@@ -11,11 +11,13 @@ export component Button inherits Rectangle {
     in property <color> toggled-bg: Theme.accent;
     in property <color> toggled-fg: Theme.text-primary;
     in property <bool> subtle-toggled: false;
+    in property <bool> borderless: false;
+    in property <bool> keep-icon-color: false;
     callback clicked;
 
     background: Theme.surface;
     border-radius: 4px;
-    border-width: 1px;
+    border-width: self.borderless ? 0px : 1px;
     border-color: Theme.border;
     height: 26px;
     preferred-width: max(30px, (root.icon.width > 0 ? root.icon-size : label.preferred-width) + 14px);
@@ -56,7 +58,7 @@ export component Button inherits Rectangle {
             icon-image.colorize: self.subtle-toggled ? root.toggled-icon-color : self.toggled-fg;
         }
         active when self.enabled && touch.pressed: {
-            icon-image.colorize: Theme.accent-hover;
+            icon-image.colorize: self.keep-icon-color ? (self.toggled ? root.toggled-icon-color : root.icon-color) : Theme.accent-hover;
         }
     ]
 

@@ -4,6 +4,7 @@ import { Theme } from "theme.slint";
 export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
     in-out property <bool> grid-enabled: true;
+    in-out property <bool> beat-open: false;
 
     callback zoom-in;
     callback zoom-out;
@@ -86,6 +87,9 @@ export component Toolbar inherits Rectangle {
             icon: @image-url("icons/drum.svg");
             icon-size: 30px;
             text: "";
+            toggled: root.beat-open;
+            subtle-toggled: true;
+            toggled-icon-color: Theme.accent;
             clicked => {
                 root.beat-opened();
             }

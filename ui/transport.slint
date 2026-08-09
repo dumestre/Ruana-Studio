@@ -5,6 +5,7 @@ export component Transport inherits Rectangle {
     in-out property <bool> playing: false;
     in-out property <bool> recording: false;
     in-out property <bool> loop-enabled: false;
+    in-out property <bool> metronome-enabled: false;
     in-out property <int> position: 0;
     in property <int> bpm: 120;
     in property <int> beats-per-bar: 4;
@@ -13,6 +14,7 @@ export component Transport inherits Rectangle {
     callback play-state-changed(bool);
     callback record-state-changed(bool);
     callback loop-state-changed(bool);
+    callback metronome-state-changed(bool);
 
     property <int> ticks-per-bar: self.ppq * self.beats-per-bar;
     property <int> bars: self.position / self.ticks-per-bar + 1;
@@ -96,6 +98,8 @@ export component Transport inherits Rectangle {
             border-width: 1px;
             border-color: Theme.border;
 
+            
+
             Text {
                 text: root.pad2(root.bars) + ":" + root.pad2(root.beat) + ":" + root.pad2(root.ticks);
                 color: Theme.accent;
@@ -110,41 +114,56 @@ export component Transport inherits Rectangle {
             background: transparent;
         }
 
-            HorizontalLayout {
-                spacing: 0px;
+        HorizontalLayout {
+            spacing: 8px;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
-                Text {
-                    text: "" + root.bpm;
-                    color: Theme.accent;
-                    font-size: 12px;
-                    vertical-alignment: center;
-                }
-
-                Text {
-                    text: " BPM";
-                    color: Theme.text-primary;
-                    font-size: 12px;
-                    vertical-alignment: center;
+            Button {
+                icon: @image-url("icons/metronome.svg");
+                icon-size: 28px;
+                borderless: true;
+                keep-icon-color: true;
+                toggled: root.metronome-enabled;
+                subtle-toggled: true;
+                toggled-icon-color: #0eec2c;
+                clicked => {
+                    root.metronome-enabled = !root.metronome-enabled;
+                    root.metronome-state-changed(root.metronome-enabled);
                 }
             }
 
-        Rectangle {
-            width: 1px;
-            background: Theme.border;
-        }
+            Text {
+                text: "" + root.bpm;
+                color: Theme.accent;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
 
             Text {
-                text: root.beats-per-bar + "/4";
-                color: Theme.accent;
+                text: " BPM";
+                color: Theme.text-primary;
                 font-size: 12px;
                 vertical-alignment: center;
             }
         }
 
         Rectangle {
-            y: parent.height - 1px;
-            width: 100%;
-            height: 1px;
+            width: 1px;
             background: Theme.border;
         }
+
+        Text {
+            text: root.beats-per-bar + "/4";
+            color: Theme.accent;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
     }
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.border;
+    }
+}
