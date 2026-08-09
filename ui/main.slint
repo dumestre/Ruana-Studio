@@ -28,7 +28,7 @@ export component MainWindow inherits Window {
 
         Toolbar {
             beat-open: beat_popup.is-open;
-            beat-opened => { beat_popup.show(); }
+            beat-opened => { beat_popup.open-requested(); }
             zoom-in => { root.zoom-level = min(root.zoom-level + 0.25, 4.0); }
             zoom-out => { root.zoom-level = max(root.zoom-level - 0.25, 0.5); }
         }
@@ -139,5 +139,6 @@ export component MainWindow inherits Window {
     }
 
     beat_popup := BeatPopup {
+        preview-mode: false;
     }
 }
