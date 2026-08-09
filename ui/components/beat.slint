@@ -1,0 +1,125 @@
+import { Theme } from "../theme.slint";
+
+component Step inherits Rectangle {
+    in property <bool> active: false;
+    in property <bool> current: false;
+    callback clicked;
+
+    width: 28px;
+    height: 22px;
+    background: Theme.base;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    states [
+        active when self.active && !self.current: {
+            background: Theme.accent;
+            border-color: Theme.accent;
+        }
+        current when self.current: {
+            border-color: Theme.playhead;
+            border-width: 2px;
+        }
+    ]
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component BeatPopup inherits PopupWindow {
+    in-out property <[bool]> steps: [
+        true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false,
+        false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false,
+        false, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false,
+        true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false,
+        false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false,
+        true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true
+    ];
+    in-out property <int> playhead: -1;
+    in-out property <[int]> step-indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    in-out property <[int]> instrument-indexes: [0, 1, 2, 3, 4, 5, 6, 7];
+    in-out property <[string]> instrument-names: ["Kick", "Snare", "Clap", "Hat Closed", "Hat Open", "Tom", "Cymbal", "Perc"];
+
+    width: 640px;
+    height: 380px;
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Theme.surface;
+        border-radius: 8px;
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 10px;
+
+            HorizontalLayout {
+                Text {
+                    text: "BEAT SEQUENCER";
+                    color: Theme.text-primary;
+                    font-size: 13px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    Text {
+                        text: "✕";
+                        color: Theme.text-dim;
+                        font-size: 14px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.close();
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 2px;
+                Rectangle { width: 76px; background: transparent; }
+                for s in root.step-indexes: Text {
+                    text: "" + (s + 1);
+                    width: 28px;
+                    height: 16px;
+                    color: Theme.text-dim;
+                    font-size: 9px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            for inst in root.instrument-indexes: HorizontalLayout {
+                spacing: 2px;
+                Text {
+                    text: root.instrument-names[inst];
+                    width: 76px;
+                    height: 22px;
+                    color: Theme.text-primary;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+                for s in root.step-indexes: Step {
+                    active: root.steps[inst * 16 + s];
+                    current: root.playhead == s;
+                    clicked => {
+                        root.steps[inst * 16 + s] = !root.steps[inst * 16 + s];
+                    }
+                }
+            }
+        }
+    }
+}

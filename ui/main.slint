@@ -5,6 +5,7 @@ import { LeftPanel } from "left_panel.slint";
 import { Timeline } from "timeline.slint";
 import { RightPanel } from "right_panel.slint";
 import { Mixer } from "mixer.slint";
+import { BeatPopup } from "components/beat.slint";
 
 export component MainWindow inherits Window {
     title: "Ferrum Studio";
@@ -26,6 +27,7 @@ export component MainWindow inherits Window {
         spacing: 0;
 
         Toolbar {
+            beat-opened => { beat_popup.show(); }
             zoom-in => { root.zoom-level = min(root.zoom-level + 0.25, 4.0); }
             zoom-out => { root.zoom-level = max(root.zoom-level - 0.25, 0.5); }
         }
@@ -133,5 +135,8 @@ export component MainWindow inherits Window {
                 }
             }
         }
+    }
+
+    beat_popup := BeatPopup {
     }
 }

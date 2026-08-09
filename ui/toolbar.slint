@@ -9,6 +9,7 @@ export component Toolbar inherits Rectangle {
     callback zoom-out;
     callback snap-toggled(bool);
     callback grid-toggled(bool);
+    callback beat-opened;
 
     
     height: 34px;
@@ -78,6 +79,14 @@ export component Toolbar inherits Rectangle {
             clicked => {
                 root.grid-enabled = !root.grid-enabled;
                 root.grid-toggled(root.grid-enabled);
+            }
+        }
+
+        Button {
+            icon: @image-url("icons/drum.svg");
+            text: "BEAT";
+            clicked => {
+                root.beat-opened();
             }
         }
 
