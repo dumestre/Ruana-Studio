@@ -146,30 +146,45 @@ export component BeatContent inherits Rectangle {
             }
         }
 
-        for inst in root.instrument-indexes: Rectangle {
-            height: 24px;
-            background: Theme.surface-high;
-            border-radius: 4px;
-            border-width: 1px;
-            border-color: Theme.border;
+        for inst in root.instrument-indexes: HorizontalLayout {
+            cross-axis-alignment: CrossAxisAlignment.center;
+            spacing: 2px;
 
-            HorizontalLayout {
-                cross-axis-alignment: CrossAxisAlignment.center;
-                spacing: 2px;
+            Rectangle {
+                height: 24px;
+                background: Theme.surface-high;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: Theme.border;
+                width: 80px;
+
                 Text {
                     text: root.instrument-names[inst];
-                    width: 76px;
+                    width: 100%;
                     height: 22px;
-                    horizontal-alignment: TextHorizontalAlignment.center;
                     color: Theme.accent;
                     font-size: 10px;
+                    horizontal-alignment: center;
                     vertical-alignment: center;
                 }
-                for s in root.step-indexes: Step {
-                    active: root.steps[inst * 16 + s];
-                    current: root.playhead == s;
-                    clicked => {
-                        root.steps[inst * 16 + s] = !root.steps[inst * 16 + s];
+            }
+
+            Rectangle {
+                height: 24px;
+                background: Theme.surface;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: Theme.border;
+
+                HorizontalLayout {
+                    cross-axis-alignment: CrossAxisAlignment.center;
+                    spacing: 2px;
+                    for s in root.step-indexes: Step {
+                        active: root.steps[inst * 16 + s];
+                        current: root.playhead == s;
+                        clicked => {
+                            root.steps[inst * 16 + s] = !root.steps[inst * 16 + s];
+                        }
                     }
                 }
             }
