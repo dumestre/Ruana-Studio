@@ -37,44 +37,51 @@ export component Transport inherits Rectangle {
         cross-axis-alignment: CrossAxisAlignment.center;
 
         Button {
-            text: "|<";
+            icon: @image-url("icons/skip_back.svg");
             clicked => {
                 root.position = 0;
             }
         }
         Button {
-            text: ">|";
+            icon: @image-url("icons/skip_fwd.svg");
             clicked => {
                 root.position = root.ticks-per-bar * 15;
             }
         }
         Button {
-            text: "PLAY";
+            icon: root.playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
+            icon-color: Theme.accent;
             toggled: root.playing;
-            primary: true;
+            subtle-toggled: true;
+            toggled-icon-color: Theme.accent;
             clicked => {
                 root.playing = !root.playing;
                 root.play-state-changed(root.playing);
             }
         }
         Button {
-            text: "STOP";
+            icon: @image-url("icons/stop.svg");
             clicked => {
                 root.playing = false;
                 root.play-state-changed(false);
             }
         }
         Button {
-            text: "REC";
+            icon: @image-url("icons/rec.svg");
+            icon-color: Theme.danger;
             toggled: root.recording;
+            toggled-bg: Theme.danger;
+            toggled-fg: #1E1E1E;
             clicked => {
                 root.recording = !root.recording;
                 root.record-state-changed(root.recording);
             }
         }
         Button {
-            text: "LOOP";
+            icon: @image-url("icons/loop.svg");
             toggled: root.loop-enabled;
+            subtle-toggled: true;
+            toggled-icon-color: Theme.accent;
             clicked => {
                 root.loop-enabled = !root.loop-enabled;
                 root.loop-state-changed(root.loop-enabled);
@@ -103,11 +110,22 @@ export component Transport inherits Rectangle {
             background: transparent;
         }
 
-            Text {
-                text: root.bpm + " BPM";
-                color: Theme.text-primary;
-                font-size: 12px;
-                vertical-alignment: center;
+            HorizontalLayout {
+                spacing: 0px;
+
+                Text {
+                    text: "" + root.bpm;
+                    color: Theme.accent;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: " BPM";
+                    color: Theme.text-primary;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
             }
 
         Rectangle {
@@ -117,7 +135,7 @@ export component Transport inherits Rectangle {
 
             Text {
                 text: root.beats-per-bar + "/4";
-                color: Theme.text-primary;
+                color: Theme.accent;
                 font-size: 12px;
                 vertical-alignment: center;
             }

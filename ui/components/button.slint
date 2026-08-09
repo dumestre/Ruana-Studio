@@ -2,48 +2,60 @@ import { Theme } from "../theme.slint";
 
 export component Button inherits Rectangle {
     in property <string> text: "";
+    in property <image> icon: @image-url("");
     in property <bool> toggled: false;
-    in property <bool> primary: false;
     in property <bool> enabled: true;
+    in property <color> icon-color: Theme.text-dim;
+    in property <color> toggled-icon-color: Theme.accent;
+    in property <color> toggled-bg: Theme.accent;
+    in property <color> toggled-fg: Theme.text-primary;
+    in property <bool> subtle-toggled: false;
     callback clicked;
 
-    label := Text {
-        text: root.text;
-        color: Theme.text-dim;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        font-size: 11px;
-    }
-
-    width: max(30px, label.preferred-width + 16px);
-    height: 26px;
     background: Theme.surface;
     border-radius: 4px;
     border-width: 1px;
     border-color: Theme.border;
+    height: 26px;
+    preferred-width: max(30px, (root.icon.width > 0 ? 16px : label.preferred-width) + 14px);
+
+    icon-image := Image {
+        source: root.icon;
+        visible: root.icon.width > 0;
+        width: 16px;
+        height: 16px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: root.icon-color;
+    }
+
+    label := Text {
+        text: root.text;
+        visible: root.text != "";
+        color: Theme.text-dim;
+        font-size: 11px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
 
     states [
         disabled when !self.enabled: {
             opacity: 0.35;
         }
-        hovered when self.enabled && touch.has-hover && !touch.pressed: {
+        hovered when self.enabled && touch.has-hover && !touch.pressed && !self.toggled: {
             background: Theme.surface-high;
             border-color: Theme.border;
         }
         on when self.enabled && self.toggled && !touch.pressed: {
-            background: Theme.accent;
-            border-color: Theme.accent;
-            label.color: Theme.text-primary;
+            background: self.subtle-toggled ? Theme.surface : self.toggled-bg;
+            border-color: self.subtle-toggled ? Theme.border : self.toggled-bg;
+            label.color: self.subtle-toggled ? Theme.text-dim : self.toggled-fg;
+            icon-image.colorize: self.subtle-toggled ? root.toggled-icon-color : self.toggled-fg;
         }
         active when self.enabled && touch.pressed: {
-            background: Theme.accent-hover;
-            border-color: Theme.accent;
-            label.color: Theme.text-primary;
-        }
-        primary-on when self.enabled && self.primary && self.toggled && !touch.pressed: {
-            background: Theme.accent;
-            border-color: Theme.accent;
-            label.color: Theme.text-primary;
+            icon-image.colorize: Theme.accent-hover;
         }
     ]
 
