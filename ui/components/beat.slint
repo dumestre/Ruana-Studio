@@ -71,57 +71,65 @@ export component BeatContent inherits Rectangle {
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
-        Rectangle {
-            width: 30px;
-            height: 30px;
-            background: Theme.border;
-        
+            Rectangle {
+                height: 26px;
+                horizontal-stretch: 1;
 
-        Image {
-            colorize: Theme.accent;
-            horizontal-alignment: ImageHorizontalAlignment.center;
-            source: @image-url("icons/drum.svg");
-        }
-    }
-        
-        Rectangle {
-            height: 26px;
-
-            touch-drag := TouchArea {
-                mouse-cursor: grab;
-                pointer-event(event) => {
-                    if (event.kind == PointerEventKind.down) {
-                        root.dragging = true;
-                        root.last-x = touch-drag.mouse-x;
-                        root.last-y = touch-drag.mouse-y;
-                    } else if (event.kind == PointerEventKind.move && root.dragging) {
-                        root.drag-moved(touch-drag.mouse-x - root.last-x, touch-drag.mouse-y - root.last-y);
-                        root.last-x = touch-drag.mouse-x;
-                        root.last-y = touch-drag.mouse-y;
-                    } else if (event.kind == PointerEventKind.up) {
-                        root.dragging = false;
+                touch-drag := TouchArea {
+                    mouse-cursor: grab;
+                    pointer-event(event) => {
+                        if (event.kind == PointerEventKind.down) {
+                            root.dragging = true;
+                            root.last-x = touch-drag.mouse-x;
+                            root.last-y = touch-drag.mouse-y;
+                        } else if (event.kind == PointerEventKind.move && root.dragging) {
+                            root.drag-moved(touch-drag.mouse-x - root.last-x, touch-drag.mouse-y - root.last-y);
+                            root.last-x = touch-drag.mouse-x;
+                            root.last-y = touch-drag.mouse-y;
+                        } else if (event.kind == PointerEventKind.up) {
+                            root.dragging = false;
+                        }
                     }
                 }
-                Image {
-                    source: @image-url("EDIT_ME.png");
+
+                HorizontalLayout {
+                    cross-axis-alignment: CrossAxisAlignment.center;
+
+                    Image {
+                        colorize: Theme.accent;
+                        width: 20px;
+                        height: 20px;
+                        source: @image-url("../icons/drum.svg");
+                    }
+
+                    Text {
+                        text: "BEAT SEQUENCER";
+                        color: Theme.text-primary;
+                        font-family: "poppins";
+                        font-size: 13px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
                 }
             }
 
-            Text {
-                text: "BEAT SEQUENCER";
-                color: Theme.text-primary;
-                font-size: 13px;
-                font-weight: 700;
-                vertical-alignment: center;
+            Rectangle {
+                width: 24px;
+                height: 24px;
+
+                Image {
+                    source: @image-url("../icons/close.svg");
+                    colorize: Theme.text-dim;
+                }
+
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.close-requested();
+                    }
+                }
             }
-
-            
-
-            
         }
-    }
-
-        
 
         HorizontalLayout {
             spacing: 2px;
