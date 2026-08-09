@@ -56,6 +56,8 @@ export component BeatContent inherits Rectangle {
 
     in-out property <string> beat-name: "BEAT SEQUENCER";
 
+    in-out property <bool> grid-dropdown-open: false;
+
     callback close-requested;
     callback drag-moved(length, length);
     callback grid-resolution-changed(int);
@@ -169,7 +171,7 @@ export component BeatContent inherits Rectangle {
                     TouchArea {
                         mouse-cursor: pointer;
                         clicked => {
-                            root.grid-resolution-changed((root.grid-resolution * 2) > 64 ? 8 : root.grid-resolution * 2);
+                            root.grid-dropdown-open = !root.grid-dropdown-open;
                         }
                     }
 
@@ -181,6 +183,43 @@ export component BeatContent inherits Rectangle {
                         font-size: 11px;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+
+                    if (root.grid-dropdown-open) : Rectangle {
+                        width: 120px;
+                        background: Theme.surface;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        x: 0px;
+                        y: 24px;
+                        clip: false;
+
+                        VerticalLayout {
+                            spacing: 1px;
+                            for res in root.resolution-options: Rectangle {
+                                height: 22px;
+                                background: Theme.base;
+
+                                Text {
+                                    text: "" + res + " steps";
+                                    width: 100%;
+                                    height: 100%;
+                                    color: Theme.text-primary;
+                                    font-size: 11px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.grid-resolution = res;
+                                        root.grid-dropdown-open = false;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -228,6 +267,7 @@ export component BeatContent inherits Rectangle {
             spacing: 2px;
             Rectangle { width: 80px; background: transparent; }
             for s in root.step-indexes: Text {
+                visible: s < root.grid-resolution;
                 text: "" + (s + 1);
                 width: 28px;
                 height: 16px;
@@ -272,6 +312,7 @@ export component BeatContent inherits Rectangle {
                     cross-axis-alignment: CrossAxisAlignment.center;
                     spacing: 2px;
                     for s in root.step-indexes: Step {
+                        visible: s < root.grid-resolution;
                         active: root.steps[inst * 16 + s];
                         current: root.playhead == s;
                         clicked => {
@@ -304,7 +345,7 @@ export component BeatContent inherits Rectangle {
             }
 
             Rectangle {
-                width: 100%;
+                width: 120px;
                 height: 28px;
                 background: Theme.base;
                 border-radius: 4px;
