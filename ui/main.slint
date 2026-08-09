@@ -8,8 +8,8 @@ import { Mixer } from "mixer.slint";
 
 export component MainWindow inherits Window {
     title: "Ferrum Studio";
-    preferred-width: 1380px;
-    preferred-height: 880px;
+    width: 1380px;
+    height: 880px;
     background: Theme.base;
 
     in-out property <int> transport-position: 0;
@@ -25,15 +25,15 @@ export component MainWindow inherits Window {
     VerticalLayout {
         spacing: 0;
 
+        Toolbar {
+            zoom-in => { root.zoom-level = min(root.zoom-level + 0.25, 4.0); }
+            zoom-out => { root.zoom-level = max(root.zoom-level - 0.25, 0.5); }
+        }
+
         Transport {
             playing <=> root.playing;
             position <=> root.transport-position;
             play-state-changed(p) => { root.play-state-changed(p); }
-        }
-
-        Toolbar {
-            zoom-in => { root.zoom-level = min(root.zoom-level + 0.25, 4.0); }
-            zoom-out => { root.zoom-level = max(root.zoom-level - 0.25, 0.5); }
         }
 
         Rectangle {

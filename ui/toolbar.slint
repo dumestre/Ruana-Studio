@@ -25,7 +25,8 @@ export component Toolbar inherits Rectangle {
         padding-left: 8px;
         padding-right: 8px;
         spacing: 4px;
-        alignment: start;
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.center;
 
         Button { text: "New"; clicked => {} }
         Button { text: "Open"; clicked => {} }
