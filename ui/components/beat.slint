@@ -67,6 +67,23 @@ export component BeatContent inherits Rectangle {
         padding: 12px;
         spacing: 8px;
 
+        HorizontalLayout {
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+        Rectangle {
+            width: 30px;
+            height: 30px;
+            background: Theme.border;
+        
+
+        Image {
+            colorize: Theme.accent;
+            horizontal-alignment: ImageHorizontalAlignment.center;
+            source: @image-url("icons/drum.svg");
+        }
+    }
+        
         Rectangle {
             height: 26px;
 
@@ -85,6 +102,9 @@ export component BeatContent inherits Rectangle {
                         root.dragging = false;
                     }
                 }
+                Image {
+                    source: @image-url("EDIT_ME.png");
+                }
             }
 
             Text {
@@ -95,94 +115,13 @@ export component BeatContent inherits Rectangle {
                 vertical-alignment: center;
             }
 
-            Rectangle {
-                horizontal-stretch: 1;
-                background: transparent;
-            }
+            
 
-            Rectangle {
-                width: 24px;
-                height: 24px;
-                Text {
-                    text: "✕";
-                    color: Theme.text-dim;
-                    font-size: 14px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-                TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.close-requested();
-                    }
-                }
-            }
+            
         }
+    }
 
-        HorizontalLayout {
-            spacing: 8px;
-
-            Rectangle {
-                width: 130px;
-                height: 26px;
-                background: Theme.base;
-                border-radius: 4px;
-                border-width: 1px;
-                border-color: root.editing-track ? Theme.accent : Theme.border;
-
-                TextInput {
-                    text: root.track-input;
-                    visible: root.editing-track;
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 12px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    accepted => {
-                        root.selected-track = Math.max(0, Math.min(7, Math.round(root.track-input.to-float() - 1)));
-                        root.editing-track = false;
-                    }
-                }
-
-                Text {
-                    text: "Track " + (root.selected-track + 1);
-                    visible: !root.editing-track;
-                    color: Theme.accent;
-                    font-size: 12px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-
-                TouchArea {
-                    mouse-cursor: pointer;
-                    scroll-event(event) => {
-                        if (event.delta-y < 0px) {
-                            root.selected-track = Math.min(root.selected-track + 1, 7);
-                        } else {
-                            root.selected-track = Math.max(root.selected-track - 1, 0);
-                        }
-                        return accept;
-                    }
-                    clicked => {
-                        root.track-input = "" + (root.selected-track + 1);
-                        root.editing-track = true;
-                    }
-                }
-            }
-
-            Text {
-                text: "TRACK";
-                color: Theme.text-dim;
-                font-size: 10px;
-                vertical-alignment: center;
-            }
-
-            Rectangle {
-                horizontal-stretch: 1;
-                background: transparent;
-            }
-        }
+        
 
         HorizontalLayout {
             spacing: 2px;
