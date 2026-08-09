@@ -6,6 +6,7 @@ export component Button inherits Rectangle {
     in property <bool> toggled: false;
     in property <bool> enabled: true;
     in property <color> icon-color: Theme.text-dim;
+    in property <length> icon-size: 16px;
     in property <color> toggled-icon-color: Theme.accent;
     in property <color> toggled-bg: Theme.accent;
     in property <color> toggled-fg: Theme.text-primary;
@@ -17,13 +18,13 @@ export component Button inherits Rectangle {
     border-width: 1px;
     border-color: Theme.border;
     height: 26px;
-    preferred-width: max(30px, (root.icon.width > 0 ? 16px : label.preferred-width) + 14px);
+    preferred-width: max(30px, (root.icon.width > 0 ? root.icon-size : label.preferred-width) + 14px);
 
     icon-image := Image {
         source: root.icon;
         visible: root.icon.width > 0;
-        width: 16px;
-        height: 16px;
+        width: root.icon-size;
+        height: root.icon-size;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         colorize: root.icon-color;

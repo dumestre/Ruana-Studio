@@ -84,7 +84,8 @@ export component Toolbar inherits Rectangle {
 
         Button {
             icon: @image-url("icons/drum.svg");
-            text: "BEAT";
+            icon-size: 30px;
+            text: "";
             clicked => {
                 root.beat-opened();
             }
@@ -103,3 +104,4 @@ export component Toolbar inherits Rectangle {
         }
     }
 }
+
