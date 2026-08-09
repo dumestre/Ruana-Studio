@@ -1,0 +1,6 @@
+[package]
+name = "daw-media"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

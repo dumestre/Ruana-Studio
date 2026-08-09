@@ -1,0 +1,57 @@
+import { Theme } from "../theme.slint";
+
+export component Button inherits Rectangle {
+    in property <string> text: "";
+    in property <bool> toggled: false;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    label := Text {
+        text: root.text;
+        color: Theme.text-dim;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: 11px;
+    }
+
+    width: max(30px, label.preferred-width + 16px);
+    height: 26px;
+    background: Theme.surface;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    states [
+        disabled when !self.enabled: {
+            opacity: 0.35;
+        }
+        hovered when self.enabled && touch.has-hover && !touch.pressed: {
+            background: Theme.surface-high;
+            border-color: Theme.border;
+        }
+        on when self.enabled && self.toggled && !touch.pressed: {
+            background: Theme.accent;
+            border-color: Theme.accent;
+            label.color: Theme.text-primary;
+        }
+        active when self.enabled && touch.pressed: {
+            background: Theme.accent-hover;
+            border-color: Theme.accent;
+            label.color: Theme.text-primary;
+        }
+        primary-on when self.enabled && self.primary && self.toggled && !touch.pressed: {
+            background: Theme.accent;
+            border-color: Theme.accent;
+            label.color: Theme.text-primary;
+        }
+    ]
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}

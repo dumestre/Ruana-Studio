@@ -1,0 +1,334 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+component TrackHeaderRow inherits Rectangle {
+    in property <string> name: "";
+    in property <color> track-color: Theme.clip-midi;
+    in property <bool> selected: false;
+    in property <int> track-index: 0;
+    callback clicked(int);
+
+    height: 64px;
+    
+    background: self.selected ? Theme.surface-high : Theme.surface;
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        cross-axis-alignment: center;
+
+        Rectangle {
+            width: 6px;
+            height: 30px;
+            background: root.track-color;
+            border-radius: 2px;
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+            Text {
+                text: root.name;
+                color: Theme.text-primary;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+            Text {
+                text: "MIDI";
+                color: Theme.text-dim;
+                font-size: 9px;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    TouchArea {
+        clicked => {
+            root.clicked(root.track-index);
+        }
+    }
+}
+
+component TrackClip inherits Rectangle {
+    in property <string> name: "";
+    in property <int> beat: 0;
+    in property <int> len: 4;
+    in property <color> clip-color: Theme.clip-midi;
+    in property <length> px-per-beat: 40px;
+    in property <length> row-height: 64px;
+    in property <int> track-index: 0;
+    in property <bool> selected: false;
+    callback clicked(int);
+
+    x: root.beat * root.px-per-beat;
+    y: 2px;
+    width: root.len * root.px-per-beat;
+    height: root.row-height - 4px;
+    background: root.clip-color;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: self.selected ? Theme.text-primary : Theme.border;
+
+    states [
+        hovered when touch.has-hover: {
+            opacity: 1;
+        }
+        normal when !touch.has-hover: {
+            opacity: 0.8;
+        }
+    ]
+
+    Text {
+        text: root.name;
+        x: 6px;
+        y: 0;
+        width: parent.width - 12px;
+        height: 100%;
+        color: #1E1E1E;
+        font-size: 11px;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked(root.track-index);
+        }
+    }
+}
+
+component TrackRow inherits Rectangle {
+    in property <int> track-index: 0;
+    in property <int> selected-track: 0;
+    in property <length> px-per-beat: 40px;
+    in property <length> px-per-bar: 160px;
+    in property <length> row-height: 64px;
+    in property <color> track-color: Theme.clip-midi;
+    in property <[int]> bar-range: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    callback clip-selected(int);
+
+    height: 64px;
+    width: 100%;
+    background: Theme.base;
+
+    for bar in root.bar-range: Rectangle {
+        x: bar * root.px-per-bar;
+        width: 1px;
+        height: 100%;
+        background: Theme.surface-high;
+    }
+
+    if root.track-index == 0: TrackClip {
+        name: "Drums A";
+        beat: 0;
+        len: 8;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 0;
+        selected: root.selected-track == 0;
+        clicked(i) => { root.clip-selected(i); }
+    }
+    if root.track-index == 0: TrackClip {
+        name: "Drums B";
+        beat: 12;
+        len: 4;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 0;
+        selected: root.selected-track == 0;
+        clicked(i) => { root.clip-selected(i); }
+    }
+    if root.track-index == 1: TrackClip {
+        name: "Bass A";
+        beat: 0;
+        len: 16;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 1;
+        selected: root.selected-track == 1;
+        clicked(i) => { root.clip-selected(i); }
+    }
+    if root.track-index == 2: TrackClip {
+        name: "Vocal Verse";
+        beat: 0;
+        len: 16;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 2;
+        selected: root.selected-track == 2;
+        clicked(i) => { root.clip-selected(i); }
+    }
+    if root.track-index == 3: TrackClip {
+        name: "Synth Pad";
+        beat: 0;
+        len: 32;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 3;
+        selected: root.selected-track == 3;
+        clicked(i) => { root.clip-selected(i); }
+    }
+}
+
+export component Timeline inherits Rectangle {
+    in-out property <int> selected-track: 0;
+    in property <int> position: 0;
+    in property <float> zoom: 1.0;
+    in property <[string]> track-names: ["Drums", "Bass", "Vocal", "Synth"];
+    callback select-track(int);
+    callback clip-selected(int);
+
+    property <length> px-per-beat: 40px * self.zoom;
+    property <length> px-per-bar: self.px-per-beat * 4;
+    property <int> ppq: 960;
+    property <int> total-bars: 16;
+    property <length> header-width: 150px;
+    property <length> ruler-height: 30px;
+    property <length> row-height: 64px;
+    property <int> track-count: self.track-names.length;
+    property <length> content-width: self.total-bars * self.px-per-bar + 80px;
+    property <length> content-height: self.ruler-height + self.track-count * self.row-height;
+    property <length> playhead-x: self.position * self.px-per-beat / self.ppq;
+    property <[int]> bar-range: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+    width: 100%;
+    height: 100%;
+    background: Theme.base;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: root.header-width;
+        height: 100%;
+        background: Theme.surface;
+
+        Rectangle {
+            x: parent.width - 1px;
+            width: 1px;
+            height: 100%;
+            background: Theme.border;
+        }
+
+        Rectangle {
+            width: 100%;
+            height: root.ruler-height;
+            background: Theme.surface;
+
+            Rectangle {
+                y: parent.height - 1px;
+                width: 100%;
+                height: 1px;
+                background: Theme.border;
+            }
+
+            Text {
+                text: "TRACK";
+                width: 100%;
+                height: 100%;
+                color: Theme.text-dim;
+                font-size: 10px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        VerticalLayout {
+            y: root.ruler-height;
+            width: 100%;
+            height: parent.height - root.ruler-height;
+            spacing: 0;
+
+            for name[i] in root.track-names: TrackHeaderRow {
+                name: name;
+                track-color: i == 2 ? Theme.clip-audio : Theme.clip-midi;
+                selected: root.selected-track == i;
+                track-index: i;
+                clicked(idx) => {
+                    root.select-track(idx);
+                }
+            }
+        }
+    }
+
+    ScrollView {
+        x: root.header-width;
+        y: 0;
+        width: parent.width - root.header-width;
+        height: 100%;
+
+        Rectangle {
+            width: root.content-width;
+            height: root.content-height;
+            background: Theme.base;
+
+            Rectangle {
+                width: 100%;
+                height: root.ruler-height;
+                background: Theme.surface;
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    width: 100%;
+                    height: 1px;
+                    background: Theme.border;
+                }
+
+                for i in root.bar-range: Rectangle {
+                    x: i * root.px-per-bar;
+                    width: 1px;
+                    height: 100%;
+                    background: Theme.border;
+                }
+
+                for i in root.bar-range: Text {
+                    x: i * root.px-per-bar + 5px;
+                    y: 0;
+                    width: 60px;
+                    height: 100%;
+                    text: "" + (i + 1);
+                    color: Theme.text-dim;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+            }
+
+            VerticalLayout {
+                y: root.ruler-height;
+                width: 100%;
+                spacing: 0;
+
+                for name[i] in root.track-names: TrackRow {
+                    track-index: i;
+                    selected-track: root.selected-track;
+                    px-per-beat: root.px-per-beat;
+                    px-per-bar: root.px-per-bar;
+                    row-height: root.row-height;
+                    track-color: i == 2 ? Theme.clip-audio : Theme.clip-midi;
+                    bar-range: root.bar-range;
+                    clip-selected(idx) => {
+                        root.clip-selected(idx);
+                    }
+                }
+            }
+
+            Rectangle {
+                x: root.playhead-x;
+                y: 0;
+                width: 2px;
+                height: 100%;
+                background: Theme.playhead;
+            }
+        }
+    }
+}

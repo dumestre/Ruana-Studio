@@ -1,0 +1,6 @@
+[package]
+name = "daw-plugins"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

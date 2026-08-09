@@ -1,0 +1,131 @@
+﻿import { Button } from "components/button.slint";
+import { Theme } from "theme.slint";
+
+export component Transport inherits Rectangle {
+    in-out property <bool> playing: false;
+    in-out property <bool> recording: false;
+    in-out property <bool> loop-enabled: false;
+    in-out property <int> position: 0;
+    in property <int> bpm: 120;
+    in property <int> beats-per-bar: 4;
+    in property <int> ppq: 960;
+
+    callback play-state-changed(bool);
+    callback record-state-changed(bool);
+    callback loop-state-changed(bool);
+
+    property <int> ticks-per-bar: self.ppq * self.beats-per-bar;
+    property <int> bars: self.position / self.ticks-per-bar + 1;
+    property <int> beat: Math.mod(self.position, self.ticks-per-bar) / self.ppq + 1;
+    property <int> ticks: Math.mod(self.position, self.ppq);
+
+    function pad2(v: int) -> string {
+        return v < 10 ? "0" + v : "" + v;
+    }
+
+    
+    height: 48px;
+    background: Theme.surface;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        spacing: 6px;
+        alignment: start;
+
+        Button {
+            text: "|<";
+            clicked => {
+                root.position = 0;
+            }
+        }
+        Button {
+            text: ">|";
+            clicked => {
+                root.position = root.ticks-per-bar * 15;
+            }
+        }
+        Button {
+            text: "PLAY";
+            toggled: root.playing;
+            primary: true;
+            clicked => {
+                root.playing = !root.playing;
+                root.play-state-changed(root.playing);
+            }
+        }
+        Button {
+            text: "STOP";
+            clicked => {
+                root.playing = false;
+                root.play-state-changed(false);
+            }
+        }
+        Button {
+            text: "REC";
+            toggled: root.recording;
+            clicked => {
+                root.recording = !root.recording;
+                root.record-state-changed(root.recording);
+            }
+        }
+        Button {
+            text: "LOOP";
+            toggled: root.loop-enabled;
+            clicked => {
+                root.loop-enabled = !root.loop-enabled;
+                root.loop-state-changed(root.loop-enabled);
+            }
+        }
+
+        Rectangle {
+            width: 120px;
+            height: 26px;
+            background: Theme.base;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            Text {
+                text: root.pad2(root.bars) + ":" + root.pad2(root.beat) + ":" + root.pad2(root.ticks);
+                color: Theme.accent;
+                font-size: 15px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
+        }
+
+            Text {
+                text: root.bpm + " BPM";
+                color: Theme.text-primary;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+
+        Rectangle {
+            width: 1px;
+            background: Theme.border;
+        }
+
+            Text {
+                text: root.beats-per-bar + "/4";
+                color: Theme.text-primary;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            y: parent.height - 1px;
+            width: 100%;
+            height: 1px;
+            background: Theme.border;
+        }
+    }

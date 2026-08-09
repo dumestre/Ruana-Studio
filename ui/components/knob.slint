@@ -1,0 +1,71 @@
+import { Theme } from "../theme.slint";
+
+export component Knob {
+    in-out property <float> value: 0.5;
+    in property <string> caption: "";
+    in property <string> display-value: "";
+    callback changed(float);
+
+    in-out property <float> last-y: 0;
+
+    width: 40px;
+    height: 54px;
+
+    Rectangle {
+        width: 34px;
+        height: 34px;
+        x: (parent.width - self.width) / 2;
+        y: 4px;
+        background: Theme.surface-high;
+        border-radius: self.width / 2;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            moved => {
+                if (self.pressed) {
+                    root.value = max(0, min(1, root.value + (root.last-y - touch.mouse-y / 1px) * 0.01));
+                    root.last-y = touch.mouse-y / 1px;
+                    root.changed(root.value);
+                }
+            }
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down) {
+                    root.last-y = touch.mouse-y / 1px;
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        width: 3px;
+        height: 13px;
+        x: (parent.width - self.width) / 2;
+        y: 6px;
+        background: Theme.accent;
+        border-radius: 1.5px;
+        transform-rotation: -135deg + root.value * 270deg;
+        transform-origin: { x: 1.5px, y: 15px };
+    }
+
+    Text {
+        text: root.caption;
+        y: 38px;
+        width: parent.width;
+        color: Theme.text-dim;
+        font-size: 9px;
+        horizontal-alignment: center;
+        vertical-alignment: top;
+    }
+
+    Text {
+        text: root.display-value;
+        y: 24px;
+        width: parent.width;
+        color: Theme.text-primary;
+        font-size: 9px;
+        horizontal-alignment: center;
+        vertical-alignment: top;
+    }
+}

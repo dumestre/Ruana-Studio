@@ -1,0 +1,63 @@
+import { Theme } from "../theme.slint";
+
+export component Fader {
+    in-out property <float> value: 0.75;
+    in property <string> caption: "";
+    callback changed(float);
+
+    width: 34px;
+    height: 110px;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        moved => {
+            if (self.pressed) {
+                root.value = max(0, min(1, 1 - touch.mouse-y / root.height));
+                root.changed(root.value);
+            }
+        }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                root.value = max(0, min(1, 1 - touch.mouse-y / root.height));
+            }
+        }
+    }
+
+    Rectangle {
+        width: 4px;
+        height: 100%;
+        x: (parent.width - self.width) / 2;
+        background: Theme.surface-high;
+        border-radius: 2px;
+    }
+
+    Rectangle {
+        width: 4px;
+        height: parent.height * root.value;
+        x: (parent.width - self.width) / 2;
+        y: parent.height - self.height;
+        background: Theme.accent;
+        border-radius: 2px;
+    }
+
+    Rectangle {
+        width: 24px;
+        height: 12px;
+        x: (parent.width - self.width) / 2;
+        y: min(max(parent.height - parent.height * root.value - self.height / 2, 0px), parent.height - self.height);
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.accent;
+        border-radius: 3px;
+    }
+
+    Text {
+        text: root.caption;
+        y: parent.height - 14px;
+        width: parent.width;
+        color: Theme.text-dim;
+        font-size: 9px;
+        horizontal-alignment: center;
+        vertical-alignment: top;
+    }
+}

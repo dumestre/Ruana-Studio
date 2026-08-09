@@ -1,0 +1,141 @@
+import { Button } from "components/button.slint";
+import { Knob } from "components/knob.slint";
+import { Fader } from "components/fader.slint";
+import { Meter } from "components/meter.slint";
+import { Theme } from "theme.slint";
+
+component MixerChannel inherits Rectangle {
+    in property <string> name: "";
+    in property <color> channel-color: Theme.accent;
+    in property <bool> is-master: false;
+    in-out property <bool> muted: false;
+    in-out property <bool> soloed: false;
+    in-out property <float> volume: 0.8;
+    in-out property <float> pan: 0.5;
+    in-out property <float> level: 0.0;
+
+    property <string> pan-display: root.pan < 0.45 ? "L" + ((0.5 - root.pan) * 100).to-fixed(0) : root.pan > 0.55 ? "R" + ((root.pan - 0.5) * 100).to-fixed(0) : "C";
+    property <string> vol-display: (root.volume * 60 - 60).to-fixed(1) + " dB";
+
+    width: 110px;
+    height: 100%;
+    background: Theme.surface;
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: 100%;
+        background: Theme.border;
+    }
+
+    VerticalLayout {
+        padding: 4px;
+        spacing: 3px;
+        alignment: start;
+
+        Text {
+            text: root.name;
+            color: root.is-master ? Theme.text-primary : Theme.text-primary;
+            font-size: 11px;
+            horizontal-alignment: center;
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 2px;
+            background: root.channel-color;
+            border-radius: 1px;
+        }
+
+        HorizontalLayout {
+            spacing: 3px;
+            alignment: center;
+            Button {
+                text: "M";
+                toggled: root.muted;
+                clicked => { root.muted = !root.muted; }
+            }
+            Button {
+                text: "S";
+                toggled: root.soloed;
+                clicked => { root.soloed = !root.soloed; }
+            }
+            Button {
+                text: "R";
+                clicked => {}
+            }
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 8px;
+            background: Theme.surface-high;
+            border-radius: 2px;
+
+            Text {
+                text: root.is-master ? "" : "FX";
+                width: 100%;
+                height: 100%;
+                color: Theme.text-dim;
+                font-size: 8px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: center;
+
+            Knob {
+                caption: "PAN";
+                value: root.pan;
+                display-value: root.pan-display;
+                changed(v) => { root.pan = v; }
+            }
+
+            Meter {
+                level: root.level;
+                height: 110px;
+                active: root.level > 0.05;
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
+        }
+
+        Fader {
+            value: root.volume;
+            caption: root.vol-display;
+            changed(v) => { root.volume = v; }
+        }
+    }
+}
+
+export component Mixer inherits Rectangle {
+    in-out property <[float]> meters: [0, 0, 0, 0, 0];
+    in property <[string]> names: ["Drums", "Bass", "Vocal", "Synth", "Master"];
+
+    width: 100%;
+    height: 100%;
+    background: Theme.surface;
+
+    Rectangle {
+        width: 100%;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    HorizontalLayout {
+        spacing: 0;
+
+        for level[i] in root.meters: MixerChannel {
+            name: root.names[i];
+            channel-color: i == 4 ? Theme.text-primary : Theme.accent;
+            is-master: i == 4;
+            level: level;
+        }
+    }
+}

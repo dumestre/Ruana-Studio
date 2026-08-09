@@ -1,0 +1,95 @@
+import { Button } from "components/button.slint";
+import { Theme } from "theme.slint";
+
+export component Toolbar inherits Rectangle {
+    in-out property <bool> snap-enabled: true;
+    in-out property <bool> grid-enabled: true;
+
+    callback zoom-in;
+    callback zoom-out;
+    callback snap-toggled(bool);
+    callback grid-toggled(bool);
+
+    
+    height: 34px;
+    background: Theme.surface;
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 4px;
+        alignment: start;
+
+        Button { text: "New"; clicked => {} }
+        Button { text: "Open"; clicked => {} }
+        Button { text: "Save"; clicked => {} }
+        Button { text: "Save As"; clicked => {} }
+
+        Rectangle {
+            width: 1px;
+            background: Theme.border;
+        }
+
+        Button { text: "Undo"; clicked => {} }
+        Button { text: "Redo"; clicked => {} }
+
+        Rectangle {
+            width: 1px;
+            background: Theme.border;
+        }
+
+        Button {
+            text: "Zoom -";
+            clicked => {
+                root.zoom-out();
+            }
+        }
+        Button {
+            text: "Zoom +";
+            clicked => {
+                root.zoom-in();
+            }
+        }
+
+        Rectangle {
+            width: 1px;
+            background: Theme.border;
+        }
+
+        Button {
+            text: "SNAP";
+            toggled: root.snap-enabled;
+            clicked => {
+                root.snap-enabled = !root.snap-enabled;
+                root.snap-toggled(root.snap-enabled);
+            }
+        }
+        Button {
+            text: "GRID";
+            toggled: root.grid-enabled;
+            clicked => {
+                root.grid-enabled = !root.grid-enabled;
+                root.grid-toggled(root.grid-enabled);
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
+        }
+
+        Text {
+            text: "Mock Session";
+            color: Theme.text-dim;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+}

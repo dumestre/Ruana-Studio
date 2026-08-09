@@ -1,0 +1,6 @@
+[package]
+name = "daw-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

@@ -1,0 +1,137 @@
+import { Theme } from "theme.slint";
+import { Transport } from "transport.slint";
+import { Toolbar } from "toolbar.slint";
+import { LeftPanel } from "left_panel.slint";
+import { Timeline } from "timeline.slint";
+import { RightPanel } from "right_panel.slint";
+import { Mixer } from "mixer.slint";
+
+export component MainWindow inherits Window {
+    title: "Ferrum Studio";
+    preferred-width: 1380px;
+    preferred-height: 880px;
+    background: Theme.base;
+
+    in-out property <int> transport-position: 0;
+    in-out property <bool> playing: false;
+    in-out property <int> selected-track: 0;
+    in-out property <float> zoom-level: 1.0;
+    in-out property <[float]> mixer-meters: [0, 0, 0, 0, 0];
+
+    callback play-state-changed(bool);
+
+    property <[string]> track-names: ["Drums", "Bass", "Vocal", "Synth"];
+
+    VerticalLayout {
+        spacing: 0;
+
+        Transport {
+            playing <=> root.playing;
+            position <=> root.transport-position;
+            play-state-changed(p) => { root.play-state-changed(p); }
+        }
+
+        Toolbar {
+            zoom-in => { root.zoom-level = min(root.zoom-level + 0.25, 4.0); }
+            zoom-out => { root.zoom-level = max(root.zoom-level - 0.25, 0.5); }
+        }
+
+        Rectangle {
+            width: 100%;
+            vertical-stretch: 1;
+            height: 100%;
+
+            HorizontalLayout {
+                spacing: 0;
+
+                LeftPanel {
+                    selected-track <=> root.selected-track;
+                    track-names: root.track-names;
+                    min-width: 190px;
+                }
+
+                Timeline {
+                    selected-track <=> root.selected-track;
+                    position: root.transport-position;
+                    zoom: root.zoom-level;
+                    track-names: root.track-names;
+                    horizontal-stretch: 1;
+                    select-track(i) => { root.selected-track = i; }
+                    clip-selected(i) => { root.selected-track = i; }
+                }
+
+                RightPanel {
+                    min-width: 200px;
+                }
+            }
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 1px;
+            background: Theme.border;
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 215px;
+
+            Mixer {
+                meters <=> root.mixer-meters;
+            }
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 1px;
+            background: Theme.border;
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 22px;
+            background: Theme.surface;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 16px;
+
+                Text {
+                    text: "Ferrum Studio 0.1.0";
+                    color: Theme.text-dim;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: transparent;
+                }
+                Text {
+                    text: "120 BPM";
+                    color: Theme.text-dim;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "44.1 kHz";
+                    color: Theme.text-dim;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "24-bit";
+                    color: Theme.text-dim;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "FASE 1 - UI";
+                    color: Theme.accent;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

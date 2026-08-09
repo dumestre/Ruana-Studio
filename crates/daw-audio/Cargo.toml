@@ -1,0 +1,6 @@
+[package]
+name = "daw-audio"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

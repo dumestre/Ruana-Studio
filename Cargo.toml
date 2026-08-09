@@ -1,0 +1,18 @@
+[workspace]
+resolver = "3"
+members = [
+    "app",
+    "crates/daw-core",
+    "crates/daw-audio",
+    "crates/daw-media",
+    "crates/daw-midi",
+    "crates/daw-plugins",
+    "crates/daw-project",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+slint = "1.17.1"
