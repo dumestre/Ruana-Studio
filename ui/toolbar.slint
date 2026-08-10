@@ -11,6 +11,9 @@ export component Toolbar inherits Rectangle {
     callback snap-toggled(bool);
     callback grid-toggled(bool);
     callback beat-opened;
+    callback close;
+    callback maximize;
+    callback minimize;
 
     
     height: 34px;
@@ -29,6 +32,17 @@ export component Toolbar inherits Rectangle {
         spacing: 4px;
         alignment: LayoutAlignment.start;
         cross-axis-alignment: CrossAxisAlignment.center;
+
+        Image {
+            source: @image-url("../app/assets/FerrumStudio.svg");
+            width: 20px;
+            height: 20px;
+        }
+
+        Rectangle {
+            width: 8px;
+            background: transparent;
+        }
 
         Button { text: "New"; clicked => {} }
         Button { text: "Open"; clicked => {} }
@@ -105,6 +119,36 @@ export component Toolbar inherits Rectangle {
             color: Theme.text-dim;
             font-size: 11px;
             vertical-alignment: center;
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
+        }
+
+        Button {
+            icon: @image-url("icons/close.svg");
+            icon-size: 14px;
+            text: "";
+            clicked => {
+                root.close();
+            }
+        }
+        Button {
+            icon: @image-url("icons/maximize.svg");
+            icon-size: 14px;
+            text: "";
+            clicked => {
+                root.maximize();
+            }
+        }
+        Button {
+            icon: @image-url("icons/minimize.svg");
+            icon-size: 14px;
+            text: "";
+            clicked => {
+                root.minimize();
+            }
         }
     }
 }

@@ -33,6 +33,9 @@ export component MainWindow inherits Window {
             beat-opened => { beat_popup.open-requested(); }
             zoom-in => { root.zoom-level = min(root.zoom-level + 0.25, 4.0); }
             zoom-out => { root.zoom-level = max(root.zoom-level - 0.25, 0.5); }
+            close => { root.visible = false; }
+            maximize => { }
+            minimize => { }
         }
 
         Transport {
