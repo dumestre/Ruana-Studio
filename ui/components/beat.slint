@@ -283,151 +283,176 @@ HorizontalLayout {
             }
         }
 
-        for inst in root.instrument-indexes: HorizontalLayout {
-            cross-axis-alignment: CrossAxisAlignment.center;
-            spacing: 8px;
+        HorizontalLayout {
+            cross-axis-alignment: CrossAxisAlignment.start;
+            spacing: 0;
 
             Rectangle {
-                height: 24px;
-                width: 102px;
-                border-radius: 4px;
-                border-width: 1px;
-
-                HorizontalLayout {
-                    cross-axis-alignment: CrossAxisAlignment.center;
-                    spacing: 2px;
-
-                    Rectangle {
-                        width: 8px;
-                        height: 8px;
-                        background: root.track-active[inst] ? Theme.activ : Theme.text-dim;
-                        border-radius: 4px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                root.track-active[inst] = !root.track-active[inst];
-                            }
-                        }
-                    }
-
-                    track-pan-touch := TouchArea {
-                        width: 24px;
-                        height: 24px;
-                        mouse-cursor: grab;
-                        pointer-event(event) => {
-                            if (event.kind == PointerEventKind.move && event.button == PointerEventButton.left) {
-                                root.track-pan[inst] = Math.max(-1.0, Math.min(1.0, root.track-pan[inst] + (track-pan-touch.mouse-x - self.width / 2) / 50px));
-                            }
-                        }
-
-                        Text {
-                            text: root.track-pan[inst] < 0 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
-                            width: 100%;
-                            height: 100%;
-                            color: Theme.text-dim;
-                            font-size: 8px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    track-vol-touch := TouchArea {
-                        width: 24px;
-                        height: 24px;
-                        mouse-cursor: grab;
-                        pointer-event(event) => {
-                            if (event.kind == PointerEventKind.move && event.button == PointerEventButton.left) {
-                                root.track-volume[inst] = Math.max(0.0, Math.min(1.0, root.track-volume[inst] + (self.height / 2 - track-vol-touch.mouse-y) / 50px));
-                            }
-                        }
-
-                        Text {
-                            text: Math.round(root.track-volume[inst] * 100) + "%";
-                            width: 100%;
-                            height: 100%;
-                            color: Theme.text-dim;
-                            font-size: 8px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    Rectangle {
-                        width: 40px;
-                        height: 22px;
-                        background: Theme.base;
-                        border-radius: 3px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-
-                        TextInput {
-                            text: "" + (root.track-mixer-channel[inst] + 1);
-                            width: 100%;
-                            height: 100%;
-                            color: Theme.text-primary;
-                            font-size: 10px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            accepted => {
-                                root.track-mixer-channel[inst] = Math.max(0, Math.min(15, Math.round(self.text.to-float() - 1)));
-                            }
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                height: 24px;
-                background: Theme.surface-high;
-                border-radius: 4px;
-                border-width: 1px;
-                border-color: Theme.border;
-                width: 80px;
-
-                Text {
-                    text: root.instrument-names[inst];
-                    width: 100%;
-                    height: 22px;
-                    color: Theme.accent;
-                    font-size: 10px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-
-            Rectangle {
-                height: 24px;
+                width: 200px;
                 background: Theme.surface;
                 border-radius: 4px;
                 border-width: 1px;
                 border-color: Theme.border;
 
-                HorizontalLayout {
-                    cross-axis-alignment: CrossAxisAlignment.center;
-                    spacing: 2px;
-                    for s in root.step-indexes: Step {
-                        visible: s < root.grid-resolution;
-                        active: root.steps[inst * 16 + s];
-                        current: root.playhead == s;
-                        clicked => {
-                            root.steps[inst * 16 + s] = !root.steps[inst * 16 + s];
-                        }
-                    }
-                }
+                VerticalLayout {
+                    spacing: 4px;
+                    for inst in root.instrument-indexes: Rectangle {
+                        height: 24px;
+                        background: Theme.surface-high;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        width: 100%;
 
-                TouchArea {
-                    mouse-cursor: default;
-                    pointer-event(event) => {
-                        if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
-                            root.sample-context-menu-requested(inst, self.mouse-x / 1px, self.mouse-y / 1px);
+                        HorizontalLayout {
+                            cross-axis-alignment: CrossAxisAlignment.center;
+                            spacing: 4px;
+
+                            Rectangle {
+                                width: 8px;
+                                height: 8px;
+                                background: root.track-active[inst] ? Theme.activ : Theme.text-dim;
+                                border-radius: 4px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.track-active[inst] = !root.track-active[inst];
+                                    }
+                                }
+                            }
+
+                            track-pan-touch := TouchArea {
+                                width: 24px;
+                                height: 24px;
+                                mouse-cursor: grab;
+                                pointer-event(event) => {
+                                    if (event.kind == PointerEventKind.move && event.button == PointerEventButton.left) {
+                                        root.track-pan[inst] = Math.max(-1.0, Math.min(1.0, root.track-pan[inst] + (track-pan-touch.mouse-x - self.width / 2) / 50px));
+                                    }
+                                }
+
+                                Text {
+                                    text: root.track-pan[inst] < 0 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
+                                    width: 100%;
+                                    height: 100%;
+                                    color: Theme.text-dim;
+                                    font-size: 8px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            track-vol-touch := TouchArea {
+                                width: 24px;
+                                height: 24px;
+                                mouse-cursor: grab;
+                                pointer-event(event) => {
+                                    if (event.kind == PointerEventKind.move && event.button == PointerEventButton.left) {
+                                        root.track-volume[inst] = Math.max(0.0, Math.min(1.0, root.track-volume[inst] + (self.height / 2 - track-vol-touch.mouse-y) / 50px));
+                                    }
+                                }
+
+                                Text {
+                                    text: Math.round(root.track-volume[inst] * 100) + "%";
+                                    width: 100%;
+                                    height: 100%;
+                                    color: Theme.text-dim;
+                                    font-size: 8px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Rectangle {
+                                width: 40px;
+                                height: 22px;
+                                background: Theme.base;
+                                border-radius: 3px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+
+                                TextInput {
+                                    text: "" + (root.track-mixer-channel[inst] + 1);
+                                    width: 100%;
+                                    height: 100%;
+                                    color: Theme.text-primary;
+                                    font-size: 10px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    accepted => {
+                                        root.track-mixer-channel[inst] = Math.max(0, Math.min(15, Math.round(self.text.to-float() - 1)));
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 80px;
+                                height: 22px;
+                                background: Theme.surface-high;
+                                border-radius: 4px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+
+                                Text {
+                                    text: root.instrument-names[inst];
+                                    width: 100%;
+                                    height: 22px;
+                                    color: Theme.accent;
+                                    font-size: 10px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
+
+Flickable {
+                width: 100%;
+                height: 100%;
+                interactive: true;
+
+                HorizontalLayout {
+                    spacing: 0;
+
+                    VerticalLayout {
+                        spacing: 4px;
+                        for inst in root.instrument-indexes: Rectangle {
+                            height: 24px;
+                            background: Theme.surface;
+                            border-radius: 4px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            HorizontalLayout {
+                                cross-axis-alignment: CrossAxisAlignment.center;
+                                spacing: 2px;
+                                for s in root.step-indexes: Step {
+                                    visible: s < root.grid-resolution;
+                                    active: root.steps[inst * 16 + s];
+                                    current: root.playhead == s;
+                                    clicked => {
+                                        root.steps[inst * 16 + s] = !root.steps[inst * 16 + s];
+                                    }
+                                }
+                            }
+
+                            TouchArea {
+                                mouse-cursor: default;
+                                pointer-event(event) => {
+                                    if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
+                                        root.sample-context-menu-requested(inst, self.mouse-x / 1px, self.mouse-y / 1px);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
         Rectangle {
             height: 32px;
@@ -461,6 +486,7 @@ HorizontalLayout {
                 }
             }
         }
+}
     }
 }
 
