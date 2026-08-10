@@ -4,7 +4,7 @@ DAW (Digital Audio Workstation) nativa desenvolvida em **Rust**, com **Slint** p
 
 ## ⚠️ REGRA PRINCIPAL DE DESENVOLVIMENTO
 
-### A DAW será construída primeiro pela interface.
+### A DAW será construída primeiro pela interface
 
 O desenvolvimento inicial deve ser focado **exclusivamente na UI/UX e no design visual da DAW**.
 
@@ -265,7 +265,6 @@ Plugin Host
 ```
 
 A arquitetura deve permitir que a UI desenvolvida na Fase 1 seja mantida enquanto a lógica real é gradualmente conectada.
-
 
 # RustDAW
 

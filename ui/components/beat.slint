@@ -824,8 +824,6 @@ export component BeatContent inherits Rectangle {
 }
 
 export component BeatPopup inherits Rectangle {
-    in property <bool> preview-mode: true;
-
     in-out property <[bool]> steps: [];
     in-out property <int> playhead: -1;
     in-out property <[int]> step-indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
@@ -846,18 +844,28 @@ export component BeatPopup inherits Rectangle {
 
     in-out property <string> beat-name: "BEAT SEQUENCER";
 
-    in-out property <length> popup-x: 0px;
-    in-out property <length> popup-y: 0px;
+    in-out property <length> popup-x: 350px;
+    in-out property <length> popup-y: 200px;
+
+    in-out property <bool> open: false;
 
     out property <bool> is-open;
-    is-open: popup.is-open;
+    is-open: root.open;
 
     callback open-requested;
     open-requested => {
-        popup.show();
+        root.open = true;
     }
 
-    if (root.preview-mode) : BeatContent {
+    x: root.popup-x;
+    y: root.popup-y;
+    width: 680px;
+    height: 440px;
+    visible: root.open;
+    background: transparent;
+    clip: false;
+
+    BeatContent {
         steps <=> root.steps;
         playhead <=> root.playhead;
         step-indexes <=> root.step-indexes;
@@ -874,7 +882,7 @@ export component BeatPopup inherits Rectangle {
         resolution-options <=> root.resolution-options;
         beat-name <=> root.beat-name;
         close-requested => {
-            popup.close();
+            root.open = false;
         }
         drag-moved(dx, dy) => {
             root.popup-x += dx;
@@ -894,54 +902,6 @@ export component BeatPopup inherits Rectangle {
         }
         beat-menu-requested(x, y) => {
             // handled by parent or Rust
-        }
-    }
-
-    popup := PopupWindow {
-        close-policy: PopupClosePolicy.no-auto-close;
-        x: root.popup-x;
-        y: root.popup-y;
-        width: 680px;
-        height: 440px;
-
-        BeatContent {
-            steps <=> root.steps;
-            playhead <=> root.playhead;
-            step-indexes <=> root.step-indexes;
-            instrument-indexes <=> root.instrument-indexes;
-            instrument-names <=> root.instrument-names;
-            track-active <=> root.track-active;
-            track-pan <=> root.track-pan;
-            track-volume <=> root.track-volume;
-            track-mixer-channel <=> root.track-mixer-channel;
-            selected-track <=> root.selected-track;
-            editing-track <=> root.editing-track;
-            track-input <=> root.track-input;
-            grid-resolution <=> root.grid-resolution;
-            resolution-options <=> root.resolution-options;
-            beat-name <=> root.beat-name;
-            close-requested => {
-                popup.close();
-            }
-            drag-moved(dx, dy) => {
-                root.popup-x += dx;
-                root.popup-y += dy;
-            }
-            grid-resolution-changed(res) => {
-                root.grid-resolution = res;
-            }
-            beat-name-changed(name) => {
-                root.beat-name = name;
-            }
-            add-track-requested => {
-                // handled by parent or Rust
-            }
-            sample-context-menu-requested(inst, x, y) => {
-                // handled by parent or Rust
-            }
-            beat-menu-requested(x, y) => {
-                // handled by parent or Rust
-            }
         }
     }
 }
