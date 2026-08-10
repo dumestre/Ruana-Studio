@@ -41,33 +41,33 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Meters animados (áudio falso).
-    {
-        let ui_weak = ui.as_weak();
-        slint::Timer::single_shot(Duration::from_millis(300), move || {
-            if let Some(ui) = ui_weak.upgrade() {
-                let _ = ui;
-            }
-        });
-    }
+    // Meters animados (áudio falso) — só rodam enquanto "tocando".
     let meter_timer = Rc::new(slint::Timer::default());
     {
         let ui_weak = ui.as_weak();
         let timer = meter_timer.clone();
-        timer.start(
-            slint::TimerMode::Repeated,
-            Duration::from_millis(80),
-            move || {
-                if let Some(ui) = ui_weak.upgrade() {
-                    let mut levels: Vec<f32> = Vec::new();
-                    for _ in 0..5 {
-                        let r = next_random(&mut seed);
-                        levels.push(r * r);
-                    }
-                    ui.set_mixer_meters(Rc::new(slint::VecModel::from(levels)).into());
-                }
-            },
-        );
+        ui.on_play_state_changed(move |playing| {
+            if playing {
+                let ui_weak = ui_weak.clone();
+                let timer = timer.clone();
+                timer.start(
+                    slint::TimerMode::Repeated,
+                    Duration::from_millis(80),
+                    move || {
+                        if let Some(ui) = ui_weak.upgrade() {
+                            let mut levels: Vec<f32> = Vec::new();
+                            for _ in 0..5 {
+                                let r = next_random(&mut seed);
+                                levels.push(r * r);
+                            }
+                            ui.set_mixer_meters(Rc::new(slint::VecModel::from(levels)).into());
+                        }
+                    },
+                );
+            } else {
+                timer.stop();
+            }
+        });
     }
 
     ui.run()
