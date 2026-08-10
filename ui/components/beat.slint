@@ -82,6 +82,54 @@ export component BeatScrollBar inherits Rectangle {
     }
 }
 
+component ContextMenu inherits Rectangle {
+    in property <[string]> options: [];
+    in property <length> pos-x: 0px;
+    in property <length> pos-y: 0px;
+    in property <bool> menu-open: false;
+    callback option-clicked(string);
+
+    width: 150px;
+    height: 21px * self.options.length + 1px;
+    x: self.pos-x;
+    y: self.pos-y;
+    background: Theme.surface;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: false;
+    visible: self.menu-open;
+
+    VerticalLayout {
+        padding: 1px;
+        spacing: 1px;
+        for opt in root.options: Rectangle {
+            height: 20px;
+            border-radius: 2px;
+            background: opt-touch.has-hover ? Theme.surface-high : Theme.base;
+
+            Text {
+                text: opt;
+                width: 100%;
+                height: 100%;
+                color: Theme.text-primary;
+                font-size: 11px;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+            }
+
+            opt-touch := TouchArea {
+                width: 100%;
+                height: 100%;
+                mouse-cursor: pointer;
+                clicked => {
+                    root.option-clicked(opt);
+                }
+            }
+        }
+    }
+}
+
 export component BeatContent inherits Rectangle {
     in-out property <[bool]> steps: [
         true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false,
@@ -113,6 +161,27 @@ export component BeatContent inherits Rectangle {
     in-out property <string> beat-name: "BEAT SEQUENCER";
 
     in-out property <bool> grid-dropdown-open: false;
+
+    property <[bool]> default-steps: [
+        true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false,
+        false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false,
+        false, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false,
+        true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false,
+        false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false,
+        true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true
+    ];
+
+    in-out property <bool> sample-menu-open: false;
+    in-out property <int> sample-menu-inst: 0;
+    in-out property <length> sample-menu-x: 0px;
+    in-out property <length> sample-menu-y: 0px;
+    in-out property <[bool]> clipboard: [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+
+    in-out property <bool> beat-menu-open: false;
+    in-out property <length> beat-menu-x: 0px;
+    in-out property <length> beat-menu-y: 0px;
 
     property <length> grid-content-width: root.grid-resolution * 28px + Math.max(0, root.grid-resolution - 1) * 2px;
     property <length> grid-content-height: 20px + root.instrument-indexes.length * 24px + Math.max(0, root.instrument-indexes.length - 1) * 4px;
@@ -231,6 +300,8 @@ export component BeatContent inherits Rectangle {
                         mouse-cursor: pointer;
                         clicked => {
                             root.grid-dropdown-open = !root.grid-dropdown-open;
+                            root.sample-menu-open = false;
+                            root.beat-menu-open = false;
                         }
                     }
 
@@ -262,7 +333,7 @@ export component BeatContent inherits Rectangle {
                     }
                 }
 
-                Rectangle {
+                beat-menu-btn := Rectangle {
                     width: 24px;
                     height: 24px;
 
@@ -278,13 +349,18 @@ export component BeatContent inherits Rectangle {
                         mouse-cursor: pointer;
                         clicked => {
                             root.beat-menu-requested(self.x / 1px, (self.y + 24px) / 1px);
+                            root.beat-menu-open = !root.beat-menu-open;
+                            root.sample-menu-open = false;
+                            root.grid-dropdown-open = false;
+                            root.beat-menu-x = header-row.x + header-controls.x + beat-menu-btn.x;
+                            root.beat-menu-y = header-row.y + header-controls.y + beat-menu-btn.y + 24px;
                         }
                     }
                 }
             }
         }
 
-        HorizontalLayout {
+        grid-body := HorizontalLayout {
             cross-axis-alignment: CrossAxisAlignment.start;
             spacing: 0;
 
@@ -474,6 +550,12 @@ export component BeatContent inherits Rectangle {
                                 pointer-event(event) => {
                                     if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
                                         root.sample-context-menu-requested(inst, self.mouse-x / 1px, self.mouse-y / 1px);
+                                        root.sample-menu-inst = inst;
+                                        root.sample-menu-x = grid-body.x + 200px + grid-flick.viewport-x + self.mouse-x;
+                                        root.sample-menu-y = grid-body.y + 20px + inst * 28px + self.mouse-y;
+                                        root.sample-menu-open = true;
+                                        root.beat-menu-open = false;
+                                        root.grid-dropdown-open = false;
                                     }
                                 }
                             }
@@ -572,6 +654,171 @@ export component BeatContent inherits Rectangle {
                     }
                 }
             }
+        }
+    }
+
+    if (root.sample-menu-open || root.beat-menu-open) : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: transparent;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => {
+                root.sample-menu-open = false;
+                root.beat-menu-open = false;
+            }
+        }
+    }
+
+    sample-menu := ContextMenu {
+        options: ["Copy Pattern", "Paste Pattern", "Clear Pattern", "Invert Pattern", "All On", "All Off"];
+        pos-x: Math.min(root.sample-menu-x, 528px);
+        pos-y: Math.min(root.sample-menu-y, 313px);
+        menu-open: root.sample-menu-open;
+        option-clicked(opt) => {
+            if (opt == "Copy Pattern") {
+                root.clipboard[0] = root.steps[root.sample-menu-inst * 16 + 0];
+                root.clipboard[1] = root.steps[root.sample-menu-inst * 16 + 1];
+                root.clipboard[2] = root.steps[root.sample-menu-inst * 16 + 2];
+                root.clipboard[3] = root.steps[root.sample-menu-inst * 16 + 3];
+                root.clipboard[4] = root.steps[root.sample-menu-inst * 16 + 4];
+                root.clipboard[5] = root.steps[root.sample-menu-inst * 16 + 5];
+                root.clipboard[6] = root.steps[root.sample-menu-inst * 16 + 6];
+                root.clipboard[7] = root.steps[root.sample-menu-inst * 16 + 7];
+                root.clipboard[8] = root.steps[root.sample-menu-inst * 16 + 8];
+                root.clipboard[9] = root.steps[root.sample-menu-inst * 16 + 9];
+                root.clipboard[10] = root.steps[root.sample-menu-inst * 16 + 10];
+                root.clipboard[11] = root.steps[root.sample-menu-inst * 16 + 11];
+                root.clipboard[12] = root.steps[root.sample-menu-inst * 16 + 12];
+                root.clipboard[13] = root.steps[root.sample-menu-inst * 16 + 13];
+                root.clipboard[14] = root.steps[root.sample-menu-inst * 16 + 14];
+                root.clipboard[15] = root.steps[root.sample-menu-inst * 16 + 15];
+            } else if (opt == "Paste Pattern") {
+                root.steps[root.sample-menu-inst * 16 + 0] = root.clipboard[0];
+                root.steps[root.sample-menu-inst * 16 + 1] = root.clipboard[1];
+                root.steps[root.sample-menu-inst * 16 + 2] = root.clipboard[2];
+                root.steps[root.sample-menu-inst * 16 + 3] = root.clipboard[3];
+                root.steps[root.sample-menu-inst * 16 + 4] = root.clipboard[4];
+                root.steps[root.sample-menu-inst * 16 + 5] = root.clipboard[5];
+                root.steps[root.sample-menu-inst * 16 + 6] = root.clipboard[6];
+                root.steps[root.sample-menu-inst * 16 + 7] = root.clipboard[7];
+                root.steps[root.sample-menu-inst * 16 + 8] = root.clipboard[8];
+                root.steps[root.sample-menu-inst * 16 + 9] = root.clipboard[9];
+                root.steps[root.sample-menu-inst * 16 + 10] = root.clipboard[10];
+                root.steps[root.sample-menu-inst * 16 + 11] = root.clipboard[11];
+                root.steps[root.sample-menu-inst * 16 + 12] = root.clipboard[12];
+                root.steps[root.sample-menu-inst * 16 + 13] = root.clipboard[13];
+                root.steps[root.sample-menu-inst * 16 + 14] = root.clipboard[14];
+                root.steps[root.sample-menu-inst * 16 + 15] = root.clipboard[15];
+            } else if (opt == "Clear Pattern") {
+                root.steps[root.sample-menu-inst * 16 + 0] = false;
+                root.steps[root.sample-menu-inst * 16 + 1] = false;
+                root.steps[root.sample-menu-inst * 16 + 2] = false;
+                root.steps[root.sample-menu-inst * 16 + 3] = false;
+                root.steps[root.sample-menu-inst * 16 + 4] = false;
+                root.steps[root.sample-menu-inst * 16 + 5] = false;
+                root.steps[root.sample-menu-inst * 16 + 6] = false;
+                root.steps[root.sample-menu-inst * 16 + 7] = false;
+                root.steps[root.sample-menu-inst * 16 + 8] = false;
+                root.steps[root.sample-menu-inst * 16 + 9] = false;
+                root.steps[root.sample-menu-inst * 16 + 10] = false;
+                root.steps[root.sample-menu-inst * 16 + 11] = false;
+                root.steps[root.sample-menu-inst * 16 + 12] = false;
+                root.steps[root.sample-menu-inst * 16 + 13] = false;
+                root.steps[root.sample-menu-inst * 16 + 14] = false;
+                root.steps[root.sample-menu-inst * 16 + 15] = false;
+            } else if (opt == "Invert Pattern") {
+                root.steps[root.sample-menu-inst * 16 + 0] = !root.steps[root.sample-menu-inst * 16 + 0];
+                root.steps[root.sample-menu-inst * 16 + 1] = !root.steps[root.sample-menu-inst * 16 + 1];
+                root.steps[root.sample-menu-inst * 16 + 2] = !root.steps[root.sample-menu-inst * 16 + 2];
+                root.steps[root.sample-menu-inst * 16 + 3] = !root.steps[root.sample-menu-inst * 16 + 3];
+                root.steps[root.sample-menu-inst * 16 + 4] = !root.steps[root.sample-menu-inst * 16 + 4];
+                root.steps[root.sample-menu-inst * 16 + 5] = !root.steps[root.sample-menu-inst * 16 + 5];
+                root.steps[root.sample-menu-inst * 16 + 6] = !root.steps[root.sample-menu-inst * 16 + 6];
+                root.steps[root.sample-menu-inst * 16 + 7] = !root.steps[root.sample-menu-inst * 16 + 7];
+                root.steps[root.sample-menu-inst * 16 + 8] = !root.steps[root.sample-menu-inst * 16 + 8];
+                root.steps[root.sample-menu-inst * 16 + 9] = !root.steps[root.sample-menu-inst * 16 + 9];
+                root.steps[root.sample-menu-inst * 16 + 10] = !root.steps[root.sample-menu-inst * 16 + 10];
+                root.steps[root.sample-menu-inst * 16 + 11] = !root.steps[root.sample-menu-inst * 16 + 11];
+                root.steps[root.sample-menu-inst * 16 + 12] = !root.steps[root.sample-menu-inst * 16 + 12];
+                root.steps[root.sample-menu-inst * 16 + 13] = !root.steps[root.sample-menu-inst * 16 + 13];
+                root.steps[root.sample-menu-inst * 16 + 14] = !root.steps[root.sample-menu-inst * 16 + 14];
+                root.steps[root.sample-menu-inst * 16 + 15] = !root.steps[root.sample-menu-inst * 16 + 15];
+            } else if (opt == "All On") {
+                root.steps[root.sample-menu-inst * 16 + 0] = true;
+                root.steps[root.sample-menu-inst * 16 + 1] = true;
+                root.steps[root.sample-menu-inst * 16 + 2] = true;
+                root.steps[root.sample-menu-inst * 16 + 3] = true;
+                root.steps[root.sample-menu-inst * 16 + 4] = true;
+                root.steps[root.sample-menu-inst * 16 + 5] = true;
+                root.steps[root.sample-menu-inst * 16 + 6] = true;
+                root.steps[root.sample-menu-inst * 16 + 7] = true;
+                root.steps[root.sample-menu-inst * 16 + 8] = true;
+                root.steps[root.sample-menu-inst * 16 + 9] = true;
+                root.steps[root.sample-menu-inst * 16 + 10] = true;
+                root.steps[root.sample-menu-inst * 16 + 11] = true;
+                root.steps[root.sample-menu-inst * 16 + 12] = true;
+                root.steps[root.sample-menu-inst * 16 + 13] = true;
+                root.steps[root.sample-menu-inst * 16 + 14] = true;
+                root.steps[root.sample-menu-inst * 16 + 15] = true;
+            } else {
+                root.steps[root.sample-menu-inst * 16 + 0] = false;
+                root.steps[root.sample-menu-inst * 16 + 1] = false;
+                root.steps[root.sample-menu-inst * 16 + 2] = false;
+                root.steps[root.sample-menu-inst * 16 + 3] = false;
+                root.steps[root.sample-menu-inst * 16 + 4] = false;
+                root.steps[root.sample-menu-inst * 16 + 5] = false;
+                root.steps[root.sample-menu-inst * 16 + 6] = false;
+                root.steps[root.sample-menu-inst * 16 + 7] = false;
+                root.steps[root.sample-menu-inst * 16 + 8] = false;
+                root.steps[root.sample-menu-inst * 16 + 9] = false;
+                root.steps[root.sample-menu-inst * 16 + 10] = false;
+                root.steps[root.sample-menu-inst * 16 + 11] = false;
+                root.steps[root.sample-menu-inst * 16 + 12] = false;
+                root.steps[root.sample-menu-inst * 16 + 13] = false;
+                root.steps[root.sample-menu-inst * 16 + 14] = false;
+                root.steps[root.sample-menu-inst * 16 + 15] = false;
+            }
+            root.sample-menu-open = false;
+        }
+    }
+
+    beat-menu := ContextMenu {
+        options: ["All Steps On", "All Steps Off", "Reset Pattern", "Close Window"];
+        pos-x: Math.min(root.beat-menu-x, 528px);
+        pos-y: Math.min(root.beat-menu-y, 355px);
+        menu-open: root.beat-menu-open;
+        option-clicked(opt) => {
+            if (opt == "All Steps On") {
+                root.steps = [
+                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true
+                ];
+            } else if (opt == "All Steps Off") {
+                root.steps = [
+                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false
+                ];
+            } else if (opt == "Reset Pattern") {
+                root.steps = root.default-steps;
+            } else {
+                root.close-requested();
+            }
+            root.beat-menu-open = false;
         }
     }
 }
