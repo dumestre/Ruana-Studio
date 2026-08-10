@@ -138,7 +138,7 @@ export component BeatContent inherits Rectangle {
         padding: 12px;
         spacing: 8px;
 
-        HorizontalLayout {
+        header-row := HorizontalLayout {
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
             spacing: 8px;
@@ -208,7 +208,7 @@ export component BeatContent inherits Rectangle {
                 }
             }
 
-            HorizontalLayout {
+            header-controls := HorizontalLayout {
                 cross-axis-alignment: CrossAxisAlignment.center;
                 spacing: 8px;
 
@@ -219,7 +219,7 @@ export component BeatContent inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                Rectangle {
+                grid-btn := Rectangle {
                     width: 60px;
                     height: 22px;
                     background: Theme.base;
@@ -242,43 +242,6 @@ export component BeatContent inherits Rectangle {
                         font-size: 11px;
                         horizontal-alignment: center;
                         vertical-alignment: center;
-                    }
-
-                    if (root.grid-dropdown-open) : Rectangle {
-                        width: 120px;
-                        background: Theme.surface;
-                        border-radius: 4px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        x: 0px;
-                        y: 24px;
-                        clip: false;
-
-                        VerticalLayout {
-                            spacing: 1px;
-                            for res in root.resolution-options: Rectangle {
-                                height: 22px;
-                                background: Theme.base;
-
-                                Text {
-                                    text: "" + res + " steps";
-                                    width: 100%;
-                                    height: 100%;
-                                    color: Theme.text-primary;
-                                    font-size: 11px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-
-                                TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => {
-                                        root.grid-resolution = res;
-                                        root.grid-dropdown-open = false;
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
 
@@ -573,7 +536,43 @@ export component BeatContent inherits Rectangle {
                 }
             }
         }
+    }
 
+    if (root.grid-dropdown-open) : Rectangle {
+        x: header-row.x + header-controls.x + grid-btn.x;
+        y: header-row.y + header-controls.y + grid-btn.y + 24px;
+        width: 120px;
+        background: Theme.surface;
+        border-radius: 4px;
+        border-width: 1px;
+        border-color: Theme.border;
+        clip: false;
+
+        VerticalLayout {
+            spacing: 1px;
+            for res in root.resolution-options: Rectangle {
+                height: 22px;
+                background: Theme.base;
+
+                Text {
+                    text: "" + res + " steps";
+                    width: 100%;
+                    height: 100%;
+                    color: Theme.text-primary;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.grid-resolution = res;
+                        root.grid-dropdown-open = false;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -652,6 +651,7 @@ export component BeatPopup inherits Rectangle {
     }
 
     popup := PopupWindow {
+        close-policy: PopupClosePolicy.no-auto-close;
         x: root.popup-x;
         y: root.popup-y;
         width: 680px;

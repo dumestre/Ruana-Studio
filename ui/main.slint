@@ -9,14 +9,16 @@ import { BeatPopup } from "components/beat.slint";
 
 export component MainWindow inherits Window {
     title: "Ferrum Studio";
-    width: 1380px;
-    height: 880px;
+    preferred-width: 1380px;
+    preferred-height: 880px;
     background: Theme.base;
 
     in-out property <int> transport-position: 0;
     in-out property <bool> playing: false;
     in-out property <int> selected-track: 0;
     in-out property <float> zoom-level: 1.0;
+    min-height: 720px;
+    min-width: 1280px;
     in-out property <[float]> mixer-meters: [0, 0, 0, 0, 0];
 
     callback play-state-changed(bool);
