@@ -5,6 +5,9 @@ export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
     in-out property <bool> grid-enabled: true;
     in-out property <bool> beat-open: false;
+    
+    preferred-width: 1380px;
+    preferred-height: 880px;
 
     callback zoom-in;
     callback zoom-out;
@@ -30,13 +33,13 @@ export component Toolbar inherits Rectangle {
         padding-left: 8px;
         padding-right: 8px;
         spacing: 4px;
-        alignment: LayoutAlignment.start;
+        alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
 
         Image {
             source: @image-url("../app/assets/FerrumStudio.svg");
-            width: 20px;
-            height: 20px;
+            width: 30px;
+            height: 30px;
         }
 
         Rectangle {
@@ -114,25 +117,21 @@ export component Toolbar inherits Rectangle {
             background: transparent;
         }
 
-        Text {
-            text: "Mock Session";
-            color: Theme.text-dim;
-            font-size: 11px;
-            vertical-alignment: center;
-        }
-
-        Rectangle {
-            horizontal-stretch: 1;
-            background: transparent;
-        }
+        HorizontalLayout {
+            alignment: LayoutAlignment.end;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
         Button {
-            icon: @image-url("icons/close.svg");
+            icon: @image-url("icons/minimize.svg");
             icon-size: 14px;
             text: "";
             clicked => {
-                root.close();
+                root.minimize();
             }
+        }
+        Rectangle {
+            width: 4px;
+            background: transparent;
         }
         Button {
             icon: @image-url("icons/maximize.svg");
@@ -142,14 +141,20 @@ export component Toolbar inherits Rectangle {
                 root.maximize();
             }
         }
+        Rectangle {
+            width: 4px;
+            background: transparent;
+        }
         Button {
-            icon: @image-url("icons/minimize.svg");
-            icon-size: 14px;
+            icon: @image-url("icons/close.svg");
+            icon-color: Colors.crimson;
+            icon-size: 20px;
             text: "";
             clicked => {
-                root.minimize();
+                root.close();
             }
         }
+    }
     }
 }
 
