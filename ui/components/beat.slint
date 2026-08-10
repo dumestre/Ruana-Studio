@@ -31,6 +31,51 @@ component Step inherits Rectangle {
     }
 }
 
+export component BeatScrollBar inherits Rectangle {
+    in-out property <length> value: 0px;
+    in-out property <length> maximum: 0px;
+    in property <length> page-size: 0px;
+    callback scrolled;
+
+    height: 8px;
+    width: 100%;
+    background: Theme.base;
+    border-radius: 4px;
+    visible: root.maximum > 0px;
+
+    handle := Rectangle {
+        x: (root.width - self.width) * (-root.value / Math.max(root.maximum, 1px));
+        width: Math.max(24px, parent.width * (root.page-size / Math.max(root.maximum + root.page-size, 1px)));
+        height: 100%;
+        background: Theme.text-dim;
+        border-radius: 4px;
+    }
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: pointer;
+
+        function update-value() {
+            root.value = -Math.max(0px, Math.min(root.maximum, (self.mouse-x - handle.width / 2) * (root.maximum / Math.max(root.width - handle.width, 1px))));
+        }
+
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                self.update-value();
+                root.scrolled();
+            }
+        }
+
+        moved => {
+            if (self.pressed) {
+                self.update-value();
+                root.scrolled();
+            }
+        }
+    }
+}
+
 export component BeatContent inherits Rectangle {
     in-out property <[bool]> steps: [
         true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false,
@@ -62,6 +107,9 @@ export component BeatContent inherits Rectangle {
     in-out property <string> beat-name: "BEAT SEQUENCER";
 
     in-out property <bool> grid-dropdown-open: false;
+
+    property <length> grid-content-width: root.grid-resolution * 28px + Math.max(0, root.grid-resolution - 1) * 2px;
+    property <length> grid-content-height: 20px + root.instrument-indexes.length * 24px + Math.max(0, root.instrument-indexes.length - 1) * 4px;
 
     callback close-requested;
     callback drag-moved(length, length);
@@ -267,22 +315,6 @@ export component BeatContent inherits Rectangle {
             }
         }
 
-HorizontalLayout {
-                    cross-axis-alignment: CrossAxisAlignment.center;
-                    spacing: 2px;
-            Rectangle { width: 214px; background: transparent; }
-            for s in root.step-indexes: Text {
-                visible: s < root.grid-resolution;
-                text: "" + (s + 1);
-                width: 28px;
-                height: 16px;
-                color: Theme.text-dim;
-                font-size: 9px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-        }
-
         HorizontalLayout {
             cross-axis-alignment: CrossAxisAlignment.start;
             spacing: 0;
@@ -294,6 +326,12 @@ HorizontalLayout {
 
                 VerticalLayout {
                     spacing: 4px;
+
+                    Rectangle {
+                        height: 16px;
+                        background: transparent;
+                    }
+
                     for inst in root.instrument-indexes: Rectangle {
                         height: 24px;
                         border-radius: 4px;
@@ -407,16 +445,35 @@ HorizontalLayout {
                 }
             }
 
-Flickable {
-                width: 100%;
-                height: 100%;
-                interactive: true;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
 
-                HorizontalLayout {
-                    spacing: 0;
+                grid-flick := Flickable {
+                    width: 100%;
+                    viewport-width: root.grid-content-width;
+                    viewport-height: root.grid-content-height;
+                    interactive: true;
 
                     VerticalLayout {
                         spacing: 4px;
+
+                        HorizontalLayout {
+                            cross-axis-alignment: CrossAxisAlignment.center;
+                            spacing: 2px;
+
+                            for s in root.step-indexes: Text {
+                                visible: s < root.grid-resolution;
+                                text: "" + (s + 1);
+                                width: 28px;
+                                height: 16px;
+                                color: Theme.text-dim;
+                                font-size: 9px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
                         for inst in root.instrument-indexes: Rectangle {
                             height: 24px;
                             background: Theme.surface;
@@ -448,7 +505,17 @@ Flickable {
                         }
                     }
                 }
+
+                BeatScrollBar {
+                    maximum: root.grid-content-width - grid-flick.width;
+                    page-size: grid-flick.width;
+                    value <=> grid-flick.viewport-x;
+                    scrolled => {
+                        // noop: value binding already updates the viewport
+                    }
+                }
             }
+        }
 
         Rectangle {
             height: 32px;
@@ -482,7 +549,7 @@ Flickable {
                 }
             }
         }
-}
+
     }
 }
 
