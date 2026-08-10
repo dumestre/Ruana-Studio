@@ -359,7 +359,6 @@ export component BeatContent inherits Rectangle {
 
                     Rectangle {
                         width: 40px;
-
                         height: 22px;
                         background: Theme.base;
                         border-radius: 3px;
@@ -378,8 +377,6 @@ export component BeatContent inherits Rectangle {
                                 root.track-mixer-channel[inst] = Math.max(0, Math.min(15, Math.round(self.text.to-float() - 1)));
                             }
                         }
-
-                        
                     }
                 }
             }
@@ -478,6 +475,11 @@ export component BeatPopup inherits Rectangle {
     in-out property <[int]> instrument-indexes: [0, 1, 2, 3, 4, 5, 6, 7];
     in-out property <[string]> instrument-names: ["Kick", "Snare", "Clap", "Hat Closed", "Hat Open", "Tom", "Cymbal", "Perc"];
 
+    in-out property <[bool]> track-active: [true, true, true, true, true, true, true, true];
+    in-out property <[float]> track-pan: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    in-out property <[float]> track-volume: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+    in-out property <[int]> track-mixer-channel: [0, 1, 2, 3, 4, 5, 6, 7];
+
     in-out property <int> selected-track: 0;
     in-out property <bool> editing-track: false;
     in-out property <string> track-input: "1";
@@ -504,6 +506,10 @@ export component BeatPopup inherits Rectangle {
         step-indexes <=> root.step-indexes;
         instrument-indexes <=> root.instrument-indexes;
         instrument-names <=> root.instrument-names;
+        track-active <=> root.track-active;
+        track-pan <=> root.track-pan;
+        track-volume <=> root.track-volume;
+        track-mixer-channel <=> root.track-mixer-channel;
         selected-track <=> root.selected-track;
         editing-track <=> root.editing-track;
         track-input <=> root.track-input;
@@ -546,6 +552,10 @@ export component BeatPopup inherits Rectangle {
             step-indexes <=> root.step-indexes;
             instrument-indexes <=> root.instrument-indexes;
             instrument-names <=> root.instrument-names;
+            track-active <=> root.track-active;
+            track-pan <=> root.track-pan;
+            track-volume <=> root.track-volume;
+            track-mixer-channel <=> root.track-mixer-channel;
             selected-track <=> root.selected-track;
             editing-track <=> root.editing-track;
             track-input <=> root.track-input;
