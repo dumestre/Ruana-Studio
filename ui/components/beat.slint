@@ -32,6 +32,7 @@ component Step inherits Rectangle {
 }
 
 export component BeatScrollBar inherits Rectangle {
+    in-out property <bool> active: false;
     in-out property <length> value: 0px;
     in-out property <length> maximum: 0px;
     in property <length> page-size: 0px;
@@ -42,6 +43,9 @@ export component BeatScrollBar inherits Rectangle {
     background: Theme.base;
     border-radius: 4px;
     visible: root.maximum > 0px;
+    opacity: root.active ? 1.0 : 0.15;
+
+    animate opacity { duration: 400ms; easing: ease-in-out; }
 
     handle := Rectangle {
         x: (root.width - self.width) * (-root.value / Math.max(root.maximum, 1px));
@@ -62,6 +66,7 @@ export component BeatScrollBar inherits Rectangle {
 
         pointer-event(event) => {
             if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                root.active = true;
                 self.update-value();
                 root.scrolled();
             }
@@ -69,6 +74,7 @@ export component BeatScrollBar inherits Rectangle {
 
         moved => {
             if (self.pressed) {
+                root.active = true;
                 self.update-value();
                 root.scrolled();
             }
@@ -451,9 +457,15 @@ export component BeatContent inherits Rectangle {
 
                 grid-flick := Flickable {
                     width: 100%;
+                    height: root.grid-content-height;
                     viewport-width: root.grid-content-width;
                     viewport-height: root.grid-content-height;
                     interactive: true;
+                    flicked => {
+                        bar.active = true;
+                        hide-bar-timer.running = false;
+                        hide-bar-timer.running = true;
+                    }
 
                     VerticalLayout {
                         spacing: 4px;
@@ -506,12 +518,24 @@ export component BeatContent inherits Rectangle {
                     }
                 }
 
-                BeatScrollBar {
+                hide-bar-timer := Timer {
+                    interval: 1400ms;
+                    running: false;
+                    triggered => {
+                        self.running = false;
+                        bar.active = false;
+                    }
+                }
+
+                bar := BeatScrollBar {
+                    active: true;
                     maximum: root.grid-content-width - grid-flick.width;
                     page-size: grid-flick.width;
                     value <=> grid-flick.viewport-x;
                     scrolled => {
-                        // noop: value binding already updates the viewport
+                        bar.active = true;
+                        hide-bar-timer.running = false;
+                        hide-bar-timer.running = true;
                     }
                 }
             }
