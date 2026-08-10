@@ -267,9 +267,9 @@ export component BeatContent inherits Rectangle {
             }
         }
 
-        HorizontalLayout {
-            cross-axis-alignment: CrossAxisAlignment.center;
-            spacing: 2px;
+HorizontalLayout {
+                    cross-axis-alignment: CrossAxisAlignment.center;
+                    spacing: 2px;
             Rectangle { width: 214px; background: transparent; }
             for s in root.step-indexes: Text {
                 visible: s < root.grid-resolution;
@@ -289,19 +289,19 @@ export component BeatContent inherits Rectangle {
 
             Rectangle {
                 height: 24px;
-                width: 120px;
+                width: 102px;
                 border-radius: 4px;
                 border-width: 1px;
 
                 HorizontalLayout {
                     cross-axis-alignment: CrossAxisAlignment.center;
-                    spacing: 4px;
+                    spacing: 2px;
 
                     Rectangle {
                         width: 8px;
                         height: 8px;
-                        background: root.track-active[inst] ? Theme.accent : Theme.text-dim;
-                        border-radius: 8px;
+                        background: root.track-active[inst] ? Theme.activ : Theme.text-dim;
+                        border-radius: 4px;
                         border-width: 1px;
                         border-color: Theme.border;
 
