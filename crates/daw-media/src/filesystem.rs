@@ -1,4 +1,3 @@
-```rust
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -37,4 +36,3 @@ pub fn list_directory(path: impl AsRef<Path>) -> io::Result<Vec<FileEntry>> {
 
     Ok(entries)
 }
-```

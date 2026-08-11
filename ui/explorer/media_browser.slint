@@ -1,13 +1,54 @@
 import { Theme } from "../theme.slint";
 import { BrowserItem } from "../components/browser_item.slint";
 
+export struct MediaItem {
+    name: string,
+    type: string,
+    category: string,
+}
+
 export component MediaBrowser inherits Rectangle {
+    in property <[MediaItem]> media: [
+        {
+            name: "Kick_01.wav",
+            type: "WAV",
+            category: "One-Shot"
+        },
+        {
+            name: "Kick_02.wav",
+            type: "WAV",
+            category: "One-Shot"
+        },
+        {
+            name: "Snare_01.wav",
+            type: "WAV",
+            category: "One-Shot"
+        },
+        {
+            name: "Hat_Closed.wav",
+            type: "WAV",
+            category: "One-Shot"
+        },
+        {
+            name: "Bass_Loop_128.wav",
+            type: "WAV",
+            category: "Loops"
+        },
+        {
+            name: "Vocal_Female.wav",
+            type: "WAV",
+            category: "Vocals"
+        }
+    ];
+
+    in-out property <string> category-filter: "All";
+
     background: transparent;
 
     VerticalLayout {
         spacing: 5px;
 
-        // Local atual
+        // Cabeçalho
         Rectangle {
             height: 26px;
 
@@ -34,25 +75,13 @@ export component MediaBrowser inherits Rectangle {
                 }
 
                 Text {
-                    text: "Samples";
+                    text: "Media";
 
                     color: Theme.text-primary;
                     font-size: 9px;
 
                     vertical-alignment: center;
                     horizontal-stretch: 1;
-                }
-
-                Text {
-                    text: "⋮";
-
-                    width: 18px;
-
-                    color: Theme.text-dim;
-                    font-size: 13px;
-
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
                 }
             }
         }
@@ -66,56 +95,122 @@ export component MediaBrowser inherits Rectangle {
                 spacing: 3px;
 
                 Rectangle {
-                    width: 52px;
+                    width: 40px;
                     height: 23px;
 
-                    background: Theme.surface-high;
+                    background: root.category-filter == "All"
+                        ? Theme.surface-high
+                        : transparent;
+
                     border-radius: 3px;
 
                     Text {
-                        text: "Audio";
+                        text: "All";
 
-                        color: Theme.text-primary;
+                        color: root.category-filter == "All"
+                            ? Theme.text-primary
+                            : Theme.text-dim;
+
                         font-size: 8px;
 
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+
+                    TouchArea {
+                        clicked => {
+                            root.category-filter = "All";
+                        }
+                    }
                 }
 
                 Rectangle {
-                    width: 45px;
+                    width: 52px;
                     height: 23px;
 
-                    background: transparent;
+                    background: root.category-filter == "Loops"
+                        ? Theme.surface-high
+                        : transparent;
+
                     border-radius: 3px;
 
                     Text {
                         text: "Loops";
 
-                        color: Theme.text-dim;
+                        color: root.category-filter == "Loops"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
                         font-size: 8px;
 
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+
+                    TouchArea {
+                        clicked => {
+                            root.category-filter = "Loops";
+                        }
+                    }
                 }
 
                 Rectangle {
-                    width: 55px;
+                    width: 62px;
                     height: 23px;
 
-                    background: transparent;
+                    background: root.category-filter == "One-Shot"
+                        ? Theme.surface-high
+                        : transparent;
+
                     border-radius: 3px;
 
                     Text {
                         text: "One-Shot";
 
-                        color: Theme.text-dim;
+                        color: root.category-filter == "One-Shot"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
                         font-size: 8px;
 
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.category-filter = "One-Shot";
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 48px;
+                    height: 23px;
+
+                    background: root.category-filter == "Vocals"
+                        ? Theme.surface-high
+                        : transparent;
+
+                    border-radius: 3px;
+
+                    Text {
+                        text: "Vocals";
+
+                        color: root.category-filter == "Vocals"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
+                        font-size: 8px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.category-filter = "Vocals";
+                        }
                     }
                 }
 
@@ -123,17 +218,29 @@ export component MediaBrowser inherits Rectangle {
                     width: 42px;
                     height: 23px;
 
-                    background: transparent;
+                    background: root.category-filter == "MIDI"
+                        ? Theme.surface-high
+                        : transparent;
+
                     border-radius: 3px;
 
                     Text {
                         text: "MIDI";
 
-                        color: Theme.text-dim;
+                        color: root.category-filter == "MIDI"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
                         font-size: 8px;
 
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.category-filter = "MIDI";
+                        }
                     }
                 }
             }
@@ -150,7 +257,7 @@ export component MediaBrowser inherits Rectangle {
                 spacing: 1px;
 
                 Text {
-                    text: "AUDIO FILES";
+                    text: "MEDIA";
 
                     height: 20px;
 
@@ -161,70 +268,16 @@ export component MediaBrowser inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                BrowserItem {
-                    name: "Kick_01.wav";
-                    type: "WAV";
-                    icon: "♫";
-                    selected: true;
-                }
+                for item in root.media : BrowserItem {
+                    visible: root.category-filter == "All"
+                        || item.category == root.category-filter;
 
-                BrowserItem {
-                    name: "Kick_02.wav";
-                    type: "WAV";
-                    icon: "♫";
-                }
+                    name: item.name;
+                    type: item.type;
 
-                BrowserItem {
-                    name: "Snare_01.wav";
-                    type: "WAV";
-                    icon: "♫";
-                }
-
-                BrowserItem {
-                    name: "Hat_Closed.wav";
-                    type: "WAV";
-                    icon: "♫";
-                }
-
-                BrowserItem {
-                    name: "Vocal_Female.wav";
-                    type: "WAV";
-                    icon: "♫";
-                }
-
-                BrowserItem {
-                    name: "Bass_Loop_128.wav";
-                    type: "WAV";
-                    icon: "♫";
-                }
-
-                Rectangle {
-                    height: 7px;
-                    background: transparent;
-                }
-
-                Text {
-                    text: "PRESETS";
-
-                    height: 20px;
-
-                    color: Theme.text-dim;
-                    font-size: 8px;
-                    font-weight: 700;
-
-                    vertical-alignment: center;
-                }
-
-                BrowserItem {
-                    name: "Analog Bass";
-                    type: "Preset";
-                    icon: "◆";
-                }
-
-                BrowserItem {
-                    name: "Warm Pad";
-                    type: "Preset";
-                    icon: "◆";
+                    icon: item.category == "MIDI"
+                        ? "♫"
+                        : "●";
                 }
             }
         }

@@ -10,6 +10,8 @@ component ExplorerTab inherits Rectangle {
     in property <string> icon: "";
     in property <bool> active: false;
 
+    callback clicked();
+
     height: 26px;
 
     background: root.active
@@ -26,22 +28,32 @@ component ExplorerTab inherits Rectangle {
 
         Text {
             text: root.icon;
+
             color: root.active
                 ? Theme.accent
                 : Theme.text-dim;
 
             font-size: 10px;
+
             vertical-alignment: center;
         }
 
         Text {
             text: root.label;
+
             color: root.active
                 ? Theme.text-primary
                 : Theme.text-dim;
 
             font-size: 9px;
+
             vertical-alignment: center;
+        }
+    }
+
+    TouchArea {
+        clicked => {
+            root.clicked();
         }
     }
 }
@@ -53,6 +65,7 @@ export component Explorer inherits Rectangle {
 
     preferred-width: 300px;
     width: 300px;
+    height: 100%;
 
     background: Theme.surface;
 
@@ -69,13 +82,17 @@ export component Explorer inherits Rectangle {
         padding: 6px;
         spacing: 6px;
 
-        // Header
+        // =====================================================
+        // HEADER
+        // =====================================================
+
         Rectangle {
-            height: 28px;
+            height: 24px;
             background: transparent;
 
             HorizontalLayout {
                 spacing: 6px;
+                alignment: center;
 
                 Text {
                     text: "Explorer";
@@ -99,7 +116,10 @@ export component Explorer inherits Rectangle {
             }
         }
 
-        // Abas
+        // =====================================================
+        // TABS
+        // =====================================================
+
         Rectangle {
             height: 26px;
             background: transparent;
@@ -112,23 +132,20 @@ export component Explorer inherits Rectangle {
                     icon: "▤";
                     active: root.browser-mode == 0;
 
-                    TouchArea {
-                        clicked => {
-                            root.browser-mode = 0;
-                        }
+                    clicked => {
+                        root.browser-mode = 0;
                     }
                 }
 
                 ExplorerTab {
-                    label: "Samples";
+                    label: "Media";
                     icon: "♫";
                     active: root.browser-mode == 1;
 
-                    TouchArea {
-                        clicked => {
-                            root.browser-mode = 1;
-                        }
+                    clicked => {
+                        root.browser-mode = 1;
                     }
+                    if root.browser-mode == 0 : FileBrowser {}
                 }
 
                 ExplorerTab {
@@ -136,43 +153,66 @@ export component Explorer inherits Rectangle {
                     icon: "◆";
                     active: root.browser-mode == 2;
 
-                    TouchArea {
-                        clicked => {
-                            root.browser-mode = 2;
-                        }
+                    clicked => {
+                        root.browser-mode = 2;
                     }
                 }
             }
         }
 
-        // Busca global
+        // =====================================================
+        // SEARCH
+        // =====================================================
+
         SearchBar {
             text <=> root.search-text;
+
             placeholder: root.browser-mode == 0
                 ? "Search files..."
                 : root.browser-mode == 1
-                    ? "Search samples..."
+                    ? "Search media..."
                     : "Search plugins...";
         }
 
-        // Conteúdo
+        // =====================================================
+        // BROWSER
+        // =====================================================
+
         Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
 
             background: transparent;
 
-            if root.browser-mode == 0 : FileBrowser {}
 
             if root.browser-mode == 1 : MediaBrowser {}
 
             if root.browser-mode == 2 : PluginBrowser {}
         }
 
-        // Preview
+        // =====================================================
+        // PREVIEW
+        // =====================================================
+
+        Rectangle {
+            height: 1px;
+            background: Theme.border;
+        }
+
         Preview {
             file-name: "No file selected";
-            file-info: "Select an audio file to preview";
+            file-info: "Select an audio file";
+            duration: "00:00";
+            progress: 0.0;
+            playing: false;
+
+            play => {
+                // Ligação com o engine virá depois.
+            }
+
+            stop => {
+                // Ligação com o engine virá depois.
+            }
         }
     }
 }

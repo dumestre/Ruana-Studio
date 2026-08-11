@@ -3,7 +3,7 @@ import { Transport } from "transport.slint";
 import { Toolbar } from "toolbar.slint";
 import { LeftPanel } from "left_panel.slint";
 import { Timeline } from "timeline.slint";
-import { Explorer } from "explorer.slint";
+import { Explorer } from "explorer/explorer.slint";
 import { Mixer } from "mixer.slint";
 import { BeatPopup } from "components/beat.slint";
 
@@ -74,7 +74,6 @@ export component MainWindow inherits Window {
                 }
 
                 Explorer {
-                    min-width: 200px;
                 }
             }
         }

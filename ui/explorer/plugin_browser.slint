@@ -1,240 +1,253 @@
 import { Theme } from "../theme.slint";
+import { BrowserItem } from "../components/browser_item.slint";
 
-component PluginRow inherits Rectangle {
-    in property <string> icon: "";
-    in property <string> name: "";
-    in property <string> vendor: "";
-    in-out property <bool> selected: false;
-
-    height: 30px;
-    background: root.selected ? Theme.surface-high : transparent;
-    border-radius: 2px;
-
-    HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        spacing: 8px;
-        alignment: center;
-
-        Rectangle {
-            width: 20px;
-            height: 20px;
-            background: Theme.base;
-            border-width: 1px;
-            border-color: Theme.border;
-            border-radius: 3px;
-
-            Text {
-                text: root.icon;
-                color: Theme.text-dim;
-                font-size: 10px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-        }
-
-        VerticalLayout {
-            spacing: 0px;
-            horizontal-stretch: 1;
-
-            Text {
-                text: root.name;
-                color: Theme.text-primary;
-                font-size: 10px;
-                vertical-alignment: center;
-            }
-
-            Text {
-                text: root.vendor;
-                color: Theme.text-dim;
-                font-size: 8px;
-                vertical-alignment: center;
-            }
-        }
-    }
-
-    TouchArea {
-        clicked => {
-            root.selected = true;
-        }
-    }
+export struct PluginItem {
+    name: string,
+    type: string,
+    category: string,
 }
 
-
 export component PluginBrowser inherits Rectangle {
+    in property <[PluginItem]> plugins: [
+        {
+            name: "Ferrum Synth",
+            type: "Native",
+            category: "Instruments"
+        },
+        {
+            name: "Ferrum EQ",
+            type: "Native",
+            category: "Effects"
+        },
+        {
+            name: "Ferrum Compressor",
+            type: "Native",
+            category: "Effects"
+        },
+        {
+            name: "PreVocal",
+            type: "Native",
+            category: "Effects"
+        },
+        {
+            name: "Surge XT",
+            type: "VST3",
+            category: "Instruments"
+        },
+        {
+            name: "Surge XT",
+            type: "CLAP",
+            category: "Instruments"
+        }
+    ];
+
+    in-out property <string> format-filter: "All";
+
     background: transparent;
 
     VerticalLayout {
         spacing: 5px;
 
-        // Busca
+        // Cabeçalho
         Rectangle {
-            height: 28px;
+            height: 26px;
+
             background: Theme.base;
             border-width: 1px;
             border-color: Theme.border;
             border-radius: 3px;
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
+                padding-left: 7px;
+                padding-right: 7px;
                 spacing: 6px;
                 alignment: center;
 
                 Text {
-                    text: "⌕";
-                    color: Theme.text-dim;
-                    font-size: 13px;
+                    text: "◆";
                     width: 18px;
+
+                    color: Theme.accent;
+                    font-size: 10px;
+
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
 
                 Text {
-                    text: "Search plugins...";
-                    color: Theme.text-dim;
+                    text: "Plugins";
+
+                    color: Theme.text-primary;
                     font-size: 9px;
+
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
             }
         }
 
-        // Formatos
+        // Filtros
         Rectangle {
-            height: 28px;
+            height: 26px;
             background: transparent;
 
             HorizontalLayout {
-                spacing: 4px;
+                spacing: 3px;
 
                 Rectangle {
-                    width: 48px;
+                    width: 45px;
                     height: 23px;
-                    background: Theme.surface-high;
+
+                    background: root.format-filter == "All"
+                        ? Theme.surface-high
+                        : transparent;
+
                     border-radius: 3px;
 
                     Text {
                         text: "All";
-                        color: Theme.text-primary;
+
+                        color: root.format-filter == "All"
+                            ? Theme.text-primary
+                            : Theme.text-dim;
+
                         font-size: 8px;
+
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.format-filter = "All";
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 55px;
+                    height: 23px;
+
+                    background: root.format-filter == "Native"
+                        ? Theme.surface-high
+                        : transparent;
+
+                    border-radius: 3px;
+
+                    Text {
+                        text: "Native";
+
+                        color: root.format-filter == "Native"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
+                        font-size: 8px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.format-filter = "Native";
+                        }
                     }
                 }
 
                 Rectangle {
                     width: 48px;
                     height: 23px;
-                    background: transparent;
+
+                    background: root.format-filter == "VST3"
+                        ? Theme.surface-high
+                        : transparent;
+
                     border-radius: 3px;
 
                     Text {
                         text: "VST3";
-                        color: Theme.text-dim;
+
+                        color: root.format-filter == "VST3"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
                         font-size: 8px;
+
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.format-filter = "VST3";
+                        }
                     }
                 }
 
                 Rectangle {
                     width: 48px;
                     height: 23px;
-                    background: transparent;
+
+                    background: root.format-filter == "CLAP"
+                        ? Theme.surface-high
+                        : transparent;
+
                     border-radius: 3px;
 
                     Text {
                         text: "CLAP";
-                        color: Theme.text-dim;
+
+                        color: root.format-filter == "CLAP"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
                         font-size: 8px;
+
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.format-filter = "CLAP";
+                        }
                     }
                 }
             }
         }
 
-        // Árvore de plugins
+        // Lista
         Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
+
             background: transparent;
 
             VerticalLayout {
-                spacing: 2px;
+                spacing: 1px;
 
                 Text {
-                    text: "INSTRUMENTS";
+                    text: "PLUGINS";
+
+                    height: 20px;
+
                     color: Theme.text-dim;
                     font-size: 8px;
                     font-weight: 700;
-                    height: 20px;
+
                     vertical-alignment: center;
                 }
 
-                PluginRow {
-                    icon: "♫";
-                    name: "Ferrum Synth";
-                    vendor: "Ferrum";
-                }
+                for plugin in root.plugins : BrowserItem {
+                    visible: root.format-filter == "All"
+                        || plugin.type == root.format-filter;
 
-                PluginRow {
-                    icon: "♫";
-                    name: "Piano";
-                    vendor: "Instruments";
-                }
+                    name: plugin.name;
+                    type: plugin.type;
 
-                Rectangle {
-                    height: 7px;
-                    background: transparent;
-                }
-
-                Text {
-                    text: "EFFECTS";
-                    color: Theme.text-dim;
-                    font-size: 8px;
-                    font-weight: 700;
-                    height: 20px;
-                    vertical-alignment: center;
-                }
-
-                PluginRow {
-                    icon: "◉";
-                    name: "Ferrum EQ";
-                    vendor: "Ferrum";
-                }
-
-                PluginRow {
-                    icon: "◉";
-                    name: "Ferrum Compressor";
-                    vendor: "Ferrum";
-                }
-
-                PluginRow {
-                    icon: "◉";
-                    name: "PreVocal";
-                    vendor: "Ferrum";
-                }
-
-                Rectangle {
-                    height: 7px;
-                    background: transparent;
-                }
-
-                Text {
-                    text: "ANALYZERS";
-                    color: Theme.text-dim;
-                    font-size: 8px;
-                    font-weight: 700;
-                    height: 20px;
-                    vertical-alignment: center;
-                }
-
-                PluginRow {
-                    icon: "◌";
-                    name: "Ferrum Spectrum";
-                    vendor: "Ferrum";
+                    icon: plugin.category == "Instruments"
+                        ? "♫"
+                        : "◆";
                 }
             }
         }
