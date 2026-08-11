@@ -1,57 +1,5 @@
 import { Theme } from "../theme.slint";
-
-component MediaRow inherits Rectangle {
-    in property <string> icon: "";
-    in property <string> name: "";
-    in property <string> info: "";
-    in-out property <bool> selected: false;
-
-    height: 26px;
-    background: root.selected ? Theme.surface-high : transparent;
-    border-radius: 2px;
-
-    HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        spacing: 7px;
-        alignment: center;
-
-        Text {
-            text: root.icon;
-            color: Theme.text-dim;
-            font-size: 11px;
-            width: 18px;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-
-        VerticalLayout {
-            spacing: 0px;
-            horizontal-stretch: 1;
-
-            Text {
-                text: root.name;
-                color: Theme.text-primary;
-                font-size: 10px;
-                vertical-alignment: center;
-            }
-
-            Text {
-                text: root.info;
-                color: Theme.text-dim;
-                font-size: 8px;
-                vertical-alignment: center;
-            }
-        }
-    }
-
-    TouchArea {
-        clicked => {
-            root.selected = true;
-        }
-    }
-}
-
+import { BrowserItem } from "../components/browser_item.slint";
 
 export component MediaBrowser inherits Rectangle {
     background: transparent;
@@ -59,72 +7,95 @@ export component MediaBrowser inherits Rectangle {
     VerticalLayout {
         spacing: 5px;
 
-        // Caminho atual
+        // Local atual
         Rectangle {
             height: 26px;
+
             background: Theme.base;
             border-width: 1px;
             border-color: Theme.border;
             border-radius: 3px;
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
+                padding-left: 7px;
+                padding-right: 7px;
                 spacing: 6px;
                 alignment: center;
 
                 Text {
                     text: "♫";
-                    color: Theme.text-dim;
-                    font-size: 12px;
                     width: 18px;
+
+                    color: Theme.accent;
+                    font-size: 11px;
+
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
 
                 Text {
                     text: "Samples";
+
                     color: Theme.text-primary;
-                    font-size: 10px;
+                    font-size: 9px;
+
                     vertical-alignment: center;
                     horizontal-stretch: 1;
+                }
+
+                Text {
+                    text: "⋮";
+
+                    width: 18px;
+
+                    color: Theme.text-dim;
+                    font-size: 13px;
+
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
         }
 
-        // Categorias
+        // Filtros
         Rectangle {
-            height: 30px;
+            height: 26px;
             background: transparent;
 
             HorizontalLayout {
-                spacing: 4px;
+                spacing: 3px;
 
                 Rectangle {
-                    width: 54px;
-                    height: 24px;
+                    width: 52px;
+                    height: 23px;
+
                     background: Theme.surface-high;
                     border-radius: 3px;
 
                     Text {
-                        text: "Samples";
+                        text: "Audio";
+
                         color: Theme.text-primary;
                         font-size: 8px;
+
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
                 }
 
                 Rectangle {
-                    width: 42px;
-                    height: 24px;
+                    width: 45px;
+                    height: 23px;
+
                     background: transparent;
                     border-radius: 3px;
 
                     Text {
                         text: "Loops";
+
                         color: Theme.text-dim;
                         font-size: 8px;
+
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -132,14 +103,17 @@ export component MediaBrowser inherits Rectangle {
 
                 Rectangle {
                     width: 55px;
-                    height: 24px;
+                    height: 23px;
+
                     background: transparent;
                     border-radius: 3px;
 
                     Text {
                         text: "One-Shot";
+
                         color: Theme.text-dim;
                         font-size: 8px;
+
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -147,14 +121,17 @@ export component MediaBrowser inherits Rectangle {
 
                 Rectangle {
                     width: 42px;
-                    height: 24px;
+                    height: 23px;
+
                     background: transparent;
                     border-radius: 3px;
 
                     Text {
                         text: "MIDI";
+
                         color: Theme.text-dim;
                         font-size: 8px;
+
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -166,80 +143,88 @@ export component MediaBrowser inherits Rectangle {
         Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
+
             background: transparent;
 
             VerticalLayout {
-                spacing: 2px;
+                spacing: 1px;
 
                 Text {
                     text: "AUDIO FILES";
+
+                    height: 20px;
+
                     color: Theme.text-dim;
                     font-size: 8px;
                     font-weight: 700;
-                    height: 20px;
+
                     vertical-alignment: center;
                 }
 
-                MediaRow {
-                    icon: "♫";
+                BrowserItem {
                     name: "Kick_01.wav";
-                    info: "Kick • 48 kHz • 24 bit";
+                    type: "WAV";
+                    icon: "♫";
+                    selected: true;
                 }
 
-                MediaRow {
-                    icon: "♫";
+                BrowserItem {
                     name: "Kick_02.wav";
-                    info: "Kick • 48 kHz • 24 bit";
+                    type: "WAV";
+                    icon: "♫";
                 }
 
-                MediaRow {
-                    icon: "♫";
+                BrowserItem {
                     name: "Snare_01.wav";
-                    info: "Snare • 48 kHz • 24 bit";
+                    type: "WAV";
+                    icon: "♫";
                 }
 
-                MediaRow {
-                    icon: "♫";
+                BrowserItem {
                     name: "Hat_Closed.wav";
-                    info: "Hi-Hat • 48 kHz • 24 bit";
+                    type: "WAV";
+                    icon: "♫";
                 }
 
-                MediaRow {
-                    icon: "♫";
+                BrowserItem {
                     name: "Vocal_Female.wav";
-                    info: "Vocal • 44.1 kHz • 24 bit";
+                    type: "WAV";
+                    icon: "♫";
                 }
 
-                MediaRow {
-                    icon: "♫";
+                BrowserItem {
                     name: "Bass_Loop_128.wav";
-                    info: "Loop • 128 BPM • E min";
+                    type: "WAV";
+                    icon: "♫";
                 }
 
                 Rectangle {
-                    height: 8px;
+                    height: 7px;
                     background: transparent;
                 }
 
                 Text {
                     text: "PRESETS";
+
+                    height: 20px;
+
                     color: Theme.text-dim;
                     font-size: 8px;
                     font-weight: 700;
-                    height: 20px;
+
                     vertical-alignment: center;
                 }
 
-                MediaRow {
-                    icon: "◆";
+                BrowserItem {
                     name: "Analog Bass";
-                    info: "Preset";
+                    type: "Preset";
+                    icon: "◆";
                 }
 
-                MediaRow {
-                    icon: "◆";
+                BrowserItem {
                     name: "Warm Pad";
-                    info: "Preset";
+                    type: "Preset";
+                    icon: "◆";
                 }
             }
         }

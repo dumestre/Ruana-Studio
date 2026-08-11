@@ -1,0 +1,84 @@
+import { Theme } from "../theme.slint";
+
+export component BrowserItem inherits Rectangle {
+    in property <string> name: "";
+    in property <string> type: "";
+    in property <string> icon: "♫";
+    in property <bool> selected: false;
+
+    callback clicked();
+
+    height: 28px;
+
+    background: root.selected
+        ? Theme.surface-high
+        : transparent;
+
+    border-radius: 3px;
+
+    HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 7px;
+        spacing: 7px;
+        alignment: center;
+
+        // Indicador de seleção
+        Rectangle {
+            width: 2px;
+            height: root.selected ? 18px : 0px;
+
+            background: Theme.accent;
+            border-radius: 1px;
+        }
+
+        // Ícone
+        Text {
+            text: root.icon;
+
+            width: 18px;
+
+            color: root.selected
+                ? Theme.accent
+                : Theme.text-dim;
+
+            font-size: 10px;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        // Nome
+        Text {
+            text: root.name;
+
+            color: root.selected
+                ? Theme.text-primary
+                : Theme.text-dim;
+
+            font-size: 10px;
+
+            vertical-alignment: center;
+
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        // Tipo / informação
+        Text {
+            text: root.type;
+
+            color: Theme.text-dim;
+
+            font-size: 8px;
+
+            vertical-alignment: center;
+            horizontal-alignment: right;
+        }
+    }
+
+    TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
