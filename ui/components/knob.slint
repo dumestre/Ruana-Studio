@@ -4,45 +4,64 @@ export component Knob {
     in-out property <float> value: 0.5;
     in property <string> caption: "";
     in property <string> display-value: "";
+    in property <bool> centered: false;
+    in property <angle> arc-start: -135deg;
+    in property <angle> arc-sweep: 270deg;
     callback changed(float);
 
     in-out property <float> last-y: 0;
 
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 56px;
 
-    for angle in [-135deg, -105deg, -75deg, -45deg, -15deg, 15deg, 45deg, 75deg, 105deg]: Rectangle {
-        width: 3px;
-        height: 12px;
-        x: (parent.width - self.width) / 2;
-        y: 4px;
-        background: Theme.border;
-        border-radius: 1.5px;
-        transform-origin: { x: 1.5px, y: 16px };
-        transform-rotation: angle;
-    }
+    // 1. Arco de Pontos
+    for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]: Rectangle {
+        property <float> position: i / 47.0;
+        property <bool> active: root.centered
+            ? (
+                root.value <= 0.5
+                    ? self.position >= root.value && self.position <= 0.5
+                    : self.position >= 0.5 && self.position <= root.value
+            )
+            : self.position <= root.value;
+            
+        property <angle> theta: root.arc-start + self.position * root.arc-sweep;
 
-    for angle in [-135deg, -105deg, -75deg, -45deg, -15deg, 15deg, 45deg, 75deg, 105deg]: Rectangle {
+        // O SEGREDO DO ARCO CINZA: Fica invisível quando não está preenchido
+        visible: self.active;
+
         width: 3px;
-        height: 12px;
-        x: (parent.width - self.width) / 2;
-        y: 4px;
+        height: 3px;
+        x: parent.width / 2 + Math.cos(self.theta - 90deg) * 15px - self.width / 2;
+        y: 18px + Math.sin(self.theta - 90deg) * 15px - self.height / 2;
+        
         background: Theme.accent;
         border-radius: 1.5px;
-        transform-origin: { x: 1.5px, y: 16px };
-        transform-rotation: angle;
-        opacity: root.value > (angle - (-135deg)) / 270deg ? 1.0 : 0.15;
     }
 
+    // 2. Corpo principal do Knob
     Rectangle {
-        width: 34px;
-        height: 34px;
+        width: 26px;
+        height: 26px;
         x: (parent.width - self.width) / 2;
-        y: 4px;
+        y: 5px; 
         background: Theme.surface-high;
         border-radius: self.width / 2;
         border-width: 1px;
         border-color: Theme.border;
+
+        // O SEGREDO DA ROTAÇÃO: Usar rotation-angle no lugar de transform-rotation
+        Rectangle {
+            width: 3px;
+            height: 10px;
+            x: (parent.width - self.width) / 2;
+            y: 3px; 
+            background: Theme.accent;
+            border-radius: 1.5px;
+            
+            transform-rotation: root.arc-start + root.value * root.arc-sweep;
+            transform-origin: { x: 1.5px, y: 10px };
+        }
 
         touch := TouchArea {
             mouse-cursor: pointer;
@@ -61,34 +80,29 @@ export component Knob {
         }
     }
 
-    Rectangle {
-        width: 3px;
-        height: 13px;
-        x: (parent.width - self.width) / 2;
-        y: 6px;
-        background: Theme.accent;
-        border-radius: 1.5px;
-        transform-rotation: -135deg + root.value * 270deg;
-        transform-origin: { x: 1.5px, y: 15px };
-    }
-
-    Text {
-        text: root.caption;
-        y: 38px;
-        width: parent.width;
-        color: Theme.text-dim;
-        font-size: 9px;
-        horizontal-alignment: center;
-        vertical-alignment: top;
-    }
-
     Text {
         text: root.display-value;
-        y: 24px;
+        y: 35px;
         width: parent.width;
         color: Theme.text-primary;
         font-size: 9px;
         horizontal-alignment: center;
-        vertical-alignment: top;
     }
+
+    Text {
+        text: root.caption;
+        y: 46px;
+        width: parent.width;
+        color: Theme.text-dim;
+        font-size: 9px;
+        horizontal-alignment: center;
+    }
+}
+
+export component PanKnob inherits Knob {
+    centered: true;
+    // Padrão clássico de DAW (270 graus, indo de -135° até +135°)
+    arc-start: -135deg; 
+    arc-sweep: 270deg;
+    value: 0.5; // O centro perfeito
 }

@@ -1,5 +1,5 @@
 import { Button } from "components/button.slint";
-import { Knob } from "components/knob.slint";
+import { Knob, PanKnob } from "components/knob.slint";
 import { Fader } from "components/fader.slint";
 import { Meter } from "components/meter.slint";
 import { Theme } from "theme.slint";
@@ -18,7 +18,6 @@ component MixerChannel inherits Rectangle {
     property <string> vol-display: (root.volume * 60 - 60).to-fixed(1) + " dB";
 
     width: 110px;
-    height: 100%;
     background: Theme.surface;
 
     Rectangle {
@@ -87,7 +86,7 @@ component MixerChannel inherits Rectangle {
             spacing: 10px;
             alignment: center;
 
-            Knob {
+            PanKnob {
                 caption: "PAN";
                 value: root.pan;
                 display-value: root.pan-display;

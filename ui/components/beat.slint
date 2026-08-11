@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { Knob } from "knob.slint";
+import { Knob, PanKnob } from "knob.slint";
 
 component Step inherits Rectangle {
     in property <bool> active: false;
@@ -406,7 +406,7 @@ export component BeatContent inherits Rectangle {
                                     }
                                 }
 
-                                Knob {
+                                PanKnob {
                                     width: 30px;
                                     height: 30px;
                                     value: (root.track-pan[inst] + 1.0) / 2.0;
@@ -895,8 +895,8 @@ export component BeatPopup inherits Rectangle {
         root.open = true;
     }
 
-    x: root.popup-x;
-    y: root.popup-y;
+    x: 0px;
+    y: 0px;
     width: 680px;
     height: 440px;
     visible: root.open;
