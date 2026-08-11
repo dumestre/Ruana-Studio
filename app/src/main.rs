@@ -77,18 +77,16 @@ fn main() -> Result<(), slint::PlatformError> {
     let ui_weak_max = ui.as_weak();
     ui.on_maximize(move || {
         if let Some(ui) = ui_weak_max.upgrade() {
-            if let Some(window) = ui.window() {
-                window.set_maximized(!window.is_maximized());
-            }
+            let window = ui.window();
+            window.set_maximized(!window.is_maximized());
         }
     });
 
     let ui_weak_min = ui.as_weak();
     ui.on_minimize(move || {
         if let Some(ui) = ui_weak_min.upgrade() {
-            if let Some(window) = ui.window() {
-                window.set_minimized(true);
-            }
+            let window = ui.window();
+            window.set_minimized(true);
         }
     });
 

@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { Knob } from "knob.slint";
 
 component Step inherits Rectangle {
     in property <bool> active: false;
@@ -396,8 +397,8 @@ export component BeatContent inherits Rectangle {
                             }
 
                             track-pan-touch := TouchArea {
-                                width: 24px;
-                                height: 24px;
+                                width: 40px;
+                                height: 40px;
                                 mouse-cursor: grab;
                                 pointer-event(event) => {
                                     if (event.kind == PointerEventKind.move && event.button == PointerEventButton.left) {
@@ -405,20 +406,21 @@ export component BeatContent inherits Rectangle {
                                     }
                                 }
 
-                                Text {
-                                    text: root.track-pan[inst] < 0 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
-                                    width: 100%;
-                                    height: 100%;
-                                    color: Theme.text-dim;
-                                    font-size: 8px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
+                                Knob {
+                                    width: 30px;
+                                    height: 30px;
+                                    value: (root.track-pan[inst] + 1.0) / 2.0;
+                                    caption: "PAN";
+                                    display-value: root.track-pan[inst] < 0 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
+                                    changed => {
+                                        root.track-pan[inst] = self.value * 2.0 - 1.0;
+                                    }
                                 }
                             }
 
                             track-vol-touch := TouchArea {
-                                width: 24px;
-                                height: 24px;
+                                width: 40px;
+                                height: 40px;
                                 mouse-cursor: grab;
                                 pointer-event(event) => {
                                     if (event.kind == PointerEventKind.move && event.button == PointerEventButton.left) {
@@ -426,14 +428,15 @@ export component BeatContent inherits Rectangle {
                                     }
                                 }
 
-                                Text {
-                                    text: Math.round(root.track-volume[inst] * 100) + "%";
-                                    width: 100%;
-                                    height: 100%;
-                                    color: Theme.text-dim;
-                                    font-size: 8px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
+                                Knob {
+                                    width: 30px;
+                                    height: 30px;
+                                    value: root.track-volume[inst];
+                                    caption: "VOL";
+                                    display-value: Math.round(root.track-volume[inst] * 100) + "%";
+                                    changed => {
+                                        root.track-volume[inst] = self.value;
+                                    }
                                 }
                             }
 

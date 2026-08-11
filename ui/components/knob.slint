@@ -11,6 +11,29 @@ export component Knob {
     width: 40px;
     height: 40px;
 
+    for angle in [-135deg, -105deg, -75deg, -45deg, -15deg, 15deg, 45deg, 75deg, 105deg]: Rectangle {
+        width: 3px;
+        height: 12px;
+        x: (parent.width - self.width) / 2;
+        y: 4px;
+        background: Theme.border;
+        border-radius: 1.5px;
+        transform-origin: { x: 1.5px, y: 16px };
+        transform-rotation: angle;
+    }
+
+    for angle in [-135deg, -105deg, -75deg, -45deg, -15deg, 15deg, 45deg, 75deg, 105deg]: Rectangle {
+        width: 3px;
+        height: 12px;
+        x: (parent.width - self.width) / 2;
+        y: 4px;
+        background: Theme.accent;
+        border-radius: 1.5px;
+        transform-origin: { x: 1.5px, y: 16px };
+        transform-rotation: angle;
+        opacity: root.value > (angle - (-135deg)) / 270deg ? 1.0 : 0.15;
+    }
+
     Rectangle {
         width: 34px;
         height: 34px;
