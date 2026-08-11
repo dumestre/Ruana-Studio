@@ -37,7 +37,7 @@ component MixerChannel inherits Rectangle {
 
         // Cabeçalho do Canal / Nome
         VerticalLayout {alignment: LayoutAlignment.stretch;
-            cross-axis-alignment: CrossAxisAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.stretch;
             spacing: 2px;
             
 
@@ -136,8 +136,8 @@ component MixerChannel inherits Rectangle {
                 cross-axis-alignment: CrossAxisAlignment.center;
 
                 PanKnob {
-                    width: 26px;
-                    height: 26px;
+                    width: 36px;
+                    height: 56px;
                     caption: "";
                     value: root.pan;
                     display-value: root.pan-display;

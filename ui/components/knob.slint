@@ -11,6 +11,12 @@ export component Knob {
 
     in-out property <float> last-y: 0;
 
+    // The dial occupies the upper portion while the remaining height is used by
+    // the value and caption. This keeps the whole control usable when resized.
+    property <length> dial-size: min(root.width, root.height * 0.64);
+    property <length> dot-size: max(1px, root.dial-size * 0.1);
+    property <length> label-size: min(9px, root.dial-size * 0.25);
+
     width: 36px;
     height: 56px;
 
@@ -30,21 +36,21 @@ export component Knob {
         // O SEGREDO DO ARCO CINZA: Fica invisível quando não está preenchido
         visible: self.active;
 
-        width: 3px;
-        height: 3px;
-        x: parent.width / 2 + Math.cos(self.theta - 90deg) * 15px - self.width / 2;
-        y: 18px + Math.sin(self.theta - 90deg) * 15px - self.height / 2;
+        width: root.dot-size;
+        height: root.dot-size;
+        x: parent.width / 2 + Math.cos(self.theta - 90deg) * root.dial-size * 0.42 - self.width / 2;
+        y: root.dial-size / 2 + Math.sin(self.theta - 90deg) * root.dial-size * 0.42 - self.height / 2;
         
         background: Theme.accent;
-        border-radius: 1.5px;
+        border-radius: self.width / 2;
     }
 
     // 2. Corpo principal do Knob
     Rectangle {
-        width: 26px;
-        height: 26px;
+        width: root.dial-size * 0.72;
+        height: root.dial-size * 0.72;
         x: (parent.width - self.width) / 2;
-        y: 5px; 
+        y: root.dial-size * 0.14;
         background: Theme.surface-high;
         border-radius: self.width / 2;
         border-width: 1px;
@@ -52,15 +58,15 @@ export component Knob {
 
         // O SEGREDO DA ROTAÇÃO: Usar rotation-angle no lugar de transform-rotation
         Rectangle {
-            width: 3px;
-            height: 10px;
+            width: max(1px, parent.width * 0.12);
+            height: parent.height * 0.38;
             x: (parent.width - self.width) / 2;
-            y: 3px; 
+            y: parent.height * 0.12;
             background: Theme.accent;
-            border-radius: 1.5px;
+            border-radius: self.width / 2;
             
             transform-rotation: root.arc-start + root.value * root.arc-sweep;
-            transform-origin: { x: 1.5px, y: 10px };
+            transform-origin: { x: self.width / 2, y: self.height };
         }
 
         touch := TouchArea {
@@ -82,19 +88,19 @@ export component Knob {
 
     Text {
         text: root.display-value;
-        y: 35px;
+        y: root.dial-size;
         width: parent.width;
         color: Theme.text-primary;
-        font-size: 9px;
+        font-size: root.label-size;
         horizontal-alignment: center;
     }
 
     Text {
         text: root.caption;
-        y: 46px;
+        y: root.dial-size + root.label-size + 2px;
         width: parent.width;
         color: Theme.text-dim;
-        font-size: 9px;
+        font-size: root.label-size;
         horizontal-alignment: center;
     }
 }
