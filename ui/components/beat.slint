@@ -5,7 +5,6 @@ component StepCell inherits Rectangle {
     in-out property <bool> active: false;
     in property <bool> current: false;
     in property <color> accent-color: Theme.accent;
-    in property <color> alternate-accent-color: Theme.accent;
     in property <bool> beat-group-highlight: false;
     callback toggled;
 
@@ -19,15 +18,13 @@ component StepCell inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         background: root.active
-            ? (root.beat-group-highlight ? root.alternate-accent-color : root.accent-color)
+            ? root.accent-color
             : (root.beat-group-highlight ? #181818 : #383838);
         border-radius: 5px;
         border-width: root.current ? 2px : 1px;
         border-color: root.current
             ? Theme.playhead
-            : (root.active
-                ? (root.beat-group-highlight ? root.alternate-accent-color : root.accent-color)
-                : Theme.border);
+            : (root.active ? root.accent-color : Theme.border);
     }
 
     touch := TouchArea {
@@ -129,6 +126,7 @@ export component BeatContent inherits Rectangle {
     in-out property <bool> editing-track: false;
     in-out property <string> track-input: "1";
     in-out property <int> grid-resolution: 16;
+    in-out property <bool> playing: false;
     in-out property <[int]> resolution-options: [8, 16, 32, 64];
     in-out property <string> beat-name: "BEAT SEQUENCER";
 
@@ -147,6 +145,15 @@ export component BeatContent inherits Rectangle {
     property <length> drag-x: 0px;
     property <length> drag-y: 0px;
     property <bool> dragging: false;
+    out property <bool> mouse-over: hover-zone.has-hover;
+
+    beat-clock := Timer {
+        interval: 140ms;
+        running: root.playing;
+        triggered => {
+            root.playhead = Math.mod(root.playhead + 1, root.grid-resolution);
+        }
+    }
 
     width: 800px;
     height: 480px;
@@ -154,6 +161,12 @@ export component BeatContent inherits Rectangle {
     border-radius: 8px;
     border-width: 1px;
     border-color: Theme.border;
+
+    hover-zone := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: default;
+    }
 
     VerticalLayout {
         padding: 12px;
@@ -391,14 +404,6 @@ export component BeatContent inherits Rectangle {
                                             : inst == 5 ? #4895EF
                                             : inst == 6 ? #E76F51
                                             : #B08D57;
-                                        alternate-accent-color: inst == 0 ? #C95518
-                                            : inst == 1 ? #4F7E4C
-                                            : inst == 2 ? #B78210
-                                            : inst == 3 ? #A83237
-                                            : inst == 4 ? #0BB000
-                                            : inst == 5 ? #2D67AA
-                                            : inst == 6 ? #A44935
-                                            : #7A633D;
                                         opacity: root.track-active[inst] ? 1.0 : 0.35;
                                         toggled => { root.steps[inst * 16 + step] = self.active; }
                                     }
@@ -460,6 +465,7 @@ export component BeatPopup inherits Rectangle {
     in-out property <bool> editing-track: false;
     in-out property <string> track-input: "1";
     in-out property <int> grid-resolution: 16;
+    in-out property <bool> playing: false;
     in-out property <[int]> resolution-options: [8, 16, 32, 64];
     in-out property <string> beat-name: "BEAT SEQUENCER";
     in-out property <length> popup-x: 24px;
@@ -469,13 +475,11 @@ export component BeatPopup inherits Rectangle {
     callback open-requested;
 
     open-requested => { root.open = true; }
-    width: 100%;
-    height: 100%;
     background: transparent;
     visible: root.open;
     clip: false;
 
-    BeatContent {
+    content := BeatContent {
         x: root.popup-x;
         y: root.popup-y;
         steps <=> root.steps;
@@ -491,6 +495,7 @@ export component BeatPopup inherits Rectangle {
         editing-track <=> root.editing-track;
         track-input <=> root.track-input;
         grid-resolution <=> root.grid-resolution;
+        playing <=> root.playing;
         resolution-options <=> root.resolution-options;
         beat-name <=> root.beat-name;
         close-requested => { root.open = false; }
@@ -499,4 +504,6 @@ export component BeatPopup inherits Rectangle {
             root.popup-y += dy;
         }
     }
+
+    out property <bool> mouse-over: content.mouse-over;
 }
