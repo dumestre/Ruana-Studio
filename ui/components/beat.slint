@@ -177,22 +177,22 @@ export component BeatContent inherits Rectangle {
     in-out property <length> beat-menu-y: 0px;
 
     property <length> grid-content-width: root.grid-resolution * 28px + Math.max(0, root.grid-resolution - 1) * 2px;
-    property <length> grid-content-height: 20px + root.instrument-indexes.length * 24px + Math.max(0, root.instrument-indexes.length - 1) * 4px;
+    property <length> grid-content-height: 20px + root.instrument-indexes.length * 32px + Math.max(0, root.instrument-indexes.length - 1) * 4px;
 
     callback close-requested;
     callback drag-moved(length, length);
     callback grid-resolution-changed(int);
     callback beat-name-changed(string);
     callback add-track-requested;
-    callback sample-context-menu-requested(int, int, int); // inst, x, y
-    callback beat-menu-requested(int, int); // x, y
+    callback sample-context-menu-requested(int, int, int); 
+    callback beat-menu-requested(int, int); 
 
     property <bool> dragging: false;
     property <length> last-x: 0px;
     property <length> last-y: 0px;
 
-    width: 680px;
-    height: 440px;
+    width: 720px; 
+    height: 480px;
     background: Theme.surface;
     border-radius: 8px;
 
@@ -354,37 +354,73 @@ export component BeatContent inherits Rectangle {
         }
 
         grid-body := HorizontalLayout {
+            alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.start;
             spacing: 0;
 
             Rectangle {
-                width: 200px;
+                width: 240px; 
                 border-radius: 4px;
                 border-width: 1px;
 
                 VerticalLayout {
+                    alignment: LayoutAlignment.stretch;
+                    cross-axis-alignment: CrossAxisAlignment.stretch;
                     spacing: 4px;
 
-                    Rectangle {
+                    // Cabeçalho global para os Knobs (mantém o exato espaçamento das tracks)
+                    HorizontalLayout {
                         height: 16px;
-                        background: transparent;
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 12px;
+                        cross-axis-alignment: CrossAxisAlignment.center; // Alinha os textos mais perto dos botões
+
+                        // Espaço reservado para alinhar com o botão de Mute (10px)
+                        Rectangle { width: 10px; }
+
+                        Text {
+                            width: 24px;
+                            text: "PAN";
+                            color: Theme.text-dim;
+                            font-size: 9px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: bottom;
+                        }
+
+                        Text {
+                            width: 24px;
+                            text: "VOL";
+                            color: Theme.text-dim;
+                            font-size: 9px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: bottom;
+                        }
+                        
+                        // Preenche o restante do espaço para não quebrar o layout
+                        Rectangle { horizontal-stretch: 1; }
                     }
 
                     for inst in root.instrument-indexes: Rectangle {
-                        height: 24px;
+                        height: 32px; 
                         border-radius: 4px;
                         border-width: 1px;
                         width: 100%;
 
                         HorizontalLayout {
                             cross-axis-alignment: CrossAxisAlignment.center;
-                            spacing: 4px;
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 12px;
 
+                            // Mute Button
                             Rectangle {
-                                width: 8px;
-                                height: 8px;
-                                background: root.track-active[inst] ? Theme.activ : Theme.text-dim;
-                                border-radius: 4px;
+                                width: 10px;
+                                height: 10px;
+                                background: root.track-active[inst] ? Theme.accent : Theme.text-dim;
+                                border-radius: 5px;
                                 border-width: 1px;
                                 border-color: Theme.border;
 
@@ -396,53 +432,34 @@ export component BeatContent inherits Rectangle {
                                 }
                             }
 
-                            track-pan-touch := TouchArea {
-                                width: 40px;
-                                height: 40px;
-                                mouse-cursor: grab;
-                                pointer-event(event) => {
-                                    if (event.kind == PointerEventKind.move && event.button == PointerEventButton.left) {
-                                        root.track-pan[inst] = Math.max(-1.0, Math.min(1.0, root.track-pan[inst] + (track-pan-touch.mouse-x - self.width / 2) / 50px));
-                                    }
-                                }
-
-                                PanKnob {
-                                    width: 30px;
-                                    height: 30px;
-                                    value: (root.track-pan[inst] + 1.0) / 2.0;
-                                    caption: "PAN";
-                                    display-value: root.track-pan[inst] < 0 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
-                                    changed => {
-                                        root.track-pan[inst] = self.value * 2.0 - 1.0;
-                                    }
+                            // Pan Control (Agora limpo, sem layout extra ou textos)
+                            PanKnob {
+                                width: 20px;
+                                height: 20px;
+                                value: (root.track-pan[inst] + 1.0) / 2.0;
+                                caption: "";
+                                display-value: root.track-pan[inst] < -0.01 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0.01 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
+                                changed => {
+                                    root.track-pan[inst] = self.value * 2.0 - 1.0;
                                 }
                             }
 
-                            track-vol-touch := TouchArea {
-                                width: 40px;
-                                height: 40px;
-                                mouse-cursor: grab;
-                                pointer-event(event) => {
-                                    if (event.kind == PointerEventKind.move && event.button == PointerEventButton.left) {
-                                        root.track-volume[inst] = Math.max(0.0, Math.min(1.0, root.track-volume[inst] + (self.height / 2 - track-vol-touch.mouse-y) / 50px));
-                                    }
-                                }
-
-                                Knob {
-                                    width: 30px;
-                                    height: 30px;
-                                    value: root.track-volume[inst];
-                                    caption: "VOL";
-                                    display-value: Math.round(root.track-volume[inst] * 100) + "%";
-                                    changed => {
-                                        root.track-volume[inst] = self.value;
-                                    }
+                            // Volume Control (Agora limpo, sem layout extra ou textos)
+                            Knob {
+                                width: 20px;
+                                height: 20px;
+                                value: root.track-volume[inst];
+                                caption: "";
+                                display-value: Math.round(root.track-volume[inst] * 100) + "%";
+                                changed => {
+                                    root.track-volume[inst] = self.value;
                                 }
                             }
 
+                            // Channel Number
                             Rectangle {
-                                width: 40px;
-                                height: 22px;
+                                width: 28px;
+                                height: 20px;
                                 background: Theme.base;
                                 border-radius: 3px;
                                 border-width: 1px;
@@ -462,9 +479,10 @@ export component BeatContent inherits Rectangle {
                                 }
                             }
 
+                            // Instrument Name
                             Rectangle {
-                                width: 80px;
-                                height: 22px;
+                                horizontal-stretch: 1;
+                                height: 20px;
                                 background: Theme.surface-high;
                                 border-radius: 4px;
                                 border-width: 1px;
@@ -473,9 +491,10 @@ export component BeatContent inherits Rectangle {
                                 Text {
                                     text: root.instrument-names[inst];
                                     width: 100%;
-                                    height: 22px;
+                                    height: 20px;
                                     color: Theme.accent;
                                     font-size: 10px;
+                                    font-weight: 600;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                 }
@@ -488,6 +507,7 @@ export component BeatContent inherits Rectangle {
             VerticalLayout {
                 horizontal-stretch: 1;
                 spacing: 2px;
+                padding-left: 8px;
 
                 grid-flick := Flickable {
                     width: 100%;
@@ -525,7 +545,7 @@ export component BeatContent inherits Rectangle {
                         }
 
                         for inst in root.instrument-indexes: Rectangle {
-                            height: 24px;
+                            height: 32px; 
                             background: Theme.surface;
                             border-radius: 4px;
                             border-width: 1px;
@@ -534,6 +554,7 @@ export component BeatContent inherits Rectangle {
                             HorizontalLayout {
                                 cross-axis-alignment: CrossAxisAlignment.center;
                                 spacing: 2px;
+                                padding-left: 1px;
                                 for s in root.step-indexes: Step {
                                     visible: s < root.grid-resolution;
                                     active: root.steps[inst * 16 + s];
@@ -544,60 +565,61 @@ export component BeatContent inherits Rectangle {
                     }
 
                     grid-touch := TouchArea {
-                    width: root.grid-content-width;
-                    height: root.grid-content-height;
-                    mouse-cursor: none;
-                    property <int> paint-row: -1;
-                    property <int> paint-col: -1;
-                    property <bool> erasing: false;
-                    pointer-event(event) => {
-                        if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
-                            let r = Math.floor((self.mouse-y - 20px) / 28px);
-                            let c = Math.floor(self.mouse-x / 30px);
-                            if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution) {
-                                root.steps[r * 16 + c] = !root.steps[r * 16 + c];
-                                self.paint-row = r;
-                                self.paint-col = c;
-                                self.erasing = !root.steps[r * 16 + c];
-                            }
-                        } else if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
-                            let r = Math.floor((self.mouse-y - 20px) / 28px);
-                            let c = Math.floor(self.mouse-x / 30px);
-                            if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution) {
-                                root.steps[r * 16 + c] = false;
-                                self.paint-row = r;
-                                self.paint-col = c;
-                                self.erasing = true;
-                            }
-                        } else if (event.kind == PointerEventKind.move) {
-                            if (self.pressed) {
-                                let r = Math.floor((self.mouse-y - 20px) / 28px);
+                        width: root.grid-content-width;
+                        height: root.grid-content-height;
+                        mouse-cursor: none;
+                        property <int> paint-row: -1;
+                        property <int> paint-col: -1;
+                        property <bool> erasing: false;
+                        
+                        pointer-event(event) => {
+                            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                                let r = Math.floor((self.mouse-y - 20px) / 36px); 
                                 let c = Math.floor(self.mouse-x / 30px);
-                                if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution
-                                    && !(r == self.paint-row && c == self.paint-col)) {
-                                    root.steps[r * 16 + c] = !self.erasing;
+                                if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution) {
+                                    root.steps[r * 16 + c] = !root.steps[r * 16 + c];
                                     self.paint-row = r;
                                     self.paint-col = c;
+                                    self.erasing = !root.steps[r * 16 + c];
                                 }
+                            } else if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
+                                let r = Math.floor((self.mouse-y - 20px) / 36px);
+                                let c = Math.floor(self.mouse-x / 30px);
+                                if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution) {
+                                    root.steps[r * 16 + c] = false;
+                                    self.paint-row = r;
+                                    self.paint-col = c;
+                                    self.erasing = true;
+                                }
+                            } else if (event.kind == PointerEventKind.move) {
+                                if (self.pressed) {
+                                    let r = Math.floor((self.mouse-y - 20px) / 36px);
+                                    let c = Math.floor(self.mouse-x / 30px);
+                                    if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution
+                                        && !(r == self.paint-row && c == self.paint-col)) {
+                                        root.steps[r * 16 + c] = !self.erasing;
+                                        self.paint-row = r;
+                                        self.paint-col = c;
+                                    }
+                                }
+                            } else if (event.kind == PointerEventKind.up) {
+                                self.paint-row = -1;
+                                self.paint-col = -1;
+                                self.erasing = false;
                             }
-                        } else if (event.kind == PointerEventKind.up) {
-                            self.paint-row = -1;
-                            self.paint-col = -1;
-                            self.erasing = false;
                         }
                     }
-                }
 
-                drumstick := Image {
-                    x: grid-touch.mouse-x - 15.7px;
-                    y: grid-touch.mouse-y - 1.2px;
-                    width: 32px;
-                    height: 32px;
-                    source: @image-url("../icons/drumstick.svg");
-                    visible: grid-touch.has-hover;
-                    transform-origin: { x: 15.7px, y: 1.2px };
-                    transform-rotation: -45deg;
-                }
+                    drumstick := Image {
+                        x: grid-touch.mouse-x - 15.7px;
+                        y: grid-touch.mouse-y - 1.2px;
+                        width: 32px;
+                        height: 32px;
+                        source: @image-url("../icons/drumstick.svg");
+                        visible: grid-touch.has-hover;
+                        transform-origin: { x: 15.7px, y: 1.2px };
+                        transform-rotation: -45deg;
+                    }
                     }
                 }
 
