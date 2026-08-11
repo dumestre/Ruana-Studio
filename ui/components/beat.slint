@@ -410,6 +410,16 @@ export component BeatContent inherits Rectangle {
                                 }
                             }
                         }
+
+                        if (root.playhead >= 0 && root.playhead < root.grid-resolution): Rectangle {
+                            x: 4px + root.playhead * 30px + 13px;
+                            y: 4px;
+                            width: 2px;
+                            height: root.grid-height - 8px;
+                            background: Theme.activ;
+                            border-radius: 1px;
+                            opacity: 0.9;
+                        }
                     }
                 }
 
