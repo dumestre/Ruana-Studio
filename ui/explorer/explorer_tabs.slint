@@ -1,0 +1,101 @@
+import { Theme } from "../theme.slint";
+
+component ExplorerTab inherits Rectangle {
+    in property <string> label: "";
+    in property <string> icon: "";
+    in property <bool> active: false;
+
+    callback clicked();
+
+    height: 26px;
+
+    background: root.active
+        ? Theme.surface-high
+        : transparent;
+
+    border-radius: 3px;
+
+    HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 7px;
+        spacing: 5px;
+        alignment: center;
+
+        Text {
+            text: root.icon;
+
+            color: root.active
+                ? Theme.accent
+                : Theme.text-dim;
+
+            font-size: 10px;
+
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.label;
+
+            color: root.active
+                ? Theme.text-primary
+                : Theme.text-dim;
+
+            font-size: 9px;
+
+            vertical-alignment: center;
+        }
+    }
+
+    TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+
+export component ExplorerTabs inherits Rectangle {
+    in-out property <int> selected: 0;
+
+    callback tab-changed(int);
+
+    height: 26px;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: 3px;
+
+        ExplorerTab {
+            label: "Files";
+            icon: "▤";
+            active: root.selected == 0;
+
+            clicked => {
+                root.selected = 0;
+                root.tab-changed(0);
+            }
+        }
+
+        ExplorerTab {
+            label: "Media";
+            icon: "♫";
+            active: root.selected == 1;
+
+            clicked => {
+                root.selected = 1;
+                root.tab-changed(1);
+            }
+        }
+
+        ExplorerTab {
+            label: "Plugins";
+            icon: "◆";
+            active: root.selected == 2;
+
+            clicked => {
+                root.selected = 2;
+                root.tab-changed(2);
+            }
+        }
+    }
+}

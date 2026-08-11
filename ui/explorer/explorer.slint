@@ -5,60 +5,7 @@ import { MediaBrowser } from "media_browser.slint";
 import { PluginBrowser } from "plugin_browser.slint";
 import { Preview } from "preview.slint";
 import { ExplorerHeader } from "explorer_header.slint";
-
-
-component ExplorerTab inherits Rectangle {
-    in property <string> label: "";
-    in property <string> icon: "";
-    in property <bool> active: false;
-
-    callback clicked();
-
-    height: 26px;
-
-    background: root.active
-        ? Theme.surface-high
-        : transparent;
-
-    border-radius: 3px;
-
-    HorizontalLayout {
-        padding-left: 7px;
-        padding-right: 7px;
-        spacing: 5px;
-        alignment: center;
-
-        Text {
-            text: root.icon;
-
-            color: root.active
-                ? Theme.accent
-                : Theme.text-dim;
-
-            font-size: 10px;
-
-            vertical-alignment: center;
-        }
-
-        Text {
-            text: root.label;
-
-            color: root.active
-                ? Theme.text-primary
-                : Theme.text-dim;
-
-            font-size: 9px;
-
-            vertical-alignment: center;
-        }
-    }
-
-    TouchArea {
-        clicked => {
-            root.clicked();
-        }
-    }
-}
+import { ExplorerTabs } from "explorer_tabs.slint";
 
 
 export component Explorer inherits Rectangle {
@@ -67,7 +14,7 @@ export component Explorer inherits Rectangle {
 
     preferred-width: 300px;
     width: 300px;
-    height: 100%;
+    
 
     background: Theme.surface;
 
@@ -105,42 +52,11 @@ export component Explorer inherits Rectangle {
         // TABS
         // =====================================================
 
-        Rectangle {
-            height: 26px;
-            background: transparent;
+        ExplorerTabs {
+            selected <=> root.browser-mode;
 
-            HorizontalLayout {
-                spacing: 3px;
-
-                ExplorerTab {
-                    label: "Files";
-                    icon: "▤";
-                    active: root.browser-mode == 0;
-
-                    clicked => {
-                        root.browser-mode = 0;
-                    }
-                }
-
-                ExplorerTab {
-                    label: "Media";
-                    icon: "♫";
-                    active: root.browser-mode == 1;
-
-                    clicked => {
-                        root.browser-mode = 1;
-                    }
-                }
-
-                ExplorerTab {
-                    label: "Plugins";
-                    icon: "◆";
-                    active: root.browser-mode == 2;
-
-                    clicked => {
-                        root.browser-mode = 2;
-                    }
-                }
+            tab-changed => {
+                // browser-mode já está sincronizado.
             }
         }
 
