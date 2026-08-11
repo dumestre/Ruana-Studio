@@ -4,6 +4,8 @@ export component Knob {
     in-out property <float> value: 0.5;
     in property <string> caption: "";
     in property <string> display-value: "";
+    in property <bool> show-display: true;
+    in property <bool> show-text: true;
     in property <bool> centered: false;
     in property <angle> arc-start: -135deg;
     in property <angle> arc-sweep: 270deg;
@@ -13,7 +15,9 @@ export component Knob {
 
     // The dial occupies the upper portion while the remaining height is used by
     // the value and caption. This keeps the whole control usable when resized.
-    property <length> dial-size: min(root.width, root.height * 0.64);
+    property <length> dial-size: root.show-text
+        ? min(root.width, root.height * 0.64)
+        : min(root.width, root.height);
     property <length> dot-size: max(1px, root.dial-size * 0.1);
     property <length> label-size: min(9px, root.dial-size * 0.25);
 
@@ -88,6 +92,7 @@ export component Knob {
 
     Text {
         text: root.display-value;
+        visible: root.show-text && root.show-display;
         y: root.dial-size;
         width: parent.width;
         color: Theme.text-primary;
@@ -97,6 +102,7 @@ export component Knob {
 
     Text {
         text: root.caption;
+        visible: root.show-text;
         y: root.dial-size + root.label-size + 2px;
         width: parent.width;
         color: Theme.text-dim;
@@ -111,4 +117,17 @@ export component PanKnob inherits Knob {
     arc-start: -135deg; 
     arc-sweep: 270deg;
     value: 0.5; // O centro perfeito
+}
+
+export component KnobWithoutText inherits Knob {
+    height: 36px;
+    show-text: false;
+}
+
+export component PanKnobWithoutText inherits KnobWithoutText {
+    centered: true;
+    height: 36px;
+    arc-start: -135deg;
+    arc-sweep: 270deg;
+    value: 0.5;
 }

@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { Knob, PanKnob } from "knob.slint";
+import { KnobWithoutText, PanKnobWithoutText } from "knob.slint";
 
 component Step inherits Rectangle {
     in property <bool> active: false;
@@ -170,6 +170,7 @@ export component BeatContent inherits Rectangle {
     in-out property <int> sample-menu-inst: 0;
     in-out property <length> sample-menu-x: 0px;
     in-out property <length> sample-menu-y: 0px;
+    border-width: 1px;
     in-out property <[bool]> clipboard: [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
 
     in-out property <bool> beat-menu-open: false;
@@ -194,6 +195,7 @@ export component BeatContent inherits Rectangle {
     width:800px; 
     height: 480px;
     background: Theme.surface;
+    border-color: Colors.beige;
     border-radius: 8px;
 
     VerticalLayout {
@@ -356,7 +358,7 @@ export component BeatContent inherits Rectangle {
         }
 
         grid-body := HorizontalLayout {
-            alignment: LayoutAlignment.stretch;
+            alignment: LayoutAlignment.start;
             cross-axis-alignment: CrossAxisAlignment.stretch;
             spacing: 0;
 
@@ -373,16 +375,15 @@ export component BeatContent inherits Rectangle {
                     // Cabeçalho global para os Knobs (mantém o exato espaçamento das tracks)
                     HorizontalLayout {
                         height: 16px;
-                        padding-left: 8px;
-                        padding-right: 8px;
-                        spacing: 12px;
+                        alignment: LayoutAlignment.start;
+                        padding-left: 4px;
+                        padding-right: 4px;
+                        spacing: 2px;
                         cross-axis-alignment: CrossAxisAlignment.center; // Alinha os textos mais perto dos botões
 
                         // Espaço reservado para alinhar com o botão de Mute (10px)
-                        Rectangle { width: 10px; }
-
                         Text {
-                            width: 24px;
+                            width: 28px;
                             text: "PAN";
                             color: Theme.text-dim;
                             font-size: 9px;
@@ -392,7 +393,7 @@ export component BeatContent inherits Rectangle {
                         }
 
                         Text {
-                            width: 24px;
+                            width: 28px;
                             text: "VOL";
                             color: Theme.text-dim;
                             font-size: 9px;
@@ -412,7 +413,7 @@ export component BeatContent inherits Rectangle {
                         width: 100%;
 
                         HorizontalLayout {
-                            alignment: LayoutAlignment.stretch;
+                            alignment: LayoutAlignment.start;
                             cross-axis-alignment: CrossAxisAlignment.center;
                             padding-left: 4px;
                             padding-right: 4px;
@@ -421,9 +422,9 @@ export component BeatContent inherits Rectangle {
                             
 
                             // Pan Control (Agora limpo, sem layout extra ou textos)
-                            PanKnob {
+                            PanKnobWithoutText {
                                 width: 28px;
-                                height: 32px;
+                                height: 28px;
                                 value: (root.track-pan[inst] + 1.0) / 2.0;
                                 caption: "";
                                 display-value: root.track-pan[inst] < -0.01 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0.01 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
@@ -433,9 +434,9 @@ export component BeatContent inherits Rectangle {
                             }
 
                             // Volume Control (Agora limpo, sem layout extra ou textos)
-                            Knob {
+                            KnobWithoutText {
                                 width: 28px;
-                                height: 32px;
+                                height: 28px;
                                 value: root.track-volume[inst];
                                 caption: "";
                                 display-value: Math.round(root.track-volume[inst] * 100) + "%";
