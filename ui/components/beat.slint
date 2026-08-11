@@ -218,12 +218,12 @@ export component BeatContent inherits Rectangle {
         body := HorizontalLayout {
             height: root.grid-height + 40px;
             spacing: 12px;
-            alignment: LayoutAlignment.start;
-            cross-axis-alignment: CrossAxisAlignment.start;
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
             Rectangle {
                 width: 244px;
-                height: parent.height;
+                height: 306px;
                 background: Theme.base;
                 border-radius: 6px;
                 border-width: 1px;
@@ -232,7 +232,7 @@ export component BeatContent inherits Rectangle {
                 VerticalLayout {
                     padding: 8px;
                     spacing: 4px;
-                    alignment: LayoutAlignment.start;
+                    alignment: LayoutAlignment.stretch;
                     cross-axis-alignment: CrossAxisAlignment.stretch;
 
                     Rectangle {
@@ -304,10 +304,10 @@ export component BeatContent inherits Rectangle {
 
             grid-column := VerticalLayout {
                 width: root.grid-width;
-                height: parent.height;
+                height: 306px;
                 spacing: 6px;
-                alignment: LayoutAlignment.start;
-                cross-axis-alignment: CrossAxisAlignment.stretch;
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.start;
 
                 grid-flick := Flickable {
                     width: root.grid-width;
@@ -327,7 +327,7 @@ export component BeatContent inherits Rectangle {
                         VerticalLayout {
                             padding: 4px;
                             spacing: 2px;
-                            alignment: LayoutAlignment.start;
+                            alignment: LayoutAlignment.space-between;
                             cross-axis-alignment: CrossAxisAlignment.start;
 
                             HorizontalLayout {
