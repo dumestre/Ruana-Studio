@@ -5,6 +5,8 @@ component StepCell inherits Rectangle {
     in-out property <bool> active: false;
     in property <bool> current: false;
     in property <color> accent-color: Theme.accent;
+    in property <color> alternate-accent-color: Theme.accent;
+    in property <bool> beat-group-highlight: false;
     callback toggled;
 
     width: 28px;
@@ -16,10 +18,16 @@ component StepCell inherits Rectangle {
         height: 20px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        background: root.active ? root.accent-color : Theme.base;
+        background: root.active
+            ? (root.beat-group-highlight ? root.alternate-accent-color : root.accent-color)
+            : (root.beat-group-highlight ? #181818 : #383838);
         border-radius: 7px;
         border-width: root.current ? 2px : 1px;
-        border-color: root.current ? Theme.playhead : (root.active ? root.accent-color : Theme.border);
+        border-color: root.current
+            ? Theme.playhead
+            : (root.active
+                ? (root.beat-group-highlight ? root.alternate-accent-color : root.accent-color)
+                : Theme.border);
     }
 
     touch := TouchArea {
@@ -218,7 +226,7 @@ export component BeatContent inherits Rectangle {
         body := HorizontalLayout {
             height: root.grid-height + 40px;
             spacing: 12px;
-            alignment: LayoutAlignment.stretch;
+            alignment: LayoutAlignment.space-between;
             cross-axis-alignment: CrossAxisAlignment.center;
 
             Rectangle {
@@ -333,14 +341,22 @@ export component BeatContent inherits Rectangle {
                             HorizontalLayout {
                                 height: 28px;
                                 spacing: 2px;
-                                for step in root.step-indexes: Text {
+                                for step in root.step-indexes: Rectangle {
                                     visible: step < root.grid-resolution;
                                     width: 28px;
-                                    text: "" + (step + 1);
-                                    color: Theme.text-dim;
-                                    font-size: 9px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
+                                    height: 28px;
+                                    background: Math.mod(Math.floor(step / 4), 2) == 1 ? #181818 : #383838;
+                                    border-radius: 4px;
+
+                                    Text {
+                                        text: "" + (step + 1);
+                                        width: 100%;
+                                        height: 100%;
+                                        color: Theme.text-dim;
+                                        font-size: 9px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
                                 }
                             }
 
@@ -356,6 +372,7 @@ export component BeatContent inherits Rectangle {
                                         visible: step < root.grid-resolution;
                                         active: root.steps[inst * 16 + step];
                                         current: root.playhead == step;
+                                        beat-group-highlight: Math.mod(Math.floor(step / 4), 2) == 1;
                                         accent-color: inst == 0 ? Theme.accent
                                             : inst == 1 ? Theme.ok
                                             : inst == 2 ? Theme.warn
@@ -364,6 +381,14 @@ export component BeatContent inherits Rectangle {
                                             : inst == 5 ? #4895EF
                                             : inst == 6 ? #E76F51
                                             : #B08D57;
+                                        alternate-accent-color: inst == 0 ? #C95518
+                                            : inst == 1 ? #4F7E4C
+                                            : inst == 2 ? #B78210
+                                            : inst == 3 ? #A83237
+                                            : inst == 4 ? #0BB000
+                                            : inst == 5 ? #2D67AA
+                                            : inst == 6 ? #A44935
+                                            : #7A633D;
                                         opacity: root.track-active[inst] ? 1.0 : 0.35;
                                         toggled => { root.steps[inst * 16 + step] = self.active; }
                                     }
