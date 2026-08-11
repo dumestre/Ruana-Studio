@@ -23,6 +23,9 @@ export component MainWindow inherits Window {
     in-out property <[float]> mixer-meters: [0, 0, 0, 0, 0];
 
     callback play-state-changed(bool);
+    callback close;
+    callback maximize;
+    callback minimize;
 
     property <[string]> track-names: ["Drums", "Bass", "Vocal", "Synth"];
 
@@ -34,9 +37,9 @@ export component MainWindow inherits Window {
             beat-opened => { beat_popup.open-requested(); }
             zoom-in => { root.zoom-level = min(root.zoom-level + 0.25, 4.0); }
             zoom-out => { root.zoom-level = max(root.zoom-level - 0.25, 0.5); }
-            close => { root.visible = false; }
-            maximize => { }
-            minimize => { }
+            close => { root.close(); }
+            maximize => { root.maximize(); }
+            minimize => { root.minimize(); }
         }
 
         Transport {

@@ -6,8 +6,7 @@ export component Toolbar inherits Rectangle {
     in-out property <bool> grid-enabled: true;
     in-out property <bool> beat-open: false;
     
-    preferred-width: 1380px;
-    preferred-height: 880px;
+    
 
     callback zoom-in;
     callback zoom-out;
@@ -18,7 +17,6 @@ export component Toolbar inherits Rectangle {
     callback maximize;
     callback minimize;
 
-    
     height: 34px;
     background: Theme.surface;
 
@@ -47,22 +45,14 @@ export component Toolbar inherits Rectangle {
             background: transparent;
         }
 
-        Button { text: "New";
+        Button { text: "New"; borderless: true;
             text-color: Colors.beige; clicked => {} }
-        Button { text: "Open";
+        Button { text: "Open"; borderless: true;
             text-color: Colors.beige; clicked => {} }
-        Button { text: "Save";
+        Button { text: "Save"; borderless: true;
             text-color: Colors.beige; clicked => {} }
-        Button { text: "Save As"; 
+        Button { text: "Save As"; borderless: true;
             text-color: Colors.beige; clicked => {} }
-
-        Rectangle {
-            width: 1px;
-            background: Theme.border;
-        }
-
-        Button { text: "Undo"; clicked => {} }
-        Button { text: "Redo"; clicked => {} }
 
         Rectangle {
             width: 1px;
@@ -70,23 +60,29 @@ export component Toolbar inherits Rectangle {
         }
 
         Button {
-            text: "Zoom -";
-            clicked => {
-                root.zoom-out();
-            }
+            height: 20px;
+            width: 20px; 
+            icon: @image-url("icons/undo.svg");
+            icon-size: 16px;
+            icon-color: #9a9a9a;
+            borderless: true;
+            clicked => {} 
         }
-        Button {
-            text: "Zoom +";
-            clicked => {
-                root.zoom-in();
-            }
+        Button { 
+            height: 20px;
+            width: 20px;
+            icon: @image-url("icons/redo.svg");
+            icon-size: 16px;
+            icon-color: #9a9a9a;
+            borderless: true;
+            clicked => {} 
         }
 
         Rectangle {
             width: 1px;
             background: Theme.border;
         }
-
+        
         Button {
             text: "SNAP";
             toggled: root.snap-enabled;
@@ -111,6 +107,7 @@ export component Toolbar inherits Rectangle {
             toggled: root.beat-open;
             subtle-toggled: true;
             toggled-icon-color: Theme.accent;
+            width: 26px;
             clicked => {
                 root.beat-opened();
             }
