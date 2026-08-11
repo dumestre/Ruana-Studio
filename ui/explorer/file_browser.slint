@@ -1,136 +1,218 @@
 import { Theme } from "../theme.slint";
-import { BrowserTreeRow } from "browser_tree.slint";
+import { BrowserItem } from "../components/browser_item.slint";
+
 
 export component FileBrowser inherits Rectangle {
+    in-out property <string> current-path: "Project";
+
     background: transparent;
 
     VerticalLayout {
         spacing: 5px;
 
-        // Caminho atual
+
+        // =====================================================
+        // NAVEGAÇÃO
+        // =====================================================
+
         Rectangle {
-            height: 26px;
+            height: 28px;
+
             background: Theme.base;
             border-width: 1px;
             border-color: Theme.border;
             border-radius: 3px;
 
             HorizontalLayout {
-                padding-left: 7px;
-                padding-right: 7px;
-                spacing: 6px;
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 2px;
                 alignment: center;
 
-                Text {
-                    text: "⌂";
-                    width: 18px;
-                    color: Theme.accent;
-                    font-size: 11px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    background: transparent;
+                    border-radius: 3px;
+
+                    Text {
+                        text: "←";
+
+                        color: Theme.text-dim;
+                        font-size: 13px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    background: transparent;
+                    border-radius: 3px;
+
+                    Text {
+                        text: "→";
+
+                        color: Theme.text-dim;
+                        font-size: 13px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    background: transparent;
+                    border-radius: 3px;
+
+                    Text {
+                        text: "↑";
+
+                        color: Theme.text-dim;
+                        font-size: 13px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 16px;
+
+                    background: Theme.border;
                 }
 
                 Text {
-                    text: "Project";
+                    text: root.current-path;
+
                     color: Theme.text-primary;
                     font-size: 9px;
+
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                     overflow: elide;
                 }
-
-                Text {
-                    text: "⋮";
-                    width: 18px;
-                    color: Theme.text-dim;
-                    font-size: 13px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
             }
         }
 
-        // Árvore
+
+        // =====================================================
+        // FAVORITES
+        // =====================================================
+
         Rectangle {
-            horizontal-stretch: 1;
-            vertical-stretch: 1;
+            height: 20px;
             background: transparent;
 
-            VerticalLayout {
-                spacing: 1px;
+            Text {
+                text: "FAVORITES";
 
-                Text {
-                    text: "PROJECT";
-                    height: 20px;
-                    color: Theme.text-dim;
-                    font-size: 8px;
-                    font-weight: 700;
-                    vertical-alignment: center;
-                }
+                color: Theme.text-dim;
+                font-size: 8px;
+                font-weight: 700;
 
-                BrowserTreeRow {
-                    name: "Ferrum Studio";
-                    icon: "▾";
-                    indent: 0;
-                    selected: true;
-                }
-
-                BrowserTreeRow {
-                    name: "Audio";
-                    icon: "▸";
-                    indent: 1;
-                }
-
-                BrowserTreeRow {
-                    name: "Samples";
-                    icon: "▾";
-                    indent: 1;
-                }
-
-                BrowserTreeRow {
-                    name: "Drums";
-                    icon: "▸";
-                    indent: 2;
-                }
-
-                BrowserTreeRow {
-                    name: "Vocals";
-                    icon: "▸";
-                    indent: 2;
-                }
-
-                BrowserTreeRow {
-                    name: "Presets";
-                    icon: "▸";
-                    indent: 1;
-                }
-
-                Rectangle {
-                    height: 8px;
-                    background: transparent;
-                }
-
-                Text {
-                    text: "FAVORITES";
-                    height: 20px;
-                    color: Theme.text-dim;
-                    font-size: 8px;
-                    font-weight: 700;
-                    vertical-alignment: center;
-                }
-
-                BrowserTreeRow {
-                    name: "My Samples";
-                    icon: "★";
-                    indent: 0;
-                }
-
-                BrowserTreeRow {
-                    name: "Vocals";
-                    icon: "★";
-                    indent: 0;
-                }
+                vertical-alignment: center;
             }
+        }
+
+        BrowserItem {
+            name: "My Samples";
+            type: "Folder";
+            icon: "★";
+        }
+
+        BrowserItem {
+            name: "Vocals";
+            type: "Folder";
+            icon: "★";
+        }
+
+
+        // =====================================================
+        // PROJECT
+        // =====================================================
+
+        Rectangle {
+            height: 20px;
+            background: transparent;
+
+            Text {
+                text: "PROJECT";
+
+                color: Theme.text-dim;
+                font-size: 8px;
+                font-weight: 700;
+
+                vertical-alignment: center;
+            }
+        }
+
+        BrowserItem {
+            name: "Ferrum Studio";
+            type: "Folder";
+            icon: "▾";
+            selected: true;
+        }
+
+        BrowserItem {
+            name: "Audio";
+            type: "Folder";
+            icon: "▸";
+        }
+
+        BrowserItem {
+            name: "Samples";
+            type: "Folder";
+            icon: "▸";
+        }
+
+        BrowserItem {
+            name: "Presets";
+            type: "Folder";
+            icon: "▸";
+        }
+
+
+        // =====================================================
+        // COMPUTER
+        // =====================================================
+
+        Rectangle {
+            height: 20px;
+            background: transparent;
+
+            Text {
+                text: "COMPUTER";
+
+                color: Theme.text-dim;
+                font-size: 8px;
+                font-weight: 700;
+
+                vertical-alignment: center;
+            }
+        }
+
+        BrowserItem {
+            name: "This PC";
+            type: "Computer";
+            icon: "▾";
+        }
+
+        BrowserItem {
+            name: "C:";
+            type: "Drive";
+            icon: "▸";
+        }
+
+        BrowserItem {
+            name: "D:";
+            type: "Drive";
+            icon: "▸";
         }
     }
 }

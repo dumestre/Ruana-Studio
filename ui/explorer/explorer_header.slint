@@ -1,0 +1,48 @@
+import { Theme } from "../theme.slint";
+
+export component ExplorerHeader inherits Rectangle {
+    callback menu-clicked();
+
+    height: 28px;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: center;
+
+        Text {
+            text: "Explorer";
+
+            color: Theme.text-primary;
+            font-size: 12px;
+            font-weight: 700;
+
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        Rectangle {
+            width: 24px;
+            height: 24px;
+
+            background: transparent;
+            border-radius: 3px;
+
+            Text {
+                text: "⋮";
+
+                color: Theme.text-dim;
+                font-size: 16px;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.menu-clicked();
+                }
+            }
+        }
+    }
+}

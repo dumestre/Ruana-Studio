@@ -4,6 +4,8 @@ import { FileBrowser } from "file_browser.slint";
 import { MediaBrowser } from "media_browser.slint";
 import { PluginBrowser } from "plugin_browser.slint";
 import { Preview } from "preview.slint";
+import { ExplorerHeader } from "explorer_header.slint";
+
 
 component ExplorerTab inherits Rectangle {
     in property <string> label: "";
@@ -69,7 +71,11 @@ export component Explorer inherits Rectangle {
 
     background: Theme.surface;
 
-    // Borda direita
+
+    // =====================================================
+    // BORDA DIREITA
+    // =====================================================
+
     Rectangle {
         x: parent.width - 1px;
         width: 1px;
@@ -78,43 +84,22 @@ export component Explorer inherits Rectangle {
         background: Theme.border;
     }
 
+
     VerticalLayout {
         padding: 6px;
         spacing: 6px;
+
 
         // =====================================================
         // HEADER
         // =====================================================
 
-        Rectangle {
-            height: 24px;
-            background: transparent;
-
-            HorizontalLayout {
-                spacing: 6px;
-                alignment: center;
-
-                Text {
-                    text: "Explorer";
-
-                    color: Theme.text-primary;
-                    font-size: 12px;
-                    font-weight: 700;
-
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-
-                Text {
-                    text: "⋮";
-
-                    color: Theme.text-dim;
-                    font-size: 16px;
-
-                    vertical-alignment: center;
-                }
+        ExplorerHeader {
+            menu-clicked => {
+                // Menu do Explorer será implementado depois.
             }
         }
+
 
         // =====================================================
         // TABS
@@ -145,7 +130,6 @@ export component Explorer inherits Rectangle {
                     clicked => {
                         root.browser-mode = 1;
                     }
-                    if root.browser-mode == 0 : FileBrowser {}
                 }
 
                 ExplorerTab {
@@ -159,6 +143,7 @@ export component Explorer inherits Rectangle {
                 }
             }
         }
+
 
         // =====================================================
         // SEARCH
@@ -174,6 +159,7 @@ export component Explorer inherits Rectangle {
                     : "Search plugins...";
         }
 
+
         // =====================================================
         // BROWSER
         // =====================================================
@@ -184,20 +170,28 @@ export component Explorer inherits Rectangle {
 
             background: transparent;
 
+            if root.browser-mode == 0 : FileBrowser {}
 
             if root.browser-mode == 1 : MediaBrowser {}
 
             if root.browser-mode == 2 : PluginBrowser {}
         }
 
+
         // =====================================================
-        // PREVIEW
+        // PREVIEW SEPARATOR
         // =====================================================
 
         Rectangle {
             height: 1px;
+
             background: Theme.border;
         }
+
+
+        // =====================================================
+        // PREVIEW
+        // =====================================================
 
         Preview {
             file-name: "No file selected";
