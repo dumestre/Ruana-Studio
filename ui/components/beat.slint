@@ -119,6 +119,7 @@ export component BeatContent inherits Rectangle {
     in-out property <[int]> instrument-indexes: [0, 1, 2, 3, 4, 5, 6, 7];
     in-out property <[string]> instrument-names: ["Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Tom", "Cymbal", "Perc"];
     in-out property <[bool]> track-active: [true, true, true, true, true, true, true, true];
+    in-out property <[bool]> track-solo: [false, false, false, false, false, false, false, false];
     in-out property <[float]> track-pan: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     in-out property <[float]> track-volume: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
     in-out property <[int]> track-mixer-channel: [0, 1, 2, 3, 4, 5, 6, 7];
@@ -127,6 +128,8 @@ export component BeatContent inherits Rectangle {
     in-out property <string> track-input: "1";
     in-out property <int> grid-resolution: 16;
     in-out property <bool> playing: false;
+    in-out property <float> humanize: 0.0;
+    in-out property <float> swing: 0.0;
     in-out property <[int]> resolution-options: [8, 16, 32, 64];
     in-out property <string> beat-name: "BEAT SEQUENCER";
 
@@ -213,11 +216,26 @@ export component BeatContent inherits Rectangle {
                     vertical-alignment: center;
                 }
                 Rectangle { horizontal-stretch: 1; }
+                Text { text: "HUM"; color: Theme.text-dim; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                KnobWithoutText {
+                    width: 26px;
+                    height: 26px;
+                    value <=> root.humanize;
+                }
+                
+                Text { text: "SWG"; color: Theme.text-dim; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                KnobWithoutText {
+                    width: 26px;
+                    height: 26px;
+                    value <=> root.swing;
+                }
+
                 Text { text: "STEPS"; color: Theme.text-dim; font-size: 9px; font-weight: 700; vertical-alignment: center; }
                 ActionButton {
                     text: "" + root.grid-resolution;
                     clicked => { root.grid-dropdown-open = !root.grid-dropdown-open; }
                 }
+                
                 ActionButton {
                     text: "+ TRACK";
                     width: 74px;
@@ -269,6 +287,7 @@ export component BeatContent inherits Rectangle {
                             Text { width: 28px; text: "VOL"; color: Theme.text-dim; font-size: 9px; font-weight: 700; horizontal-alignment: center; }
                             Text { width: 30px; text: "CH"; color: Theme.text-dim; font-size: 9px; font-weight: 700; horizontal-alignment: center; }
                             Text { width: 22px; text: "M"; color: Theme.text-dim; font-size: 9px; font-weight: 700; horizontal-alignment: center; }
+                            Text { width: 22px; text: "S"; color: Theme.text-dim; font-size: 9px; font-weight: 700; horizontal-alignment: center; }
                             Text { horizontal-stretch: 1; text: "SAMPLE"; color: Theme.text-dim; font-size: 9px; font-weight: 700; }
                         }
                     }
@@ -309,6 +328,12 @@ export component BeatContent inherits Rectangle {
                                 text: "M";
                                 selected: !root.track-active[inst];
                                 clicked => { root.track-active[inst] = !root.track-active[inst]; }
+                            }
+                            ActionButton {
+                                width: 22px; height: 24px;
+                                text: "S";
+                                selected: root.track-solo[inst];
+                                clicked => { root.track-solo[inst] = !root.track-solo[inst]; }
                             }
                             Text {
                                 horizontal-stretch: 1;
@@ -468,6 +493,7 @@ export component BeatPopup inherits Rectangle {
     in-out property <[int]> instrument-indexes: [0, 1, 2, 3, 4, 5, 6, 7];
     in-out property <[string]> instrument-names: ["Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Tom", "Cymbal", "Perc"];
     in-out property <[bool]> track-active: [true, true, true, true, true, true, true, true];
+    in-out property <[bool]> track-solo: [false, false, false, false, false, false, false, false];
     in-out property <[float]> track-pan: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     in-out property <[float]> track-volume: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
     in-out property <[int]> track-mixer-channel: [0, 1, 2, 3, 4, 5, 6, 7];
@@ -476,6 +502,8 @@ export component BeatPopup inherits Rectangle {
     in-out property <string> track-input: "1";
     in-out property <int> grid-resolution: 16;
     in-out property <bool> playing: false;
+    in-out property <float> humanize: 0.0;
+    in-out property <float> swing: 0.0;
     in-out property <[int]> resolution-options: [8, 16, 32, 64];
     in-out property <string> beat-name: "BEAT SEQUENCER";
     in-out property <length> popup-x: 24px;
@@ -498,6 +526,7 @@ export component BeatPopup inherits Rectangle {
         instrument-indexes <=> root.instrument-indexes;
         instrument-names <=> root.instrument-names;
         track-active <=> root.track-active;
+        track-solo <=> root.track-solo;
         track-pan <=> root.track-pan;
         track-volume <=> root.track-volume;
         track-mixer-channel <=> root.track-mixer-channel;
@@ -506,6 +535,8 @@ export component BeatPopup inherits Rectangle {
         track-input <=> root.track-input;
         grid-resolution <=> root.grid-resolution;
         playing <=> root.playing;
+        humanize <=> root.humanize;
+        swing <=> root.swing;
         resolution-options <=> root.resolution-options;
         beat-name <=> root.beat-name;
         close-requested => { root.open = false; }

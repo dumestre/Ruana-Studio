@@ -1,4 +1,5 @@
-# Ferrum Studio
+# Ferrum Studio  Windows > Linux > MacOS
+
 
 DAW (Digital Audio Workstation) nativa desenvolvida em **Rust**, com **Slint** para a interface gráfica.
 
