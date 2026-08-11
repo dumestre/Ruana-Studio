@@ -1,124 +1,99 @@
 import { Theme } from "../theme.slint";
 import { KnobWithoutText, PanKnobWithoutText } from "knob.slint";
 
-component Step inherits Rectangle {
-    in property <bool> active: false;
+component StepCell inherits Rectangle {
+    in-out property <bool> active: false;
     in property <bool> current: false;
+    in property <color> accent-color: Theme.accent;
+    callback toggled;
 
     width: 28px;
-    height: 22px;
-    background: Theme.base;
-    border-radius: 3px;
-    border-width: 1px;
-    border-color: Theme.border;
+    height: 28px;
+    background: transparent;
 
-    states [
-        active when self.active && !self.current: {
-            background: Theme.accent;
-            border-color: Theme.accent;
+    Rectangle {
+        width: 20px;
+        height: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: root.active ? root.accent-color : Theme.base;
+        border-radius: 7px;
+        border-width: root.current ? 2px : 1px;
+        border-color: root.current ? Theme.playhead : (root.active ? root.accent-color : Theme.border);
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.active = !root.active;
+            root.toggled();
         }
-        current when self.current: {
-            border-color: Theme.playhead;
-            border-width: 2px;
-        }
-    ]
+    }
 }
 
-export component BeatScrollBar inherits Rectangle {
-    in-out property <bool> active: false;
+component ActionButton inherits Rectangle {
+    in property <string> text: "";
+    in property <bool> selected: false;
+    callback clicked;
+
+    height: 26px;
+    width: 62px;
+    background: selected ? Theme.accent : (touch.has-hover ? Theme.surface-high : Theme.base);
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: selected ? Theme.accent : Theme.border;
+
+    Text {
+        text: root.text;
+        width: 100%;
+        height: 100%;
+        color: selected ? Theme.text-primary : Theme.text-dim;
+        font-size: 10px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component ScrollTrack inherits Rectangle {
     in-out property <length> value: 0px;
-    in-out property <length> maximum: 0px;
+    in property <length> maximum: 0px;
     in property <length> page-size: 0px;
-    callback scrolled;
+    callback changed;
 
     height: 8px;
     width: 100%;
     background: Theme.base;
     border-radius: 4px;
     visible: root.maximum > 0px;
-    opacity: root.active ? 1.0 : 0.15;
-
-    animate opacity { duration: 400ms; easing: ease-in-out; }
 
     handle := Rectangle {
-        x: (root.width - self.width) * (-root.value / Math.max(root.maximum, 1px));
-        width: Math.max(24px, parent.width * (root.page-size / Math.max(root.maximum + root.page-size, 1px)));
+        width: max(32px, parent.width * root.page-size / max(root.page-size + root.maximum, 1px));
         height: 100%;
-        background: Theme.text-dim;
+        x: (parent.width - self.width) * (-root.value / max(root.maximum, 1px));
+        background: touch.has-hover || touch.pressed ? Theme.accent : Theme.text-dim;
         border-radius: 4px;
     }
 
     touch := TouchArea {
-        width: 100%;
-        height: 100%;
         mouse-cursor: pointer;
 
-        function update-value() {
-            root.value = -Math.max(0px, Math.min(root.maximum, (self.mouse-x - handle.width / 2) * (root.maximum / Math.max(root.width - handle.width, 1px))));
+        function set-position() {
+            root.value = -max(0px, min(root.maximum,
+                (self.mouse-x - handle.width / 2) * root.maximum / max(root.width - handle.width, 1px)));
+            root.changed();
         }
 
         pointer-event(event) => {
-            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
-                root.active = true;
-                self.update-value();
-                root.scrolled();
-            }
+            if (event.kind == PointerEventKind.down) { self.set-position(); }
         }
-
         moved => {
-            if (self.pressed) {
-                root.active = true;
-                self.update-value();
-                root.scrolled();
-            }
-        }
-    }
-}
-
-component ContextMenu inherits Rectangle {
-    in property <[string]> options: [];
-    in property <length> pos-x: 0px;
-    in property <length> pos-y: 0px;
-    in property <bool> menu-open: false;
-    callback option-clicked(string);
-
-    width: 150px;
-    height: 21px * self.options.length + 1px;
-    x: self.pos-x;
-    y: self.pos-y;
-    background: Theme.surface;
-    border-radius: 4px;
-    border-width: 1px;
-    border-color: Theme.border;
-    clip: false;
-    visible: self.menu-open;
-
-    VerticalLayout {
-        padding: 1px;
-        spacing: 1px;
-        for opt in root.options: Rectangle {
-            height: 20px;
-            border-radius: 2px;
-            background: opt-touch.has-hover ? Theme.surface-high : Theme.base;
-
-            Text {
-                text: opt;
-                width: 100%;
-                height: 100%;
-                color: Theme.text-primary;
-                font-size: 11px;
-                horizontal-alignment: left;
-                vertical-alignment: center;
-            }
-
-            opt-touch := TouchArea {
-                width: 100%;
-                height: 100%;
-                mouse-cursor: pointer;
-                clicked => {
-                    root.option-clicked(opt);
-                }
-            }
+            if (self.pressed) { self.set-position(); }
         }
     }
 }
@@ -137,742 +112,301 @@ export component BeatContent inherits Rectangle {
     in-out property <int> playhead: -1;
     in-out property <[int]> step-indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     in-out property <[int]> instrument-indexes: [0, 1, 2, 3, 4, 5, 6, 7];
-    in-out property <[string]> instrument-names: ["Kick", "Snare", "Clap", "Hat Closed", "Hat Open", "Tom", "Cymbal", "Perc"];
-
+    in-out property <[string]> instrument-names: ["Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Tom", "Cymbal", "Perc"];
     in-out property <[bool]> track-active: [true, true, true, true, true, true, true, true];
     in-out property <[float]> track-pan: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     in-out property <[float]> track-volume: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
     in-out property <[int]> track-mixer-channel: [0, 1, 2, 3, 4, 5, 6, 7];
-
     in-out property <int> selected-track: 0;
     in-out property <bool> editing-track: false;
     in-out property <string> track-input: "1";
-
     in-out property <int> grid-resolution: 16;
     in-out property <[int]> resolution-options: [8, 16, 32, 64];
-
     in-out property <string> beat-name: "BEAT SEQUENCER";
-
-    in-out property <bool> grid-dropdown-open: false;
-
-    property <[bool]> default-steps: [
-        true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false,
-        false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false,
-        false, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false,
-        true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false,
-        false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false,
-        true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true
-    ];
-
-    in-out property <bool> sample-menu-open: false;
-    in-out property <int> sample-menu-inst: 0;
-    in-out property <length> sample-menu-x: 0px;
-    in-out property <length> sample-menu-y: 0px;
-    border-width: 1px;
-    in-out property <[bool]> clipboard: [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
-
-    in-out property <bool> beat-menu-open: false;
-    in-out property <length> beat-menu-x: 0px;
-    in-out property <length> beat-menu-y: 0px;
-
-    property <length> grid-content-width: root.grid-resolution * 28px + Math.max(0, root.grid-resolution - 1) * 2px;
-    property <length> grid-content-height: 20px + root.instrument-indexes.length * 32px + Math.max(0, root.instrument-indexes.length - 1) * 4px;
 
     callback close-requested;
     callback drag-moved(length, length);
     callback grid-resolution-changed(int);
     callback beat-name-changed(string);
     callback add-track-requested;
-    callback sample-context-menu-requested(int, int, int); 
-    callback beat-menu-requested(int, int); 
+    callback sample-context-menu-requested(int, int, int);
+    callback beat-menu-requested(int, int);
 
+    property <bool> grid-dropdown-open: false;
+    property <length> grid-content-width: root.grid-resolution * 28px + max(0, root.grid-resolution - 1) * 2px;
+    property <length> grid-width: max(0px, root.width - 268px);
+    property <length> grid-height: 34px + root.instrument-indexes.length * 34px;
+    property <length> drag-x: 0px;
+    property <length> drag-y: 0px;
     property <bool> dragging: false;
-    property <length> last-x: 0px;
-    property <length> last-y: 0px;
 
-    width:800px; 
+    width: 800px;
     height: 480px;
     background: Theme.surface;
-    border-color: Colors.beige;
     border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.border;
 
     VerticalLayout {
-        alignment: LayoutAlignment.stretch;
-        cross-axis-alignment: CrossAxisAlignment.stretch;
         padding: 12px;
-        spacing: 8px;
+        spacing: 10px;
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
 
-        header-row := HorizontalLayout {
-            alignment: LayoutAlignment.stretch;
-            cross-axis-alignment: CrossAxisAlignment.center;
-            spacing: 8px;
+        Rectangle {
+            height: 34px;
+            background: transparent;
 
-            Rectangle {
-                height: 26px;
-                horizontal-stretch: 1;
-
-                touch-drag := TouchArea {
-                    mouse-cursor: grab;
-                    pointer-event(event) => {
-                        if (event.kind == PointerEventKind.down) {
-                            root.dragging = true;
-                            root.last-x = touch-drag.mouse-x;
-                            root.last-y = touch-drag.mouse-y;
-                        } else if (event.kind == PointerEventKind.move && root.dragging) {
-                            root.drag-moved(touch-drag.mouse-x - root.last-x, touch-drag.mouse-y - root.last-y);
-                            root.last-x = touch-drag.mouse-x;
-                            root.last-y = touch-drag.mouse-y;
-                        } else if (event.kind == PointerEventKind.up) {
-                            root.dragging = false;
-                        }
-                    }
-                }
-
-                HorizontalLayout {
-                    cross-axis-alignment: CrossAxisAlignment.center;
-                    spacing: 8px;
-
-                    Image {
-                        colorize: Theme.accent;
-                        width: 20px;
-                        height: 20px;
-                        source: @image-url("../icons/drum.svg");
-                    }
-
-                    Text {
-                        text: root.beat-name;
-                        color: Theme.text-primary;
-                        font-family: "poppins";
-                        font-size: 13px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                    }
-
-                    Rectangle {
-                        width: 100px;
-                        height: 22px;
-                        background: Theme.base;
-                        border-radius: 4px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-
-                        TextInput {
-                            text: root.beat-name;
-                            width: 100%;
-                            height: 100%;
-                            color: Theme.text-primary;
-                            font-size: 11px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            accepted => {
-                                root.beat-name-changed(self.text);
-                            }
-                        }
+            drag-area := TouchArea {
+                mouse-cursor: root.dragging ? grabbing : grab;
+                pointer-event(event) => {
+                    if (event.kind == PointerEventKind.down) {
+                        root.dragging = true;
+                        root.drag-x = self.mouse-x;
+                        root.drag-y = self.mouse-y;
+                    } else if (event.kind == PointerEventKind.move && root.dragging) {
+                        root.drag-moved(self.mouse-x - root.drag-x, self.mouse-y - root.drag-y);
+                        root.drag-x = self.mouse-x;
+                        root.drag-y = self.mouse-y;
+                    } else if (event.kind == PointerEventKind.up) {
+                        root.dragging = false;
                     }
                 }
             }
 
-            header-controls := HorizontalLayout {
-                cross-axis-alignment: CrossAxisAlignment.center;
+            HorizontalLayout {
                 spacing: 8px;
-
-                Text {
-                    text: "GRID";
-                    color: Theme.text-dim;
-                    font-size: 10px;
-                    vertical-alignment: center;
-                }
-
-                grid-btn := Rectangle {
-                    width: 60px;
-                    height: 22px;
-                    background: Theme.base;
-                    border-radius: 4px;
-                    border-width: 1px;
-                    border-color: Theme.border;
-
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.grid-dropdown-open = !root.grid-dropdown-open;
-                            root.sample-menu-open = false;
-                            root.beat-menu-open = false;
-                        }
-                    }
-
-                    Text {
-                        text: "" + root.grid-resolution;
-                        width: 100%;
-                        height: 100%;
-                        color: Theme.text-primary;
-                        font-size: 11px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
+                cross-axis-alignment: CrossAxisAlignment.center;
 
                 Rectangle {
-                    width: 24px;
+                    width: 4px;
                     height: 24px;
-
-                    Image {
-                        source: @image-url("../icons/close.svg");
-                        colorize: Theme.text-dim;
-                    }
-
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.close-requested();
-                        }
-                    }
+                    background: Theme.accent;
+                    border-radius: 2px;
                 }
-
-                beat-menu-btn := Rectangle {
-                    width: 24px;
-                    height: 24px;
-
-                    Text {
-                        text: "▼";
-                        color: Theme.text-dim;
-                        font-size: 12px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.beat-menu-requested(self.x / 1px, (self.y + 24px) / 1px);
-                            root.beat-menu-open = !root.beat-menu-open;
-                            root.sample-menu-open = false;
-                            root.grid-dropdown-open = false;
-                            root.beat-menu-x = header-row.x + header-controls.x + beat-menu-btn.x;
-                            root.beat-menu-y = header-row.y + header-controls.y + beat-menu-btn.y + 24px;
-                        }
-                    }
+                Text {
+                    text: root.beat-name;
+                    color: Theme.text-primary;
+                    font-size: 14px;
+                    font-weight: 700;
+                    vertical-alignment: center;
                 }
-            }
-        }
-
-        grid-body := HorizontalLayout {
-            alignment: LayoutAlignment.start;
-            cross-axis-alignment: CrossAxisAlignment.stretch;
-            spacing: 0;
-
-            Rectangle {
-                width: 240px; 
-                border-radius: 4px;
-                border-width: 1px;
-
-                VerticalLayout {
-                    alignment: LayoutAlignment.stretch;
-                    cross-axis-alignment: CrossAxisAlignment.stretch;
-                    spacing: 4px;
-
-                    // Cabeçalho global para os Knobs (mantém o exato espaçamento das tracks)
-                    HorizontalLayout {
-                        height: 16px;
-                        alignment: LayoutAlignment.start;
-                        padding-left: 4px;
-                        padding-right: 4px;
-                        spacing: 2px;
-                        cross-axis-alignment: CrossAxisAlignment.center; // Alinha os textos mais perto dos botões
-
-                        // Espaço reservado para alinhar com o botão de Mute (10px)
-                        Text {
-                            width: 28px;
-                            text: "PAN";
-                            color: Theme.text-dim;
-                            font-size: 9px;
-                            font-weight: 700;
-                            horizontal-alignment: center;
-                            vertical-alignment: bottom;
-                        }
-
-                        Text {
-                            width: 28px;
-                            text: "VOL";
-                            color: Theme.text-dim;
-                            font-size: 9px;
-                            font-weight: 700;
-                            horizontal-alignment: center;
-                            vertical-alignment: bottom;
-                        }
-                        
-                        // Preenche o restante do espaço para não quebrar o layout
-                        Rectangle { horizontal-stretch: 1; }
-                    }
-
-                    for inst in root.instrument-indexes: Rectangle {
-                        height: 32px; 
-                        border-radius: 4px;
-                        border-width: 1px;
-                        width: 100%;
-
-                        HorizontalLayout {
-                            alignment: LayoutAlignment.start;
-                            cross-axis-alignment: CrossAxisAlignment.center;
-                            padding-left: 4px;
-                            padding-right: 4px;
-                            spacing: 2px;
-
-                            
-
-                            // Pan Control (Agora limpo, sem layout extra ou textos)
-                            PanKnobWithoutText {
-                                width: 28px;
-                                height: 28px;
-                                value: (root.track-pan[inst] + 1.0) / 2.0;
-                                caption: "";
-                                display-value: root.track-pan[inst] < -0.01 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0.01 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
-                                changed => {
-                                    root.track-pan[inst] = self.value * 2.0 - 1.0;
-                                }
-                            }
-
-                            // Volume Control (Agora limpo, sem layout extra ou textos)
-                            KnobWithoutText {
-                                width: 28px;
-                                height: 28px;
-                                value: root.track-volume[inst];
-                                caption: "";
-                                display-value: Math.round(root.track-volume[inst] * 100) + "%";
-                                changed => {
-                                    root.track-volume[inst] = self.value;
-                                }
-                            }
-
-                            // Channel Number
-                            Rectangle {
-                                width: 28px;
-                                height: 20px;
-                                background: Theme.base;
-                                border-radius: 3px;
-                                border-width: 1px;
-                                border-color: Theme.border;
-
-                                TextInput {
-                                    text: "" + (root.track-mixer-channel[inst] + 1);
-                                    width: 100%;
-                                    height: 100%;
-                                    color: Theme.text-primary;
-                                    font-size: 10px;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    accepted => {
-                                        root.track-mixer-channel[inst] = Math.max(0, Math.min(15, Math.round(self.text.to-float() - 1)));
-                                    }
-                                }
-                            }
-
-                            // Instrument Name
-                            Rectangle {
-                                horizontal-stretch: 1;
-                                height: 30px;
-                                background: Theme.surface-high;
-                                border-radius: 4px;
-                                border-width: 1px;
-                                border-color: Theme.border;
-
-                                Text {
-                                    text: root.instrument-names[inst];
-                                    width: 100%;
-                                    height: 30px;
-                                    color: Theme.accent;
-                                    font-size: 10px;
-                                    font-weight: 600;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                    }
+                Rectangle { horizontal-stretch: 1; }
+                Text { text: "STEPS"; color: Theme.text-dim; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                ActionButton {
+                    text: "" + root.grid-resolution;
+                    clicked => { root.grid-dropdown-open = !root.grid-dropdown-open; }
                 }
-            }
-
-            VerticalLayout {
-                alignment: LayoutAlignment.stretch;
-                cross-axis-alignment: CrossAxisAlignment.center;
-                horizontal-stretch: 1;
-                spacing: 2px;
-                padding-left: 8px;
-
-                grid-flick := Flickable {
-                    width: 500px;
-                    height: root.grid-content-height;
-                    viewport-width: 500px;
-                    viewport-height: 302px;
-                    interactive: true;
-                    flicked => {
-                        bar.active = true;
-                        hide-bar-timer.running = false;
-                        hide-bar-timer.running = true;
-                    }
-
-                    grid-content := Rectangle {
-                        width: 500px;
-                        height: 302px;
-
-                    VerticalLayout {
-                        alignment: LayoutAlignment.stretch;
-                        cross-axis-alignment: CrossAxisAlignment.center;
-                        spacing: 4px;
-
-                        HorizontalLayout {
-                            cross-axis-alignment: CrossAxisAlignment.center;
-                            spacing: 2px;
-
-                            for s in root.step-indexes: Text {
-                                visible: s < root.grid-resolution;
-                                text: "" + (s + 1);
-                                width: 28px;
-                                height: 16px;
-                                color: Theme.text-dim;
-                                font-size: 9px;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        for inst in root.instrument-indexes: Rectangle {
-                            height: 32px; 
-                            border-radius: 4px;
-                            border-width: 1px;
-                            border-color: Theme.border;
-
-                            HorizontalLayout {
-                                alignment: LayoutAlignment.stretch;
-                                cross-axis-alignment: CrossAxisAlignment.center;
-                                spacing: 2px;
-                                padding-left: 1px;
-                                for s in root.step-indexes: Step {
-                                    visible: s < root.grid-resolution;
-                                    active: root.steps[inst * 16 + s];
-                                    border-radius: 6px;
-                                    current: root.playhead == s;
-                                }
-                            }
-                        }
-                    }
-
-                    grid-touch := TouchArea {
-                        width: 500px;
-                        height: root.grid-content-height;
-                        mouse-cursor: none;
-                        property <int> paint-row: -1;
-                        property <int> paint-col: -1;
-                        property <bool> erasing: false;
-                        
-                        pointer-event(event) => {
-                            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
-                                let r = Math.floor((self.mouse-y - 20px) / 36px); 
-                                let c = Math.floor(self.mouse-x / 30px);
-                                if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution) {
-                                    root.steps[r * 16 + c] = !root.steps[r * 16 + c];
-                                    self.paint-row = r;
-                                    self.paint-col = c;
-                                    self.erasing = !root.steps[r * 16 + c];
-                                }
-                            } else if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
-                                let r = Math.floor((self.mouse-y - 20px) / 36px);
-                                let c = Math.floor(self.mouse-x / 30px);
-                                if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution) {
-                                    root.steps[r * 16 + c] = false;
-                                    self.paint-row = r;
-                                    self.paint-col = c;
-                                    self.erasing = true;
-                                }
-                            } else if (event.kind == PointerEventKind.move) {
-                                if (self.pressed) {
-                                    let r = Math.floor((self.mouse-y - 20px) / 36px);
-                                    let c = Math.floor(self.mouse-x / 30px);
-                                    if (r >= 0 && r < root.instrument-indexes.length && c >= 0 && c < root.grid-resolution
-                                        && !(r == self.paint-row && c == self.paint-col)) {
-                                        root.steps[r * 16 + c] = !self.erasing;
-                                        self.paint-row = r;
-                                        self.paint-col = c;
-                                    }
-                                }
-                            } else if (event.kind == PointerEventKind.up) {
-                                self.paint-row = -1;
-                                self.paint-col = -1;
-                                self.erasing = false;
-                            }
-                        }
-                    }
-
-                    drumstick := Image {
-                        x: grid-touch.mouse-x - 15.7px;
-                        y: grid-touch.mouse-y - 1.2px;
-                        width: 32px;
-                        height: 32px;
-                        source: @image-url("../icons/drumstick.svg");
-                        visible: grid-touch.has-hover;
-                        transform-origin: { x: 15.7px, y: 1.2px };
-                        transform-rotation: -45deg;
-                    }
-                    }
+                ActionButton {
+                    text: "+ TRACK";
+                    width: 74px;
+                    clicked => { root.add-track-requested(); }
                 }
-
-                hide-bar-timer := Timer {
-                    interval: 1400ms;
-                    running: false;
-                    triggered => {
-                        self.running = false;
-                        bar.active = false;
-                    }
-                }
-
-                bar := BeatScrollBar {
-                    active: true;
-                    maximum: root.grid-content-width - grid-flick.width;
-                    page-size: grid-flick.width;
-                    value <=> grid-flick.viewport-x;
-                    scrolled => {
-                        bar.active = true;
-                        hide-bar-timer.running = false;
-                        hide-bar-timer.running = true;
-                    }
+                ActionButton {
+                    text: "CLOSE";
+                    width: 58px;
+                    clicked => { root.close-requested(); }
                 }
             }
         }
 
         Rectangle {
-            height: 32px;
-            width: 100%;
-            background: transparent;
+            height: 1px;
+            background: Theme.border;
+        }
 
-            TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    root.add-track-requested();
-                }
-                Rectangle {
-                    width: 87px;
-                    height: 28px;
-                    background: Theme.base;
-                    border-radius: 4px;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                
-                    Text {
-                        text: "+ ADD TRACK";
-                        width: 100%;
-                        height: 100%;
-                        color: Theme.text-dim;
-                        font-size: 11px;
-                        font-weight: 600;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+        body := HorizontalLayout {
+            height: root.grid-height + 40px;
+            spacing: 12px;
+            alignment: LayoutAlignment.start;
+            cross-axis-alignment: CrossAxisAlignment.start;
+
+            Rectangle {
+                width: 244px;
+                height: parent.height;
+                background: Theme.base;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: Theme.border;
+
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+                    alignment: LayoutAlignment.start;
+                    cross-axis-alignment: CrossAxisAlignment.stretch;
+
+                    Rectangle {
+                        height: 22px;
+                        background: Theme.surface-high;
+                        border-radius: 3px;
+                        HorizontalLayout {
+                            alignment: LayoutAlignment.start;
+                            padding-left: 1px;
+                            spacing: 2px;
+                            cross-axis-alignment: CrossAxisAlignment.center;
+                            Text { width: 28px; text: "PAN"; color: Theme.text-dim; font-size: 9px; font-weight: 700; horizontal-alignment: center; }
+                            Text { width: 28px; text: "VOL"; color: Theme.text-dim; font-size: 9px; font-weight: 700; horizontal-alignment: center; }
+                            Text { width: 30px; text: "CH"; color: Theme.text-dim; font-size: 9px; font-weight: 700; horizontal-alignment: center; }
+                            Text { width: 22px; text: "M"; color: Theme.text-dim; font-size: 9px; font-weight: 700; horizontal-alignment: center; }
+                            Text { horizontal-stretch: 1; text: "SAMPLE"; color: Theme.text-dim; font-size: 9px; font-weight: 700; }
+                        }
+                    }
+
+                    for inst in root.instrument-indexes: Rectangle {
+                        height: 30px;
+                        background: root.selected-track == inst ? Theme.surface-high : transparent;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: root.selected-track == inst ? Theme.accent : Theme.border;
+
+                        row-touch := TouchArea {
+                            clicked => { root.selected-track = inst; }
+                        }
+
+                        HorizontalLayout {
+                            alignment: LayoutAlignment.start;
+                            padding-left: 1px;
+                            spacing: 2px;
+                            cross-axis-alignment: CrossAxisAlignment.center;
+                            PanKnobWithoutText {
+                                width: 28px; height: 28px;
+                                value: (root.track-pan[inst] + 1.0) / 2.0;
+                                changed(v) => { root.track-pan[inst] = v * 2.0 - 1.0; }
+                            }
+                            KnobWithoutText {
+                                width: 28px; height: 28px;
+                                value: root.track-volume[inst];
+                                changed(v) => { root.track-volume[inst] = v; }
+                            }
+                            ActionButton {
+                                width: 30px; height: 24px;
+                                text: "" + (root.track-mixer-channel[inst] + 1);
+                                clicked => { root.track-mixer-channel[inst] = Math.mod(root.track-mixer-channel[inst] + 1, 16); }
+                            }
+                            ActionButton {
+                                width: 22px; height: 24px;
+                                text: "M";
+                                selected: !root.track-active[inst];
+                                clicked => { root.track-active[inst] = !root.track-active[inst]; }
+                            }
+                            Text {
+                                horizontal-stretch: 1;
+                                text: root.instrument-names[inst];
+                                color: root.track-active[inst] ? Theme.text-primary : Theme.text-dim;
+                                font-size: 10px;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
                     }
                 }
             }
 
+            grid-column := VerticalLayout {
+                width: root.grid-width;
+                height: parent.height;
+                spacing: 6px;
+                alignment: LayoutAlignment.start;
+                cross-axis-alignment: CrossAxisAlignment.stretch;
+
+                grid-flick := Flickable {
+                    width: root.grid-width;
+                    height: root.grid-height;
+                    viewport-width: root.grid-width;
+                    viewport-height: root.grid-height;
+                    interactive: true;
+
+                    grid-content := Rectangle {
+                        width: max(root.grid-content-width, root.grid-width);
+                        height: root.grid-height;
+                        background: Theme.base;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+
+                        VerticalLayout {
+                            padding: 4px;
+                            spacing: 2px;
+                            alignment: LayoutAlignment.start;
+                            cross-axis-alignment: CrossAxisAlignment.start;
+
+                            HorizontalLayout {
+                                height: 28px;
+                                spacing: 2px;
+                                for step in root.step-indexes: Text {
+                                    visible: step < root.grid-resolution;
+                                    width: 28px;
+                                    text: "" + (step + 1);
+                                    color: Theme.text-dim;
+                                    font-size: 9px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            for inst in root.instrument-indexes: Rectangle {
+                                height: 30px;
+                                background: root.selected-track == inst ? Theme.surface : transparent;
+                                border-radius: 4px;
+
+                                HorizontalLayout {
+                                    padding-left: 0px;
+                                    spacing: 2px;
+                                    for step in root.step-indexes: StepCell {
+                                        visible: step < root.grid-resolution;
+                                        active: root.steps[inst * 16 + step];
+                                        current: root.playhead == step;
+                                        accent-color: inst == 0 ? Theme.accent
+                                            : inst == 1 ? Theme.ok
+                                            : inst == 2 ? Theme.warn
+                                            : inst == 3 ? Theme.danger
+                                            : inst == 4 ? Theme.activ
+                                            : inst == 5 ? #4895EF
+                                            : inst == 6 ? #E76F51
+                                            : #B08D57;
+                                        opacity: root.track-active[inst] ? 1.0 : 0.35;
+                                        toggled => { root.steps[inst * 16 + step] = self.active; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ScrollTrack {
+                    maximum: max(0px, grid-content.width - grid-flick.width);
+                    page-size: grid-flick.width;
+                    value <=> grid-flick.viewport-x;
+                }
+            }
         }
     }
 
     if (root.grid-dropdown-open) : Rectangle {
-        x: header-row.x + header-controls.x + grid-btn.x;
-        y: header-row.y + header-controls.y + grid-btn.y + 24px;
-        width: 120px;
-        background: Theme.surface;
+        x: root.width - 212px;
+        y: 48px;
+        width: 62px;
+        height: root.resolution-options.length * 26px + 4px;
+        background: Theme.surface-high;
         border-radius: 4px;
         border-width: 1px;
         border-color: Theme.border;
-        clip: false;
+        z: 10;
 
         VerticalLayout {
+            padding: 2px;
             spacing: 1px;
-            for res in root.resolution-options: Rectangle {
-                height: 22px;
-                background: Theme.base;
-
-                Text {
-                    text: "" + res + " steps";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 11px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-
-                TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        root.grid-resolution = res;
-                        root.grid-dropdown-open = false;
-                    }
+            for option in root.resolution-options: ActionButton {
+                width: 58px;
+                height: 24px;
+                text: "" + option;
+                selected: option == root.grid-resolution;
+                clicked => {
+                    root.grid-resolution = option;
+                    root.grid-resolution-changed(option);
+                    root.grid-dropdown-open = false;
                 }
             }
-        }
-    }
-
-    if (root.sample-menu-open || root.beat-menu-open) : Rectangle {
-        width: 100%;
-        height: 100%;
-        background: transparent;
-
-        TouchArea {
-            width: 100%;
-            height: 100%;
-            clicked => {
-                root.sample-menu-open = false;
-                root.beat-menu-open = false;
-            }
-        }
-    }
-
-    sample-menu := ContextMenu {
-        options: ["Copy Pattern", "Paste Pattern", "Clear Pattern", "Invert Pattern", "All On", "All Off"];
-        pos-x: Math.min(root.sample-menu-x, 528px);
-        pos-y: Math.min(root.sample-menu-y, 313px);
-        menu-open: root.sample-menu-open;
-        option-clicked(opt) => {
-            if (opt == "Copy Pattern") {
-                root.clipboard[0] = root.steps[root.sample-menu-inst * 16 + 0];
-                root.clipboard[1] = root.steps[root.sample-menu-inst * 16 + 1];
-                root.clipboard[2] = root.steps[root.sample-menu-inst * 16 + 2];
-                root.clipboard[3] = root.steps[root.sample-menu-inst * 16 + 3];
-                root.clipboard[4] = root.steps[root.sample-menu-inst * 16 + 4];
-                root.clipboard[5] = root.steps[root.sample-menu-inst * 16 + 5];
-                root.clipboard[6] = root.steps[root.sample-menu-inst * 16 + 6];
-                root.clipboard[7] = root.steps[root.sample-menu-inst * 16 + 7];
-                root.clipboard[8] = root.steps[root.sample-menu-inst * 16 + 8];
-                root.clipboard[9] = root.steps[root.sample-menu-inst * 16 + 9];
-                root.clipboard[10] = root.steps[root.sample-menu-inst * 16 + 10];
-                root.clipboard[11] = root.steps[root.sample-menu-inst * 16 + 11];
-                root.clipboard[12] = root.steps[root.sample-menu-inst * 16 + 12];
-                root.clipboard[13] = root.steps[root.sample-menu-inst * 16 + 13];
-                root.clipboard[14] = root.steps[root.sample-menu-inst * 16 + 14];
-                root.clipboard[15] = root.steps[root.sample-menu-inst * 16 + 15];
-            } else if (opt == "Paste Pattern") {
-                root.steps[root.sample-menu-inst * 16 + 0] = root.clipboard[0];
-                root.steps[root.sample-menu-inst * 16 + 1] = root.clipboard[1];
-                root.steps[root.sample-menu-inst * 16 + 2] = root.clipboard[2];
-                root.steps[root.sample-menu-inst * 16 + 3] = root.clipboard[3];
-                root.steps[root.sample-menu-inst * 16 + 4] = root.clipboard[4];
-                root.steps[root.sample-menu-inst * 16 + 5] = root.clipboard[5];
-                root.steps[root.sample-menu-inst * 16 + 6] = root.clipboard[6];
-                root.steps[root.sample-menu-inst * 16 + 7] = root.clipboard[7];
-                root.steps[root.sample-menu-inst * 16 + 8] = root.clipboard[8];
-                root.steps[root.sample-menu-inst * 16 + 9] = root.clipboard[9];
-                root.steps[root.sample-menu-inst * 16 + 10] = root.clipboard[10];
-                root.steps[root.sample-menu-inst * 16 + 11] = root.clipboard[11];
-                root.steps[root.sample-menu-inst * 16 + 12] = root.clipboard[12];
-                root.steps[root.sample-menu-inst * 16 + 13] = root.clipboard[13];
-                root.steps[root.sample-menu-inst * 16 + 14] = root.clipboard[14];
-                root.steps[root.sample-menu-inst * 16 + 15] = root.clipboard[15];
-            } else if (opt == "Clear Pattern") {
-                root.steps[root.sample-menu-inst * 16 + 0] = false;
-                root.steps[root.sample-menu-inst * 16 + 1] = false;
-                root.steps[root.sample-menu-inst * 16 + 2] = false;
-                root.steps[root.sample-menu-inst * 16 + 3] = false;
-                root.steps[root.sample-menu-inst * 16 + 4] = false;
-                root.steps[root.sample-menu-inst * 16 + 5] = false;
-                root.steps[root.sample-menu-inst * 16 + 6] = false;
-                root.steps[root.sample-menu-inst * 16 + 7] = false;
-                root.steps[root.sample-menu-inst * 16 + 8] = false;
-                root.steps[root.sample-menu-inst * 16 + 9] = false;
-                root.steps[root.sample-menu-inst * 16 + 10] = false;
-                root.steps[root.sample-menu-inst * 16 + 11] = false;
-                root.steps[root.sample-menu-inst * 16 + 12] = false;
-                root.steps[root.sample-menu-inst * 16 + 13] = false;
-                root.steps[root.sample-menu-inst * 16 + 14] = false;
-                root.steps[root.sample-menu-inst * 16 + 15] = false;
-            } else if (opt == "Invert Pattern") {
-                root.steps[root.sample-menu-inst * 16 + 0] = !root.steps[root.sample-menu-inst * 16 + 0];
-                root.steps[root.sample-menu-inst * 16 + 1] = !root.steps[root.sample-menu-inst * 16 + 1];
-                root.steps[root.sample-menu-inst * 16 + 2] = !root.steps[root.sample-menu-inst * 16 + 2];
-                root.steps[root.sample-menu-inst * 16 + 3] = !root.steps[root.sample-menu-inst * 16 + 3];
-                root.steps[root.sample-menu-inst * 16 + 4] = !root.steps[root.sample-menu-inst * 16 + 4];
-                root.steps[root.sample-menu-inst * 16 + 5] = !root.steps[root.sample-menu-inst * 16 + 5];
-                root.steps[root.sample-menu-inst * 16 + 6] = !root.steps[root.sample-menu-inst * 16 + 6];
-                root.steps[root.sample-menu-inst * 16 + 7] = !root.steps[root.sample-menu-inst * 16 + 7];
-                root.steps[root.sample-menu-inst * 16 + 8] = !root.steps[root.sample-menu-inst * 16 + 8];
-                root.steps[root.sample-menu-inst * 16 + 9] = !root.steps[root.sample-menu-inst * 16 + 9];
-                root.steps[root.sample-menu-inst * 16 + 10] = !root.steps[root.sample-menu-inst * 16 + 10];
-                root.steps[root.sample-menu-inst * 16 + 11] = !root.steps[root.sample-menu-inst * 16 + 11];
-                root.steps[root.sample-menu-inst * 16 + 12] = !root.steps[root.sample-menu-inst * 16 + 12];
-                root.steps[root.sample-menu-inst * 16 + 13] = !root.steps[root.sample-menu-inst * 16 + 13];
-                root.steps[root.sample-menu-inst * 16 + 14] = !root.steps[root.sample-menu-inst * 16 + 14];
-                root.steps[root.sample-menu-inst * 16 + 15] = !root.steps[root.sample-menu-inst * 16 + 15];
-            } else if (opt == "All On") {
-                root.steps[root.sample-menu-inst * 16 + 0] = true;
-                root.steps[root.sample-menu-inst * 16 + 1] = true;
-                root.steps[root.sample-menu-inst * 16 + 2] = true;
-                root.steps[root.sample-menu-inst * 16 + 3] = true;
-                root.steps[root.sample-menu-inst * 16 + 4] = true;
-                root.steps[root.sample-menu-inst * 16 + 5] = true;
-                root.steps[root.sample-menu-inst * 16 + 6] = true;
-                root.steps[root.sample-menu-inst * 16 + 7] = true;
-                root.steps[root.sample-menu-inst * 16 + 8] = true;
-                root.steps[root.sample-menu-inst * 16 + 9] = true;
-                root.steps[root.sample-menu-inst * 16 + 10] = true;
-                root.steps[root.sample-menu-inst * 16 + 11] = true;
-                root.steps[root.sample-menu-inst * 16 + 12] = true;
-                root.steps[root.sample-menu-inst * 16 + 13] = true;
-                root.steps[root.sample-menu-inst * 16 + 14] = true;
-                root.steps[root.sample-menu-inst * 16 + 15] = true;
-            } else {
-                root.steps[root.sample-menu-inst * 16 + 0] = false;
-                root.steps[root.sample-menu-inst * 16 + 1] = false;
-                root.steps[root.sample-menu-inst * 16 + 2] = false;
-                root.steps[root.sample-menu-inst * 16 + 3] = false;
-                root.steps[root.sample-menu-inst * 16 + 4] = false;
-                root.steps[root.sample-menu-inst * 16 + 5] = false;
-                root.steps[root.sample-menu-inst * 16 + 6] = false;
-                root.steps[root.sample-menu-inst * 16 + 7] = false;
-                root.steps[root.sample-menu-inst * 16 + 8] = false;
-                root.steps[root.sample-menu-inst * 16 + 9] = false;
-                root.steps[root.sample-menu-inst * 16 + 10] = false;
-                root.steps[root.sample-menu-inst * 16 + 11] = false;
-                root.steps[root.sample-menu-inst * 16 + 12] = false;
-                root.steps[root.sample-menu-inst * 16 + 13] = false;
-                root.steps[root.sample-menu-inst * 16 + 14] = false;
-                root.steps[root.sample-menu-inst * 16 + 15] = false;
-            }
-            root.sample-menu-open = false;
-        }
-    }
-
-    beat-menu := ContextMenu {
-        options: ["All Steps On", "All Steps Off", "Reset Pattern", "Close Window"];
-        pos-x: Math.min(root.beat-menu-x, 528px);
-        pos-y: Math.min(root.beat-menu-y, 355px);
-        menu-open: root.beat-menu-open;
-        option-clicked(opt) => {
-            if (opt == "All Steps On") {
-                root.steps = [
-                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true
-                ];
-            } else if (opt == "All Steps Off") {
-                root.steps = [
-                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-                    false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false
-                ];
-            } else if (opt == "Reset Pattern") {
-                root.steps = root.default-steps;
-            } else {
-                root.close-requested();
-            }
-            root.beat-menu-open = false;
         }
     }
 }
@@ -882,44 +416,33 @@ export component BeatPopup inherits Rectangle {
     in-out property <int> playhead: -1;
     in-out property <[int]> step-indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     in-out property <[int]> instrument-indexes: [0, 1, 2, 3, 4, 5, 6, 7];
-    in-out property <[string]> instrument-names: ["Kick", "Snare", "Clap", "Hat Closed", "Hat Open", "Tom", "Cymbal", "Perc"];
-
+    in-out property <[string]> instrument-names: ["Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Tom", "Cymbal", "Perc"];
     in-out property <[bool]> track-active: [true, true, true, true, true, true, true, true];
     in-out property <[float]> track-pan: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     in-out property <[float]> track-volume: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
     in-out property <[int]> track-mixer-channel: [0, 1, 2, 3, 4, 5, 6, 7];
-
     in-out property <int> selected-track: 0;
     in-out property <bool> editing-track: false;
     in-out property <string> track-input: "1";
-
     in-out property <int> grid-resolution: 16;
     in-out property <[int]> resolution-options: [8, 16, 32, 64];
-
     in-out property <string> beat-name: "BEAT SEQUENCER";
-
-    in-out property <length> popup-x: 350px;
-    in-out property <length> popup-y: 200px;
-
+    in-out property <length> popup-x: 24px;
+    in-out property <length> popup-y: 80px;
     in-out property <bool> open: false;
-
-    out property <bool> is-open;
-    is-open: root.open;
-
+    out property <bool> is-open: root.open;
     callback open-requested;
-    open-requested => {
-        root.open = true;
-    }
 
-    x: 0px;
-    y: 0px;
-    width: 680px;
-    height: 440px;
-    visible: root.open;
+    open-requested => { root.open = true; }
+    width: 100%;
+    height: 100%;
     background: transparent;
+    visible: root.open;
     clip: false;
 
     BeatContent {
+        x: root.popup-x;
+        y: root.popup-y;
         steps <=> root.steps;
         playhead <=> root.playhead;
         step-indexes <=> root.step-indexes;
@@ -935,27 +458,10 @@ export component BeatPopup inherits Rectangle {
         grid-resolution <=> root.grid-resolution;
         resolution-options <=> root.resolution-options;
         beat-name <=> root.beat-name;
-        close-requested => {
-            root.open = false;
-        }
+        close-requested => { root.open = false; }
         drag-moved(dx, dy) => {
             root.popup-x += dx;
             root.popup-y += dy;
-        }
-        grid-resolution-changed(res) => {
-            root.grid-resolution = res;
-        }
-        beat-name-changed(name) => {
-            root.beat-name = name;
-        }
-        add-track-requested => {
-            // handled by parent or Rust
-        }
-        sample-context-menu-requested(inst, x, y) => {
-            // handled by parent or Rust
-        }
-        beat-menu-requested(x, y) => {
-            // handled by parent or Rust
         }
     }
 }
