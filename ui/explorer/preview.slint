@@ -1,0 +1,134 @@
+import { Theme } from "../theme.slint";
+
+export component Preview inherits Rectangle {
+    in property <string> file-name: "No file selected";
+    in property <string> file-info: "";
+    in property <string> duration: "00:00.000";
+    in-out property <bool> playing: false;
+    in property <float> progress: 0.0;
+
+    height: 92px;
+    background: Theme.base;
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    VerticalLayout {
+        padding: 7px;
+        spacing: 5px;
+
+        // Nome e informações
+        HorizontalLayout {
+            height: 20px;
+            spacing: 6px;
+
+            Text {
+                text: root.file-name;
+                color: Theme.text-primary;
+                font-size: 10px;
+                font-weight: 600;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.duration;
+                color: Theme.text-dim;
+                font-size: 8px;
+                vertical-alignment: center;
+            }
+        }
+
+        // Waveform
+        Rectangle {
+            height: 30px;
+            background: Theme.surface;
+            border-radius: 2px;
+
+            // Linha central
+            Rectangle {
+                y: parent.height / 2;
+                width: parent.width;
+                height: 1px;
+                background: Theme.border;
+            }
+
+            // Representação provisória da waveform
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 2px;
+                alignment: center;
+
+                Rectangle { width: 2px; height: 7px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 14px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 20px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 11px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 25px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 17px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 9px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 22px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 14px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 26px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 12px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 19px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 8px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 24px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 16px; background: Theme.text-dim; }
+                Rectangle { width: 2px; height: 10px; background: Theme.text-dim; }
+            }
+
+            // Indicador de progresso
+            Rectangle {
+                x: root.progress * parent.width;
+                y: 0px;
+                width: 1px;
+                height: parent.height;
+                background: Theme.text-primary;
+            }
+        }
+
+        // Controles
+        HorizontalLayout {
+            height: 20px;
+            spacing: 6px;
+
+            Rectangle {
+                width: 24px;
+                height: 20px;
+                background: Theme.surface-high;
+                border-radius: 3px;
+
+                Text {
+                    text: root.playing ? "■" : "▶";
+                    color: Theme.text-primary;
+                    font-size: 9px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    clicked => {
+                        root.playing = !root.playing;
+                    }
+                }
+            }
+
+            Text {
+                text: root.file-info;
+                color: Theme.text-dim;
+                font-size: 8px;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Text {
+                text: "Preview";
+                color: Theme.text-dim;
+                font-size: 8px;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

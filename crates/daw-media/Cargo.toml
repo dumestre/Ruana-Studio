@@ -4,3 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+slint.workspace = true
+daw-media = { path = "../crates/daw-media" }
+
+[build-dependencies]
+slint-build = "1.17.1"

@@ -1,17 +1,67 @@
 import { Theme } from "../theme.slint";
+import { SearchBar } from "../components/search_bar.slint";
+import { FileBrowser } from "file_browser.slint";
+import { MediaBrowser } from "media_browser.slint";
+import { PluginBrowser } from "plugin_browser.slint";
+import { Preview } from "preview.slint";
+
+component ExplorerTab inherits Rectangle {
+    in property <string> label: "";
+    in property <string> icon: "";
+    in property <bool> active: false;
+
+    height: 26px;
+
+    background: root.active
+        ? Theme.surface-high
+        : transparent;
+
+    border-radius: 3px;
+
+    HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 7px;
+        spacing: 5px;
+        alignment: center;
+
+        Text {
+            text: root.icon;
+            color: root.active
+                ? Theme.accent
+                : Theme.text-dim;
+
+            font-size: 10px;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.label;
+            color: root.active
+                ? Theme.text-primary
+                : Theme.text-dim;
+
+            font-size: 9px;
+            vertical-alignment: center;
+        }
+    }
+}
+
 
 export component Explorer inherits Rectangle {
+    in-out property <int> browser-mode: 0;
+    in-out property <string> search-text: "";
+
     preferred-width: 300px;
     width: 300px;
-    height: 100%;
 
     background: Theme.surface;
 
-    // Borda direita do Explorer
+    // Borda direita
     Rectangle {
         x: parent.width - 1px;
         width: 1px;
         height: 100%;
+
         background: Theme.border;
     }
 
@@ -19,94 +69,110 @@ export component Explorer inherits Rectangle {
         padding: 6px;
         spacing: 6px;
 
-        // Cabeçalho
+        // Header
         Rectangle {
             height: 28px;
             background: transparent;
 
             HorizontalLayout {
                 spacing: 6px;
-                alignment: center;
 
                 Text {
                     text: "Explorer";
+
                     color: Theme.text-primary;
                     font-size: 12px;
                     font-weight: 700;
+
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
 
                 Text {
                     text: "⋮";
+
                     color: Theme.text-dim;
                     font-size: 16px;
+
                     vertical-alignment: center;
                 }
             }
         }
 
-        // Barra de busca
+        // Abas
         Rectangle {
-            height: 28px;
-            background: Theme.base;
-            border-width: 1px;
-            border-color: Theme.border;
-            border-radius: 3px;
+            height: 26px;
+            background: transparent;
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
-                alignment: center;
+                spacing: 3px;
 
-                Text {
-                    text: "⌕";
-                    color: Theme.text-dim;
-                    font-size: 14px;
-                    vertical-alignment: center;
+                ExplorerTab {
+                    label: "Files";
+                    icon: "▤";
+                    active: root.browser-mode == 0;
+
+                    TouchArea {
+                        clicked => {
+                            root.browser-mode = 0;
+                        }
+                    }
                 }
 
-                Text {
-                    text: "Search...";
-                    color: Theme.text-dim;
-                    font-size: 10px;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
+                ExplorerTab {
+                    label: "Samples";
+                    icon: "♫";
+                    active: root.browser-mode == 1;
+
+                    TouchArea {
+                        clicked => {
+                            root.browser-mode = 1;
+                        }
+                    }
+                }
+
+                ExplorerTab {
+                    label: "Plugins";
+                    icon: "◆";
+                    active: root.browser-mode == 2;
+
+                    TouchArea {
+                        clicked => {
+                            root.browser-mode = 2;
+                        }
+                    }
                 }
             }
         }
 
-        // Área principal
+        // Busca global
+        SearchBar {
+            text <=> root.search-text;
+            placeholder: root.browser-mode == 0
+                ? "Search files..."
+                : root.browser-mode == 1
+                    ? "Search samples..."
+                    : "Search plugins...";
+        }
+
+        // Conteúdo
         Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
+
             background: transparent;
 
-            Text {
-                text: "Explorer";
-                color: Theme.text-dim;
-                font-size: 10px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+            if root.browser-mode == 0 : FileBrowser {}
+
+            if root.browser-mode == 1 : MediaBrowser {}
+
+            if root.browser-mode == 2 : PluginBrowser {}
         }
 
         // Preview
-        Rectangle {
-            height: 70px;
-            background: Theme.base;
-            border-width: 1px;
-            border-color: Theme.border;
-            border-radius: 3px;
-
-            Text {
-                text: "No file selected";
-                color: Theme.text-dim;
-                font-size: 9px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+        Preview {
+            file-name: "No file selected";
+            file-info: "Select an audio file to preview";
         }
     }
 }

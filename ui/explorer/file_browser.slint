@@ -1,0 +1,136 @@
+import { Theme } from "../theme.slint";
+import { BrowserTreeRow } from "browser_tree.slint";
+
+export component FileBrowser inherits Rectangle {
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 5px;
+
+        // Caminho atual
+        Rectangle {
+            height: 26px;
+            background: Theme.base;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: 3px;
+
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 7px;
+                spacing: 6px;
+                alignment: center;
+
+                Text {
+                    text: "⌂";
+                    width: 18px;
+                    color: Theme.accent;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: "Project";
+                    color: Theme.text-primary;
+                    font-size: 9px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: "⋮";
+                    width: 18px;
+                    color: Theme.text-dim;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Árvore
+        Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            background: transparent;
+
+            VerticalLayout {
+                spacing: 1px;
+
+                Text {
+                    text: "PROJECT";
+                    height: 20px;
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                BrowserTreeRow {
+                    name: "Ferrum Studio";
+                    icon: "▾";
+                    indent: 0;
+                    selected: true;
+                }
+
+                BrowserTreeRow {
+                    name: "Audio";
+                    icon: "▸";
+                    indent: 1;
+                }
+
+                BrowserTreeRow {
+                    name: "Samples";
+                    icon: "▾";
+                    indent: 1;
+                }
+
+                BrowserTreeRow {
+                    name: "Drums";
+                    icon: "▸";
+                    indent: 2;
+                }
+
+                BrowserTreeRow {
+                    name: "Vocals";
+                    icon: "▸";
+                    indent: 2;
+                }
+
+                BrowserTreeRow {
+                    name: "Presets";
+                    icon: "▸";
+                    indent: 1;
+                }
+
+                Rectangle {
+                    height: 8px;
+                    background: transparent;
+                }
+
+                Text {
+                    text: "FAVORITES";
+                    height: 20px;
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                BrowserTreeRow {
+                    name: "My Samples";
+                    icon: "★";
+                    indent: 0;
+                }
+
+                BrowserTreeRow {
+                    name: "Vocals";
+                    icon: "★";
+                    indent: 0;
+                }
+            }
+        }
+    }
+}
