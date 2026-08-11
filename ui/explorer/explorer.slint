@@ -1,0 +1,112 @@
+import { Theme } from "../theme.slint";
+
+export component Explorer inherits Rectangle {
+    preferred-width: 300px;
+    width: 300px;
+    height: 100%;
+
+    background: Theme.surface;
+
+    // Borda direita do Explorer
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: 100%;
+        background: Theme.border;
+    }
+
+    VerticalLayout {
+        padding: 6px;
+        spacing: 6px;
+
+        // Cabeçalho
+        Rectangle {
+            height: 28px;
+            background: transparent;
+
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: center;
+
+                Text {
+                    text: "Explorer";
+                    color: Theme.text-primary;
+                    font-size: 12px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                Text {
+                    text: "⋮";
+                    color: Theme.text-dim;
+                    font-size: 16px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Barra de busca
+        Rectangle {
+            height: 28px;
+            background: Theme.base;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: 3px;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: center;
+
+                Text {
+                    text: "⌕";
+                    color: Theme.text-dim;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: "Search...";
+                    color: Theme.text-dim;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        // Área principal
+        Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            background: transparent;
+
+            Text {
+                text: "Explorer";
+                color: Theme.text-dim;
+                font-size: 10px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Preview
+        Rectangle {
+            height: 70px;
+            background: Theme.base;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: 3px;
+
+            Text {
+                text: "No file selected";
+                color: Theme.text-dim;
+                font-size: 9px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

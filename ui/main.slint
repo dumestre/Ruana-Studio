@@ -3,7 +3,7 @@ import { Transport } from "transport.slint";
 import { Toolbar } from "toolbar.slint";
 import { LeftPanel } from "left_panel.slint";
 import { Timeline } from "timeline.slint";
-import { RightPanel } from "right_panel.slint";
+import { Explorer } from "explorer.slint";
 import { Mixer } from "mixer.slint";
 import { BeatPopup } from "components/beat.slint";
 
@@ -73,7 +73,7 @@ export component MainWindow inherits Window {
                     clip-selected(i) => { root.selected-track = i; }
                 }
 
-                RightPanel {
+                Explorer {
                     min-width: 200px;
                 }
             }
