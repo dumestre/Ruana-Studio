@@ -7,6 +7,7 @@ export component Button inherits Rectangle {
     in property <bool> enabled: true;
     in property <color> icon-color: Theme.text-dim;
     in property <length> icon-size: 16px;
+    in property <color> text-color: Theme.text-dim;
     in property <color> toggled-icon-color: Theme.accent;
     in property <color> toggled-bg: Theme.accent;
     in property <color> toggled-fg: Theme.text-primary;
@@ -35,7 +36,7 @@ export component Button inherits Rectangle {
     label := Text {
         text: root.text;
         visible: root.text != "";
-        color: Theme.text-dim;
+        color: root.text-color;
         font-size: 11px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -54,7 +55,7 @@ export component Button inherits Rectangle {
         on when self.enabled && self.toggled && !touch.pressed: {
             background: self.subtle-toggled ? Theme.surface : self.toggled-bg;
             border-color: self.subtle-toggled ? Theme.border : self.toggled-bg;
-            label.color: self.subtle-toggled ? Theme.text-dim : self.toggled-fg;
+            label.color: self.subtle-toggled ? root.text-color : self.toggled-fg;
             icon-image.colorize: self.subtle-toggled ? root.toggled-icon-color : self.toggled-fg;
         }
         active when self.enabled && touch.pressed: {
