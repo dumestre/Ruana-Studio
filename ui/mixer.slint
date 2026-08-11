@@ -10,6 +10,7 @@ component MixerChannel inherits Rectangle {
     in property <bool> is-master: false;
     in-out property <bool> muted: false;
     in-out property <bool> soloed: false;
+    in-out property <bool> arm: false;
     in-out property <float> volume: 0.8;
     in-out property <float> pan: 0.5;
     in-out property <float> level: 0.0;
@@ -17,9 +18,10 @@ component MixerChannel inherits Rectangle {
     property <string> pan-display: root.pan < 0.45 ? "L" + ((0.5 - root.pan) * 100).to-fixed(0) : root.pan > 0.55 ? "R" + ((root.pan - 0.5) * 100).to-fixed(0) : "C";
     property <string> vol-display: (root.volume * 60 - 60).to-fixed(1) + " dB";
 
-    width: 110px;
+    width: 105px;
     background: Theme.surface;
 
+    // Linha divisória lateral direita
     Rectangle {
         x: parent.width - 1px;
         width: 1px;
@@ -28,87 +30,179 @@ component MixerChannel inherits Rectangle {
     }
 
     VerticalLayout {
-        padding: 4px;
-        spacing: 3px;
-        alignment: start;
+        padding: 6px;
+        spacing: 5px;
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
 
-        Text {
-            text: root.name;
-            color: root.is-master ? Theme.text-primary : Theme.text-primary;
-            font-size: 11px;
-            horizontal-alignment: center;
+        // Cabeçalho do Canal / Nome
+        VerticalLayout {alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
+            spacing: 2px;
+            
+
+
+            Text {
+                text: "";
+                color: Theme.text-primary;
+                font-size: 11px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                
+            }
+
+            Rectangle {
+                width: 100%;
+                height: 3px;
+                background: root.channel-color;
+                border-radius: 1.5px;
+            }
         }
 
-        Rectangle {
-            width: 100%;
-            height: 2px;
-            background: root.channel-color;
-            border-radius: 1px;
-        }
-
+        // Botões de Ação (M, S, R)
         HorizontalLayout {
-            spacing: 3px;
+            spacing: 2px;
             alignment: center;
+            
             Button {
                 text: "M";
+                width: 28px;
+                height: 20px;
                 toggled: root.muted;
+                toggled-bg: Colors.gold;
                 clicked => { root.muted = !root.muted; }
             }
-            Button {
+            
+            if (!root.is-master): Button {
                 text: "S";
+                width: 28px;
+                height: 20px;
                 toggled: root.soloed;
                 clicked => { root.soloed = !root.soloed; }
             }
-            Button {
+            if (root.is-master): Rectangle {
+                width: 28px;
+                height: 20px;
+                background: transparent;
+            }
+
+            if (!root.is-master): Button {
                 text: "R";
-                clicked => {}
+                width: 28px;
+                height: 20px;
+                toggled: root.arm;
+                clicked => { root.arm = !root.arm; }
+            }
+            if (root.is-master): Rectangle {
+                width: 28px;
+                height: 20px;
+                background: transparent;
             }
         }
 
+        // Slot de Efeitos (FX)
         Rectangle {
             width: 100%;
-            height: 8px;
-            background: Theme.surface-high;
-            border-radius: 2px;
+            height: 16px;
+            background: Theme.base;
+            border-radius: 3px;
+            border-width: 1px;
+            border-color: Theme.border;
 
             Text {
-                text: root.is-master ? "" : "FX";
+                text: root.is-master ? "MASTER OUT" : "FX SLOT";
                 width: 100%;
                 height: 100%;
                 color: Theme.text-dim;
                 font-size: 8px;
+                font-weight: 600;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
         }
 
-        HorizontalLayout {
-            spacing: 10px;
-            alignment: center;
+        // Posição Estratégica DAW: Controle de Pan no topo logo abaixo dos FX
+        VerticalLayout {
+            spacing: 2px;
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+            padding-top: 2px;
+            padding-bottom: 2px;
 
-            PanKnob {
-                caption: "PAN";
-                value: root.pan;
-                display-value: root.pan-display;
-                changed(v) => { root.pan = v; }
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                PanKnob {
+                    width: 26px;
+                    height: 26px;
+                    caption: "";
+                    value: root.pan;
+                    display-value: root.pan-display;
+                    changed(v) => { root.pan = v; }
+                }
+
+                VerticalLayout {
+                    spacing: 0;
+                    alignment: center;
+                    cross-axis-alignment: CrossAxisAlignment.center;
+                    
+                    Rectangle { /* @lsp:ignore-node */ }
+                }
+            }
+        }
+
+        // Seção Principal: Fader de Volume acoplado lado a lado com o Meter de Áudio (Padrão de DAW Profissional)
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: LayoutAlignment.space-evenly;
+            cross-axis-alignment: CrossAxisAlignment.center;
+            horizontal-stretch: 1;
+
+            // Fader à esquerda do Meter
+            VerticalLayout {
+                spacing: 3px;
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
+                horizontal-stretch: 1;
+
+                Fader {
+                    value: root.volume;
+                    caption: "";
+                    changed(v) => { root.volume = v; }
+                }
+
+                // Display de dB posicionado logo abaixo do fader para leitura imediata
+                Rectangle {
+                    width: 62px;
+                    height: 18px;
+                    background: Theme.base;
+                    border-radius: 3px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+
+                    Text {
+                        text: root.vol-display;
+                        width: 100%;
+                        height: 100%;
+                        color: Theme.text-primary;
+                        font-size: 9px;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
             }
 
+            // Meter de Áudio vertical em paralelo direto com o curso do fader
             Meter {
                 level: root.level;
-                height: 110px;
+                width: 12px;
+                height: 115px;
                 active: root.level > 0.05;
             }
-        }
-
-        Rectangle {
-            horizontal-stretch: 1;
-            background: transparent;
-        }
-
-        Fader {
-            value: root.volume;
-            caption: root.vol-display;
-            changed(v) => { root.volume = v; }
         }
     }
 }
@@ -117,9 +211,9 @@ export component Mixer inherits Rectangle {
     in-out property <[float]> meters: [0, 0, 0, 0, 0];
     in property <[string]> names: ["Drums", "Bass", "Vocal", "Synth", "Master"];
 
-    width: 100%;
-    height: 100%;
+    
     background: Theme.surface;
+    border-radius: 8px;
 
     Rectangle {
         width: 100%;
@@ -127,14 +221,22 @@ export component Mixer inherits Rectangle {
         background: Theme.border;
     }
 
-    HorizontalLayout {
-        spacing: 0;
+    Flickable {
+        width: 100%;
+        height: 100%;
+        viewport-width: 525px;
+        interactive: true;
 
-        for level[i] in root.meters: MixerChannel {
-            name: root.names[i];
-            channel-color: i == 4 ? Theme.text-primary : Theme.accent;
-            is-master: i == 4;
-            level: level;
+        HorizontalLayout {
+            spacing: 0;
+            alignment: start;
+
+            for level[i] in root.meters: MixerChannel {
+                name: root.names[i];
+                channel-color: i == 4 ? Theme.text-primary : Theme.accent;
+                is-master: i == 4;
+                level: level;
+            }
         }
     }
 }

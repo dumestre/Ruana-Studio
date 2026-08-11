@@ -191,12 +191,14 @@ export component BeatContent inherits Rectangle {
     property <length> last-x: 0px;
     property <length> last-y: 0px;
 
-    width: 720px; 
+    width:800px; 
     height: 480px;
     background: Theme.surface;
     border-radius: 8px;
 
     VerticalLayout {
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
         padding: 12px;
         spacing: 8px;
 
@@ -355,7 +357,7 @@ export component BeatContent inherits Rectangle {
 
         grid-body := HorizontalLayout {
             alignment: LayoutAlignment.stretch;
-            cross-axis-alignment: CrossAxisAlignment.start;
+            cross-axis-alignment: CrossAxisAlignment.stretch;
             spacing: 0;
 
             Rectangle {
@@ -410,32 +412,18 @@ export component BeatContent inherits Rectangle {
                         width: 100%;
 
                         HorizontalLayout {
+                            alignment: LayoutAlignment.stretch;
                             cross-axis-alignment: CrossAxisAlignment.center;
-                            padding-left: 8px;
-                            padding-right: 8px;
-                            spacing: 12px;
+                            padding-left: 4px;
+                            padding-right: 4px;
+                            spacing: 2px;
 
-                            // Mute Button
-                            Rectangle {
-                                width: 10px;
-                                height: 10px;
-                                background: root.track-active[inst] ? Theme.accent : Theme.text-dim;
-                                border-radius: 5px;
-                                border-width: 1px;
-                                border-color: Theme.border;
-
-                                TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => {
-                                        root.track-active[inst] = !root.track-active[inst];
-                                    }
-                                }
-                            }
+                            
 
                             // Pan Control (Agora limpo, sem layout extra ou textos)
                             PanKnob {
-                                width: 20px;
-                                height: 20px;
+                                width: 28px;
+                                height: 32px;
                                 value: (root.track-pan[inst] + 1.0) / 2.0;
                                 caption: "";
                                 display-value: root.track-pan[inst] < -0.01 ? "L" + Math.round(-root.track-pan[inst] * 100) : (root.track-pan[inst] > 0.01 ? "R" + Math.round(root.track-pan[inst] * 100) : "C");
@@ -446,8 +434,8 @@ export component BeatContent inherits Rectangle {
 
                             // Volume Control (Agora limpo, sem layout extra ou textos)
                             Knob {
-                                width: 20px;
-                                height: 20px;
+                                width: 28px;
+                                height: 32px;
                                 value: root.track-volume[inst];
                                 caption: "";
                                 display-value: Math.round(root.track-volume[inst] * 100) + "%";
@@ -482,7 +470,7 @@ export component BeatContent inherits Rectangle {
                             // Instrument Name
                             Rectangle {
                                 horizontal-stretch: 1;
-                                height: 20px;
+                                height: 30px;
                                 background: Theme.surface-high;
                                 border-radius: 4px;
                                 border-width: 1px;
@@ -491,7 +479,7 @@ export component BeatContent inherits Rectangle {
                                 Text {
                                     text: root.instrument-names[inst];
                                     width: 100%;
-                                    height: 20px;
+                                    height: 30px;
                                     color: Theme.accent;
                                     font-size: 10px;
                                     font-weight: 600;
@@ -505,15 +493,17 @@ export component BeatContent inherits Rectangle {
             }
 
             VerticalLayout {
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.center;
                 horizontal-stretch: 1;
                 spacing: 2px;
                 padding-left: 8px;
 
                 grid-flick := Flickable {
-                    width: 100%;
+                    width: 500px;
                     height: root.grid-content-height;
-                    viewport-width: root.grid-content-width;
-                    viewport-height: root.grid-content-height;
+                    viewport-width: 500px;
+                    viewport-height: 302px;
                     interactive: true;
                     flicked => {
                         bar.active = true;
@@ -522,10 +512,12 @@ export component BeatContent inherits Rectangle {
                     }
 
                     grid-content := Rectangle {
-                        width: root.grid-content-width;
-                        height: root.grid-content-height;
+                        width: 500px;
+                        height: 302px;
 
                     VerticalLayout {
+                        alignment: LayoutAlignment.stretch;
+                        cross-axis-alignment: CrossAxisAlignment.center;
                         spacing: 4px;
 
                         HorizontalLayout {
@@ -546,18 +538,19 @@ export component BeatContent inherits Rectangle {
 
                         for inst in root.instrument-indexes: Rectangle {
                             height: 32px; 
-                            background: Theme.surface;
                             border-radius: 4px;
                             border-width: 1px;
                             border-color: Theme.border;
 
                             HorizontalLayout {
+                                alignment: LayoutAlignment.stretch;
                                 cross-axis-alignment: CrossAxisAlignment.center;
                                 spacing: 2px;
                                 padding-left: 1px;
                                 for s in root.step-indexes: Step {
                                     visible: s < root.grid-resolution;
                                     active: root.steps[inst * 16 + s];
+                                    border-radius: 6px;
                                     current: root.playhead == s;
                                 }
                             }
@@ -565,7 +558,7 @@ export component BeatContent inherits Rectangle {
                     }
 
                     grid-touch := TouchArea {
-                        width: root.grid-content-width;
+                        width: 500px;
                         height: root.grid-content-height;
                         mouse-cursor: none;
                         property <int> paint-row: -1;
@@ -656,27 +649,27 @@ export component BeatContent inherits Rectangle {
                 clicked => {
                     root.add-track-requested();
                 }
-            }
-
-            Rectangle {
-                width: 120px;
-                height: 28px;
-                background: Theme.base;
-                border-radius: 4px;
-                border-width: 1px;
-                border-color: Theme.border;
-
-                Text {
-                    text: "+ ADD TRACK";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-dim;
-                    font-size: 11px;
-                    font-weight: 600;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                Rectangle {
+                    width: 87px;
+                    height: 28px;
+                    background: Theme.base;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                
+                    Text {
+                        text: "+ ADD TRACK";
+                        width: 100%;
+                        height: 100%;
+                        color: Theme.text-dim;
+                        font-size: 11px;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
             }
+
         }
     }
 
