@@ -1,0 +1,235 @@
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+import { KnobWithoutText } from "../components/knob.slint";
+
+export component BeatHeader inherits Rectangle {
+    in-out property <string> beat-name: "BEAT SEQUENCER";
+    in-out property <float> humanize: 0.0;
+    in-out property <float> swing: 0.0;
+    in-out property <int> grid-resolution: 16;
+
+    in-out property <bool> grid-dropdown-open: false;
+
+    in property <[int]> resolution-options: [8, 16, 32, 64];
+
+    callback close-requested;
+    callback add-track-requested;
+    callback grid-resolution-changed(int);
+
+    height: 34px;
+    background: transparent;
+    z: 10;
+
+    HorizontalLayout {
+        spacing: 8px;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        Rectangle {
+            width: 4px;
+            height: 24px;
+
+            background: Theme.accent;
+            border-radius: 2px;
+        }
+
+        Text {
+            text: root.beat-name;
+
+            color: Theme.text-primary;
+            font-family: "";
+            font-size: 14px;
+            font-weight: 700;
+
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+        }
+
+        Text {
+            text: "HUM";
+
+            color: Theme.text-dim;
+            font-size: 9px;
+            font-weight: 700;
+
+            vertical-alignment: center;
+        }
+
+        KnobWithoutText {
+            width: 26px;
+            height: 26px;
+
+            value <=> root.humanize;
+        }
+
+        Text {
+            text: "SWG";
+
+            color: Theme.text-dim;
+            font-size: 9px;
+            font-weight: 700;
+
+            vertical-alignment: center;
+        }
+
+        KnobWithoutText {
+            width: 26px;
+            height: 26px;
+
+            value <=> root.swing;
+        }
+
+        Text {
+            text: "STEPS";
+
+            color: Theme.text-dim;
+            font-size: 9px;
+            font-weight: 700;
+
+            vertical-alignment: center;
+        }
+
+        steps-button := Rectangle {
+            width: 62px;
+            height: 26px;
+
+            background: root.grid-dropdown-open
+                ? Theme.surface-high
+                : Theme.base;
+
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            Text {
+                text: "" + root.grid-resolution;
+
+                width: 100%;
+                height: 100%;
+
+                color: Theme.text-dim;
+                font-size: 10px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.grid-dropdown-open =
+                        !root.grid-dropdown-open;
+                }
+            }
+        }
+
+        Rectangle {
+            width: 74px;
+            height: 26px;
+
+            background: touch.has-hover
+                ? Theme.surface-high
+                : Theme.base;
+
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            Text {
+                text: "+ TRACK";
+
+                width: 100%;
+                height: 100%;
+
+                color: Theme.text-dim;
+                font-size: 10px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            touch := TouchArea {
+                mouse-cursor: pointer;
+
+                clicked => {
+                    root.add-track-requested();
+                }
+            }
+        }
+
+        Button {
+            width: 24px;
+            height: 24px;
+
+            border-radius: 12px;
+
+            icon: @image-url("../icons/close.svg");
+            icon-size: 14px;
+            icon-color: Theme.text-primary;
+
+            clicked => {
+                root.close-requested();
+            }
+        }
+    }
+
+    if root.grid-dropdown-open : Rectangle {
+        x: steps-button.x;
+        y: 38px;
+
+        width: 62px;
+        height: root.resolution-options.length * 26px + 4px;
+
+        background: Theme.surface-high;
+
+        border-radius: 4px;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        z: 20;
+
+        VerticalLayout {
+            padding: 2px;
+            spacing: 1px;
+
+            for option in root.resolution-options: Rectangle {
+                width: 58px;
+                height: 24px;
+
+                background: option == root.grid-resolution
+                    ? Theme.accent
+                    : transparent;
+
+                border-radius: 3px;
+
+                Text {
+                    text: "" + option;
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: option == root.grid-resolution
+                        ? Theme.text-primary
+                        : Theme.text-dim;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    clicked => {
+                        root.grid-resolution = option;
+                        root.grid-resolution-changed(option);
+                        root.grid-dropdown-open = false;
+                    }
+                }
+            }
+        }
+    }
+}

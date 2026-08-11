@@ -1,0 +1,209 @@
+import { Theme } from "../theme.slint";
+import { KnobWithoutText, PanKnobWithoutText } from "../components/knob.slint";
+
+export component BeatTrack inherits Rectangle {
+    in-out property <int> track-index: 0;
+    in property <string> track-name: "Kick";
+
+    in-out property <bool> active: true;
+    in-out property <bool> solo: false;
+
+    in-out property <float> pan: 0.0;
+    in-out property <float> volume: 1.0;
+    in-out property <int> mixer-channel: 0;
+
+    in property <bool> selected: false;
+
+    callback selected-changed;
+    callback active-changed(bool);
+    callback solo-changed(bool);
+    callback pan-changed(float);
+    callback volume-changed(float);
+    callback mixer-channel-changed(int);
+
+    height: 30px;
+
+    background: root.selected
+        ? Theme.surface-high
+        : transparent;
+
+    border-radius: 4px;
+
+    border-width: root.selected ? 1px : 0px;
+    border-color: root.selected
+        ? Theme.accent
+        : transparent;
+
+
+    TouchArea {
+        clicked => {
+            root.selected-changed();
+        }
+    }
+
+
+    HorizontalLayout {
+        padding-left: 1px;
+        padding-right: 2px;
+        spacing: 2px;
+
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+
+        PanKnobWithoutText {
+            width: 28px;
+            height: 28px;
+
+            value: (root.pan + 1.0) / 2.0;
+
+            changed(v) => {
+                root.pan = v * 2.0 - 1.0;
+                root.pan-changed(root.pan);
+            }
+        }
+
+
+        KnobWithoutText {
+            width: 28px;
+            height: 28px;
+
+            value: root.volume;
+
+            changed(v) => {
+                root.volume = v;
+                root.volume-changed(root.volume);
+            }
+        }
+
+
+        Rectangle {
+            width: 30px;
+            height: 24px;
+
+            background: Theme.base;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            Text {
+                text: "" + (root.mixer-channel + 1);
+
+                width: 100%;
+                height: 100%;
+
+                color: Theme.text-dim;
+                font-size: 9px;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.mixer-channel =
+                        Math.mod(root.mixer-channel + 1, 16);
+                    root.mixer-channel-changed(root.mixer-channel);
+                }
+            }
+        }
+
+
+        Rectangle {
+            width: 22px;
+            height: 24px;
+
+            background: !root.active
+                ? Theme.accent
+                : Theme.base;
+
+            border-radius: 4px;
+            border-width: 1px;
+
+            border-color: !root.active
+                ? Theme.accent
+                : Theme.border;
+
+            Text {
+                text: "M";
+
+                width: 100%;
+                height: 100%;
+
+                color: !root.active
+                    ? Theme.text-primary
+                    : Theme.text-dim;
+
+                font-size: 9px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.active = !root.active;
+                    root.active-changed(root.active);
+                }
+            }
+        }
+
+
+        Rectangle {
+            width: 22px;
+            height: 24px;
+
+            background: root.solo
+                ? Theme.accent
+                : Theme.base;
+
+            border-radius: 4px;
+            border-width: 1px;
+
+            border-color: root.solo
+                ? Theme.accent
+                : Theme.border;
+
+            Text {
+                text: "S";
+
+                width: 100%;
+                height: 100%;
+
+                color: root.solo
+                    ? Theme.text-primary
+                    : Theme.text-dim;
+
+                font-size: 9px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.solo = !root.solo;
+                    root.solo-changed(root.solo);
+                }
+            }
+        }
+
+
+        Text {
+            horizontal-stretch: 1;
+
+            text: root.track-name;
+
+            color: root.active
+                ? Theme.text-primary
+                : Theme.text-dim;
+
+            font-size: 10px;
+
+            vertical-alignment: center;
+
+            overflow: elide;
+        }
+    }
+}

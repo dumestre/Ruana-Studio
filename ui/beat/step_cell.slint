@@ -1,0 +1,57 @@
+import { Theme } from "../theme.slint";
+
+
+export component StepCell inherits Rectangle {
+    in-out property <bool> active: false;
+    in property <bool> current: false;
+    in property <color> accent-color: Theme.accent;
+    in property <bool> beat-group-highlight: false;
+
+    callback toggled();
+
+    width: 28px;
+    height: 28px;
+
+    background: transparent;
+
+
+    Rectangle {
+        width: 24px;
+        height: 24px;
+
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+
+        background: root.active
+            ? root.accent-color
+            : (
+                root.beat-group-highlight
+                    ? #181818
+                    : #383838
+            );
+
+        border-radius: 5px;
+
+        border-width: root.current
+            ? 2px
+            : 1px;
+
+        border-color: root.current
+            ? Theme.playhead
+            : (
+                root.active
+                    ? root.accent-color
+                    : Theme.border
+            );
+    }
+
+
+    TouchArea {
+        mouse-cursor: pointer;
+
+        clicked => {
+            root.active = !root.active;
+            root.toggled();
+        }
+    }
+}

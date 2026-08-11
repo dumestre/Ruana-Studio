@@ -1,0 +1,157 @@
+import { BeatContent } from "beat_content.slint";
+
+export component Beat inherits Rectangle {
+    in-out property <[bool]> steps: [];
+
+    in-out property <int> playhead: -1;
+
+    in-out property <int> grid-resolution: 16;
+
+    in-out property <bool> playing: false;
+
+    in-out property <float> humanize: 0.0;
+    in-out property <float> swing: 0.0;
+
+    in-out property <string> beat-name: "BEAT SEQUENCER";
+
+    in-out property <[int]> resolution-options:
+        [8, 16, 32, 64];
+
+    in-out property <[string]> instrument-names:
+        ["Kick", "Snare", "Clap", "Closed Hat",
+         "Open Hat", "Tom", "Cymbal", "Perc"];
+
+    in-out property <[bool]> track-active:
+        [true, true, true, true, true, true, true, true];
+
+    in-out property <[bool]> track-solo:
+        [false, false, false, false, false, false, false, false];
+
+    in-out property <[float]> track-pan:
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+    in-out property <[float]> track-volume:
+        [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+
+    in-out property <[int]> track-mixer-channel:
+        [0, 1, 2, 3, 4, 5, 6, 7];
+
+    in-out property <int> selected-track: 0;
+
+    callback close-requested;
+    callback add-track-requested;
+    callback grid-resolution-changed(int);
+    callback track-selected(int);
+
+    width: 800px;
+    height: 480px;
+
+    BeatContent {
+        width: 100%;
+        height: 100%;
+
+        steps <=> root.steps;
+        playhead <=> root.playhead;
+
+        grid-resolution <=> root.grid-resolution;
+        playing <=> root.playing;
+
+        humanize <=> root.humanize;
+        swing <=> root.swing;
+
+        beat-name <=> root.beat-name;
+        resolution-options <=> root.resolution-options;
+
+        instrument-names <=> root.instrument-names;
+
+        track-active <=> root.track-active;
+        track-solo <=> root.track-solo;
+
+        track-pan <=> root.track-pan;
+        track-volume <=> root.track-volume;
+
+        track-mixer-channel <=> root.track-mixer-channel;
+        selected-track <=> root.selected-track;
+
+        close-requested => { root.close-requested(); }
+        add-track-requested => { root.add-track-requested(); }
+        grid-resolution-changed(value) => { root.grid-resolution-changed(value); }
+        track-selected(index) => { root.track-selected(index); }
+    }
+}
+
+export component BeatPopup inherits Rectangle {
+    in-out property <[bool]> steps: [];
+    in-out property <int> playhead: -1;
+    in-out property <int> grid-resolution: 16;
+    in-out property <bool> playing: false;
+    in-out property <float> humanize: 0.0;
+    in-out property <float> swing: 0.0;
+    in-out property <string> beat-name: "BEAT SEQUENCER";
+    in-out property <[int]> resolution-options: [8, 16, 32, 64];
+    in-out property <[string]> instrument-names:
+        ["Kick", "Snare", "Clap", "Closed Hat",
+         "Open Hat", "Tom", "Cymbal", "Perc"];
+    in-out property <[bool]> track-active:
+        [true, true, true, true, true, true, true, true];
+    in-out property <[bool]> track-solo:
+        [false, false, false, false, false, false, false, false];
+    in-out property <[float]> track-pan:
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    in-out property <[float]> track-volume:
+        [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+    in-out property <[int]> track-mixer-channel:
+        [0, 1, 2, 3, 4, 5, 6, 7];
+    in-out property <int> selected-track: 0;
+    in-out property <length> popup-x: 24px;
+    in-out property <length> popup-y: 80px;
+    in-out property <bool> open: false;
+    out property <bool> is-open: root.open;
+
+    callback open-requested;
+    callback close-requested;
+
+    open-requested => { root.open = true; }
+
+    background: transparent;
+    visible: root.open;
+    clip: false;
+
+    content := BeatContent {
+        x: root.popup-x;
+        y: root.popup-y;
+
+        steps <=> root.steps;
+        playhead <=> root.playhead;
+
+        grid-resolution <=> root.grid-resolution;
+        playing <=> root.playing;
+
+        humanize <=> root.humanize;
+        swing <=> root.swing;
+
+        beat-name <=> root.beat-name;
+        resolution-options <=> root.resolution-options;
+
+        instrument-names <=> root.instrument-names;
+
+        track-active <=> root.track-active;
+        track-solo <=> root.track-solo;
+
+        track-pan <=> root.track-pan;
+        track-volume <=> root.track-volume;
+
+        track-mixer-channel <=> root.track-mixer-channel;
+        selected-track <=> root.selected-track;
+
+        close-requested => {
+            root.open = false;
+            root.close-requested();
+        }
+        add-track-requested => { }
+        grid-resolution-changed(value) => { }
+        track-selected(index) => { }
+    }
+
+    out property <bool> mouse-over: content.mouse-over;
+}

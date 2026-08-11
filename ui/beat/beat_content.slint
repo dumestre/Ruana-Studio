@@ -1,0 +1,330 @@
+import { Theme } from "../theme.slint";
+import { BeatHeader } from "beat_header.slint";
+import { BeatStep } from "beat_step.slint";
+import { BeatTrack } from "beat_track.slint";
+
+export component BeatContent inherits Rectangle {
+    in-out property <[bool]> steps: [
+        true, false, false, false,
+        false, false, false, false,
+        true, false, false, false,
+        false, false, false, false,
+
+        false, false, false, false,
+        true, false, false, false,
+        false, false, false, false,
+        true, false, false, false,
+
+        false, false, false, false,
+        false, false, true, false,
+        false, false, false, false,
+        false, false, true, false,
+
+        true, false, true, false,
+        true, false, true, false,
+        true, false, true, false,
+        true, false, true, false,
+
+        false, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+        false, false, true, false,
+
+        false, false, false, false,
+        false, true, false, false,
+        false, false, false, false,
+        false, false, false, false,
+
+        true, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+
+        false, false, false, true,
+        false, false, false, true,
+        false, false, false, true,
+        false, false, false, true
+    ];
+
+    in-out property <int> playhead: -1;
+
+    in-out property <[int]> step-indexes:
+        [0, 1, 2, 3, 4, 5, 6, 7,
+         8, 9, 10, 11, 12, 13, 14, 15];
+
+    in-out property <[int]> instrument-indexes:
+        [0, 1, 2, 3, 4, 5, 6, 7];
+
+    in-out property <[string]> instrument-names:
+        ["Kick", "Snare", "Clap", "Closed Hat",
+         "Open Hat", "Tom", "Cymbal", "Perc"];
+
+    in-out property <[bool]> track-active:
+        [true, true, true, true, true, true, true, true];
+
+    in-out property <[bool]> track-solo:
+        [false, false, false, false, false, false, false, false];
+
+    in-out property <[float]> track-pan:
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+    in-out property <[float]> track-volume:
+        [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+
+    in-out property <[int]> track-mixer-channel:
+        [0, 1, 2, 3, 4, 5, 6, 7];
+
+    in-out property <int> selected-track: 0;
+
+    in-out property <int> grid-resolution: 16;
+
+    in-out property <bool> playing: false;
+
+    in-out property <float> humanize: 0.0;
+    in-out property <float> swing: 0.0;
+
+    in-out property <[int]> resolution-options:
+        [8, 16, 32, 64];
+
+    in-out property <string> beat-name:
+        "BEAT SEQUENCER";
+
+    callback close-requested;
+    callback add-track-requested;
+    callback grid-resolution-changed(int);
+    callback track-selected(int);
+
+    property <bool> grid-dropdown-open: false;
+
+    width: 800px;
+    height: 480px;
+
+    background: Theme.surface;
+
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    out property <bool> mouse-over: hover-zone.has-hover;
+
+    hover-zone := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: default;
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+
+
+        BeatHeader {
+            beat-name <=> root.beat-name;
+
+            humanize <=> root.humanize;
+            swing <=> root.swing;
+
+            grid-resolution <=> root.grid-resolution;
+
+            resolution-options: root.resolution-options;
+
+            grid-dropdown-open <=> root.grid-dropdown-open;
+
+            close-requested => {
+                root.close-requested();
+            }
+
+            add-track-requested => {
+                root.add-track-requested();
+            }
+
+            grid-resolution-changed(value) => {
+                root.grid-resolution-changed(value);
+            }
+        }
+
+
+        Rectangle {
+            height: 1px;
+            background: Theme.border;
+        }
+
+
+        HorizontalLayout {
+            height: 306px;
+            spacing: 12px;
+
+
+            Rectangle {
+                width: 244px;
+                height: 306px;
+
+                background: Theme.base;
+
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: Theme.border;
+
+
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+
+
+                    Rectangle {
+                        height: 22px;
+
+                        background: Theme.surface-high;
+                        border-radius: 3px;
+
+
+                        HorizontalLayout {
+                            spacing: 2px;
+
+                            Text {
+                                width: 28px;
+                                text: "PAN";
+                                color: Theme.text-dim;
+                                font-size: 9px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                            }
+
+                            Text {
+                                width: 28px;
+                                text: "VOL";
+                                color: Theme.text-dim;
+                                font-size: 9px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                            }
+
+                            Text {
+                                width: 30px;
+                                text: "CH";
+                                color: Theme.text-dim;
+                                font-size: 9px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                            }
+
+                            Text {
+                                width: 22px;
+                                text: "M";
+                                color: Theme.text-dim;
+                                font-size: 9px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                            }
+
+                            Text {
+                                width: 22px;
+                                text: "S";
+                                color: Theme.text-dim;
+                                font-size: 9px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                            }
+
+                            Text {
+                                horizontal-stretch: 1;
+                                text: "SAMPLE";
+                                color: Theme.text-dim;
+                                font-size: 9px;
+                                font-weight: 700;
+                            }
+                        }
+                    }
+
+
+                    for inst in root.instrument-indexes: BeatTrack {
+                        track-index: inst;
+
+                        track-name: root.instrument-names[inst];
+
+                        active: root.track-active[inst];
+                        active-changed(v) => { root.track-active[inst] = v; }
+
+                        solo: root.track-solo[inst];
+                        solo-changed(v) => { root.track-solo[inst] = v; }
+
+                        pan: root.track-pan[inst];
+                        pan-changed(v) => { root.track-pan[inst] = v; }
+
+                        volume: root.track-volume[inst];
+                        volume-changed(v) => { root.track-volume[inst] = v; }
+
+                        mixer-channel: root.track-mixer-channel[inst];
+                        mixer-channel-changed(v) => { root.track-mixer-channel[inst] = v; }
+
+                        selected: root.selected-track == inst;
+
+                        selected-changed => {
+                            root.selected-track = inst;
+                            root.track-selected(inst);
+                        }
+                    }
+                }
+            }
+
+
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 306px;
+
+                background: Theme.base;
+
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: Theme.border;
+
+
+                HorizontalLayout {
+                    padding: 4px;
+                    spacing: 2px;
+
+
+                    for inst in root.instrument-indexes: BeatStep {
+                        track-index: inst;
+
+                        width: root.grid-resolution * 28px
+                            + max(0, root.grid-resolution - 1) * 2px;
+
+                        steps <=> root.steps;
+
+                        playhead: root.playhead;
+
+                        grid-resolution: root.grid-resolution;
+
+                        step-indexes: root.step-indexes;
+
+                        track-active: root.track-active[inst];
+
+                        accent-color:
+                            inst == 0 ? Theme.accent :
+                            inst == 1 ? Theme.ok :
+                            inst == 2 ? Theme.warn :
+                            inst == 3 ? Theme.danger :
+                            inst == 4 ? Theme.activ :
+                            inst == 5 ? #4895EF :
+                            inst == 6 ? #E76F51 :
+                            #B08D57;
+                    }
+                }
+            }
+        }
+    }
+
+
+    Timer {
+        interval: 140ms;
+        running: root.playing;
+
+        triggered => {
+            if (root.grid-resolution > 0) {
+                root.playhead =
+                    Math.mod(root.playhead + 1, root.grid-resolution);
+            }
+        }
+    }
+}
