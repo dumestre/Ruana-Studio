@@ -1,8 +1,9 @@
 import { Theme } from "theme.slint";
 import { Transport } from "transport.slint";
 import { Toolbar } from "toolbar.slint";
+import { EditToolbar } from "edit_toolbar.slint";
 import { LeftPanel } from "left_panel.slint";
-import { Timeline } from "timeline.slint";
+import { Timeline } from "timeline/timeline.slint";
 import { Explorer } from "explorer/explorer.slint";
 import { Mixer } from "mixer.slint";
 import { BeatPopup } from "beat/beat.slint";
@@ -19,8 +20,11 @@ export component MainWindow inherits Window {
     in-out property <bool> playing: false;
     in-out property <int> selected-track: 0;
     in-out property <float> zoom-level: 1.0;
+    in-out property <int> active-tool: 0;
+
     min-height: 720px;
     min-width: 1280px;
+
     in-out property <[float]> mixer-meters: [0, 0, 0, 0, 0];
 
     callback play-state-changed(bool);
@@ -28,25 +32,55 @@ export component MainWindow inherits Window {
     callback maximize;
     callback minimize;
 
-    property <[string]> track-names: ["Drums", "Bass", "Vocal", "Synth"];
+    property <[string]> track-names: [
+        "Drums",
+        "Bass",
+        "Vocal",
+        "Synth"
+    ];
 
     VerticalLayout {
         spacing: 0;
 
         Toolbar {
             beat-open: beat_popup.is-open;
-            beat-opened => { beat_popup.open-requested(); }
-            zoom-in => { root.zoom-level = min(root.zoom-level + 0.25, 4.0); }
-            zoom-out => { root.zoom-level = max(root.zoom-level - 0.25, 0.5); }
-            close => { root.close(); }
-            maximize => { root.maximize(); }
-            minimize => { root.minimize(); }
+
+            beat-opened => {
+                beat_popup.open-requested();
+            }
+
+            zoom-in => {
+                root.zoom-level = min(root.zoom-level + 0.25, 4.0);
+            }
+
+            zoom-out => {
+                root.zoom-level = max(root.zoom-level - 0.25, 0.5);
+            }
+
+            close => {
+                root.close();
+            }
+
+            maximize => {
+                root.maximize();
+            }
+
+            minimize => {
+                root.minimize();
+            }
         }
 
         Transport {
             playing <=> root.playing;
             position <=> root.transport-position;
-            play-state-changed(p) => { root.play-state-changed(p); }
+
+            play-state-changed(p) => {
+                root.play-state-changed(p);
+            }
+        }
+
+        EditToolbar {
+            active-tool <=> root.active-tool;
         }
 
         Rectangle {
@@ -68,9 +102,16 @@ export component MainWindow inherits Window {
                     position: root.transport-position;
                     zoom: root.zoom-level;
                     track-names: root.track-names;
+                    active-tool: root.active-tool;
                     horizontal-stretch: 1;
-                    select-track(i) => { root.selected-track = i; }
-                    clip-selected(i) => { root.selected-track = i; }
+
+                    select-track(i) => {
+                        root.selected-track = i;
+                    }
+
+                    clip-selected(i) => {
+                        root.selected-track = i;
+                    }
                 }
 
                 Explorer {
@@ -115,28 +156,33 @@ export component MainWindow inherits Window {
                     font-size: 10px;
                     vertical-alignment: center;
                 }
+
                 Rectangle {
                     horizontal-stretch: 1;
                     background: transparent;
                 }
+
                 Text {
                     text: "120 BPM";
                     color: Theme.text-dim;
                     font-size: 10px;
                     vertical-alignment: center;
                 }
+
                 Text {
                     text: "44.1 kHz";
                     color: Theme.text-dim;
                     font-size: 10px;
                     vertical-alignment: center;
                 }
+
                 Text {
                     text: "24-bit";
                     color: Theme.text-dim;
                     font-size: 10px;
                     vertical-alignment: center;
                 }
+
                 Text {
                     text: "FASE 1 - UI";
                     color: Theme.accent;
@@ -153,6 +199,7 @@ export component MainWindow inherits Window {
     keyboard-focus := FocusScope {
         width: 100%;
         height: 100%;
+
         key-pressed(event) => {
             if (event.text == Key.Space && beat_popup.is-open && beat_popup.mouse-over) {
                 beat_popup.playing = !beat_popup.playing;
