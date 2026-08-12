@@ -279,10 +279,9 @@ export component BeatContent inherits Rectangle {
                 border-color: Theme.border;
 
 
-                HorizontalLayout {
+VerticalLayout {
                     padding: 4px;
                     spacing: 2px;
-
 
                     for inst in root.instrument-indexes: BeatStep {
                         track-index: inst;
