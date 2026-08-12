@@ -46,6 +46,8 @@ export component MediaBrowser inherits Rectangle {
     background: transparent;
 
     VerticalLayout {
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.center;
         spacing: 5px;
 
         // Cabeçalho
@@ -62,6 +64,7 @@ export component MediaBrowser inherits Rectangle {
                 padding-right: 7px;
                 spacing: 6px;
                 alignment: center;
+                cross-axis-alignment: CrossAxisAlignment.center;
 
                 Text {
                     text: "♫";
@@ -92,6 +95,8 @@ export component MediaBrowser inherits Rectangle {
             background: transparent;
 
             HorizontalLayout {
+                alignment: LayoutAlignment.space-between;
+                cross-axis-alignment: CrossAxisAlignment.center;
                 spacing: 3px;
 
                 Rectangle {
@@ -254,6 +259,8 @@ export component MediaBrowser inherits Rectangle {
             background: transparent;
 
             VerticalLayout {
+                alignment: LayoutAlignment.start;
+                cross-axis-alignment: CrossAxisAlignment.center;
                 spacing: 1px;
 
                 Text {
