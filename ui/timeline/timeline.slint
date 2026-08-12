@@ -8,6 +8,7 @@ in property <color> track-color: Theme.clip-midi;
 in property <bool> selected: false;
 in property <int> track-index: 0;
 
+
 callback clicked(int);
 
 height: 64px;
@@ -61,10 +62,12 @@ TouchArea {
     }
 }
 
+
 }
 
 component TrackClip inherits Rectangle {
 in property <string> name: "";
+in property <int> clip-id: 0;
 in property <int> beat: 0;
 in property <int> len: 4;
 in property <color> clip-color: Theme.clip-midi;
@@ -73,6 +76,7 @@ in property <length> row-height: 64px;
 in property <int> track-index: 0;
 in property <bool> selected: false;
 in property <int> active-tool: 0;
+
 
 callback clicked(int);
 
@@ -85,8 +89,8 @@ height: root.row-height - 4px;
 background: root.clip-color;
 
 border-radius: 4px;
-border-width: 1px;
-border-color: self.selected
+border-width: root.selected ? 2px : 1px;
+border-color: root.selected
     ? Theme.text-primary
     : Theme.border;
 
@@ -114,7 +118,9 @@ Text {
 
 touch := TouchArea {
     clicked => {
-        root.clicked(root.track-index);
+        if root.active-tool == 0 {
+            root.clicked(root.clip-id);
+        }
     }
 }
 
@@ -124,16 +130,20 @@ touch := TouchArea {
 component TrackRow inherits Rectangle {
 in property <int> track-index: 0;
 in property <int> selected-track: 0;
+in property <int> selected-clip: -1;
 in property <length> px-per-beat: 40px;
 in property <length> px-per-bar: 160px;
 in property <length> row-height: 64px;
 in property <color> track-color: Theme.clip-midi;
+
+
 in property <[int]> bar-range: [
-0, 1, 2, 3,
-4, 5, 6, 7,
-8, 9, 10, 11,
-12, 13, 14, 15
+    0, 1, 2, 3,
+    4, 5, 6, 7,
+    8, 9, 10, 11,
+    12, 13, 14, 15
 ];
+
 in property <int> active-tool: 0;
 
 callback clip-selected(int);
@@ -151,13 +161,14 @@ for bar in root.bar-range: Rectangle {
 
 if root.track-index == 0: TrackClip {
     name: "Drums A";
+    clip-id: 0;
     beat: 0;
     len: 8;
     clip-color: root.track-color;
     px-per-beat: root.px-per-beat;
     row-height: root.row-height;
     track-index: 0;
-    selected: root.selected-track == 0;
+    selected: root.selected-clip == 0;
     active-tool: root.active-tool;
 
     clicked(i) => {
@@ -167,13 +178,14 @@ if root.track-index == 0: TrackClip {
 
 if root.track-index == 0: TrackClip {
     name: "Drums B";
+    clip-id: 1;
     beat: 12;
     len: 4;
     clip-color: root.track-color;
     px-per-beat: root.px-per-beat;
     row-height: root.row-height;
     track-index: 0;
-    selected: root.selected-track == 0;
+    selected: root.selected-clip == 1;
     active-tool: root.active-tool;
 
     clicked(i) => {
@@ -183,13 +195,14 @@ if root.track-index == 0: TrackClip {
 
 if root.track-index == 1: TrackClip {
     name: "Bass A";
+    clip-id: 2;
     beat: 0;
     len: 16;
     clip-color: root.track-color;
     px-per-beat: root.px-per-beat;
     row-height: root.row-height;
     track-index: 1;
-    selected: root.selected-track == 1;
+    selected: root.selected-clip == 2;
     active-tool: root.active-tool;
 
     clicked(i) => {
@@ -199,13 +212,14 @@ if root.track-index == 1: TrackClip {
 
 if root.track-index == 2: TrackClip {
     name: "Vocal Verse";
+    clip-id: 3;
     beat: 0;
     len: 16;
     clip-color: root.track-color;
     px-per-beat: root.px-per-beat;
     row-height: root.row-height;
     track-index: 2;
-    selected: root.selected-track == 2;
+    selected: root.selected-clip == 3;
     active-tool: root.active-tool;
 
     clicked(i) => {
@@ -215,13 +229,14 @@ if root.track-index == 2: TrackClip {
 
 if root.track-index == 3: TrackClip {
     name: "Synth Pad";
+    clip-id: 4;
     beat: 0;
     len: 32;
     clip-color: root.track-color;
     px-per-beat: root.px-per-beat;
     row-height: root.row-height;
     track-index: 3;
-    selected: root.selected-track == 3;
+    selected: root.selected-clip == 4;
     active-tool: root.active-tool;
 
     clicked(i) => {
@@ -234,13 +249,17 @@ if root.track-index == 3: TrackClip {
 
 export component Timeline inherits Rectangle {
 in-out property <int> selected-track: 0;
+in-out property <int> selected-clip: -1;
+
+
 in property <int> position: 0;
 in property <float> zoom: 1.0;
+
 in property <[string]> track-names: [
-"Drums",
-"Bass",
-"Vocal",
-"Synth"
+    "Drums",
+    "Bass",
+    "Vocal",
+    "Synth"
 ];
 
 in-out property <int> active-tool: 0;
@@ -284,10 +303,6 @@ height: 100%;
 background: Theme.base;
 
 
-// ============================================================
-// EDIT TOOLBAR
-// ============================================================
-
 edit-toolbar := EditToolbar {
     x: 0;
     y: 0;
@@ -301,10 +316,6 @@ edit-toolbar := EditToolbar {
     }
 }
 
-
-// ============================================================
-// TRACK HEADERS
-// ============================================================
 
 Rectangle {
     x: 0;
@@ -366,10 +377,6 @@ Rectangle {
 }
 
 
-// ============================================================
-// TIMELINE
-// ============================================================
-
 ScrollView {
     x: root.header-width;
     y: root.edit-toolbar-height;
@@ -381,10 +388,6 @@ ScrollView {
         height: root.content-height;
         background: Theme.base;
 
-
-        // ====================================================
-        // RULER
-        // ====================================================
 
         Rectangle {
             width: 100%;
@@ -418,10 +421,6 @@ ScrollView {
         }
 
 
-        // ====================================================
-        // TRACK ROWS
-        // ====================================================
-
         VerticalLayout {
             y: root.ruler-height;
             width: 100%;
@@ -430,6 +429,7 @@ ScrollView {
             for name[i] in root.track-names: TrackRow {
                 track-index: i;
                 selected-track: root.selected-track;
+                selected-clip: root.selected-clip;
 
                 px-per-beat: root.px-per-beat;
                 px-per-bar: root.px-per-bar;
@@ -444,15 +444,14 @@ ScrollView {
                 active-tool: root.active-tool;
 
                 clip-selected(idx) => {
-                    root.clip-selected(idx);
+                    if root.active-tool == 0 {
+                        root.selected-clip = idx;
+                        root.clip-selected(idx);
+                    }
                 }
             }
         }
 
-
-        // ====================================================
-        // PLAYHEAD
-        // ============================================================
 
         Rectangle {
             x: root.playhead-x;

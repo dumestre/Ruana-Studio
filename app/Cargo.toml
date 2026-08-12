@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-slint.workspace = true
+slint = { workspace = true, features = ["renderer-skia"] }
 
 [build-dependencies]
 slint-build = "1.17.1"
