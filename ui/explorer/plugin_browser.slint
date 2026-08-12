@@ -46,6 +46,8 @@ export component PluginBrowser inherits Rectangle {
     background: transparent;
 
     VerticalLayout {
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
         spacing: 5px;
 
         // Cabeçalho
@@ -61,7 +63,8 @@ export component PluginBrowser inherits Rectangle {
                 padding-left: 7px;
                 padding-right: 7px;
                 spacing: 6px;
-                alignment: center;
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
 
                 Text {
                     text: "◆";
@@ -92,6 +95,8 @@ export component PluginBrowser inherits Rectangle {
             background: transparent;
 
             HorizontalLayout {
+                alignment: LayoutAlignment.space-between;
+                cross-axis-alignment: CrossAxisAlignment.center;
                 spacing: 3px;
 
                 Rectangle {
@@ -235,7 +240,8 @@ export component PluginBrowser inherits Rectangle {
                     font-size: 8px;
                     font-weight: 700;
 
-                    vertical-alignment: center;
+                    vertical-alignment: TextVerticalAlignment.center;
+                    horizontal-alignment: TextHorizontalAlignment.center;
                 }
 
                 for plugin in root.plugins : BrowserItem {

@@ -47,7 +47,7 @@ export component MediaBrowser inherits Rectangle {
 
     VerticalLayout {
         alignment: LayoutAlignment.start;
-        cross-axis-alignment: CrossAxisAlignment.center;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
         spacing: 5px;
 
         // Cabeçalho
@@ -259,14 +259,15 @@ export component MediaBrowser inherits Rectangle {
             background: transparent;
 
             VerticalLayout {
-                alignment: LayoutAlignment.start;
-                cross-axis-alignment: CrossAxisAlignment.center;
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.stretch;
                 spacing: 1px;
 
                 Text {
                     text: "MEDIA";
 
                     height: 20px;
+                    horizontal-alignment: TextHorizontalAlignment.center;
 
                     color: Theme.text-dim;
                     font-size: 8px;
