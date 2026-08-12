@@ -14,6 +14,8 @@ export component BeatStep inherits Rectangle {
     background: transparent;
 
     HorizontalLayout {
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
         spacing: 2px;
 
         for step in root.step-indexes: StepCell {

@@ -1,6 +1,5 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { EditToolbar } from "../edit_toolbar.slint";
 
 component TrackHeaderRow inherits Rectangle {
 in property <string> name: "";
@@ -314,8 +313,6 @@ callback select-track(int);
 callback clip-selected(int);
 callback clip-slice-requested(int, float);
 
-property <length> edit-toolbar-height: 34px;
-
 property <length> px-per-beat: 40px * self.zoom;
 property <length> px-per-bar: self.px-per-beat * 4;
 
@@ -350,25 +347,11 @@ height: 100%;
 background: Theme.base;
 
 
-edit-toolbar := EditToolbar {
-    x: 0;
-    y: 0;
-    width: 100%;
-    height: root.edit-toolbar-height;
-
-    active-tool <=> root.active-tool;
-
-    tool-changed(tool) => {
-        root.active-tool = tool;
-    }
-}
-
-
 Rectangle {
     x: 0;
-    y: root.edit-toolbar-height;
+    y: 0;
     width: root.header-width;
-    height: parent.height - root.edit-toolbar-height;
+    height: parent.height;
     background: Theme.surface;
 
     Rectangle {
@@ -426,9 +409,9 @@ Rectangle {
 
 ScrollView {
     x: root.header-width;
-    y: root.edit-toolbar-height;
+    y: 0;
     width: parent.width - root.header-width;
-    height: parent.height - root.edit-toolbar-height;
+    height: parent.height;
 
     Rectangle {
         width: root.content-width;

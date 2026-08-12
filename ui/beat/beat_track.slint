@@ -44,9 +44,10 @@ export component BeatTrack inherits Rectangle {
 
     HorizontalLayout {
         padding-left: 1px;
-        padding-right: 2px;
+        padding-right: 1px;
         spacing: 2px;
 
+        alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
 
 
@@ -80,7 +81,7 @@ export component BeatTrack inherits Rectangle {
             width: 30px;
             height: 24px;
 
-            background: Theme.base;
+            background: #2f2e2e;
             border-radius: 4px;
             border-width: 1px;
             border-color: Theme.border;
@@ -92,7 +93,9 @@ export component BeatTrack inherits Rectangle {
                 height: 100%;
 
                 color: Theme.text-dim;
-                font-size: 9px;
+                font-family: "";
+                font-size: 14px;
+                font-weight: 0;
 
                 horizontal-alignment: center;
                 vertical-alignment: center;

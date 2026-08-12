@@ -4,6 +4,10 @@ import { Theme } from "theme.slint";
 export component EditToolbar inherits Rectangle {
     in-out property <int> active-tool: 0;
 
+    in-out property <bool> beat-open: false;
+    in-out property <bool> explorer-visible: true;
+    in-out property <bool> mixer-visible: true;
+
     callback tool-changed(int);
 
     height: 32px;
@@ -106,6 +110,60 @@ export component EditToolbar inherits Rectangle {
         Rectangle {
             horizontal-stretch: 1;
             background: transparent;
+        }
+
+        Rectangle {
+            width: 1px;
+            height: 20px;
+            background: Theme.border;
+        }
+
+        Button {
+            width: 28px;
+            height: 26px;
+            icon: @image-url("icons/drum.svg");
+            icon-size: 17px;
+            text: "";
+            borderless: true;
+            toggled: root.beat-open;
+            subtle-toggled: true;
+            toggled-icon-color: Theme.accent;
+
+            clicked => {
+                root.beat-open = !root.beat-open;
+            }
+        }
+
+        Button {
+            width: 28px;
+            height: 26px;
+            icon: @image-url("icons/folder.svg");
+            icon-size: 17px;
+            text: "";
+            borderless: true;
+            toggled: root.explorer-visible;
+            subtle-toggled: true;
+            toggled-icon-color: Theme.accent;
+
+            clicked => {
+                root.explorer-visible = !root.explorer-visible;
+            }
+        }
+
+        Button {
+            width: 28px;
+            height: 26px;
+            icon: @image-url("icons/mixer.svg");
+            icon-size: 17px;
+            text: "";
+            borderless: true;
+            toggled: root.mixer-visible;
+            subtle-toggled: true;
+            toggled-icon-color: Theme.accent;
+
+            clicked => {
+                root.mixer-visible = !root.mixer-visible;
+            }
         }
     }
 }

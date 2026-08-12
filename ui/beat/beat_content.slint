@@ -114,6 +114,7 @@ export component BeatContent inherits Rectangle {
     }
 
     VerticalLayout {
+        alignment: LayoutAlignment.stretch;
         padding: 12px;
         spacing: 10px;
 
@@ -151,6 +152,8 @@ export component BeatContent inherits Rectangle {
 
 
         HorizontalLayout {
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
             height: 306px;
             spacing: 12px;
 
@@ -167,74 +170,13 @@ export component BeatContent inherits Rectangle {
 
 
                 VerticalLayout {
+                    alignment: LayoutAlignment.space-between;
+                    cross-axis-alignment: CrossAxisAlignment.stretch;
                     padding: 8px;
-                    spacing: 4px;
+                    spacing: 0px;
 
 
-                    Rectangle {
-                        height: 22px;
-
-                        background: Theme.surface-high;
-                        border-radius: 3px;
-
-
-                        HorizontalLayout {
-                            spacing: 2px;
-
-                            Text {
-                                width: 28px;
-                                text: "PAN";
-                                color: Theme.text-dim;
-                                font-size: 9px;
-                                font-weight: 700;
-                                horizontal-alignment: center;
-                            }
-
-                            Text {
-                                width: 28px;
-                                text: "VOL";
-                                color: Theme.text-dim;
-                                font-size: 9px;
-                                font-weight: 700;
-                                horizontal-alignment: center;
-                            }
-
-                            Text {
-                                width: 30px;
-                                text: "CH";
-                                color: Theme.text-dim;
-                                font-size: 9px;
-                                font-weight: 700;
-                                horizontal-alignment: center;
-                            }
-
-                            Text {
-                                width: 22px;
-                                text: "M";
-                                color: Theme.text-dim;
-                                font-size: 9px;
-                                font-weight: 700;
-                                horizontal-alignment: center;
-                            }
-
-                            Text {
-                                width: 22px;
-                                text: "S";
-                                color: Theme.text-dim;
-                                font-size: 9px;
-                                font-weight: 700;
-                                horizontal-alignment: center;
-                            }
-
-                            Text {
-                                horizontal-stretch: 1;
-                                text: "SAMPLE";
-                                color: Theme.text-dim;
-                                font-size: 9px;
-                                font-weight: 700;
-                            }
-                        }
-                    }
+                  
 
 
                     for inst in root.instrument-indexes: BeatTrack {
@@ -251,6 +193,7 @@ export component BeatContent inherits Rectangle {
                         pan: root.track-pan[inst];
                         pan-changed(v) => { root.track-pan[inst] = v; }
 
+                        vertical-stretch: 1;
                         volume: root.track-volume[inst];
                         volume-changed(v) => { root.track-volume[inst] = v; }
 
@@ -280,7 +223,9 @@ export component BeatContent inherits Rectangle {
 
 
 VerticalLayout {
-                    padding: 4px;
+                    alignment: LayoutAlignment.space-between;
+    cross-axis-alignment: CrossAxisAlignment.center;
+    padding: 8px;
                     spacing: 2px;
 
                     for inst in root.instrument-indexes: BeatStep {
