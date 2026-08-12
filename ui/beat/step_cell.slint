@@ -1,19 +1,15 @@
 import { Theme } from "../theme.slint";
 
-
 export component StepCell inherits Rectangle {
-    in-out property <bool> active: false;
+    in property <bool> active: false;
     in property <bool> current: false;
     in property <color> accent-color: Theme.accent;
     in property <bool> beat-group-highlight: false;
-
-    callback toggled();
 
     width: 28px;
     height: 28px;
 
     background: transparent;
-
 
     Rectangle {
         width: 24px;
@@ -43,15 +39,5 @@ export component StepCell inherits Rectangle {
                     ? root.accent-color
                     : Theme.border
             );
-    }
-
-
-    TouchArea {
-        mouse-cursor: pointer;
-
-        clicked => {
-            root.active = !root.active;
-            root.toggled();
-        }
     }
 }

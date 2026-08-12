@@ -30,10 +30,6 @@ export component BeatStep inherits Rectangle {
             accent-color: root.accent-color;
 
             opacity: root.track-active ? 1.0 : 0.35;
-
-            toggled => {
-                root.steps[root.track-index * 16 + step] = self.active;
-            }
         }
     }
 }

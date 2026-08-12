@@ -1,0 +1,77 @@
+import { Theme } from "../theme.slint";
+
+export component SplitterV inherits Rectangle {
+    in-out property <length> value: 300px;
+    in property <length> min-value: 160px;
+    in property <length> max-value: 700px;
+
+    property <bool> dragging: false;
+    property <length> start-x: 0px;
+    property <length> start-value: 0px;
+
+    width: 5px;
+    height: 100%;
+
+    background: touch.has-hover || root.dragging
+        ? Theme.surface-high
+        : Theme.border;
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: col-resize;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.dragging = true;
+                root.start-x = self.mouse-x;
+                root.start-value = root.value;
+            } else if root.dragging && event.kind == PointerEventKind.move {
+                root.value = max(
+                    root.min-value,
+                    min(root.max-value, root.start-value + (self.mouse-x - root.start-x))
+                );
+            } else if root.dragging && event.kind == PointerEventKind.up {
+                root.dragging = false;
+            }
+        }
+    }
+}
+
+export component SplitterH inherits Rectangle {
+    in-out property <length> value: 215px;
+    in property <length> min-value: 80px;
+    in property <length> max-value: 600px;
+
+    property <bool> dragging: false;
+    property <length> start-y: 0px;
+    property <length> start-value: 0px;
+
+    width: 100%;
+    height: 5px;
+
+    background: touch.has-hover || root.dragging
+        ? Theme.surface-high
+        : Theme.border;
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: row-resize;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.dragging = true;
+                root.start-y = self.mouse-y;
+                root.start-value = root.value;
+            } else if root.dragging && event.kind == PointerEventKind.move {
+                root.value = max(
+                    root.min-value,
+                    min(root.max-value, root.start-value - (self.mouse-y - root.start-y))
+                );
+            } else if root.dragging && event.kind == PointerEventKind.up {
+                root.dragging = false;
+            }
+        }
+    }
+}

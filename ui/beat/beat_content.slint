@@ -96,6 +96,8 @@ export component BeatContent inherits Rectangle {
 
     property <bool> grid-dropdown-open: false;
 
+    property <bool> stick-hit: false;
+
     width: 800px;
     height: 480px;
 
@@ -169,43 +171,36 @@ export component BeatContent inherits Rectangle {
                 border-color: Theme.border;
 
 
-                VerticalLayout {
-                    alignment: LayoutAlignment.space-between;
-                    cross-axis-alignment: CrossAxisAlignment.stretch;
-                    padding: 8px;
-                    spacing: 0px;
+                for inst in root.instrument-indexes: BeatTrack {
+                    track-index: inst;
 
+                    track-name: root.instrument-names[inst];
 
-                  
+                    active: root.track-active[inst];
+                    active-changed(v) => { root.track-active[inst] = v; }
 
+                    solo: root.track-solo[inst];
+                    solo-changed(v) => { root.track-solo[inst] = v; }
 
-                    for inst in root.instrument-indexes: BeatTrack {
-                        track-index: inst;
+                    pan: root.track-pan[inst];
+                    pan-changed(v) => { root.track-pan[inst] = v; }
 
-                        track-name: root.instrument-names[inst];
+                    volume: root.track-volume[inst];
+                    volume-changed(v) => { root.track-volume[inst] = v; }
 
-                        active: root.track-active[inst];
-                        active-changed(v) => { root.track-active[inst] = v; }
+                    mixer-channel: root.track-mixer-channel[inst];
+                    mixer-channel-changed(v) => { root.track-mixer-channel[inst] = v; }
 
-                        solo: root.track-solo[inst];
-                        solo-changed(v) => { root.track-solo[inst] = v; }
+                    x: 8px;
+                    y: 33px + inst * 30px;
+                    width: parent.width - 16px;
+                    height: 30px;
 
-                        pan: root.track-pan[inst];
-                        pan-changed(v) => { root.track-pan[inst] = v; }
+                    selected: root.selected-track == inst;
 
-                        vertical-stretch: 1;
-                        volume: root.track-volume[inst];
-                        volume-changed(v) => { root.track-volume[inst] = v; }
-
-                        mixer-channel: root.track-mixer-channel[inst];
-                        mixer-channel-changed(v) => { root.track-mixer-channel[inst] = v; }
-
-                        selected: root.selected-track == inst;
-
-                        selected-changed => {
-                            root.selected-track = inst;
-                            root.track-selected(inst);
-                        }
+                    selected-changed => {
+                        root.selected-track = inst;
+                        root.track-selected(inst);
                     }
                 }
             }
@@ -221,39 +216,104 @@ export component BeatContent inherits Rectangle {
                 border-width: 1px;
                 border-color: Theme.border;
 
+                property <length> row-pitch: 30px;
+                property <length> rows-top: 33px;
 
-VerticalLayout {
-                    alignment: LayoutAlignment.space-between;
-    cross-axis-alignment: CrossAxisAlignment.center;
-    padding: 8px;
-                    spacing: 2px;
+                for inst in root.instrument-indexes: BeatStep {
+                    track-index: inst;
 
-                    for inst in root.instrument-indexes: BeatStep {
-                        track-index: inst;
+                    x: 8px;
+                    y: 33px + inst * 30px;
 
-                        width: root.grid-resolution * 28px
-                            + max(0, root.grid-resolution - 1) * 2px;
+                    width: root.grid-resolution * 28px
+                        + max(0, root.grid-resolution - 1) * 2px;
 
-                        steps <=> root.steps;
+                    height: 30px;
 
-                        playhead: root.playhead;
+                    steps <=> root.steps;
 
-                        grid-resolution: root.grid-resolution;
+                    playhead: root.playhead;
 
-                        step-indexes: root.step-indexes;
+                    grid-resolution: root.grid-resolution;
 
-                        track-active: root.track-active[inst];
+                    step-indexes: root.step-indexes;
 
-                        accent-color:
-                            inst == 0 ? Theme.accent :
-                            inst == 1 ? Theme.ok :
-                            inst == 2 ? Theme.warn :
-                            inst == 3 ? Theme.danger :
-                            inst == 4 ? Theme.activ :
-                            inst == 5 ? #4895EF :
-                            inst == 6 ? #E76F51 :
-                            #B08D57;
+                    track-active: root.track-active[inst];
+
+                    accent-color:
+                        inst == 0 ? Theme.accent :
+                        inst == 1 ? Theme.ok :
+                        inst == 2 ? Theme.warn :
+                        inst == 3 ? Theme.danger :
+                        inst == 4 ? Theme.activ :
+                        inst == 5 ? #4895EF :
+                        inst == 6 ? #E76F51 :
+                        #B08D57;
+                }
+
+                grid-touch := TouchArea {
+                    x: 0;
+                    y: 0;
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: none;
+
+                    property <int> paint-row: -1;
+                    property <int> paint-col: -1;
+
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                            root.stick-hit = false;
+                            hit-timer.running = false;
+                            hit-timer.running = true;
+
+                            let r = Math.floor((self.mouse-y - rows-top) / row-pitch);
+                            let c = Math.floor((self.mouse-x - 8px) / 30px);
+
+                            if r >= 0 && r < root.instrument-indexes.length
+                                && c >= 0 && c < root.grid-resolution {
+                                root.steps[r * 16 + c] = !root.steps[r * 16 + c];
+                                self.paint-row = r;
+                                self.paint-col = c;
+                            }
+                        } else if event.kind == PointerEventKind.move && self.pressed {
+                            let r = Math.floor((self.mouse-y - rows-top) / row-pitch);
+                            let c = Math.floor((self.mouse-x - 8px) / 30px);
+
+                            if r >= 0 && r < root.instrument-indexes.length
+                                && c >= 0 && c < root.grid-resolution
+                                && !(r == self.paint-row && c == self.paint-col) {
+                                root.steps[r * 16 + c] = true;
+                                self.paint-row = r;
+                                self.paint-col = c;
+                            }
+                        } else if event.kind == PointerEventKind.up {
+                            self.paint-row = -1;
+                            self.paint-col = -1;
+                        }
                     }
+                }
+
+                hit-timer := Timer {
+                    interval: 90ms;
+                    running: false;
+
+                    triggered => {
+                        self.running = false;
+                        root.stick-hit = false;
+                    }
+                }
+
+                drumstick := Image {
+                    x: grid-touch.mouse-x - 15.7px;
+                    y: grid-touch.mouse-y - 1.2px;
+                    width: 32px;
+                    height: 32px;
+                    source: @image-url("../icons/drumstick.svg");
+                    visible: grid-touch.has-hover;
+                    transform-origin: { x: 15.7px, y: 1.2px };
+                    transform-rotation: root.stick-hit ? -60deg : -45deg;
+                    animate transform-rotation { duration: 90ms; easing: ease-out; }
                 }
             }
         }

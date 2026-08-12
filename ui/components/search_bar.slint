@@ -16,17 +16,24 @@ export component SearchBar inherits Rectangle {
         padding-right: 6px;
         spacing: 6px;
         alignment: center;
+        cross-axis-alignment: CrossAxisAlignment.center;
 
-        Text {
-            text: "⌕";
+        Rectangle {
+            width: 24px;
+            height: 24px;
+            
+        
+
+        Image {
             width: 16px;
-            color: root.text == ""
-                ? Theme.text-dim
-                : Theme.accent;
-            font-size: 13px;
+            colorize: #9a9a9a;
+            height: 16px;
+            source: @image-url("../icons/search.svg");
             horizontal-alignment: center;
             vertical-alignment: center;
         }
+    }
+    
 
         TextInput {
             text <=> root.text;
