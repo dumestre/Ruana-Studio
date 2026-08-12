@@ -26,6 +26,11 @@ export component EditToolbar inherits Rectangle {
         spacing: 3px;
         cross-axis-alignment: CrossAxisAlignment.center;
 
+        HorizontalLayout {
+            spacing: 0px;
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
         Button {
             width: 28px;
             height: 26px;
@@ -101,23 +106,21 @@ export component EditToolbar inherits Rectangle {
                 root.tool-changed(4);
             }
         }
+    }
+
+
+        
 
         Rectangle {
             width: 1px;
             height: 20px;
             background: Theme.border;
         }
+        HorizontalLayout {
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
-        Rectangle {
-            horizontal-stretch: 1;
-            background: transparent;
-        }
-
-        Rectangle {
-            width: 1px;
-            height: 20px;
-            background: Theme.border;
-        }
+        
 
         Button {
             width: 28px;
@@ -166,5 +169,6 @@ export component EditToolbar inherits Rectangle {
                 root.mixer-visible = !root.mixer-visible;
             }
         }
+    }
     }
 }

@@ -29,7 +29,7 @@ export component SplitterV inherits Rectangle {
             } else if root.dragging && event.kind == PointerEventKind.move {
                 root.value = max(
                     root.min-value,
-                    min(root.max-value, root.start-value + (self.mouse-x - root.start-x))
+                    min(root.max-value, root.start-value - (self.mouse-x - root.start-x))
                 );
             } else if root.dragging && event.kind == PointerEventKind.up {
                 root.dragging = false;
