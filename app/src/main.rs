@@ -74,14 +74,6 @@ fn main() -> Result<(), slint::PlatformError> {
         std::process::exit(0);
     });
 
-    let ui_weak_max = ui.as_weak();
-    ui.on_maximize(move || {
-        if let Some(ui) = ui_weak_max.upgrade() {
-            let window = ui.window();
-            window.set_maximized(!window.is_maximized());
-        }
-    });
-
     let ui_weak_min = ui.as_weak();
     ui.on_minimize(move || {
         if let Some(ui) = ui_weak_min.upgrade() {

@@ -1,10 +1,9 @@
 import { Button } from "components/button.slint";
 import { Theme } from "theme.slint";
-
 export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
     in-out property <bool> grid-enabled: true;
-    in-out property <bool> beat-open: false;
+    in-out property <bool> full-screen: false;
     
     
 
@@ -12,9 +11,7 @@ export component Toolbar inherits Rectangle {
     callback zoom-out;
     callback snap-toggled(bool);
     callback grid-toggled(bool);
-    callback beat-opened;
     callback close;
-    callback maximize;
     callback minimize;
 
     height: 34px;
@@ -36,8 +33,8 @@ export component Toolbar inherits Rectangle {
 
         Image {
             source: @image-url("../app/assets/FerrumStudio.svg");
-            width: 30px;
-            height: 30px;
+            width: 26px;
+            height: 26px;
         }
 
         Rectangle {
@@ -100,19 +97,6 @@ export component Toolbar inherits Rectangle {
             }
         }
 
-        Button {
-            icon: @image-url("icons/drum.svg");
-            icon-size: 30px;
-            text: "";
-            toggled: root.beat-open;
-            subtle-toggled: true;
-            toggled-icon-color: Theme.accent;
-            width: 26px;
-            clicked => {
-                root.beat-opened();
-            }
-        }
-
         Rectangle {
             horizontal-stretch: 1;
             background: transparent;
@@ -135,11 +119,13 @@ export component Toolbar inherits Rectangle {
             background: transparent;
         }
         Button {
-            icon: @image-url("icons/maximize.svg");
+            icon: root.full-screen
+                ? @image-url("icons/restore.svg")
+                : @image-url("icons/maximize.svg");
             icon-size: 14px;
             text: "";
             clicked => {
-                root.maximize();
+                root.full-screen = !root.full-screen;
             }
         }
         Rectangle {

@@ -34,7 +34,6 @@ export component MainWindow inherits Window {
 
     callback play-state-changed(bool);
     callback close;
-    callback maximize;
     callback minimize;
 
     property <[string]> track-names: [
@@ -48,11 +47,7 @@ export component MainWindow inherits Window {
         spacing: 0;
 
         Toolbar {
-            beat-open: beat_popup.is-open;
-
-            beat-opened => {
-                beat_popup.open-requested();
-            }
+            full-screen <=> root.full-screen;
 
             zoom-in => {
                 root.zoom-level = min(root.zoom-level + 0.25, 4.0);
@@ -64,10 +59,6 @@ export component MainWindow inherits Window {
 
             close => {
                 root.close();
-            }
-
-            maximize => {
-                root.maximize();
             }
 
             minimize => {
@@ -105,43 +96,54 @@ export component MainWindow inherits Window {
                     min-width: 190px;
                 }
 
-                Timeline {
-                    selected-track <=> root.selected-track;
-                    position: root.transport-position;
-                    zoom: root.zoom-level;
-                    track-names: root.track-names;
-                    active-tool: root.active-tool;
+                VerticalLayout {
+                    spacing: 0;
                     horizontal-stretch: 1;
 
-                    select-track(i) => {
-                        root.selected-track = i;
+                    Rectangle {
+                        width: 100%;
+                        vertical-stretch: 1;
+
+                        Timeline {
+                            selected-track <=> root.selected-track;
+                            position: root.transport-position;
+                            zoom: root.zoom-level;
+                            track-names: root.track-names;
+                            active-tool: root.active-tool;
+                            width: 100%;
+                            height: 100%;
+
+                            select-track(i) => {
+                                root.selected-track = i;
+                            }
+
+                            clip-selected(i) => {
+                                root.selected-track = i;
+                            }
+                        }
                     }
 
-                    clip-selected(i) => {
-                        root.selected-track = i;
+                    Rectangle {
+                        width: 100%;
+                        height: 1px;
+                        background: Theme.border;
+                        visible: root.mixer-visible;
+                    }
+
+                    Rectangle {
+                        width: 100%;
+                        height: 215px;
+                        visible: root.mixer-visible;
+
+                        Mixer {
+                            meters <=> root.mixer-meters;
+                        }
                     }
                 }
 
                 Explorer {
                     visible: root.explorer-visible;
                 }
-            }
-        }
-
-        Rectangle {
-            width: 100%;
-            height: 1px;
-            background: Theme.border;
-        }
-
-        Rectangle {
-            width: 100%;
-            height: 215px;
-
-            visible: root.mixer-visible;
-
-            Mixer {
-                meters <=> root.mixer-meters;
             }
         }
 
