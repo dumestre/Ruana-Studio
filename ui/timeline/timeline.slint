@@ -79,6 +79,10 @@ in property <int> active-tool: 0;
 
 
 callback clicked(int);
+callback slice-requested(int, float);
+
+property <length> slice-preview-x: -100px;
+property <bool> slice-hover: touch.has-hover;
 
 x: root.beat * root.px-per-beat;
 y: 2px;
@@ -116,10 +120,31 @@ Text {
     overflow: elide;
 }
 
+if root.active-tool == 1 && root.slice-hover: Rectangle {
+    x: root.slice-preview-x - 1px;
+    y: 0;
+    width: 2px;
+    height: 100%;
+    background: Theme.playhead;
+    z: 10;
+}
+
 touch := TouchArea {
+    mouse-cursor: root.active-tool == 1 ? crosshair : pointer;
+
     clicked => {
         if root.active-tool == 0 {
             root.clicked(root.clip-id);
+        }
+    }
+
+    pointer-event(event) => {
+        if root.active-tool == 1 {
+            if event.kind == PointerEventKind.down {
+                root.slice-requested(root.clip-id, root.slice-preview-x / root.px-per-beat);
+            } else if event.kind == PointerEventKind.move {
+                root.slice-preview-x = self.mouse-x;
+            }
         }
     }
 }
@@ -147,6 +172,7 @@ in property <[int]> bar-range: [
 in property <int> active-tool: 0;
 
 callback clip-selected(int);
+callback slice-requested(int, float);
 
 height: 64px;
 width: 100%;
@@ -174,6 +200,10 @@ if root.track-index == 0: TrackClip {
     clicked(i) => {
         root.clip-selected(i);
     }
+
+    slice-requested(id, pos) => {
+        root.slice-requested(id, pos);
+    }
 }
 
 if root.track-index == 0: TrackClip {
@@ -190,6 +220,10 @@ if root.track-index == 0: TrackClip {
 
     clicked(i) => {
         root.clip-selected(i);
+    }
+
+    slice-requested(id, pos) => {
+        root.slice-requested(id, pos);
     }
 }
 
@@ -208,6 +242,10 @@ if root.track-index == 1: TrackClip {
     clicked(i) => {
         root.clip-selected(i);
     }
+
+    slice-requested(id, pos) => {
+        root.slice-requested(id, pos);
+    }
 }
 
 if root.track-index == 2: TrackClip {
@@ -225,6 +263,10 @@ if root.track-index == 2: TrackClip {
     clicked(i) => {
         root.clip-selected(i);
     }
+
+    slice-requested(id, pos) => {
+        root.slice-requested(id, pos);
+    }
 }
 
 if root.track-index == 3: TrackClip {
@@ -241,6 +283,10 @@ if root.track-index == 3: TrackClip {
 
     clicked(i) => {
         root.clip-selected(i);
+    }
+
+    slice-requested(id, pos) => {
+        root.slice-requested(id, pos);
     }
 }
 
@@ -266,6 +312,7 @@ in-out property <int> active-tool: 0;
 
 callback select-track(int);
 callback clip-selected(int);
+callback clip-slice-requested(int, float);
 
 property <length> edit-toolbar-height: 34px;
 
@@ -448,6 +495,10 @@ ScrollView {
                         root.selected-clip = idx;
                         root.clip-selected(idx);
                     }
+                }
+
+                slice-requested(id, pos) => {
+                    root.clip-slice-requested(id, pos);
                 }
             }
         }
