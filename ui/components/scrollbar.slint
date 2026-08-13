@@ -7,6 +7,9 @@ import { Theme } from "../theme.slint";
 // thumb-size é o tamanho proporcional do polegar
 // (calculado pelo chamador: viewport² / conteúdo).
 // Arrastar o polegar ou clicar no trilho move o valor.
+//
+// Polegar em formato pílula: escurecido quando não há
+// nada para rolar, clareando no hover e no arrasto.
 // =========================================================
 
 export component ScrollBarHorizontal inherits Rectangle {
@@ -19,62 +22,77 @@ export component ScrollBarHorizontal inherits Rectangle {
 
     property <length> thumb-min: 18px;
 
+    property <length> inset: 3px;
+
     property <bool> dragging: false;
 
     property <length> start-abs-x: 0px;
     property <length> start-value: 0px;
 
-    height: 12px;
+    height: 14px;
 
-    background:
-        Theme.base;
+    opacity:
+        root.max-value <= 0px
+            ? 0.3
+            : 1.0;
 
-    border-radius: 2px;
+    Rectangle {
+        x: 0;
+        y: 0;
 
-    border-width: 1px;
-    border-color: Theme.border;
+        width: 100%;
+        height: 100%;
+
+        background:
+            touch.has-hover || root.dragging
+                ? Theme.surface-high
+                : Theme.surface;
+
+        border-radius: 7px;
+    }
 
     property <length> thumb-width:
         root.max-value <= 0px
-            ? self.width - 2px
+            ? self.width - 2 * root.inset
             : max(
                 root.thumb-min,
                 min(
                     root.thumb-size,
-                    self.width - 2px
+                    self.width - 2 * root.inset
                 )
             );
 
     property <length> thumb-x:
         root.max-value <= 0px
-            ? 1px
-            : 1px
+            ? root.inset
+            : root.inset
                 + (
                     root.value
                     / root.max-value
                 )
                 * (
                     self.width
-                    - 2px
+                    - 2 * root.inset
                     - root.thumb-width
                 );
 
     Rectangle {
         x: root.thumb-x;
-        y: 1px;
+        y: 2px;
 
         width: root.thumb-width;
         height:
-            parent.height - 2px;
+            parent.height - 4px;
 
         background:
             root.dragging
-                ? Theme.border
+                ? #6E6E6E
                 : touch.has-hover
-                    ? Theme.border
-                    : Theme.surface-high;
+                    ? #5A5A5A
+                    : Theme.border;
 
-        border-radius: 1px;
+        border-radius:
+            (parent.height - 4px) / 2;
     }
 
     touch := TouchArea {
@@ -172,64 +190,78 @@ export component ScrollBarVertical inherits Rectangle {
 
     property <length> thumb-min: 18px;
 
+    property <length> inset: 3px;
+
     property <bool> dragging: false;
 
     property <length> start-abs-y: 0px;
     property <length> start-value: 0px;
-    property <length> grab-offset: 0px;
 
-    width: 12px;
+    width: 14px;
 
-    background:
-        Theme.base;
+    opacity:
+        root.max-value <= 0px
+            ? 0.3
+            : 1.0;
 
-    border-radius: 2px;
+    Rectangle {
+        x: 0;
+        y: 0;
 
-    border-width: 1px;
-    border-color: Theme.border;
+        width: 100%;
+        height: 100%;
+
+        background:
+            touch.has-hover || root.dragging
+                ? Theme.surface-high
+                : Theme.surface;
+
+        border-radius: 7px;
+    }
 
     property <length> thumb-height:
         root.max-value <= 0px
-            ? self.height - 2px
+            ? self.height - 2 * root.inset
             : max(
                 root.thumb-min,
                 min(
                     root.thumb-size,
-                    self.height - 2px
+                    self.height - 2 * root.inset
                 )
             );
 
     property <length> thumb-y:
         root.max-value <= 0px
-            ? 1px
-            : 1px
+            ? root.inset
+            : root.inset
                 + (
                     root.value
                     / root.max-value
                 )
                 * (
                     self.height
-                    - 2px
+                    - 2 * root.inset
                     - root.thumb-height
                 );
 
     Rectangle {
-        x: 1px;
+        x: 2px;
         y: root.thumb-y;
 
         width:
-            parent.width - 2px;
+            parent.width - 4px;
 
         height: root.thumb-height;
 
         background:
             root.dragging
-                ? Theme.border
+                ? #6E6E6E
                 : touch.has-hover
-                    ? Theme.border
-                    : Theme.surface-high;
+                    ? #5A5A5A
+                    : Theme.border;
 
-        border-radius: 2px;
+        border-radius:
+            (parent.width - 4px) / 2;
     }
 
     touch := TouchArea {
