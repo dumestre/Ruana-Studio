@@ -6,7 +6,7 @@ export component SplitterV inherits Rectangle {
     in property <length> max-value: 700px;
 
     property <bool> dragging: false;
-    property <length> start-x: 0px;
+    property <length> start-abs-x: 0px;
     property <length> start-value: 0px;
 
     width: 5px;
@@ -17,19 +17,20 @@ export component SplitterV inherits Rectangle {
         : Theme.border;
 
     touch := TouchArea {
-        width: 100%;
+        x: -3px;
+        width: parent.width + 6px;
         height: 100%;
         mouse-cursor: col-resize;
 
         pointer-event(event) => {
             if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                 root.dragging = true;
-                root.start-x = self.mouse-x;
+                root.start-abs-x = self.absolute-position.x + self.mouse-x;
                 root.start-value = root.value;
             } else if root.dragging && event.kind == PointerEventKind.move {
                 root.value = max(
                     root.min-value,
-                    min(root.max-value, root.start-value - (self.mouse-x - root.start-x))
+                    min(root.max-value, root.start-value - ((self.absolute-position.x + self.mouse-x) - root.start-abs-x))
                 );
             } else if root.dragging && event.kind == PointerEventKind.up {
                 root.dragging = false;
@@ -44,7 +45,7 @@ export component SplitterH inherits Rectangle {
     in property <length> max-value: 600px;
 
     property <bool> dragging: false;
-    property <length> start-y: 0px;
+    property <length> start-abs-y: 0px;
     property <length> start-value: 0px;
 
     width: 100%;
@@ -55,19 +56,20 @@ export component SplitterH inherits Rectangle {
         : Theme.border;
 
     touch := TouchArea {
+        y: -3px;
         width: 100%;
-        height: 100%;
+        height: parent.height + 6px;
         mouse-cursor: row-resize;
 
         pointer-event(event) => {
             if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                 root.dragging = true;
-                root.start-y = self.mouse-y;
+                root.start-abs-y = self.absolute-position.y + self.mouse-y;
                 root.start-value = root.value;
             } else if root.dragging && event.kind == PointerEventKind.move {
                 root.value = max(
                     root.min-value,
-                    min(root.max-value, root.start-value - (self.mouse-y - root.start-y))
+                    min(root.max-value, root.start-value - ((self.absolute-position.y + self.mouse-y) - root.start-abs-y))
                 );
             } else if root.dragging && event.kind == PointerEventKind.up {
                 root.dragging = false;

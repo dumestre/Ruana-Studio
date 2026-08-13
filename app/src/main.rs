@@ -33,8 +33,8 @@ fn bind_project(ui: &MainWindow, project: &Project) {
             id: c.id as i32,
             name: c.name.clone().into(),
             track_index: c.track_id as i32,
-            beat: c.start_beat as i32,
-            len: c.length_beats as i32,
+            beat: c.start_beat as f32,
+            len: c.length_beats as f32,
             is_midi: c.is_midi(),
         })
         .collect();

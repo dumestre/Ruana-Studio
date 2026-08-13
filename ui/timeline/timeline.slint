@@ -8,7 +8,7 @@ import { ClipData } from "clip_data.slint";
 export component Timeline inherits Rectangle {
 
     // =====================================================
-    // ESTADO DE SELEÇÃO
+    // SELEÇÃO
     // =====================================================
 
     in-out property <int> selected-track: 0;
@@ -40,7 +40,7 @@ export component Timeline inherits Rectangle {
     in-out property <int> active-tool: 0;
 
     // =====================================================
-    // CLIPS
+    // MODELO DE CLIPS
     // =====================================================
 
     in property <[ClipData]> clips: [];
@@ -54,7 +54,7 @@ export component Timeline inherits Rectangle {
     callback clip-slice-requested(int, float);
 
     // =====================================================
-    // MÉTRICA DA TIMELINE
+    // GRID / ESCALA
     // =====================================================
 
     property <length> px-per-beat:
@@ -92,16 +92,17 @@ export component Timeline inherits Rectangle {
         + self.track-count * self.row-height;
 
     // =====================================================
-    // PLAYHEAD
+    // POSIÇÃO DO PLAYHEAD
+    //
+    // position = ticks
+    // ppq = ticks por beat
     // =====================================================
 
     property <length> playhead-x:
-        self.position
-        * self.px-per-beat
-        / self.ppq;
+        self.position * self.px-per-beat / self.ppq;
 
     // =====================================================
-    // BARRAS DA RÉGUA
+    // BARRAS
     // =====================================================
 
     property <[int]> bar-range: [
@@ -119,7 +120,9 @@ export component Timeline inherits Rectangle {
 
 
     // =====================================================
-    // HEADER DAS TRACKS
+    // HEADER FIXO
+    //
+    // Esta coluna NÃO rola horizontalmente.
     // =====================================================
 
     TimelineHeader {
@@ -130,16 +133,14 @@ export component Timeline inherits Rectangle {
         height: parent.height;
 
         track-names: root.track-names;
-
-        selected-track:
-            root.selected-track;
-
-        ruler-height:
-            root.ruler-height;
+        selected-track: root.selected-track;
+        ruler-height: root.ruler-height;
 
         track-clicked(idx) => {
             root.select-track(idx);
         }
+
+        z: 20;
     }
 
 
@@ -151,13 +152,11 @@ export component Timeline inherits Rectangle {
         x: root.header-width;
         y: 0;
 
-        width:
-            parent.width - root.header-width;
-
+        width: parent.width - root.header-width;
         height: parent.height;
 
         // =================================================
-        // CONTEÚDO COM SCROLL
+        // CONTEÚDO REAL DA TIMELINE
         // =================================================
 
         Rectangle {
@@ -175,18 +174,16 @@ export component Timeline inherits Rectangle {
                 x: 0;
                 y: 0;
 
-                width: parent.width;
+                width: root.content-width;
                 height: root.ruler-height;
 
-                ruler-height:
-                    root.ruler-height;
+                ruler-height: root.ruler-height;
+                bar-range: root.bar-range;
+                px-per-bar: root.px-per-bar;
 
-                bar-range:
-                    root.bar-range;
-
-                px-per-bar:
-                    root.px-per-bar;
+                z: 5;
             }
+            
 
 
             // =============================================
@@ -197,14 +194,16 @@ export component Timeline inherits Rectangle {
                 x: 0;
                 y: root.ruler-height;
 
-                width: parent.width;
-                height:
-                    root.track-count
-                    * root.row-height;
+                width: root.content-width;
+                alignment: LayoutAlignment.stretch;
+                height: root.track-count * root.row-height;
 
                 spacing: 0;
 
                 for name[i] in root.track-names: TrackRow {
+
+                    width: root.content-width;
+                    height: root.row-height;
 
                     track-index: i;
 
@@ -233,10 +232,6 @@ export component Timeline inherits Rectangle {
                         root.active-tool;
 
 
-                    // -------------------------------------
-                    // CLIP SELECIONADO
-                    // -------------------------------------
-
                     clip-selected(idx) => {
                         if root.active-tool == 0 {
                             root.selected-clip = idx;
@@ -244,10 +239,6 @@ export component Timeline inherits Rectangle {
                         }
                     }
 
-
-                    // -------------------------------------
-                    // SLICE
-                    // -------------------------------------
 
                     slice-requested(id, pos) => {
                         root.clip-slice-requested(
@@ -261,19 +252,73 @@ export component Timeline inherits Rectangle {
 
             // =============================================
             // PLAYHEAD
+            //
+            // Linha vertical verde.
+            // Começa abaixo da régua e atravessa
+            // todas as tracks.
             // =============================================
 
             Rectangle {
-                x: root.playhead-x;
-                y: 0;
+                x: root.playhead-x - 1px;
+                y: root.ruler-height;
 
                 width: 2px;
-                height: parent.height;
+                height:
+                    root.track-count
+                    * root.row-height;
 
-                background:
-                    Theme.playhead;
+                background: #35E06F;
 
                 z: 50;
+            }
+
+
+            // =============================================
+            // CABEÇA DA AGULHA
+            //
+            // Pequeno marcador verde no topo.
+            // =============================================
+
+            Rectangle {
+                x: root.playhead-x - 6px;
+                y: 1px;
+
+                width: 12px;
+                height: 10px;
+
+                background: #35E06F;
+
+                z: 60;
+
+                // ponta inferior
+                Rectangle {
+                    x: 3px;
+                    y: 7px;
+
+                    width: 6px;
+                    height: 3px;
+
+                    background: #35E06F;
+                }
+            }
+
+
+            // =============================================
+            // PEQUENA LINHA DE CONTINUIDADE NA RÉGUA
+            // =============================================
+
+            Rectangle {
+                x: root.playhead-x - 1px;
+                y: 10px;
+
+                width: 2px;
+                height: root.ruler-height - 10px;
+
+                background: #35E06F;
+
+                opacity: 0.9;
+
+                z: 55;
             }
         }
     }
@@ -282,14 +327,17 @@ export component Timeline inherits Rectangle {
     // =====================================================
     // CURSOR DAS FERRAMENTAS
     //
-    // Select  -> cursor normal
-    // Slice   -> cursor do próprio clip
-    // Stretch -> stretch.svg
-    // Draw    -> draw_filled.svg
-    // Erase   -> erase_filled.svg
+    // Stretch / Draw / Erase
     // =====================================================
 
+    // Ícones pré-carregados no init do componente para
+    // evitar decodificação (e lag) ao trocar de ferramenta.
+    private property <image> cursor-icon-stretch: @image-url("../icons/stretch.svg");
+    private property <image> cursor-icon-draw: @image-url("../icons/draw_filled.svg");
+    private property <image> cursor-icon-erase: @image-url("../icons/erase_filled.svg");
+
     tool-cursor := TouchArea {
+
         x: 0;
         y: 0;
 
@@ -305,15 +353,19 @@ export component Timeline inherits Rectangle {
 
         z: 100;
 
+        // `visible` em vez de `if`: o elemento permanece
+        // instanciado, apenas alterna visibilidade — sem
+        // criação/destruição a cada troca de ferramenta.
+        Image {
 
-        if tool-cursor.enabled: Image {
+            visible: tool-cursor.enabled;
 
             source:
                 root.active-tool == 2
-                    ? @image-url("../icons/stretch.svg")
+                    ? root.cursor-icon-stretch
                     : root.active-tool == 3
-                        ? @image-url("../icons/draw_filled.svg")
-                        : @image-url("../icons/erase_filled.svg");
+                        ? root.cursor-icon-draw
+                        : root.cursor-icon-erase;
 
             x:
                 tool-cursor.mouse-x - 8px;

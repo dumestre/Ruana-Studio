@@ -98,6 +98,10 @@ export component BeatContent inherits Rectangle {
 
     property <bool> stick-hit: false;
 
+    // Ícone pré-carregado no init para evitar decodificação
+    // (e lag) na primeira vez que o cursor aparece na grade.
+    private property <image> cursor-drumstick: @image-url("../icons/drumstick.svg");
+
     width: 800px;
     height: 480px;
 
@@ -309,7 +313,7 @@ export component BeatContent inherits Rectangle {
                     y: grid-touch.mouse-y - 1.2px;
                     width: 32px;
                     height: 32px;
-                    source: @image-url("../icons/drumstick.svg");
+                    source: root.cursor-drumstick;
                     visible: grid-touch.has-hover;
                     transform-origin: { x: 15.7px, y: 1.2px };
                     transform-rotation: root.stick-hit ? -60deg : -45deg;

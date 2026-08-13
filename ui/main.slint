@@ -103,59 +103,102 @@ export component MainWindow inherits Window {
                     min-width: 190px;
                 }
 
-                VerticalLayout {
-                    spacing: 0;
+                Timeline {
+                    selected-track <=> root.selected-track;
+                    position: root.transport-position;
+                    zoom: root.zoom-level;
+                    track-names: root.track-names;
+                    active-tool: root.active-tool;
+                    clips: root.clips;
                     horizontal-stretch: 1;
 
-                    Rectangle {
+                    select-track(i) => {
+                        root.selected-track = i;
+                    }
+
+                    clip-selected(i) => {
+                        root.selected-track = i;
+                    }
+                    keyboard-focus := FocusScope {
                         width: 100%;
-                        vertical-stretch: 1;
-
-                        Timeline {
-                            selected-track <=> root.selected-track;
-                            position: root.transport-position;
-                            zoom: root.zoom-level;
-                            track-names: root.track-names;
-                            active-tool: root.active-tool;
-                            clips: root.clips;
-                            width: 100%;
-                            height: 100%;
-
-                            select-track(i) => {
-                                root.selected-track = i;
-                            }
-
-                            clip-selected(i) => {
-                                root.selected-track = i;
+                        height: 100%;
+                    
+                        key-pressed(event) => {
+                            if (event.text == Key.Space && beat_popup.is-open && beat_popup.mouse-over) {
+                                beat_popup.playing = !beat_popup.playing;
+                                accept
+                            } else {
+                                reject
                             }
                         }
                     }
-
-                    SplitterH {
-                        value <=> root.mixer-height;
-                        visible: root.mixer-visible;
-                    }
-
-                    Rectangle {
-                        width: 100%;
-                        height: root.mixer-height;
-                        visible: root.mixer-visible;
-
-                        Mixer {
-                            meters <=> root.mixer-meters;
-                        }
-                    }
                 }
+            }
 
-                SplitterV {
-                    value <=> root.explorer-width;
-                    visible: root.explorer-visible;
-                }
+            // =============================================
+            // MIXER (OVERLAY INFERIOR)
+            //
+            // Cobre a parte de baixo da timeline, sem
+            // empurrá-la.
+            // =============================================
 
-                Explorer {
-                    width: root.explorer-width;
-                    visible: root.explorer-visible;
-                }
+            SplitterH {
+                x: 0;
+                y: parent.height - root.mixer-height - 5px;
+
+                width: parent.width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+
+                visible: root.mixer-visible;
+
+                value <=> root.mixer-height;
+
+                z: 30;
+            }
+
+            Mixer {
+                x: 0;
+                y: parent.height - root.mixer-height;
+
+                width: parent.width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                height: root.mixer-height;
+
+                visible: root.mixer-visible;
+
+                meters <=> root.mixer-meters;
+
+                z: 30;
+            }
+
+            // =============================================
+            // EXPLORER (OVERLAY DIREITO)
+            //
+            // Cobre a parte direita da timeline, sem
+            // empurrá-la.
+            // =============================================
+
+            SplitterV {
+                x: parent.width - root.explorer-width - 5px;
+                y: 0;
+
+                height: 100%;
+
+                visible: root.explorer-visible;
+
+                value <=> root.explorer-width;
+
+                z: 40;
+            }
+
+            Explorer {
+                x: parent.width - root.explorer-width;
+                y: 0;
+
+                width: root.explorer-width;
+                height: 100%;
+
+                visible: root.explorer-visible;
+
+                z: 40;
             }
         }
 
@@ -222,17 +265,4 @@ export component MainWindow inherits Window {
         open <=> root.beat-open;
     }
 
-    keyboard-focus := FocusScope {
-        width: 100%;
-        height: 100%;
-
-        key-pressed(event) => {
-            if (event.text == Key.Space && beat_popup.is-open && beat_popup.mouse-over) {
-                beat_popup.playing = !beat_popup.playing;
-                accept
-            } else {
-                reject
-            }
-        }
-    }
 }
