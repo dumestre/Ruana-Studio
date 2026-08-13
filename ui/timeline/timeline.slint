@@ -129,9 +129,13 @@ export component Timeline inherits Rectangle {
     // Esta coluna NÃO rola horizontalmente.
     // =====================================================
 
-    TimelineHeader {
+    VerticalLayout { alignment: LayoutAlignment.stretch;
         x: 0;
         y: 0;
+
+        width: root.header-width;
+
+    TimelineHeader {
 
         width: root.header-width;
         height: parent.height;
@@ -150,6 +154,8 @@ export component Timeline inherits Rectangle {
 
         z: 20;
     }
+    }
+
 
     // =====================================================
     // SPLITTER DA COLUNA DE TRACKS
@@ -170,6 +176,7 @@ export component Timeline inherits Rectangle {
     }
 
 
+
     // =====================================================
     // ÁREA PRINCIPAL DA TIMELINE
     // =====================================================
@@ -186,8 +193,12 @@ export component Timeline inherits Rectangle {
         // =================================================
 
         Rectangle {
-            width: root.content-width;
-            height: root.content-height;
+    width: root.content-width;
+
+    height:
+        root.content-height > parent.height
+            ? root.content-height
+            : parent.height;
 
             background: Theme.base;
 
@@ -273,7 +284,10 @@ export component Timeline inherits Rectangle {
                         );
                     }
                 }
+            
             }
+
+        
 
 
             // =============================================
@@ -347,6 +361,7 @@ export component Timeline inherits Rectangle {
                 z: 55;
             }
         }
+        
     }
 
 
@@ -403,4 +418,5 @@ export component Timeline inherits Rectangle {
             height: 16px;
         }
     }
+
 }
