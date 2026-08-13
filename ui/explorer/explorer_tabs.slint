@@ -3,6 +3,7 @@ import { Theme } from "../theme.slint";
 component ExplorerTab inherits Rectangle {
     in property <string> label: "";
     in property <string> icon: "";
+    in property <image> icon-image: @image-url("");
     in property <bool> active: false;
 
     callback clicked();
@@ -20,17 +21,21 @@ component ExplorerTab inherits Rectangle {
         padding-right: 7px;
         spacing: 5px;
         alignment: center;
+        cross-axis-alignment: CrossAxisAlignment.center;
 
-        Text {
-            text: root.icon;
+       
 
-            color: root.active
+        Image {
+            source: root.icon-image;
+            vertical-alignment: ImageVerticalAlignment.center;
+            visible: root.icon-image.width > 0;
+            width: 15px;
+            height: 15px;
+            horizontal-alignment: ImageHorizontalAlignment.center;
+            image-rendering: ImageRendering.smooth;
+            colorize: root.active
                 ? Theme.accent
                 : Theme.text-dim;
-
-            font-size: 10px;
-
-            vertical-alignment: center;
         }
 
         Text {
@@ -41,6 +46,7 @@ component ExplorerTab inherits Rectangle {
                 : Theme.text-dim;
 
             font-size: 9px;
+            horizontal-alignment: TextHorizontalAlignment.center;
 
             vertical-alignment: center;
         }
@@ -63,7 +69,8 @@ export component ExplorerTabs inherits Rectangle {
     background: transparent;
 
     HorizontalLayout {
-        alignment: LayoutAlignment.stretch;
+        alignment: LayoutAlignment.center;
+        cross-axis-alignment: CrossAxisAlignment.center;
         spacing: 3px;
 
         ExplorerTab {
@@ -90,7 +97,8 @@ export component ExplorerTabs inherits Rectangle {
 
         ExplorerTab {
             label: "Plugins";
-            icon: "◆";
+            icon: "";
+            icon-image: @image-url("../icons/plugin.svg");
             active: root.selected == 2;
 
             clicked => {
