@@ -44,6 +44,9 @@ export component TimelineRuler inherits Rectangle {
 
     // =====================================================
     // LINHAS DOS COMPASSOS
+    //
+    // A cor alterna a cada compasso (4 batidas),
+    // como no beat.
     // =====================================================
 
     for i in root.bar-range: Rectangle {
@@ -59,7 +62,7 @@ export component TimelineRuler inherits Rectangle {
             parent.height - 1px;
 
         background:
-            Math.mod(i, 4) == 0
+            Math.mod(i, 2) == 1
                 ? Theme.border
                 : Theme.border.transparentize(0.45);
     }
@@ -67,17 +70,19 @@ export component TimelineRuler inherits Rectangle {
 
     // =====================================================
     // NÚMEROS
+    //
+    // Alinhados exatamente na linha do compasso.
     // =====================================================
 
     for i in root.bar-range: Text {
 
         x:
-            i * root.px-per-bar + 6px;
+            i * root.px-per-bar + 2px;
 
         y: 0;
 
         width:
-            root.px-per-bar - 8px;
+            root.px-per-bar - 2px;
 
         height:
             parent.height;
@@ -86,17 +91,17 @@ export component TimelineRuler inherits Rectangle {
             "" + (i + 1);
 
         color:
-            Math.mod(i, 4) == 0
+            Math.mod(i, 2) == 1
                 ? Theme.text-primary
                 : Theme.text-dim;
 
         font-size:
-            Math.mod(i, 4) == 0
+            Math.mod(i, 2) == 1
                 ? 10px
                 : 9px;
 
         font-weight:
-            Math.mod(i, 4) == 0
+            Math.mod(i, 2) == 1
                 ? 700
                 : 500;
 
@@ -112,36 +117,144 @@ export component TimelineRuler inherits Rectangle {
 
 
     // =====================================================
-    // SUBDIVISÃO 1/4
+    // LINHAS DE BATIDA (1/4 DE COMPASSO)
+    //
+    // Visíveis quando px-per-bar >= 40px.
     // =====================================================
 
     for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 40px;
 
         x:
             i * root.px-per-bar
             + root.px-per-bar * 0.25;
 
-        y:
-            parent.height - 8px;
+        y: 0;
 
         width: 1px;
-        height: 7px;
+
+        height:
+            parent.height - 1px;
 
         background:
-            Theme.border.transparentize(0.25);
+            Theme.border.transparentize(0.6);
     }
 
-
-    // =====================================================
-    // SUBDIVISÃO 2/4
-    // =====================================================
-
     for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 40px;
 
         x:
             i * root.px-per-bar
             + root.px-per-bar * 0.50;
 
+        y: 0;
+
+        width: 1px;
+
+        height:
+            parent.height - 1px;
+
+        background:
+            Theme.border.transparentize(0.6);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 40px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.75;
+
+        y: 0;
+
+        width: 1px;
+
+        height:
+            parent.height - 1px;
+
+        background:
+            Theme.border.transparentize(0.6);
+    }
+
+
+    // =====================================================
+    // SUBDIVISÃO 1/8
+    //
+    // Visível quando px-per-bar >= 120px.
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 120px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.125;
+
+        y:
+            parent.height - 8px;
+
+        width: 1px;
+        height: 7px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 120px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.375;
+
+        y:
+            parent.height - 8px;
+
+        width: 1px;
+        height: 7px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 120px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.625;
+
+        y:
+            parent.height - 8px;
+
+        width: 1px;
+        height: 7px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 120px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.875;
+
         y:
             parent.height - 8px;
 
@@ -154,20 +267,158 @@ export component TimelineRuler inherits Rectangle {
 
 
     // =====================================================
-    // SUBDIVISÃO 3/4
+    // SUBDIVISÃO 1/16
+    //
+    // Visível quando px-per-bar >= 240px.
     // =====================================================
 
     for i in root.bar-range: Rectangle {
 
+        visible:
+            root.px-per-bar >= 240px;
+
         x:
             i * root.px-per-bar
-            + root.px-per-bar * 0.75;
+            + root.px-per-bar * 0.0625;
 
         y:
-            parent.height - 8px;
+            parent.height - 6px;
 
         width: 1px;
-        height: 7px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.1875;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.3125;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.4375;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.5625;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.6875;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.8125;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.9375;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
 
         background:
             Theme.border.transparentize(0.25);

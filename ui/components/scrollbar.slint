@@ -1,0 +1,313 @@
+import { Theme } from "../theme.slint";
+
+// =========================================================
+// BARRA DE ROLAGEM HORIZONTAL
+//
+// value ∈ [0, max-value].
+// thumb-size é o tamanho proporcional do polegar
+// (calculado pelo chamador: viewport² / conteúdo).
+// Arrastar o polegar ou clicar no trilho move o valor.
+// =========================================================
+
+export component ScrollBarHorizontal inherits Rectangle {
+
+    in-out property <length> value: 0px;
+
+    in-out property <length> max-value: 0px;
+
+    in property <length> thumb-size: 100px;
+
+    property <length> thumb-min: 18px;
+
+    property <bool> dragging: false;
+
+    property <length> start-abs-x: 0px;
+    property <length> start-value: 0px;
+
+    height: 12px;
+
+    background:
+        Theme.base;
+
+    border-radius: 2px;
+
+    border-width: 1px;
+    border-color: Theme.border;
+
+    property <length> thumb-width:
+        root.max-value <= 0px
+            ? self.width - 2px
+            : max(
+                root.thumb-min,
+                min(
+                    root.thumb-size,
+                    self.width - 2px
+                )
+            );
+
+    property <length> thumb-x:
+        root.max-value <= 0px
+            ? 1px
+            : 1px
+                + (
+                    root.value
+                    / root.max-value
+                )
+                * (
+                    self.width
+                    - 2px
+                    - root.thumb-width
+                );
+
+    Rectangle {
+        x: root.thumb-x;
+        y: 1px;
+
+        width: root.thumb-width;
+        height:
+            parent.height - 2px;
+
+        background:
+            root.dragging
+                ? Theme.border
+                : touch.has-hover
+                    ? Theme.border
+                    : Theme.surface-high;
+
+        border-radius: 1px;
+    }
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+
+        mouse-cursor:
+            pointer;
+
+        pointer-event(event) => {
+
+            if event.kind == PointerEventKind.down
+                && event.button == PointerEventButton.left
+                && root.max-value > 0px {
+
+                root.dragging = true;
+
+                root.start-abs-x =
+                    self.absolute-position.x
+                    + self.mouse-x;
+
+                root.start-value =
+                    root.value;
+
+                if self.mouse-x >= root.thumb-x
+                    && self.mouse-x <= root.thumb-x + root.thumb-width {
+
+                    // clicou no polegar: apenas segura
+
+                } else {
+
+                    root.value =
+                        max(
+                            0px,
+                            min(
+                                root.max-value,
+                                (
+                                    self.mouse-x
+                                    - root.thumb-width / 2
+                                )
+                                / (
+                                    self.width
+                                    - root.thumb-width
+                                )
+                                * root.max-value
+                            )
+                        );
+                }
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.move {
+
+                root.value =
+                    max(
+                        0px,
+                        min(
+                            root.max-value,
+                            root.start-value
+                            + (
+                                (
+                                    self.absolute-position.x
+                                    + self.mouse-x
+                                )
+                                - root.start-abs-x
+                            )
+                            / (
+                                self.width
+                                - root.thumb-width
+                            )
+                            * root.max-value
+                        )
+                    );
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.up {
+
+                root.dragging = false;
+            }
+        }
+    }
+}
+
+
+// =========================================================
+// BARRA DE ROLAGEM VERTICAL
+// =========================================================
+
+export component ScrollBarVertical inherits Rectangle {
+
+    in-out property <length> value: 0px;
+
+    in-out property <length> max-value: 0px;
+
+    in property <length> thumb-size: 100px;
+
+    property <length> thumb-min: 18px;
+
+    property <bool> dragging: false;
+
+    property <length> start-abs-y: 0px;
+    property <length> start-value: 0px;
+    property <length> grab-offset: 0px;
+
+    width: 12px;
+
+    background:
+        Theme.base;
+
+    border-radius: 2px;
+
+    border-width: 1px;
+    border-color: Theme.border;
+
+    property <length> thumb-height:
+        root.max-value <= 0px
+            ? self.height - 2px
+            : max(
+                root.thumb-min,
+                min(
+                    root.thumb-size,
+                    self.height - 2px
+                )
+            );
+
+    property <length> thumb-y:
+        root.max-value <= 0px
+            ? 1px
+            : 1px
+                + (
+                    root.value
+                    / root.max-value
+                )
+                * (
+                    self.height
+                    - 2px
+                    - root.thumb-height
+                );
+
+    Rectangle {
+        x: 1px;
+        y: root.thumb-y;
+
+        width:
+            parent.width - 2px;
+
+        height: root.thumb-height;
+
+        background:
+            root.dragging
+                ? Theme.border
+                : touch.has-hover
+                    ? Theme.border
+                    : Theme.surface-high;
+
+        border-radius: 2px;
+    }
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+
+        mouse-cursor:
+            pointer;
+
+        pointer-event(event) => {
+
+            if event.kind == PointerEventKind.down
+                && event.button == PointerEventButton.left
+                && root.max-value > 0px {
+
+                root.dragging = true;
+
+                root.start-abs-y =
+                    self.absolute-position.y
+                    + self.mouse-y;
+
+                root.start-value =
+                    root.value;
+
+                if self.mouse-y >= root.thumb-y
+                    && self.mouse-y <= root.thumb-y + root.thumb-height {
+
+                    // clicou no polegar: apenas segura
+
+                } else {
+
+                    root.value =
+                        max(
+                            0px,
+                            min(
+                                root.max-value,
+                                (
+                                    self.mouse-y
+                                    - root.thumb-height / 2
+                                )
+                                / (
+                                    self.height
+                                    - root.thumb-height
+                                )
+                                * root.max-value
+                            )
+                        );
+                }
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.move {
+
+                root.value =
+                    max(
+                        0px,
+                        min(
+                            root.max-value,
+                            root.start-value
+                            + (
+                                (
+                                    self.absolute-position.y
+                                    + self.mouse-y
+                                )
+                                - root.start-abs-y
+                            )
+                            / (
+                                self.height
+                                - root.thumb-height
+                            )
+                            * root.max-value
+                        )
+                    );
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.up {
+
+                root.dragging = false;
+            }
+        }
+    }
+}

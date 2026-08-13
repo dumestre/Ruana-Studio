@@ -13,6 +13,8 @@ import {
     SplitterVerticalGrowRight,
     SplitterHorizontal
 } from "components/splitter.slint";
+import { ZoomBarHorizontal, ZoomBarVertical } from "components/zoom_bar.slint";
+import { ScrollBarHorizontal, ScrollBarVertical } from "components/scrollbar.slint";
 import { TrackPanel } from "timeline/TrackPanel.slint";
 
 
@@ -64,6 +66,9 @@ export component MainWindow inherits Window {
         0;
 
     in-out property <float> zoom-level:
+        1.0;
+
+    in-out property <float> zoom-y-level:
         1.0;
 
     in-out property <int> active-tool:
@@ -251,6 +256,36 @@ export component MainWindow inherits Window {
 
 
             // =================================================
+            // ÁREA VISÍVEL DA TIMELINE
+            //
+            // Mesma matemática do Mixer/Explorer.
+            // =================================================
+
+            property <length> timeline-area-x:
+                root.left-panel-width
+                + root.tracks-header-width;
+
+            property <length> timeline-area-w:
+                self.width
+                - root.left-panel-width
+                - root.tracks-header-width
+                - (
+                    root.explorer-visible
+                        ? root.explorer-width + 5px
+                        : 0px
+                )
+                - 5px;
+
+            property <length> timeline-area-h:
+                self.height
+                - (
+                    root.mixer-visible
+                        ? root.mixer-height + 5px
+                        : 0px
+                );
+
+
+            // =================================================
             // ÁREA PRINCIPAL
             //
             // LeftPanel
@@ -361,7 +396,7 @@ export component MainWindow inherits Window {
                 //     Timeline aumenta.
                 // =============================================
 
-                Timeline {
+                timeline := Timeline {
 
                     horizontal-stretch:
                         1;
@@ -372,8 +407,11 @@ export component MainWindow inherits Window {
                     position:
                         root.transport-position;
 
-                    zoom:
+                    zoom <=>
                         root.zoom-level;
+
+                    zoom-y <=>
+                        root.zoom-y-level;
 
                     track-names:
                         root.track-names;
@@ -406,32 +444,156 @@ export component MainWindow inherits Window {
                     }
 
 
-                    keyboard-focus := FocusScope {
-
-                        width:
-                            100%;
-
-                        height:
-                            100%;
+ Rectangle { min-width: 16px; min-height: 16px; /* @lsp:ignore-node */ }                }
+            }
 
 
-                        key-pressed(event) => {
+            // =================================================
+            // BARRAS DA TIMELINE
+            //
+            // Rodapé: scroll horizontal + zoom horizontal.
+            // Lateral direita: scroll vertical + zoom vertical.
+            // =================================================
 
-                            if (
-                                event.text == Key.Space
-                                && beat_popup.is-open
-                                && beat_popup.mouse-over
-                            ) {
+            ScrollBarHorizontal {
 
-                                beat_popup.playing =
-                                    !beat_popup.playing;
+                x:
+                    parent.timeline-area-x;
 
-                                accept;
+                y:
+                    parent.timeline-area-h
+                    - 12px;
 
-                            } else {
+                width:
+                    parent.timeline-area-w
+                    - 30px;
 
-                                reject;
-                            }
+                height: 12px;
+
+                value <=>
+                    timeline.scroll-x;
+
+                max-value:
+                    timeline.max-scroll-x;
+
+                thumb-size:
+                    parent.timeline-area-w
+                    * parent.timeline-area-w
+                    / (
+                        parent.timeline-area-w
+                        + timeline.max-scroll-x
+                    );
+
+                z: 60;
+            }
+
+
+            ZoomBarHorizontal {
+
+                x:
+                    parent.timeline-area-x;
+
+                y:
+                    parent.timeline-area-h
+                    - 12px
+                    - 16px;
+
+                width:
+                    parent.timeline-area-w
+                    - 30px;
+
+                height: 16px;
+
+                value <=>
+                    root.zoom-level;
+
+                min-value: 0.5;
+                max-value: 4.0;
+
+                z: 60;
+            }
+
+
+            ScrollBarVertical {
+
+                x:
+                    parent.timeline-area-x
+                    + parent.timeline-area-w
+                    - 30px;
+
+                y: 0;
+
+                width: 12px;
+
+                height:
+                    parent.timeline-area-h
+                    - 28px;
+
+                value <=>
+                    timeline.scroll-y;
+
+                max-value:
+                    timeline.max-scroll-y;
+
+                thumb-size:
+                    parent.timeline-area-h
+                    * parent.timeline-area-h
+                    / (
+                        parent.timeline-area-h
+                        + timeline.max-scroll-y
+                    );
+
+                z: 60;
+            }
+
+
+            ZoomBarVertical {
+
+                x:
+                    parent.timeline-area-x
+                    + parent.timeline-area-w
+                    - 16px;
+
+                y: 0;
+
+                width: 16px;
+
+                height:
+                    parent.timeline-area-h
+                    - 28px;
+
+                value <=>
+                    root.zoom-y-level;
+
+                min-value: 0.4;
+                max-value: 3.0;
+
+                z: 60;
+                keyboard-focus := FocusScope {
+                
+                    width:
+                        100%;
+                
+                    height:
+                        100%;
+                
+                
+                    key-pressed(event) => {
+                
+                        if (
+                            event.text == Key.Space
+                            && beat_popup.is-open
+                            && beat_popup.mouse-over
+                        ) {
+                
+                            beat_popup.playing =
+                                !beat_popup.playing;
+                
+                            accept;
+                
+                        } else {
+                
+                            reject;
                         }
                     }
                 }

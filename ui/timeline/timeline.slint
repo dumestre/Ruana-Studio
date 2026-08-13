@@ -18,7 +18,31 @@ export component Timeline inherits Rectangle {
     // =====================================================
 
     in property <int> position: 0;
-    in property <float> zoom: 1.0;
+
+    in-out property <float> zoom: 1.0;
+
+    in-out property <float> zoom-y: 1.0;
+
+
+    // =====================================================
+    // SCROLL
+    // =====================================================
+
+    in-out property <length> scroll-x: 0px;
+
+    in-out property <length> scroll-y: 0px;
+
+    out property <length> max-scroll-x:
+        max(
+            0px,
+            self.content-width - self.width
+        );
+
+    out property <length> max-scroll-y:
+        max(
+            0px,
+            self.ruler-height + self.tracks-height - self.height
+        );
 
 
     // =====================================================
@@ -72,7 +96,8 @@ export component Timeline inherits Rectangle {
 
     property <length> ruler-height: 30px;
 
-    property <length> row-height: 64px;
+    property <length> row-height:
+        64px * self.zoom-y;
 
 
     // =====================================================
@@ -148,13 +173,149 @@ export component Timeline inherits Rectangle {
 
 
         // =================================================
+        // ZOOM / PAN (WHEEL)
+        //
+        // Camada mais baixa: recebe os eventos de wheel
+        // que nenhum elemento acima consumir.
+        //
+        // Ctrl + wheel   ou botão do meio + wheel → zoom H
+        // Alt  + wheel                          → zoom V
+        // wheel simples                         → pan
+        // =================================================
+
+        zoom-pan-area := TouchArea {
+
+            x: 0;
+            y: 0;
+
+            width:
+                parent.width;
+
+            height:
+                parent.height;
+
+            property <bool> middle-pressed:
+                false;
+
+            pointer-event(event) => {
+
+                if event.kind == PointerEventKind.down
+                    && event.button == PointerEventButton.middle {
+
+                    self.middle-pressed = true;
+
+                } else if event.kind == PointerEventKind.up
+                    && event.button == PointerEventButton.middle {
+
+                    self.middle-pressed = false;
+                }
+            }
+
+            scroll-event(event) => {
+
+                let dz =
+                    event.delta-x
+                    + event.delta-y;
+
+                if event.modifiers.control
+                    || (
+                        self.middle-pressed
+                        && !event.modifiers.alt
+                    ) {
+
+                    root.zoom =
+                        max(
+                            0.5,
+                            min(
+                                4.0,
+                                root.zoom
+                                * (
+                                    dz > 0px
+                                        ? 1.1
+                                        : 0.9
+                                )
+                            )
+                        );
+
+                    root.scroll-x =
+                        min(
+                            root.scroll-x,
+                            root.max-scroll-x
+                        );
+
+                    root.scroll-y =
+                        min(
+                            root.scroll-y,
+                            root.max-scroll-y
+                        );
+
+                } else if event.modifiers.alt {
+
+                    root.zoom-y =
+                        max(
+                            0.4,
+                            min(
+                                3.0,
+                                root.zoom-y
+                                * (
+                                    dz > 0px
+                                        ? 1.1
+                                        : 0.9
+                                )
+                            )
+                        );
+
+                    root.scroll-x =
+                        min(
+                            root.scroll-x,
+                            root.max-scroll-x
+                        );
+
+                    root.scroll-y =
+                        min(
+                            root.scroll-y,
+                            root.max-scroll-y
+                        );
+
+                } else {
+
+                    root.scroll-x =
+                        max(
+                            0px,
+                            min(
+                                root.max-scroll-x,
+                                root.scroll-x
+                                + event.delta-x
+                            )
+                        );
+
+                    root.scroll-y =
+                        max(
+                            0px,
+                            min(
+                                root.max-scroll-y,
+                                root.scroll-y
+                                + event.delta-y
+                            )
+                        );
+                }
+
+                accept
+            }
+        }
+
+
+        // =================================================
         // CONTEÚDO
         // =================================================
 
         Rectangle {
 
-            x: 0;
-            y: 0;
+            x:
+                -root.scroll-x;
+
+            y:
+                -root.scroll-y;
 
             width:
                 root.content-width;
@@ -200,7 +361,8 @@ export component Timeline inherits Rectangle {
             // =============================================
             // GRID VERTICAL
             //
-            // O GRID ATRAVESSA TODA A ALTURA.
+            // COMPASSOS: cor alterna a cada compasso.
+            // BATEDAS / 1/8 / 1/16: aparecem conforme o zoom.
             // =============================================
 
             for i in root.bar-range: Rectangle {
@@ -217,9 +379,354 @@ export component Timeline inherits Rectangle {
                     parent.height - root.ruler-height;
 
                 background:
-                    Math.mod(i, 4) == 0
+                    Math.mod(i, 2) == 1
                         ? Theme.border
                         : Theme.border.transparentize(0.45);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 40px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.25;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.6);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 40px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.50;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.6);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 40px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.75;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.6);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 120px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.125;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.7);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 120px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.375;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.7);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 120px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.625;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.7);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 120px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.875;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.7);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 240px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.0625;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.8);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 240px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.1875;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.8);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 240px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.3125;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.8);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 240px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.4375;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.8);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 240px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.5625;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.8);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 240px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.6875;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.8);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 240px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.8125;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.8);
+
+                z: 1;
+            }
+
+            for i in root.bar-range: Rectangle {
+
+                visible:
+                    root.px-per-bar >= 240px;
+
+                x:
+                    i * root.px-per-bar
+                    + root.px-per-bar * 0.9375;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Theme.border.transparentize(0.8);
 
                 z: 1;
             }
