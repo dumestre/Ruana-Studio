@@ -38,14 +38,13 @@ export component FileBrowser inherits Rectangle {
                     background: transparent;
                     border-radius: 3px;
 
-                    Text {
-                        text: "←";
+                    Image {
+                        source: @image-url("../icons/arrow_back.svg");
 
-                        color: Theme.text-dim;
-                        font-size: 13px;
+                        width: 14px;
+                        height: 14px;
 
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                        colorize: Theme.text-dim;
                     }
                 }
 
@@ -55,14 +54,13 @@ export component FileBrowser inherits Rectangle {
                     background: transparent;
                     border-radius: 3px;
 
-                    Text {
-                        text: "→";
+                    Image {
+                        source: @image-url("../icons/arrow_fwd.svg");
 
-                        color: Theme.text-dim;
-                        font-size: 13px;
+                        width: 14px;
+                        height: 14px;
 
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                        colorize: Theme.text-dim;
                     }
                 }
 
@@ -72,14 +70,13 @@ export component FileBrowser inherits Rectangle {
                     background: transparent;
                     border-radius: 3px;
 
-                    Text {
-                        text: "↑";
+                    Image {
+                        source: @image-url("../icons/arrow_up.svg");
 
-                        color: Theme.text-dim;
-                        font-size: 13px;
+                        width: 14px;
+                        height: 14px;
 
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                        colorize: Theme.text-dim;
                     }
                 }
 
@@ -127,13 +124,15 @@ export component FileBrowser inherits Rectangle {
             name: "My Samples";
             type: "Folder";
             horizontal-stretch: 1;
-            icon: "★";
+            icon: "";
+            icon-image: @image-url("../icons/folder.svg");
         }
 
         BrowserItem {
             name: "Vocals";
             type: "Folder";
-            icon: "★";
+            icon: "";
+            icon-image: @image-url("../icons/folder.svg");
         }
 
 
@@ -159,26 +158,30 @@ export component FileBrowser inherits Rectangle {
         BrowserItem {
             name: "Ferrum Studio";
             type: "Folder";
-            icon: "▾";
+            icon: "";
+            icon-image: @image-url("../icons/folder.svg");
             selected: true;
         }
 
         BrowserItem {
             name: "Audio";
             type: "Folder";
-            icon: "▸";
+            icon: "";
+            icon-image: @image-url("../icons/folder.svg");
         }
 
         BrowserItem {
             name: "Samples";
             type: "Folder";
-            icon: "▸";
+            icon: "";
+            icon-image: @image-url("../icons/folder.svg");
         }
 
         BrowserItem {
             name: "Presets";
             type: "Folder";
-            icon: "▸";
+            icon: "";
+            icon-image: @image-url("../icons/folder.svg");
         }
 
 
@@ -204,19 +207,22 @@ export component FileBrowser inherits Rectangle {
         BrowserItem {
             name: "This PC";
             type: "Computer";
-            icon: "▾";
+            icon: "";
+            icon-image: @image-url("../icons/disk.svg");
         }
 
         BrowserItem {
             name: "C:";
             type: "Drive";
-            icon: "▸";
+            icon: "";
+            icon-image: @image-url("../icons/disk.svg");
         }
 
         BrowserItem {
             name: "D:";
             type: "Drive";
-            icon: "▸";
+            icon: "";
+            icon-image: @image-url("../icons/disk.svg");
         }
     }
 }

@@ -4,6 +4,7 @@ export component BrowserItem inherits Rectangle {
     in property <string> name: "";
     in property <string> type: "";
     in property <string> icon: "♫";
+    in property <image> icon-image: @image-url("");
     in property <bool> selected: false;
 
     callback clicked();
@@ -35,6 +36,7 @@ export component BrowserItem inherits Rectangle {
         // Ícone
         Text {
             text: root.icon;
+            visible: root.icon-image.width == 0;
 
             width: 18px;
 
@@ -46,6 +48,16 @@ export component BrowserItem inherits Rectangle {
 
             horizontal-alignment: center;
             vertical-alignment: center;
+        }
+
+        Image {
+            source: root.icon-image;
+            visible: root.icon-image.width > 0;
+            width: 14px;
+            height: 14px;
+            colorize: root.selected
+                ? Theme.accent
+                : Theme.text-dim;
         }
 
         // Nome

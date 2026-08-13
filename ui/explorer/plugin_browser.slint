@@ -66,15 +66,13 @@ export component PluginBrowser inherits Rectangle {
                 alignment: LayoutAlignment.center;
                 cross-axis-alignment: CrossAxisAlignment.center;
 
-                Text {
-                    text: "◆";
-                    width: 18px;
+                Image {
+                    source: @image-url("../icons/plugin.svg");
 
-                    color: Theme.accent;
-                    font-size: 10px;
+                    width: 15px;
+                    height: 15px;
 
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    colorize: Theme.accent;
                 }
 
                 Text {
@@ -251,9 +249,8 @@ export component PluginBrowser inherits Rectangle {
                     name: plugin.name;
                     type: plugin.type;
 
-                    icon: plugin.category == "Instruments"
-                        ? "♫"
-                        : "◆";
+                    icon: "";
+                    icon-image: @image-url("../icons/plugin.svg");
                 }
             }
         }

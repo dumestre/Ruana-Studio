@@ -75,7 +75,8 @@ export component ExplorerTabs inherits Rectangle {
 
         ExplorerTab {
             label: "Files";
-            icon: "▤";
+            icon: "";
+            icon-image: @image-url("../icons/disk.svg");
             active: root.selected == 0;
 
             clicked => {
@@ -86,7 +87,8 @@ export component ExplorerTabs inherits Rectangle {
 
         ExplorerTab {
             label: "Media";
-            icon: "♫";
+            icon: "";
+            icon-image: @image-url("../icons/media.svg");
             active: root.selected == 1;
 
             clicked => {

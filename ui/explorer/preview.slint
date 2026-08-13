@@ -27,15 +27,13 @@ export component Preview inherits Rectangle {
             spacing: 6px;
             alignment: center;
 
-            Text {
-                text: "♫";
-                width: 18px;
+            Image {
+                source: @image-url("../icons/media.svg");
 
-                color: Theme.accent;
-                font-size: 11px;
+                width: 15px;
+                height: 15px;
 
-                horizontal-alignment: center;
-                vertical-alignment: center;
+                colorize: Theme.accent;
             }
 
             Text {

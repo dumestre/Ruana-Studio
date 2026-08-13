@@ -9,6 +9,7 @@ export component ExplorerHeader inherits Rectangle {
     HorizontalLayout {
         spacing: 6px;
         alignment: center;
+        cross-axis-alignment: CrossAxisAlignment.center;
 
         Text {
             text: "Explorer";
@@ -28,14 +29,13 @@ export component ExplorerHeader inherits Rectangle {
             background: transparent;
             border-radius: 3px;
 
-            Text {
-                text: "⋮";
+            Image {
+                source: @image-url("../icons/menu_dots.svg");
 
-                color: Theme.text-dim;
-                font-size: 16px;
+                width: 14px;
+                height: 14px;
 
-                horizontal-alignment: center;
-                vertical-alignment: center;
+                colorize: Theme.text-dim;
             }
 
             TouchArea {
