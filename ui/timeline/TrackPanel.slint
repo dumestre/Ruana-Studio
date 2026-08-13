@@ -16,6 +16,14 @@ export component TrackPanel inherits Rectangle {
 
 
     // =====================================================
+    // LARGURA
+    // =====================================================
+
+    min-width:
+        200px;
+
+
+    // =====================================================
     // CALLBACKS
     // =====================================================
 
@@ -33,16 +41,15 @@ export component TrackPanel inherits Rectangle {
 
     // =====================================================
     // HEADER DOS TRACKS
-    //
-    // A largura vem diretamente do próprio TrackPanel.
-    // Não existe mais panel-width separado.
     // =====================================================
 
     TimelineHeader {
 
-        x: 0;
+        x:
+            0;
 
-        y: 0;
+        y:
+            0;
 
         width:
             parent.width;
