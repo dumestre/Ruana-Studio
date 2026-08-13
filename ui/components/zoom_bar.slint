@@ -339,7 +339,7 @@ export component ZoomBarVertical inherits Rectangle {
 
                 y:
                     (
-                        (root.value - root.min-value)
+                        (root.max-value - root.value)
                         / root.range
                     )
                     * parent.height
