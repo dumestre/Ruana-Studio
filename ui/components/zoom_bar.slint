@@ -382,8 +382,8 @@ export component ZoomBarVertical inherits Rectangle {
                                 root.min-value,
                                 min(
                                     root.max-value,
-                                    root.start-value
-                                    + (
+root.start-value
+                                    - (
                                         (
                                             self.absolute-position.y
                                             + self.mouse-y
@@ -399,8 +399,8 @@ export component ZoomBarVertical inherits Rectangle {
                                 )
                             );
 
-                    } else if root.dragging
-                        && event.kind == PointerEventKind.move {
+                        } else if root.dragging
+                            && event.kind == PointerEventKind.move {
 
                         root.value =
                             max(
@@ -408,7 +408,7 @@ export component ZoomBarVertical inherits Rectangle {
                                 min(
                                     root.max-value,
                                     root.start-value
-                                    + (
+                                    - (
                                         (
                                             self.absolute-position.y
                                             + self.mouse-y
