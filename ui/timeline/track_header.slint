@@ -1,0 +1,61 @@
+import { Theme } from "../theme.slint";
+
+export component TrackHeaderRow inherits Rectangle {
+    in property <string> name: "";
+    in property <color> track-color: Theme.clip-midi;
+    in property <bool> selected: false;
+    in property <int> track-index: 0;
+
+    callback clicked(int);
+
+    height: 64px;
+
+    background: self.selected
+        ? Theme.surface-high
+        : Theme.surface;
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        Rectangle {
+            width: 6px;
+            height: 30px;
+            background: root.track-color;
+            border-radius: 2px;
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+
+            Text {
+                text: root.name;
+                color: Theme.text-primary;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "MIDI";
+                color: Theme.text-dim;
+                font-size: 9px;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    TouchArea {
+        clicked => {
+            root.clicked(root.track-index);
+        }
+    }
+}

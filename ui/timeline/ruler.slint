@@ -1,0 +1,42 @@
+import { Theme } from "../theme.slint";
+
+export component TimelineRuler inherits Rectangle {
+    in property <[int]> bar-range: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+        8, 9, 10, 11,
+        12, 13, 14, 15
+    ];
+
+    in property <length> px-per-bar: 160px;
+    in property <length> ruler-height: 30px;
+
+    height: root.ruler-height;
+
+    background: Theme.surface;
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    for i in root.bar-range: Rectangle {
+        x: i * root.px-per-bar;
+        width: 1px;
+        height: 100%;
+        background: Theme.border;
+    }
+
+    for i in root.bar-range: Text {
+        x: i * root.px-per-bar + 5px;
+        y: 0;
+        width: 60px;
+        height: 100%;
+        text: "" + (i + 1);
+        color: Theme.text-dim;
+        font-size: 10px;
+        vertical-alignment: center;
+    }
+}

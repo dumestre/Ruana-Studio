@@ -1,0 +1,140 @@
+import { Theme } from "../theme.slint";
+import { TrackClip } from "track_clip.slint";
+
+export component TrackRow inherits Rectangle {
+    in property <int> track-index: 0;
+    in property <int> selected-track: 0;
+    in property <int> selected-clip: -1;
+    in property <length> px-per-beat: 40px;
+    in property <length> px-per-bar: 160px;
+    in property <length> row-height: 64px;
+    in property <color> track-color: Theme.clip-midi;
+
+    in property <[int]> bar-range: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+        8, 9, 10, 11,
+        12, 13, 14, 15
+    ];
+
+    in property <int> active-tool: 0;
+
+    callback clip-selected(int);
+    callback slice-requested(int, float);
+
+    height: 64px;
+    width: 100%;
+    background: Theme.base;
+
+    for bar in root.bar-range: Rectangle {
+        x: bar * root.px-per-bar;
+        width: 1px;
+        height: 100%;
+        background: Theme.surface-high;
+    }
+
+    if root.track-index == 0: TrackClip {
+        name: "Drums A";
+        clip-id: 0;
+        beat: 0;
+        len: 8;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 0;
+        selected: root.selected-clip == 0;
+        active-tool: root.active-tool;
+
+        clicked(i) => {
+            root.clip-selected(i);
+        }
+
+        slice-requested(id, pos) => {
+            root.slice-requested(id, pos);
+        }
+    }
+
+    if root.track-index == 0: TrackClip {
+        name: "Drums B";
+        clip-id: 1;
+        beat: 12;
+        len: 4;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 0;
+        selected: root.selected-clip == 1;
+        active-tool: root.active-tool;
+
+        clicked(i) => {
+            root.clip-selected(i);
+        }
+
+        slice-requested(id, pos) => {
+            root.slice-requested(id, pos);
+        }
+    }
+
+    if root.track-index == 1: TrackClip {
+        name: "Bass A";
+        clip-id: 2;
+        beat: 0;
+        len: 16;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 1;
+        selected: root.selected-clip == 2;
+        active-tool: root.active-tool;
+
+        clicked(i) => {
+            root.clip-selected(i);
+        }
+
+        slice-requested(id, pos) => {
+            root.slice-requested(id, pos);
+        }
+    }
+
+    if root.track-index == 2: TrackClip {
+        name: "Vocal Verse";
+        clip-id: 3;
+        beat: 0;
+        len: 16;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 2;
+        selected: root.selected-clip == 3;
+        active-tool: root.active-tool;
+
+        clicked(i) => {
+            root.clip-selected(i);
+        }
+
+        slice-requested(id, pos) => {
+            root.slice-requested(id, pos);
+        }
+    }
+
+    if root.track-index == 3: TrackClip {
+        name: "Synth Pad";
+        clip-id: 4;
+        beat: 0;
+        len: 32;
+        clip-color: root.track-color;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        track-index: 3;
+        selected: root.selected-clip == 4;
+        active-tool: root.active-tool;
+
+        clicked(i) => {
+            root.clip-selected(i);
+        }
+
+        slice-requested(id, pos) => {
+            root.slice-requested(id, pos);
+        }
+    }
+}

@@ -1,0 +1,85 @@
+import { Theme } from "../theme.slint";
+
+export component TrackClip inherits Rectangle {
+    in property <string> name: "";
+    in property <int> clip-id: 0;
+    in property <int> beat: 0;
+    in property <int> len: 4;
+    in property <color> clip-color: Theme.clip-midi;
+    in property <length> px-per-beat: 40px;
+    in property <length> row-height: 64px;
+    in property <int> track-index: 0;
+    in property <bool> selected: false;
+    in property <int> active-tool: 0;
+
+    callback clicked(int);
+    callback slice-requested(int, float);
+
+    property <length> slice-preview-x: -100px;
+    property <bool> slice-hover: touch.has-hover;
+
+    x: root.beat * root.px-per-beat;
+    y: 2px;
+
+    width: root.len * root.px-per-beat;
+    height: root.row-height - 4px;
+
+    background: root.clip-color;
+
+    border-radius: 4px;
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected
+        ? Theme.text-primary
+        : Theme.border;
+
+    states [
+        hovered when touch.has-hover: {
+            opacity: 1;
+        }
+
+        normal when !touch.has-hover: {
+            opacity: 0.8;
+        }
+    ]
+
+    Text {
+        text: root.name;
+        x: 6px;
+        y: 0;
+        width: parent.width - 12px;
+        height: 100%;
+        color: #1E1E1E;
+        font-size: 11px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    if root.active-tool == 1 && root.slice-hover: Rectangle {
+        x: root.slice-preview-x - 1px;
+        y: 0;
+        width: 2px;
+        height: 100%;
+        background: Theme.playhead;
+        z: 10;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.active-tool == 1 ? crosshair : pointer;
+
+        clicked => {
+            if root.active-tool == 0 {
+                root.clicked(root.clip-id);
+            }
+        }
+
+        pointer-event(event) => {
+            if root.active-tool == 1 {
+                if event.kind == PointerEventKind.down {
+                    root.slice-requested(root.clip-id, root.slice-preview-x / root.px-per-beat);
+                } else if event.kind == PointerEventKind.move {
+                    root.slice-preview-x = self.mouse-x;
+                }
+            }
+        }
+    }
+}
