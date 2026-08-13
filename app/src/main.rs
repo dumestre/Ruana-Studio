@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use daw_core::project::Project;
+use slint::Model;
 
 fn next_random(seed: &mut u64) -> f32 {
     *seed = seed
@@ -18,13 +19,17 @@ fn next_random(seed: &mut u64) -> f32 {
 ///
 /// A UI nunca recebe estruturas do core diretamente;
 /// ela recebe DTOs (ClipData) próprios da camada Slint.
-fn bind_project(ui: &MainWindow, project: &Project) {
+///
+/// Retorna o modelo de tracks para permitir adicionar
+/// novas tracks em runtime (botão "+" da timeline).
+fn bind_project(ui: &MainWindow, project: &Project) -> Rc<slint::VecModel<slint::SharedString>> {
     let track_names: Vec<slint::SharedString> = project
         .tracks
         .iter()
         .map(|t| t.name.clone().into())
         .collect();
-    ui.set_track_names(Rc::new(slint::VecModel::from(track_names)).into());
+    let tracks_model = Rc::new(slint::VecModel::from(track_names));
+    ui.set_track_names(tracks_model.clone().into());
 
     let clips: Vec<ClipData> = project
         .clips
@@ -39,6 +44,8 @@ fn bind_project(ui: &MainWindow, project: &Project) {
         })
         .collect();
     ui.set_clips(Rc::new(slint::VecModel::from(clips)).into());
+
+    tracks_model
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -46,7 +53,25 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Projeto placeholder do daw-core — o core não conhece a UI.
     let project = Project::demo();
-    bind_project(&ui, &project);
+    let tracks_model = bind_project(&ui, &project);
+
+    // Adiciona tracks via botão "+" da timeline.
+    {
+        ui.on_add_track_requested(move |kind| {
+            let base = match kind.as_str() {
+                "AUDIO" => "Audio",
+                "MIDI" => "MIDI",
+                "INSTRUMENT" => "Instrument",
+                "DRUM" => "Drums",
+                "FX" => "FX",
+                "BUS" => "Bus",
+                "MASTER" => "Master",
+                _ => "Track",
+            };
+            let count = tracks_model.row_count() + 1;
+            tracks_model.push(slint::SharedString::from(format!("{base} {count}")));
+        });
+    }
 
     let mut seed = 0x1234_5678_9abc_def0u64;
 

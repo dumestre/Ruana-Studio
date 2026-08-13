@@ -31,6 +31,8 @@ export component MainWindow inherits Window {
 
     in-out property <length> explorer-width: 300px;
     in-out property <length> mixer-height: 215px;
+    in-out property <length> left-panel-width: 230px;
+    in-out property <length> tracks-header-width: 150px;
 
     min-height: 720px;
     min-width: 1280px;
@@ -42,6 +44,7 @@ export component MainWindow inherits Window {
     callback play-state-changed(bool);
     callback close;
     callback minimize;
+    callback add-track-requested(string);
 
     in-out property <[string]> track-names: [
         "Drums",
@@ -51,6 +54,8 @@ export component MainWindow inherits Window {
     ];
 
     VerticalLayout {
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
         spacing: 0;
 
         Toolbar {
@@ -95,12 +100,13 @@ export component MainWindow inherits Window {
             height: 100%;
 
             HorizontalLayout {
+                cross-axis-alignment: CrossAxisAlignment.stretch;
                 spacing: 0;
 
                 LeftPanel {
                     selected-track <=> root.selected-track;
                     track-names: root.track-names;
-                    min-width: 190px;
+                    width: root.left-panel-width;
                 }
 
                 Timeline {
@@ -110,6 +116,7 @@ export component MainWindow inherits Window {
                     track-names: root.track-names;
                     active-tool: root.active-tool;
                     clips: root.clips;
+                    header-width: root.tracks-header-width;
                     horizontal-stretch: 1;
 
                     select-track(i) => {
@@ -118,6 +125,10 @@ export component MainWindow inherits Window {
 
                     clip-selected(i) => {
                         root.selected-track = i;
+                    }
+
+                    add-track-requested(t) => {
+                        root.add-track-requested(t);
                     }
                     keyboard-focus := FocusScope {
                         width: 100%;
@@ -138,15 +149,19 @@ export component MainWindow inherits Window {
             // =============================================
             // MIXER (OVERLAY INFERIOR)
             //
-            // Cobre a parte de baixo da timeline, sem
-            // empurrá-la.
+            // Fica contido entre a coluna de tracks e o
+            // explorer (formato "H"), sem empurrar a
+            // timeline.
             // =============================================
 
             SplitterH {
-                x: 0;
+                x: root.left-panel-width + root.tracks-header-width;
                 y: parent.height - root.mixer-height - 5px;
 
-                width: parent.width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                width: parent.width
+                    - root.left-panel-width
+                    - root.tracks-header-width
+                    - (root.explorer-visible ? root.explorer-width + 5px : 0px);
 
                 visible: root.mixer-visible;
 
@@ -156,10 +171,13 @@ export component MainWindow inherits Window {
             }
 
             Mixer {
-                x: 0;
+                x: root.left-panel-width + root.tracks-header-width;
                 y: parent.height - root.mixer-height;
 
-                width: parent.width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                width: parent.width
+                    - root.left-panel-width
+                    - root.tracks-header-width
+                    - (root.explorer-visible ? root.explorer-width + 5px : 0px);
                 height: root.mixer-height;
 
                 visible: root.mixer-visible;

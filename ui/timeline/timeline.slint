@@ -4,6 +4,7 @@ import { TimelineHeader } from "header.slint";
 import { TimelineRuler } from "ruler.slint";
 import { TrackRow } from "track_row.slint";
 import { ClipData } from "clip_data.slint";
+import { SplitterV } from "../components/splitter.slint";
 
 export component Timeline inherits Rectangle {
 
@@ -52,6 +53,7 @@ export component Timeline inherits Rectangle {
     callback select-track(int);
     callback clip-selected(int);
     callback clip-slice-requested(int, float);
+    callback add-track-requested(string);
 
     // =====================================================
     // GRID / ESCALA
@@ -71,7 +73,9 @@ export component Timeline inherits Rectangle {
     // DIMENSÕES
     // =====================================================
 
-    property <length> header-width: 150px;
+    in-out property <length> header-width: 150px;
+
+    in property <length> header-min-width: 140px;
 
     property <length> ruler-height: 30px;
 
@@ -140,7 +144,29 @@ export component Timeline inherits Rectangle {
             root.select-track(idx);
         }
 
+        add-track-requested(t) => {
+            root.add-track-requested(t);
+        }
+
         z: 20;
+    }
+
+    // =====================================================
+    // SPLITTER DA COLUNA DE TRACKS
+    // =====================================================
+
+    SplitterV {
+        x: root.header-width - 2px;
+        y: 0;
+
+        height: parent.height;
+
+        value <=> root.header-width;
+
+        min-value: root.header-min-width;
+        max-value: 420px;
+
+        z: 21;
     }
 
 
