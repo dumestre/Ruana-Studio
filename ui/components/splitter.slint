@@ -1,77 +1,245 @@
 import { Theme } from "../theme.slint";
 
-export component SplitterV inherits Rectangle {
+// =========================================================
+// SPLITTER VERTICAL — CRESCE PARA A ESQUERDA
+//
+// Arrastar ← : aumenta o valor
+// Arrastar → : diminui o valor
+//
+// Exemplo:
+//     [ PAINEL ][ SPLITTER ][ CONTEÚDO ]
+//
+// Usado quando o painel está à direita do conteúdo.
+// =========================================================
+
+export component SplitterVerticalGrowLeft inherits Rectangle {
+
     in-out property <length> value: 300px;
+
     in property <length> min-value: 160px;
     in property <length> max-value: 700px;
 
     property <bool> dragging: false;
+
     property <length> start-abs-x: 0px;
     property <length> start-value: 0px;
 
     width: 5px;
-    height: 100%;
 
-    background: touch.has-hover || root.dragging
-        ? Theme.surface-high
-        : Theme.border;
+    background:
+        touch.has-hover || root.dragging
+            ? Theme.surface-high
+            : Theme.border;
 
     touch := TouchArea {
+
         x: -3px;
+
         width: parent.width + 6px;
         height: 100%;
+
         mouse-cursor: col-resize;
 
         pointer-event(event) => {
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+
+            if event.kind == PointerEventKind.down
+                && event.button == PointerEventButton.left {
+
                 root.dragging = true;
-                root.start-abs-x = self.absolute-position.x + self.mouse-x;
-                root.start-value = root.value;
-            } else if root.dragging && event.kind == PointerEventKind.move {
-                root.value = max(
-                    root.min-value,
-                    min(root.max-value, root.start-value - ((self.absolute-position.x + self.mouse-x) - root.start-abs-x))
-                );
-            } else if root.dragging && event.kind == PointerEventKind.up {
+
+                root.start-abs-x =
+                    self.absolute-position.x
+                    + self.mouse-x;
+
+                root.start-value =
+                    root.value;
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.move {
+
+                root.value =
+                    max(
+                        root.min-value,
+                        min(
+                            root.max-value,
+                            root.start-value
+                            + (
+                                (
+                                    self.absolute-position.x
+                                    + self.mouse-x
+                                )
+                                - root.start-abs-x
+                            )
+                        )
+                    );
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.up {
+
                 root.dragging = false;
             }
         }
     }
 }
 
-export component SplitterH inherits Rectangle {
+
+// =========================================================
+// SPLITTER VERTICAL — CRESCE PARA A DIREITA
+//
+// Arrastar ← : diminui o valor
+// Arrastar → : aumenta o valor
+//
+// Exemplo:
+//     [ CONTEÚDO ][ SPLITTER ][ PAINEL ]
+//
+// Usado quando o painel está à esquerda do splitter,
+// como o Explorer.
+// =========================================================
+
+export component SplitterVerticalGrowRight inherits Rectangle {
+
+    in-out property <length> value: 300px;
+
+    in property <length> min-value: 160px;
+    in property <length> max-value: 700px;
+
+    property <bool> dragging: false;
+
+    property <length> start-abs-x: 0px;
+    property <length> start-value: 0px;
+
+    width: 5px;
+
+    background:
+        touch.has-hover || root.dragging
+            ? Theme.surface-high
+            : Theme.border;
+
+    touch := TouchArea {
+
+        x: -3px;
+
+        width: parent.width + 6px;
+        height: 100%;
+
+        mouse-cursor: col-resize;
+
+        pointer-event(event) => {
+
+            if event.kind == PointerEventKind.down
+                && event.button == PointerEventButton.left {
+
+                root.dragging = true;
+
+                root.start-abs-x =
+                    self.absolute-position.x
+                    + self.mouse-x;
+
+                root.start-value =
+                    root.value;
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.move {
+
+                root.value =
+                    max(
+                        root.min-value,
+                        min(
+                            root.max-value,
+                            root.start-value
+                            - (
+                                (
+                                    self.absolute-position.x
+                                    + self.mouse-x
+                                )
+                                - root.start-abs-x
+                            )
+                        )
+                    );
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.up {
+
+                root.dragging = false;
+            }
+        }
+    }
+}
+
+
+// =========================================================
+// SPLITTER HORIZONTAL
+//
+// Usado pelo Mixer.
+//
+// Arrastar ↑ : aumenta o Mixer
+// Arrastar ↓ : diminui o Mixer
+// =========================================================
+
+export component SplitterHorizontal inherits Rectangle {
+
     in-out property <length> value: 215px;
+
     in property <length> min-value: 80px;
     in property <length> max-value: 600px;
 
     property <bool> dragging: false;
+
     property <length> start-abs-y: 0px;
     property <length> start-value: 0px;
 
-    width: 100%;
     height: 5px;
 
-    background: touch.has-hover || root.dragging
-        ? Theme.surface-high
-        : Theme.border;
+    background:
+        touch.has-hover || root.dragging
+            ? Theme.surface-high
+            : Theme.border;
 
     touch := TouchArea {
+
         y: -3px;
+
         width: 100%;
         height: parent.height + 6px;
+
         mouse-cursor: row-resize;
 
         pointer-event(event) => {
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+
+            if event.kind == PointerEventKind.down
+                && event.button == PointerEventButton.left {
+
                 root.dragging = true;
-                root.start-abs-y = self.absolute-position.y + self.mouse-y;
-                root.start-value = root.value;
-            } else if root.dragging && event.kind == PointerEventKind.move {
-                root.value = max(
-                    root.min-value,
-                    min(root.max-value, root.start-value - ((self.absolute-position.y + self.mouse-y) - root.start-abs-y))
-                );
-            } else if root.dragging && event.kind == PointerEventKind.up {
+
+                root.start-abs-y =
+                    self.absolute-position.y
+                    + self.mouse-y;
+
+                root.start-value =
+                    root.value;
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.move {
+
+                root.value =
+                    max(
+                        root.min-value,
+                        min(
+                            root.max-value,
+                            root.start-value
+                            - (
+                                (
+                                    self.absolute-position.y
+                                    + self.mouse-y
+                                )
+                                - root.start-abs-y
+                            )
+                        )
+                    );
+
+            } else if root.dragging
+                && event.kind == PointerEventKind.up {
+
                 root.dragging = false;
             }
         }

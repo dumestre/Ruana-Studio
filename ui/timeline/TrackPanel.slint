@@ -1,0 +1,78 @@
+import { Theme } from "../theme.slint";
+import { TimelineHeader } from "header.slint";
+
+
+export component TrackPanel inherits Rectangle {
+
+    // =====================================================
+    // DADOS
+    // =====================================================
+
+    in property <[string]> track-names: [];
+
+    in-out property <int> selected-track: 0;
+
+    in property <length> ruler-height: 30px;
+
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
+
+    callback track-clicked(int);
+    callback add-track-requested(string);
+
+
+    // =====================================================
+    // FUNDO
+    // =====================================================
+
+    background:
+        Theme.surface;
+
+
+    // =====================================================
+    // HEADER DOS TRACKS
+    //
+    // A largura vem diretamente do próprio TrackPanel.
+    // Não existe mais panel-width separado.
+    // =====================================================
+
+    TimelineHeader {
+
+        x: 0;
+
+        y: 0;
+
+        width:
+            parent.width;
+
+        height:
+            parent.height;
+
+        track-names:
+            root.track-names;
+
+        selected-track:
+            root.selected-track;
+
+        ruler-height:
+            root.ruler-height;
+
+
+        track-clicked(index) => {
+
+            root.track-clicked(
+                index
+            );
+        }
+
+
+        add-track-requested(type) => {
+
+            root.add-track-requested(
+                type
+            );
+        }
+    }
+}

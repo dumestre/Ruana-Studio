@@ -3,29 +3,19 @@ import { TrackHeaderRow } from "track_header.slint";
 import { TrackTypeItem } from "new_track.slint";
 
 export component TimelineHeader inherits Rectangle {
-    // =====================================================
-    // DADOS
-    // =====================================================
 
     in property <[string]> track-names: [];
     in property <int> selected-track: 0;
     in property <length> ruler-height: 30px;
 
-    // =====================================================
-    // CALLBACKS
-    // =====================================================
-
     callback track-clicked(int);
     callback add-track-requested(string);
 
-    // =====================================================
-    // FUNDO
-    // =====================================================
-
     background: Theme.surface;
 
+
     // =====================================================
-    // DIVISÓRIA ENTRE HEADER E TIMELINE
+    // BORDA DIREITA DO TRACK PANEL
     // =====================================================
 
     Rectangle {
@@ -38,8 +28,9 @@ export component TimelineHeader inherits Rectangle {
         background: Theme.border;
     }
 
+
     // =====================================================
-    // HEADER SUPERIOR
+    // HEADER
     // =====================================================
 
     Rectangle {
@@ -51,7 +42,7 @@ export component TimelineHeader inherits Rectangle {
 
         background: Theme.surface;
 
-        // Linha inferior
+
         Rectangle {
             x: 0;
             y: parent.height - 1px;
@@ -62,7 +53,7 @@ export component TimelineHeader inherits Rectangle {
             background: Theme.border;
         }
 
-        // Título
+
         title := Text {
             x: 10px;
             y: 0;
@@ -83,11 +74,14 @@ export component TimelineHeader inherits Rectangle {
             overflow: elide;
         }
 
-        // Pequeno indicador visual, centralizado
-        // sob o texto "TRACKS"
+
         Rectangle {
-            x: title.x + (title.preferred-width - 24px) / 2;
-            y: parent.height - 3px;
+            x:
+                title.x
+                + (title.preferred-width - 24px) / 2;
+
+            y:
+                parent.height - 3px;
 
             width: 24px;
             height: 2px;
@@ -97,7 +91,11 @@ export component TimelineHeader inherits Rectangle {
             opacity: 0.55;
         }
 
-        // Botão de adicionar track
+
+        // =================================================
+        // BOTÃO +
+        // =================================================
+
         Rectangle {
             x: parent.width - 28px;
             y: 3px;
@@ -112,17 +110,24 @@ export component TimelineHeader inherits Rectangle {
                     ? Theme.surface-high
                     : transparent;
 
+
             Image {
-                source: @image-url("../icons/add.svg");
+                source:
+                    @image-url("../icons/add.svg");
 
                 width: 14px;
                 height: 14px;
 
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
+                x:
+                    (parent.width - self.width) / 2;
 
-                colorize: Theme.text-primary;
+                y:
+                    (parent.height - self.height) / 2;
+
+                colorize:
+                    Theme.text-primary;
             }
+
 
             add-area := TouchArea {
                 width: 100%;
@@ -137,25 +142,37 @@ export component TimelineHeader inherits Rectangle {
         }
     }
 
+
     // =====================================================
-    // TRACK HEADERS
+    // TRACK ROWS
     // =====================================================
 
     VerticalLayout {
+
         x: 0;
         y: root.ruler-height;
 
         width: parent.width;
-        alignment: LayoutAlignment.stretch;
-        cross-axis-alignment: CrossAxisAlignment.stretch;
-        height: parent.height - root.ruler-height;
+        height:
+            parent.height
+            - root.ruler-height;
+
+        alignment:
+            LayoutAlignment.stretch;
+
+        cross-axis-alignment:
+            CrossAxisAlignment.stretch;
 
         spacing: 0;
 
-        for name[i] in root.track-names: TrackHeaderRow {
-            name: name;
 
-            track-index: i;
+        for name[i] in root.track-names: TrackHeaderRow {
+
+            name:
+                name;
+
+            track-index:
+                i;
 
             track-color:
                 i == 2
@@ -165,58 +182,71 @@ export component TimelineHeader inherits Rectangle {
             selected:
                 root.selected-track == i;
 
-            clicked(idx) => {
-                root.track-clicked(idx);
+
+            clicked(index) => {
+                root.track-clicked(index);
             }
         }
     }
 
+
     // =====================================================
-    // POPUP: NOVA TRACK
-    //
-    // PopupWindow inline (padrão do combobox do
-    // std-widgets): um componente exportado que herda
-    // PopupWindow não pode ser top-level de um arquivo.
+    // POPUP NOVA TRACK
     // =====================================================
 
     new-track-popup := PopupWindow {
+
         x: 0;
         y: root.ruler-height + 2px;
 
         width: 230px;
         height: 332px;
 
-        close-policy: close-on-click-outside;
+        close-policy:
+            close-on-click-outside;
+
 
         Rectangle {
+
             width: 100%;
             height: 100%;
 
-            background: Theme.surface-high;
+            background:
+                Theme.surface-high;
 
             border-radius: 8px;
 
             border-width: 1px;
             border-color: Theme.border;
 
-            VerticalLayout {
-                padding: 6px;
 
+            VerticalLayout {
+
+                padding: 6px;
                 spacing: 2px;
+
 
                 Text {
                     text: "NOVA TRACK";
 
                     color: Theme.text-dim;
+
                     font-size: 9px;
                     font-weight: 700;
                 }
 
+
                 TrackTypeItem {
-                    icon: @image-url("../icons/audio.svg");
+                    icon:
+                        @image-url("../icons/audio.svg");
+
                     name: "Audio";
-                    description: "Onda de áudio gravada";
-                    item-color: #F26A21;
+
+                    description:
+                        "Onda de áudio gravada";
+
+                    item-color:
+                        #F26A21;
 
                     clicked => {
                         root.add-track-requested("AUDIO");
@@ -224,11 +254,18 @@ export component TimelineHeader inherits Rectangle {
                     }
                 }
 
+
                 TrackTypeItem {
-                    icon: @image-url("../icons/midi.svg");
+                    icon:
+                        @image-url("../icons/midi.svg");
+
                     name: "MIDI";
-                    description: "Notas e dados de controlador";
-                    item-color: #6FA86B;
+
+                    description:
+                        "Notas e dados de controlador";
+
+                    item-color:
+                        #6FA86B;
 
                     clicked => {
                         root.add-track-requested("MIDI");
@@ -236,11 +273,18 @@ export component TimelineHeader inherits Rectangle {
                     }
                 }
 
+
                 TrackTypeItem {
-                    icon: @image-url("../icons/instrument.svg");
+                    icon:
+                        @image-url("../icons/instrument.svg");
+
                     name: "Instrument";
-                    description: "Instrumento virtual (VST)";
-                    item-color: #6FB3E0;
+
+                    description:
+                        "Instrumento virtual (VST)";
+
+                    item-color:
+                        #6FB3E0;
 
                     clicked => {
                         root.add-track-requested("INSTRUMENT");
@@ -248,11 +292,18 @@ export component TimelineHeader inherits Rectangle {
                     }
                 }
 
+
                 TrackTypeItem {
-                    icon: @image-url("../icons/drum.svg");
+                    icon:
+                        @image-url("../icons/drum.svg");
+
                     name: "Drum Machine";
-                    description: "Bateria por steps";
-                    item-color: #F2B021;
+
+                    description:
+                        "Bateria por steps";
+
+                    item-color:
+                        #F2B021;
 
                     clicked => {
                         root.add-track-requested("DRUM");
@@ -260,11 +311,18 @@ export component TimelineHeader inherits Rectangle {
                     }
                 }
 
+
                 TrackTypeItem {
-                    icon: @image-url("../icons/fx.svg");
+                    icon:
+                        @image-url("../icons/fx.svg");
+
                     name: "FX";
-                    description: "Cadeia de efeitos";
-                    item-color: #B07CD8;
+
+                    description:
+                        "Cadeia de efeitos";
+
+                    item-color:
+                        #B07CD8;
 
                     clicked => {
                         root.add-track-requested("FX");
@@ -272,11 +330,18 @@ export component TimelineHeader inherits Rectangle {
                     }
                 }
 
+
                 TrackTypeItem {
-                    icon: @image-url("../icons/bus.svg");
+                    icon:
+                        @image-url("../icons/bus.svg");
+
                     name: "Bus";
-                    description: "Rota de múltiplos canais";
-                    item-color: #4EC9C9;
+
+                    description:
+                        "Rota de múltiplos canais";
+
+                    item-color:
+                        #4EC9C9;
 
                     clicked => {
                         root.add-track-requested("BUS");
@@ -284,11 +349,18 @@ export component TimelineHeader inherits Rectangle {
                     }
                 }
 
+
                 TrackTypeItem {
-                    icon: @image-url("../icons/master.svg");
+                    icon:
+                        @image-url("../icons/master.svg");
+
                     name: "Master";
-                    description: "Saída principal";
-                    item-color: #E8E8E8;
+
+                    description:
+                        "Saída principal";
+
+                    item-color:
+                        #E8E8E8;
 
                     clicked => {
                         root.add-track-requested("MASTER");

@@ -14,13 +14,11 @@ export component TrackRow inherits Rectangle {
 
     in property <int> selected-clip: -1;
 
-    // Clips pertencentes ao projeto.
-    // O TrackRow apenas filtra os clips do próprio track.
     in property <[ClipData]> clips: [];
 
 
     // =====================================================
-    // MÉTRICA DA TIMELINE
+    // MÉTRICAS
     // =====================================================
 
     in property <length> px-per-beat: 40px;
@@ -31,7 +29,12 @@ export component TrackRow inherits Rectangle {
 
 
     // =====================================================
-    // RÉGUA / GRID
+    // BARRAS
+    //
+    // Mantido porque TrackRow ainda recebe essa propriedade
+    // pela Timeline.
+    //
+    // O GRID VERTICAL NÃO É MAIS DESENHADO AQUI.
     // =====================================================
 
     in property <[int]> bar-range: [
@@ -43,13 +46,7 @@ export component TrackRow inherits Rectangle {
 
 
     // =====================================================
-    // FERRAMENTA ATIVA
-    //
-    // 0 = Select
-    // 1 = Slice
-    // 2 = Stretch
-    // 3 = Draw
-    // 4 = Erase
+    // FERRAMENTA
     // =====================================================
 
     in property <int> active-tool: 0;
@@ -65,14 +62,15 @@ export component TrackRow inherits Rectangle {
 
 
     // =====================================================
-    // DIMENSÕES
+    // DIMENSÃO
     // =====================================================
 
-    height: root.row-height;
+    height:
+        root.row-height;
 
 
     // =====================================================
-    // FUNDO DA TRACK
+    // FUNDO
     // =====================================================
 
     background:
@@ -86,11 +84,15 @@ export component TrackRow inherits Rectangle {
     // =====================================================
 
     Rectangle {
+
         x: 0;
         y: 0;
 
-        width: parent.width;
-        height: parent.height;
+        width:
+            parent.width;
+
+        height:
+            parent.height;
 
         background:
             root.selected-track
@@ -100,67 +102,45 @@ export component TrackRow inherits Rectangle {
 
 
     // =====================================================
-    // GRID VERTICAL
-    // =====================================================
-
-    for i in root.bar-range: Rectangle {
-
-        x:
-            i * root.px-per-bar;
-
-        y: 0;
-
-        width: 1px;
-
-        height: parent.height;
-
-        background:
-            Math.mod(i, 4) == 0
-                ? Theme.border
-                : Theme.border.transparentize(0.45);
-    }
-
-
-    // =====================================================
-    // LINHA INFERIOR
+    // LINHA INFERIOR DA TRACK
     // =====================================================
 
     Rectangle {
+
         x: 0;
 
         y:
             parent.height - 1px;
 
-        width: parent.width;
+        width:
+            parent.width;
 
-        height: 1px;
+        height:
+            1px;
 
-        background: Theme.border;
+        background:
+            Theme.border;
+
+        z: 10;
     }
 
 
     // =====================================================
     // CLIPS
     //
-    // O TrackRow não cria nem modifica clips.
-    //
-    // Ele recebe o array do projeto e renderiza somente
-    // os clips cujo track-index corresponde ao seu track.
+    // Cada TrackRow renderiza apenas os clips cujo
+    // track-index corresponde ao próprio track.
     // =====================================================
 
     for clip in root.clips: TrackClip {
-
-        // ---------------------------------------------
-        // FILTRO
-        // ---------------------------------------------
 
         visible:
             clip.track-index == root.track-index;
 
 
-        // ---------------------------------------------
+        // =================================================
         // IDENTIDADE
-        // ---------------------------------------------
+        // =================================================
 
         name:
             clip.name;
@@ -172,39 +152,38 @@ export component TrackRow inherits Rectangle {
             root.track-index;
 
 
-        // ---------------------------------------------
+        // =================================================
         // POSIÇÃO
-        // ---------------------------------------------
+        // =================================================
 
         beat:
             clip.beat;
 
 
-        // ---------------------------------------------
+        // =================================================
         // DURAÇÃO
-        // ---------------------------------------------
+        // =================================================
 
         len:
             clip.len;
 
 
-        // ---------------------------------------------
+        // =================================================
         // TIPO / COR
-        // ---------------------------------------------
+        // =================================================
 
         clip-color:
             clip.is-midi
                 ? Theme.clip-midi
                 : Theme.clip-audio;
 
-
         is-midi:
             clip.is-midi;
 
 
-        // ---------------------------------------------
+        // =================================================
         // ESCALA
-        // ---------------------------------------------
+        // =================================================
 
         px-per-beat:
             root.px-per-beat;
@@ -213,36 +192,43 @@ export component TrackRow inherits Rectangle {
             root.row-height;
 
 
-        // ---------------------------------------------
+        // =================================================
         // SELEÇÃO
-        // ---------------------------------------------
+        // =================================================
 
         selected:
             root.selected-clip == clip.id;
 
 
-        // ---------------------------------------------
+        // =================================================
         // FERRAMENTA
-        // ---------------------------------------------
+        // =================================================
 
         active-tool:
             root.active-tool;
 
 
-        // ---------------------------------------------
+        // =================================================
         // CLIQUE
-        // ---------------------------------------------
+        // =================================================
 
         clicked(id) => {
-            root.clip-selected(id);
+
+            root.clip-selected(
+                id
+            );
         }
 
 
-        // ---------------------------------------------
+        // =================================================
         // SLICE
-        // ---------------------------------------------
+        // =================================================
 
-        slice-requested(id, position) => {
+        slice-requested(
+            id,
+            position
+        ) => {
+
             root.slice-requested(
                 id,
                 position

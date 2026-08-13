@@ -8,279 +8,728 @@ import { ClipData } from "timeline/clip_data.slint";
 import { Explorer } from "explorer/explorer.slint";
 import { Mixer } from "mixer.slint";
 import { BeatPopup } from "beat/beat.slint";
-import { SplitterV, SplitterH } from "components/splitter.slint";
+import {
+    SplitterVerticalGrowLeft,
+    SplitterVerticalGrowRight,
+    SplitterHorizontal
+} from "components/splitter.slint";
+import { TrackPanel } from "timeline/TrackPanel.slint";
+
 
 export component MainWindow inherits Window {
-    title: "Ferrum Studio";
-    preferred-width: 1380px;
-    preferred-height: 880px;
-    background: Theme.base;
-    no-frame: true;
-    full-screen: true;
-    forward-focus: keyboard-focus;
 
-    in-out property <int> transport-position: 0;
-    in-out property <bool> playing: false;
-    in-out property <int> selected-track: 0;
-    in-out property <float> zoom-level: 1.0;
-    in-out property <int> active-tool: 0;
+    // =====================================================
+    // JANELA
+    // =====================================================
 
-    in-out property <bool> beat-open: false;
-    in-out property <bool> explorer-visible: true;
-    in-out property <bool> mixer-visible: true;
+    title:
+        "Ferrum Studio";
 
-    in-out property <length> explorer-width: 300px;
-    in-out property <length> mixer-height: 215px;
-    in-out property <length> left-panel-width: 230px;
-    in-out property <length> tracks-header-width: 150px;
+    preferred-width:
+        1380px;
 
-    min-height: 720px;
-    min-width: 1280px;
+    preferred-height:
+        880px;
 
-    in-out property <[float]> mixer-meters: [0, 0, 0, 0, 0];
+    min-width:
+        1280px;
 
-    in-out property <[ClipData]> clips: [];
+    min-height:
+        720px;
+
+    background:
+        Theme.base;
+
+    no-frame:
+        true;
+
+    full-screen:
+        true;
+
+    forward-focus:
+        keyboard-focus;
+
+
+    // =====================================================
+    // ESTADO
+    // =====================================================
+
+    in-out property <int> transport-position:
+        0;
+
+    in-out property <bool> playing:
+        false;
+
+    in-out property <int> selected-track:
+        0;
+
+    in-out property <float> zoom-level:
+        1.0;
+
+    in-out property <int> active-tool:
+        0;
+
+
+    // =====================================================
+    // PAINÉIS
+    // =====================================================
+
+    in-out property <bool> beat-open:
+        false;
+
+    in-out property <bool> explorer-visible:
+        true;
+
+    in-out property <bool> mixer-visible:
+        true;
+
+
+    // =====================================================
+    // DIMENSÕES
+    // =====================================================
+
+    in-out property <length> explorer-width:
+        300px;
+
+    in-out property <length> mixer-height:
+        215px;
+
+    in-out property <length> left-panel-width:
+        230px;
+
+    in-out property <length> tracks-header-width:
+        150px;
+
+
+    // =====================================================
+    // DADOS
+    // =====================================================
+
+    in-out property <[float]> mixer-meters:
+        [0, 0, 0, 0, 0];
+
+    in-out property <[ClipData]> clips:
+        [];
+
+    in-out property <[string]> track-names:
+        [
+            "Drums",
+            "Bass",
+            "Vocal",
+            "Synth"
+        ];
+
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
 
     callback play-state-changed(bool);
+
     callback close;
+
     callback minimize;
+
     callback add-track-requested(string);
 
-    in-out property <[string]> track-names: [
-        "Drums",
-        "Bass",
-        "Vocal",
-        "Synth"
-    ];
+
+    // =====================================================
+    // LAYOUT PRINCIPAL
+    // =====================================================
 
     VerticalLayout {
-        alignment: LayoutAlignment.stretch;
-        cross-axis-alignment: CrossAxisAlignment.stretch;
-        spacing: 0;
+
+        alignment:
+            LayoutAlignment.stretch;
+
+        cross-axis-alignment:
+            CrossAxisAlignment.stretch;
+
+        spacing:
+            0;
+
+
+        // =================================================
+        // TOOLBAR
+        // =================================================
 
         Toolbar {
-            full-screen <=> root.full-screen;
+
+            full-screen <=>
+                root.full-screen;
+
 
             zoom-in => {
-                root.zoom-level = min(root.zoom-level + 0.25, 4.0);
+
+                root.zoom-level =
+                    min(
+                        root.zoom-level + 0.25,
+                        4.0
+                    );
             }
+
 
             zoom-out => {
-                root.zoom-level = max(root.zoom-level - 0.25, 0.5);
+
+                root.zoom-level =
+                    max(
+                        root.zoom-level - 0.25,
+                        0.5
+                    );
             }
 
+
             close => {
+
                 root.close();
             }
 
+
             minimize => {
+
                 root.minimize();
             }
         }
 
-        Transport {
-            playing <=> root.playing;
-            position <=> root.transport-position;
 
-            play-state-changed(p) => {
-                root.play-state-changed(p);
+        // =================================================
+        // TRANSPORT
+        // =================================================
+
+        Transport {
+
+            playing <=>
+                root.playing;
+
+            position <=>
+                root.transport-position;
+
+
+            play-state-changed(state) => {
+
+                root.play-state-changed(
+                    state
+                );
             }
         }
 
+
+        // =================================================
+        // EDIT TOOLBAR
+        // =================================================
+
         EditToolbar {
-            active-tool <=> root.active-tool;
-            beat-open <=> root.beat-open;
-            explorer-visible <=> root.explorer-visible;
-            mixer-visible <=> root.mixer-visible;
+
+            active-tool <=>
+                root.active-tool;
+
+            beat-open <=>
+                root.beat-open;
+
+            explorer-visible <=>
+                root.explorer-visible;
+
+            mixer-visible <=>
+                root.mixer-visible;
         }
 
+
+        // =================================================
+        // ÁREA DE TRABALHO
+        // =================================================
+
         Rectangle {
-            width: 100%;
-            vertical-stretch: 1;
-            height: 100%;
+
+            width:
+                100%;
+
+            height:
+                100%;
+
+            vertical-stretch:
+                1;
+
+
+            // =================================================
+            // ÁREA PRINCIPAL
+            //
+            // LeftPanel
+            // TrackPanel
+            // Splitter
+            // Timeline
+            //
+            // O Timeline recebe automaticamente todo o espaço
+            // restante.
+            // =================================================
 
             HorizontalLayout {
-                cross-axis-alignment: CrossAxisAlignment.stretch;
-                spacing: 0;
+
+                spacing:
+                    0;
+
+                cross-axis-alignment:
+                    CrossAxisAlignment.stretch;
+
+
+                // =============================================
+                // LEFT PANEL
+                // =============================================
 
                 LeftPanel {
-                    selected-track <=> root.selected-track;
-                    track-names: root.track-names;
-                    width: root.left-panel-width;
+
+                    width:
+                        root.left-panel-width;
+
+                    selected-track <=>
+                        root.selected-track;
+
+                    track-names:
+                        root.track-names;
                 }
 
+
+                // =============================================
+                // TRACK PANEL
+                // =============================================
+
+                TrackPanel {
+
+                    width:
+                        root.tracks-header-width;
+
+                    selected-track <=>
+                        root.selected-track;
+
+                    track-names:
+                        root.track-names;
+
+
+                    track-clicked(index) => {
+
+                        root.selected-track =
+                            index;
+                    }
+
+
+                    add-track-requested(type) => {
+
+                        root.add-track-requested(
+                            type
+                        );
+                    }
+                }
+
+
+                // =============================================
+                // SPLITTER DO TRACK PANEL
+                //
+                // TrackPanel está à esquerda.
+                //
+                // ← aumenta TrackPanel
+                // → diminui TrackPanel
+                //
+                // O valor do splitter é a única fonte
+                // de verdade da largura do TrackPanel.
+                // =============================================
+
+                SplitterVerticalGrowLeft {
+
+                    value <=>
+                        root.tracks-header-width;
+
+                    min-value:
+                        120px;
+
+                    max-value:
+                        420px;
+
+                    z:
+                        50;
+                }
+
+
+                // =============================================
+                // TIMELINE
+                //
+                // Ocupa automaticamente todo o espaço
+                // restante do HorizontalLayout.
+                //
+                // Quando TrackPanel aumenta:
+                //     Timeline diminui.
+                //
+                // Quando TrackPanel diminui:
+                //     Timeline aumenta.
+                // =============================================
+
                 Timeline {
-                    selected-track <=> root.selected-track;
-                    position: root.transport-position;
-                    zoom: root.zoom-level;
-                    track-names: root.track-names;
-                    active-tool: root.active-tool;
-                    clips: root.clips;
-                    header-width: root.tracks-header-width;
-                    horizontal-stretch: 1;
 
-                    select-track(i) => {
-                        root.selected-track = i;
+                    horizontal-stretch:
+                        1;
+
+                    selected-track <=>
+                        root.selected-track;
+
+                    position:
+                        root.transport-position;
+
+                    zoom:
+                        root.zoom-level;
+
+                    track-names:
+                        root.track-names;
+
+                    active-tool:
+                        root.active-tool;
+
+                    clips:
+                        root.clips;
+
+
+                    select-track(index) => {
+
+                        root.selected-track =
+                            index;
                     }
 
-                    clip-selected(i) => {
-                        root.selected-track = i;
+
+                    clip-selected(index) => {
+
+                        root.selected-track =
+                            index;
                     }
 
-                    add-track-requested(t) => {
-                        root.add-track-requested(t);
+
+                    clip-slice-requested(
+                        id,
+                        position
+                    ) => {
                     }
+
+
                     keyboard-focus := FocusScope {
-                        width: 100%;
-                        height: 100%;
-                    
+
+                        width:
+                            100%;
+
+                        height:
+                            100%;
+
+
                         key-pressed(event) => {
-                            if (event.text == Key.Space && beat_popup.is-open && beat_popup.mouse-over) {
-                                beat_popup.playing = !beat_popup.playing;
-                                accept
+
+                            if (
+                                event.text == Key.Space
+                                && beat_popup.is-open
+                                && beat_popup.mouse-over
+                            ) {
+
+                                beat_popup.playing =
+                                    !beat_popup.playing;
+
+                                accept;
+
                             } else {
-                                reject
+
+                                reject;
                             }
                         }
                     }
                 }
             }
 
-            // =============================================
-            // MIXER (OVERLAY INFERIOR)
-            //
-            // Fica contido entre a coluna de tracks e o
-            // explorer (formato "H"), sem empurrar a
-            // timeline.
-            // =============================================
 
-            SplitterH {
-                x: root.left-panel-width + root.tracks-header-width;
-                y: parent.height - root.mixer-height - 5px;
+            // =================================================
+            // MIXER SPLITTER
+            // =================================================
 
-                width: parent.width
+            SplitterHorizontal {
+
+                x:
+                    root.left-panel-width
+                    + root.tracks-header-width;
+
+                y:
+                    parent.height
+                    - root.mixer-height
+                    - 5px;
+
+                width:
+                    parent.width
                     - root.left-panel-width
                     - root.tracks-header-width
-                    - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                    - (
+                        root.explorer-visible
+                            ? root.explorer-width + 5px
+                            : 0px
+                    );
 
-                visible: root.mixer-visible;
+                visible:
+                    root.mixer-visible;
 
-                value <=> root.mixer-height;
+                value <=>
+                    root.mixer-height;
 
-                z: 30;
+                min-value:
+                    120px;
+
+                max-value:
+                    600px;
+
+                z:
+                    30;
             }
+
+
+            // =================================================
+            // MIXER
+            // =================================================
 
             Mixer {
-                x: root.left-panel-width + root.tracks-header-width;
-                y: parent.height - root.mixer-height;
 
-                width: parent.width
+                x:
+                    root.left-panel-width
+                    + root.tracks-header-width;
+
+                y:
+                    parent.height
+                    - root.mixer-height;
+
+                width:
+                    parent.width
                     - root.left-panel-width
                     - root.tracks-header-width
-                    - (root.explorer-visible ? root.explorer-width + 5px : 0px);
-                height: root.mixer-height;
+                    - (
+                        root.explorer-visible
+                            ? root.explorer-width + 5px
+                            : 0px
+                    );
 
-                visible: root.mixer-visible;
+                height:
+                    root.mixer-height;
 
-                meters <=> root.mixer-meters;
+                visible:
+                    root.mixer-visible;
 
-                z: 30;
+                meters <=>
+                    root.mixer-meters;
+
+                z:
+                    30;
             }
 
-            // =============================================
-            // EXPLORER (OVERLAY DIREITO)
+
+            // =================================================
+            // EXPLORER SPLITTER
             //
-            // Cobre a parte direita da timeline, sem
-            // empurrá-la.
-            // =============================================
+            // Explorer está à direita.
+            //
+            // ← diminui Explorer
+            // → aumenta Explorer
+            // =================================================
 
-            SplitterV {
-                x: parent.width - root.explorer-width - 5px;
-                y: 0;
+            SplitterVerticalGrowRight {
 
-                height: 100%;
+                x:
+                    parent.width
+                    - root.explorer-width
+                    - 5px;
 
-                visible: root.explorer-visible;
+                y:
+                    0;
 
-                value <=> root.explorer-width;
+                height:
+                    100%;
 
-                z: 40;
+                visible:
+                    root.explorer-visible;
+
+                value <=>
+                    root.explorer-width;
+
+                min-value:
+                    220px;
+
+                max-value:
+                    500px;
+
+                z:
+                    40;
             }
+
+
+            // =================================================
+            // EXPLORER
+            // =================================================
 
             Explorer {
-                x: parent.width - root.explorer-width;
-                y: 0;
 
-                width: root.explorer-width;
-                height: 100%;
+                x:
+                    parent.width
+                    - root.explorer-width;
 
-                visible: root.explorer-visible;
+                y:
+                    0;
 
-                z: 40;
+                width:
+                    root.explorer-width;
+
+                height:
+                    100%;
+
+                visible:
+                    root.explorer-visible;
+
+                z:
+                    40;
             }
         }
 
-        Rectangle {
-            width: 100%;
-            height: 1px;
-            background: Theme.border;
-        }
+
+        // =====================================================
+        // STATUS DIVIDER
+        // =====================================================
 
         Rectangle {
-            width: 100%;
-            height: 22px;
-            background: Theme.surface;
+
+            width:
+                100%;
+
+            height:
+                1px;
+
+            background:
+                Theme.border;
+        }
+
+
+        // =====================================================
+        // STATUS BAR
+        // =====================================================
+
+        Rectangle {
+
+            width:
+                100%;
+
+            height:
+                22px;
+
+            background:
+                Theme.surface;
+
 
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 16px;
+
+                padding-left:
+                    8px;
+
+                padding-right:
+                    8px;
+
+                spacing:
+                    16px;
+
 
                 Text {
-                    text: "Ferrum Studio 0.1.0";
-                    color: Theme.text-dim;
-                    font-size: 10px;
-                    vertical-alignment: center;
+
+                    text:
+                        "Ferrum Studio 0.1.0";
+
+                    color:
+                        Theme.text-dim;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
                 }
+
 
                 Rectangle {
-                    horizontal-stretch: 1;
-                    background: transparent;
+
+                    horizontal-stretch:
+                        1;
+
+                    background:
+                        transparent;
                 }
 
-                Text {
-                    text: "120 BPM";
-                    color: Theme.text-dim;
-                    font-size: 10px;
-                    vertical-alignment: center;
-                }
 
                 Text {
-                    text: "44.1 kHz";
-                    color: Theme.text-dim;
-                    font-size: 10px;
-                    vertical-alignment: center;
+
+                    text:
+                        "120 BPM";
+
+                    color:
+                        Theme.text-dim;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
                 }
 
-                Text {
-                    text: "24-bit";
-                    color: Theme.text-dim;
-                    font-size: 10px;
-                    vertical-alignment: center;
-                }
 
                 Text {
-                    text: "FASE 1 - UI";
-                    color: Theme.accent;
-                    font-size: 10px;
-                    vertical-alignment: center;
+
+                    text:
+                        "44.1 kHz";
+
+                    color:
+                        Theme.text-dim;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
+                }
+
+
+                Text {
+
+                    text:
+                        "24-bit";
+
+                    color:
+                        Theme.text-dim;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
+                }
+
+
+                Text {
+
+                    text:
+                        "FASE 1 - UI";
+
+                    color:
+                        Theme.accent;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
                 }
             }
         }
     }
 
-    beat_popup := BeatPopup {
-        open <=> root.beat-open;
-    }
 
+    // =====================================================
+    // BEAT POPUP
+    // =====================================================
+
+    beat_popup := BeatPopup {
+
+        open <=>
+            root.beat-open;
+    }
 }

@@ -1,10 +1,7 @@
-import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { TimelineHeader } from "header.slint";
 import { TimelineRuler } from "ruler.slint";
 import { TrackRow } from "track_row.slint";
 import { ClipData } from "clip_data.slint";
-import { SplitterV } from "../components/splitter.slint";
 
 export component Timeline inherits Rectangle {
 
@@ -15,6 +12,7 @@ export component Timeline inherits Rectangle {
     in-out property <int> selected-track: 0;
     in-out property <int> selected-clip: -1;
 
+
     // =====================================================
     // TRANSPORTE / ZOOM
     // =====================================================
@@ -22,29 +20,27 @@ export component Timeline inherits Rectangle {
     in property <int> position: 0;
     in property <float> zoom: 1.0;
 
+
     // =====================================================
     // TRACKS
     // =====================================================
 
     in property <[string]> track-names: [];
 
+
     // =====================================================
-    // FERRAMENTA ATIVA
-    //
-    // 0 = Select
-    // 1 = Slice
-    // 2 = Stretch
-    // 3 = Draw
-    // 4 = Erase
+    // FERRAMENTA
     // =====================================================
 
     in-out property <int> active-tool: 0;
 
+
     // =====================================================
-    // MODELO DE CLIPS
+    // CLIPS
     // =====================================================
 
     in property <[ClipData]> clips: [];
+
 
     // =====================================================
     // CALLBACKS
@@ -53,10 +49,10 @@ export component Timeline inherits Rectangle {
     callback select-track(int);
     callback clip-selected(int);
     callback clip-slice-requested(int, float);
-    callback add-track-requested(string);
+
 
     // =====================================================
-    // GRID / ESCALA
+    // ESCALA
     // =====================================================
 
     property <length> px-per-beat:
@@ -69,41 +65,52 @@ export component Timeline inherits Rectangle {
 
     property <int> total-bars: 16;
 
+
     // =====================================================
     // DIMENSÕES
     // =====================================================
-
-    in-out property <length> header-width: 150px;
-
-    in property <length> header-min-width: 140px;
 
     property <length> ruler-height: 30px;
 
     property <length> row-height: 64px;
 
+
+    // =====================================================
+    // TRACK COUNT
+    // =====================================================
+
     property <int> track-count:
         self.track-names.length;
 
+
     // =====================================================
-    // TAMANHO DO CONTEÚDO
+    // LARGURA
     // =====================================================
+
+    property <length> timeline-width:
+        self.total-bars * self.px-per-bar;
 
     property <length> content-width:
-        self.total-bars * self.px-per-bar + 80px;
+        self.timeline-width + 80px;
 
-    property <length> content-height:
-        self.ruler-height
-        + self.track-count * self.row-height;
 
     // =====================================================
-    // POSIÇÃO DO PLAYHEAD
-    //
-    // position = ticks
-    // ppq = ticks por beat
+    // ALTURA
+    // =====================================================
+
+    property <length> tracks-height:
+        self.track-count * self.row-height;
+
+
+    // =====================================================
+    // PLAYHEAD X
     // =====================================================
 
     property <length> playhead-x:
-        self.position * self.px-per-beat / self.ppq;
+        self.position
+        * self.px-per-beat
+        / self.ppq;
+
 
     // =====================================================
     // BARRAS
@@ -116,91 +123,50 @@ export component Timeline inherits Rectangle {
         12, 13, 14, 15
     ];
 
+
     // =====================================================
     // FUNDO
     // =====================================================
 
-    background: Theme.base;
+    background:
+        Theme.base;
 
 
     // =====================================================
-    // HEADER FIXO
-    //
-    // Esta coluna NÃO rola horizontalmente.
+    // ÁREA DA TIMELINE
     // =====================================================
 
-    VerticalLayout { alignment: LayoutAlignment.stretch;
+    Rectangle {
+
         x: 0;
         y: 0;
 
-        width: root.header-width;
-
-    TimelineHeader {
-
-        width: root.header-width;
+        width: parent.width;
         height: parent.height;
 
-        track-names: root.track-names;
-        selected-track: root.selected-track;
-        ruler-height: root.ruler-height;
+        clip: true;
 
-        track-clicked(idx) => {
-            root.select-track(idx);
-        }
-
-        add-track-requested(t) => {
-            root.add-track-requested(t);
-        }
-
-        z: 20;
-    }
-    }
-
-
-    // =====================================================
-    // SPLITTER DA COLUNA DE TRACKS
-    // =====================================================
-
-    SplitterV {
-        x: root.header-width - 2px;
-        y: 0;
-
-        height: parent.height;
-
-        value <=> root.header-width;
-
-        min-value: root.header-min-width;
-        max-value: 420px;
-
-        z: 21;
-    }
-
-
-
-    // =====================================================
-    // ÁREA PRINCIPAL DA TIMELINE
-    // =====================================================
-
-    ScrollView {
-        x: root.header-width;
-        y: 0;
-
-        width: parent.width - root.header-width;
-        height: parent.height;
 
         // =================================================
-        // CONTEÚDO REAL DA TIMELINE
+        // CONTEÚDO
         // =================================================
 
         Rectangle {
-    width: root.content-width;
 
-    height:
-        root.content-height > parent.height
-            ? root.content-height
-            : parent.height;
+            x: 0;
+            y: 0;
 
-            background: Theme.base;
+            width:
+                root.content-width;
+
+            height:
+                max(
+                    root.ruler-height + root.tracks-height,
+                    parent.height
+                );
+
+            background:
+                Theme.base;
 
 
             // =============================================
@@ -208,19 +174,55 @@ export component Timeline inherits Rectangle {
             // =============================================
 
             TimelineRuler {
+
                 x: 0;
                 y: 0;
 
-                width: root.content-width;
-                height: root.ruler-height;
+                width:
+                    root.timeline-width;
 
-                ruler-height: root.ruler-height;
-                bar-range: root.bar-range;
-                px-per-bar: root.px-per-bar;
+                height:
+                    root.ruler-height;
+
+                ruler-height:
+                    root.ruler-height;
+
+                bar-range:
+                    root.bar-range;
+
+                px-per-bar:
+                    root.px-per-bar;
 
                 z: 5;
             }
-            
+
+
+            // =============================================
+            // GRID VERTICAL
+            //
+            // O GRID ATRAVESSA TODA A ALTURA.
+            // =============================================
+
+            for i in root.bar-range: Rectangle {
+
+                x:
+                    i * root.px-per-bar;
+
+                y:
+                    root.ruler-height;
+
+                width: 1px;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Math.mod(i, 4) == 0
+                        ? Theme.border
+                        : Theme.border.transparentize(0.45);
+
+                z: 1;
+            }
 
 
             // =============================================
@@ -228,24 +230,37 @@ export component Timeline inherits Rectangle {
             // =============================================
 
             VerticalLayout {
-                x: 0;
-                y: root.ruler-height;
 
-                width: root.content-width;
-                alignment: LayoutAlignment.stretch;
-                height: root.track-count * root.row-height;
+                x: 0;
+
+                y:
+                    root.ruler-height;
+
+                width:
+                    root.timeline-width;
+
+                height:
+                    root.tracks-height;
+
+                alignment:
+                    LayoutAlignment.stretch;
 
                 spacing: 0;
 
-                for name[i] in root.track-names: TrackRow {
 
-                    width: root.content-width;
-                    height: root.row-height;
+                for name[index] in root.track-names: TrackRow {
 
-                    track-index: i;
+                    width:
+                        root.timeline-width;
+
+                    height:
+                        root.row-height;
+
+                    track-index:
+                        index;
 
                     selected-track:
-                        i == root.selected-track;
+                        index == root.selected-track;
 
                     selected-clip:
                         root.selected-clip;
@@ -269,137 +284,157 @@ export component Timeline inherits Rectangle {
                         root.active-tool;
 
 
-                    clip-selected(idx) => {
+                    clip-selected(id) => {
+
                         if root.active-tool == 0 {
-                            root.selected-clip = idx;
-                            root.clip-selected(idx);
+
+                            root.selected-clip =
+                                id;
+
+                            root.clip-selected(
+                                id
+                            );
                         }
                     }
 
 
-                    slice-requested(id, pos) => {
+                    slice-requested(
+                        id,
+                        position
+                    ) => {
+
                         root.clip-slice-requested(
                             id,
-                            pos
+                            position
                         );
                     }
                 }
-            
             }
-
-        
 
 
             // =============================================
             // PLAYHEAD
             //
-            // Linha vertical verde.
-            // Começa abaixo da régua e atravessa
-            // todas as tracks.
+            // LINHA PRINCIPAL
             // =============================================
 
             Rectangle {
-                x: root.playhead-x - 1px;
-                y: root.ruler-height;
+
+                x:
+                    root.playhead-x - 1px;
+
+                y:
+                    root.ruler-height;
 
                 width: 2px;
+
                 height:
-                    root.track-count
-                    * root.row-height;
+                    parent.height - root.ruler-height;
 
-                background: #35E06F;
+                background:
+                    #35E06F;
 
-                z: 50;
+                z: 100;
             }
 
 
             // =============================================
-            // CABEÇA DA AGULHA
+            // BOLINHA DO PLAYHEAD
             //
-            // Pequeno marcador verde no topo.
+            // ESTA É A ÚNICA CABEÇA DO PLAYHEAD.
             // =============================================
 
             Rectangle {
-                x: root.playhead-x - 6px;
+
+                x:
+                    root.playhead-x - 6px;
+
                 y: 1px;
 
                 width: 12px;
-                height: 10px;
 
-                background: #35E06F;
+                height: 12px;
 
-                z: 60;
+                border-radius: 6px;
 
-                // ponta inferior
-                Rectangle {
-                    x: 3px;
-                    y: 7px;
+                background:
+                    #35E06F;
 
-                    width: 6px;
-                    height: 3px;
-
-                    background: #35E06F;
-                }
+                z: 120;
             }
 
 
             // =============================================
-            // PEQUENA LINHA DE CONTINUIDADE NA RÉGUA
+            // LINHA DENTRO DA RÉGUA
             // =============================================
 
             Rectangle {
-                x: root.playhead-x - 1px;
-                y: 10px;
+
+                x:
+                    root.playhead-x - 1px;
+
+                y: 7px;
 
                 width: 2px;
-                height: root.ruler-height - 10px;
 
-                background: #35E06F;
+                height:
+                    root.ruler-height - 7px;
+
+                background:
+                    #35E06F;
 
                 opacity: 0.9;
 
-                z: 55;
+                z: 115;
             }
         }
-        
     }
 
 
     // =====================================================
-    // CURSOR DAS FERRAMENTAS
-    //
-    // Stretch / Draw / Erase
+    // CURSORES
     // =====================================================
 
-    // Ícones pré-carregados no init do componente para
-    // evitar decodificação (e lag) ao trocar de ferramenta.
-    private property <image> cursor-icon-stretch: @image-url("../icons/stretch.svg");
-    private property <image> cursor-icon-draw: @image-url("../icons/draw_filled.svg");
-    private property <image> cursor-icon-erase: @image-url("../icons/erase_filled.svg");
+    private property <image> cursor-icon-stretch:
+        @image-url("../icons/stretch.svg");
+
+    private property <image> cursor-icon-draw:
+        @image-url("../icons/draw_filled.svg");
+
+    private property <image> cursor-icon-erase:
+        @image-url("../icons/erase_filled.svg");
+
+
+    // =====================================================
+    // CURSOR DAS FERRAMENTAS
+    // =====================================================
 
     tool-cursor := TouchArea {
 
         x: 0;
         y: 0;
 
-        width: parent.width;
-        height: parent.height;
+        width:
+            parent.width;
+
+        height:
+            parent.height;
 
         enabled:
             root.active-tool == 2
             || root.active-tool == 3
             || root.active-tool == 4;
 
-        mouse-cursor: none;
+        mouse-cursor:
+            none;
 
-        z: 100;
+        z: 200;
 
-        // `visible` em vez de `if`: o elemento permanece
-        // instanciado, apenas alterna visibilidade — sem
-        // criação/destruição a cada troca de ferramenta.
+
         Image {
 
-            visible: tool-cursor.enabled;
+            visible:
+                tool-cursor.enabled;
 
             source:
                 root.active-tool == 2
@@ -418,5 +453,4 @@ export component Timeline inherits Rectangle {
             height: 16px;
         }
     }
-
 }
