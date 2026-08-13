@@ -2,9 +2,3 @@
 name = "daw-media"
 version.workspace = true
 edition.workspace = true
-
-[dependencies]
-slint.workspace = true
-
-[build-dependencies]
-slint-build = "1.17.1"

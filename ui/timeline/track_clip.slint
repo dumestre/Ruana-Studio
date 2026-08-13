@@ -1,70 +1,431 @@
 import { Theme } from "../theme.slint";
 
 export component TrackClip inherits Rectangle {
+
+    // =====================================================
+    // DADOS
+    // =====================================================
+
     in property <string> name: "";
+
     in property <int> clip-id: 0;
+
     in property <int> beat: 0;
+
     in property <int> len: 4;
+
+    in property <bool> is-midi: true;
+
     in property <color> clip-color: Theme.clip-midi;
+
     in property <length> px-per-beat: 40px;
+
     in property <length> row-height: 64px;
+
     in property <int> track-index: 0;
+
     in property <bool> selected: false;
+
     in property <int> active-tool: 0;
 
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
+
     callback clicked(int);
+
     callback slice-requested(int, float);
 
-    property <length> slice-preview-x: -100px;
-    property <bool> slice-hover: touch.has-hover;
 
-    x: root.beat * root.px-per-beat;
+    // =====================================================
+    // DIMENSÕES
+    // =====================================================
+
+    private property <length> edge-width: 6px;
+
+    private property <length> header-height: 18px;
+
+
+    // =====================================================
+    // ESTADO DO MOUSE
+    // =====================================================
+
+    private property <bool> hovered:
+        touch.has-hover;
+
+    private property <bool> on-left-edge:
+        touch.has-hover
+        && touch.mouse-x <= root.edge-width;
+
+    private property <bool> on-right-edge:
+        touch.has-hover
+        && touch.mouse-x >= self.width - root.edge-width;
+
+    private property <bool> on-edge:
+        self.on-left-edge
+        || self.on-right-edge;
+
+
+    // =====================================================
+    // SLICE
+    // =====================================================
+
+    property <length> slice-preview-x: -100px;
+
+    private property <bool> slice-hover:
+        touch.has-hover;
+
+
+    // =====================================================
+    // POSIÇÃO
+    // =====================================================
+
+    x:
+        root.beat * root.px-per-beat;
+
     y: 2px;
 
-    width: root.len * root.px-per-beat;
-    height: root.row-height - 4px;
 
-    background: root.clip-color;
+    // =====================================================
+    // TAMANHO
+    // =====================================================
+
+    width:
+        root.len * root.px-per-beat;
+
+    height:
+        root.row-height - 4px;
+
+
+    // =====================================================
+    // COR BASE
+    // =====================================================
+
+    background:
+        root.clip-color;
+
+
+    // =====================================================
+    // BORDA
+    // =====================================================
 
     border-radius: 4px;
-    border-width: root.selected ? 2px : 1px;
-    border-color: root.selected
-        ? Theme.text-primary
-        : Theme.border;
 
-    states [
-        hovered when touch.has-hover: {
-            opacity: 1;
-        }
+    border-width:
+        root.selected
+            ? 2px
+            : 1px;
 
-        normal when !touch.has-hover: {
-            opacity: 0.8;
-        }
-    ]
+    border-color:
+        root.selected
+            ? Theme.text-primary
+            : root.hovered
+                ? root.clip-color.brighter(0.22)
+                : root.clip-color.darker(0.18);
 
-    Text {
-        text: root.name;
-        x: 6px;
-        y: 0;
-        width: parent.width - 12px;
-        height: 100%;
-        color: #1E1E1E;
-        font-size: 11px;
-        vertical-alignment: center;
-        overflow: elide;
+
+    // =====================================================
+    // CORPO DO CLIP
+    // =====================================================
+
+    Rectangle {
+        x: 1px;
+        y: root.header-height;
+
+        width:
+            parent.width - 2px;
+
+        height:
+            parent.height
+            - root.header-height
+            - 1px;
+
+        background:
+            root.clip-color.darker(
+                root.hovered
+                    ? 0.08
+                    : 0.15
+            );
+
+        opacity:
+            root.hovered
+                ? 1.0
+                : 0.94;
+
+        clip: true;
     }
 
-    if root.active-tool == 1 && root.slice-hover: Rectangle {
-        x: root.slice-preview-x - 1px;
-        y: 0;
+
+    // =====================================================
+    // CABEÇALHO VIBRANTE
+    // =====================================================
+
+    Rectangle {
+        x: 1px;
+        y: 1px;
+
+        width:
+            parent.width - 2px;
+
+        height:
+            root.header-height;
+
+        background:
+            root.clip-color.brighter(
+                root.hovered
+                    ? 0.46
+                    : 0.34
+            );
+
+        clip: true;
+
+
+        // =================================================
+        // BRILHO SUPERIOR
+        // =================================================
+
+        Rectangle {
+            x: 0;
+            y: 0;
+
+            width: parent.width;
+            height: 2px;
+
+            background:
+                root.selected
+                    ? Theme.text-primary
+                    : root.clip-color.brighter(0.58);
+
+            opacity:
+                root.selected
+                    ? 1.0
+                    : 0.75;
+        }
+
+
+        // =================================================
+        // NOME
+        // =================================================
+
+        Text {
+            x: 6px;
+            y: 2px;
+
+            width:
+                parent.width - 12px;
+
+            height:
+                parent.height - 2px;
+
+            text: root.name;
+
+            color: #171717;
+
+            font-size: 9px;
+            font-weight: 700;
+
+            vertical-alignment: center;
+
+            overflow: elide;
+        }
+    }
+
+
+    // =====================================================
+    // DIVISÓRIA DO HEADER
+    // =====================================================
+
+    Rectangle {
+        x: 1px;
+
+        y: root.header-height;
+
+        width:
+            parent.width - 2px;
+
+        height: 1px;
+
+        background:
+            root.clip-color.brighter(0.30);
+
+        opacity:
+            root.hovered
+                ? 0.85
+                : 0.55;
+    }
+
+
+    // =====================================================
+    // INDICADOR DE TIPO
+    // =====================================================
+
+    Rectangle {
+        x:
+            parent.width - 8px;
+
+        y: 5px;
+
+        width: 3px;
+        height: 8px;
+
+        border-radius: 1px;
+
+        background: Theme.text-primary;
+
+        opacity: 0.45;
+    }
+
+
+    // =====================================================
+    // HANDLE ESQUERDO
+    // =====================================================
+
+    if root.active-tool == 0
+        && root.on-left-edge: Rectangle {
+
+        x: 2px;
+        y: 3px;
+
         width: 2px;
-        height: 100%;
-        background: Theme.playhead;
-        z: 10;
+
+        height:
+            parent.height - 6px;
+
+        background:
+            Theme.text-primary;
+
+        opacity: 0.85;
+
+        border-radius: 1px;
+
+        z: 5;
     }
+
+
+    // =====================================================
+    // HANDLE DIREITO
+    // =====================================================
+
+    if root.active-tool == 0
+        && root.on-right-edge: Rectangle {
+
+        x:
+            parent.width - 4px;
+
+        y: 3px;
+
+        width: 2px;
+
+        height:
+            parent.height - 6px;
+
+        background:
+            Theme.text-primary;
+
+        opacity: 0.85;
+
+        border-radius: 1px;
+
+        z: 5;
+    }
+
+
+    // =====================================================
+    // BORDA INTERNA DE SELEÇÃO
+    // =====================================================
+
+    if root.selected: Rectangle {
+
+        x: 2px;
+        y: 2px;
+
+        width:
+            parent.width - 4px;
+
+        height:
+            parent.height - 4px;
+
+        background: transparent;
+
+        border-width: 1px;
+
+        border-color:
+            Theme.text-primary;
+
+        border-radius: 2px;
+
+        opacity: 0.55;
+
+        z: 4;
+    }
+
+
+    // =====================================================
+    // PREVIEW DO SLICE
+    // =====================================================
+
+    if root.active-tool == 1
+        && root.slice-hover: Rectangle {
+
+        x:
+            root.slice-preview-x - 1px;
+
+        y: 0px;
+
+        width: 2px;
+
+        height: parent.height;
+
+        background:
+            Theme.playhead;
+
+        opacity: 0.95;
+
+        z: 10;
+
+
+        Rectangle {
+            x: -2px;
+            y: 0;
+
+            width: 6px;
+            height: 100%;
+
+            background:
+                Theme.playhead;
+
+            opacity: 0.12;
+        }
+    }
+
+
+    // =====================================================
+    // TOUCH
+    // =====================================================
 
     touch := TouchArea {
-        mouse-cursor: root.active-tool == 1 ? crosshair : pointer;
+
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: parent.height;
+
+        mouse-cursor:
+            root.active-tool == 1
+                ? crosshair
+                : root.active-tool == 0
+                    && root.on-edge
+                        ? ew-resize
+                        : root.active-tool >= 2
+                            ? none
+                            : pointer;
+
+
+        // =================================================
+        // CLICK
+        // =================================================
 
         clicked => {
             if root.active-tool == 0 {
@@ -72,12 +433,27 @@ export component TrackClip inherits Rectangle {
             }
         }
 
+
+        // =================================================
+        // POINTER
+        // =================================================
+
         pointer-event(event) => {
+
             if root.active-tool == 1 {
+
                 if event.kind == PointerEventKind.down {
-                    root.slice-requested(root.clip-id, root.slice-preview-x / root.px-per-beat);
+
+                    root.slice-requested(
+                        root.clip-id,
+                        root.slice-preview-x
+                            / root.px-per-beat
+                    );
+
                 } else if event.kind == PointerEventKind.move {
-                    root.slice-preview-x = self.mouse-x;
+
+                    root.slice-preview-x =
+                        self.mouse-x;
                 }
             }
         }

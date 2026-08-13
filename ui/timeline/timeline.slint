@@ -3,38 +3,86 @@ import { Theme } from "../theme.slint";
 import { TimelineHeader } from "header.slint";
 import { TimelineRuler } from "ruler.slint";
 import { TrackRow } from "track_row.slint";
+import { ClipData } from "clip_data.slint";
 
 export component Timeline inherits Rectangle {
+
+    // =====================================================
+    // ESTADO DE SELEÇÃO
+    // =====================================================
+
     in-out property <int> selected-track: 0;
     in-out property <int> selected-clip: -1;
+
+    // =====================================================
+    // TRANSPORTE / ZOOM
+    // =====================================================
 
     in property <int> position: 0;
     in property <float> zoom: 1.0;
 
-    in property <[string]> track-names: [
-        "Drums",
-        "Bass",
-        "Vocal",
-        "Synth"
-    ];
+    // =====================================================
+    // TRACKS
+    // =====================================================
+
+    in property <[string]> track-names: [];
+
+    // =====================================================
+    // FERRAMENTA ATIVA
+    //
+    // 0 = Select
+    // 1 = Slice
+    // 2 = Stretch
+    // 3 = Draw
+    // 4 = Erase
+    // =====================================================
 
     in-out property <int> active-tool: 0;
+
+    // =====================================================
+    // CLIPS
+    // =====================================================
+
+    in property <[ClipData]> clips: [];
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
 
     callback select-track(int);
     callback clip-selected(int);
     callback clip-slice-requested(int, float);
 
-    property <length> px-per-beat: 40px * self.zoom;
-    property <length> px-per-bar: self.px-per-beat * 4;
+    // =====================================================
+    // MÉTRICA DA TIMELINE
+    // =====================================================
+
+    property <length> px-per-beat:
+        40px * self.zoom;
+
+    property <length> px-per-bar:
+        self.px-per-beat * 4;
 
     property <int> ppq: 960;
+
     property <int> total-bars: 16;
 
+    // =====================================================
+    // DIMENSÕES
+    // =====================================================
+
     property <length> header-width: 150px;
+
     property <length> ruler-height: 30px;
+
     property <length> row-height: 64px;
 
-    property <int> track-count: self.track-names.length;
+    property <int> track-count:
+        self.track-names.length;
+
+    // =====================================================
+    // TAMANHO DO CONTEÚDO
+    // =====================================================
 
     property <length> content-width:
         self.total-bars * self.px-per-bar + 80px;
@@ -43,8 +91,18 @@ export component Timeline inherits Rectangle {
         self.ruler-height
         + self.track-count * self.row-height;
 
+    // =====================================================
+    // PLAYHEAD
+    // =====================================================
+
     property <length> playhead-x:
-        self.position * self.px-per-beat / self.ppq;
+        self.position
+        * self.px-per-beat
+        / self.ppq;
+
+    // =====================================================
+    // BARRAS DA RÉGUA
+    // =====================================================
 
     property <[int]> bar-range: [
         0, 1, 2, 3,
@@ -53,70 +111,131 @@ export component Timeline inherits Rectangle {
         12, 13, 14, 15
     ];
 
-    
+    // =====================================================
+    // FUNDO
+    // =====================================================
+
     background: Theme.base;
 
+
     // =====================================================
-    // HEADER (coluna esquerda)
+    // HEADER DAS TRACKS
     // =====================================================
 
     TimelineHeader {
         x: 0;
         y: 0;
+
         width: root.header-width;
         height: parent.height;
 
         track-names: root.track-names;
-        selected-track: root.selected-track;
-        ruler-height: root.ruler-height;
+
+        selected-track:
+            root.selected-track;
+
+        ruler-height:
+            root.ruler-height;
 
         track-clicked(idx) => {
             root.select-track(idx);
         }
     }
 
+
     // =====================================================
-    // ÁREA DE ROLAGEM (régua + trilhas)
+    // ÁREA PRINCIPAL DA TIMELINE
     // =====================================================
 
     ScrollView {
         x: root.header-width;
         y: 0;
-        width: parent.width - root.header-width;
+
+        width:
+            parent.width - root.header-width;
+
         height: parent.height;
+
+        // =================================================
+        // CONTEÚDO COM SCROLL
+        // =================================================
 
         Rectangle {
             width: root.content-width;
             height: root.content-height;
+
             background: Theme.base;
 
+
+            // =============================================
+            // RÉGUA
+            // =============================================
+
             TimelineRuler {
-                ruler-height: root.ruler-height;
-                bar-range: root.bar-range;
-                px-per-bar: root.px-per-bar;
+                x: 0;
+                y: 0;
+
+                width: parent.width;
+                height: root.ruler-height;
+
+                ruler-height:
+                    root.ruler-height;
+
+                bar-range:
+                    root.bar-range;
+
+                px-per-bar:
+                    root.px-per-bar;
             }
 
+
+            // =============================================
+            // TRACKS
+            // =============================================
+
             VerticalLayout {
+                x: 0;
                 y: root.ruler-height;
-                width: 100%;
+
+                width: parent.width;
+                height:
+                    root.track-count
+                    * root.row-height;
+
                 spacing: 0;
 
                 for name[i] in root.track-names: TrackRow {
+
                     track-index: i;
-                    selected-track: root.selected-track;
-                    selected-clip: root.selected-clip;
 
-                    px-per-beat: root.px-per-beat;
-                    px-per-bar: root.px-per-bar;
-                    row-height: root.row-height;
+                    selected-track:
+                        i == root.selected-track;
 
-                    track-color: i == 2
-                        ? Theme.clip-audio
-                        : Theme.clip-midi;
+                    selected-clip:
+                        root.selected-clip;
 
-                    bar-range: root.bar-range;
+                    clips:
+                        root.clips;
 
-                    active-tool: root.active-tool;
+                    px-per-beat:
+                        root.px-per-beat;
+
+                    px-per-bar:
+                        root.px-per-bar;
+
+                    row-height:
+                        root.row-height;
+
+                    bar-range:
+                        root.bar-range;
+
+                    active-tool:
+                        root.active-tool;
+
+
+                    // -------------------------------------
+                    // CLIP SELECIONADO
+                    // -------------------------------------
 
                     clip-selected(idx) => {
                         if root.active-tool == 0 {
@@ -125,19 +244,85 @@ export component Timeline inherits Rectangle {
                         }
                     }
 
+
+                    // -------------------------------------
+                    // SLICE
+                    // -------------------------------------
+
                     slice-requested(id, pos) => {
-                        root.clip-slice-requested(id, pos);
+                        root.clip-slice-requested(
+                            id,
+                            pos
+                        );
                     }
                 }
             }
 
+
+            // =============================================
+            // PLAYHEAD
+            // =============================================
+
             Rectangle {
                 x: root.playhead-x;
                 y: 0;
+
                 width: 2px;
-                height: 100%;
-                background: Theme.playhead;
+                height: parent.height;
+
+                background:
+                    Theme.playhead;
+
+                z: 50;
             }
+        }
+    }
+
+
+    // =====================================================
+    // CURSOR DAS FERRAMENTAS
+    //
+    // Select  -> cursor normal
+    // Slice   -> cursor do próprio clip
+    // Stretch -> stretch.svg
+    // Draw    -> draw_filled.svg
+    // Erase   -> erase_filled.svg
+    // =====================================================
+
+    tool-cursor := TouchArea {
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: parent.height;
+
+        enabled:
+            root.active-tool == 2
+            || root.active-tool == 3
+            || root.active-tool == 4;
+
+        mouse-cursor: none;
+
+        z: 100;
+
+
+        if tool-cursor.enabled: Image {
+
+            source:
+                root.active-tool == 2
+                    ? @image-url("../icons/stretch.svg")
+                    : root.active-tool == 3
+                        ? @image-url("../icons/draw_filled.svg")
+                        : @image-url("../icons/erase_filled.svg");
+
+            x:
+                tool-cursor.mouse-x - 8px;
+
+            y:
+                tool-cursor.mouse-y - 8px;
+
+            width: 16px;
+            height: 16px;
         }
     }
 }

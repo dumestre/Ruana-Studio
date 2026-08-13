@@ -4,6 +4,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
+use daw_core::project::Project;
+
 fn next_random(seed: &mut u64) -> f32 {
     *seed = seed
         .wrapping_mul(6364136223846793005)
@@ -12,8 +14,39 @@ fn next_random(seed: &mut u64) -> f32 {
     r
 }
 
+/// Projeta o modelo do daw-core para os modelos da UI.
+///
+/// A UI nunca recebe estruturas do core diretamente;
+/// ela recebe DTOs (ClipData) próprios da camada Slint.
+fn bind_project(ui: &MainWindow, project: &Project) {
+    let track_names: Vec<slint::SharedString> = project
+        .tracks
+        .iter()
+        .map(|t| t.name.clone().into())
+        .collect();
+    ui.set_track_names(Rc::new(slint::VecModel::from(track_names)).into());
+
+    let clips: Vec<ClipData> = project
+        .clips
+        .iter()
+        .map(|c| ClipData {
+            id: c.id as i32,
+            name: c.name.clone().into(),
+            track_index: c.track_id as i32,
+            beat: c.start_beat as i32,
+            len: c.length_beats as i32,
+            is_midi: c.is_midi(),
+        })
+        .collect();
+    ui.set_clips(Rc::new(slint::VecModel::from(clips)).into());
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     let ui = MainWindow::new()?;
+
+    // Projeto placeholder do daw-core — o core não conhece a UI.
+    let project = Project::demo();
+    bind_project(&ui, &project);
 
     let mut seed = 0x1234_5678_9abc_def0u64;
 

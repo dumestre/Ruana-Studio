@@ -1,14 +1,38 @@
 import { Theme } from "../theme.slint";
 import { TrackClip } from "track_clip.slint";
+import { ClipData } from "clip_data.slint";
 
 export component TrackRow inherits Rectangle {
+
+    // =====================================================
+    // DADOS DO TRACK
+    // =====================================================
+
     in property <int> track-index: 0;
-    in property <int> selected-track: 0;
+
+    in property <bool> selected-track: false;
+
     in property <int> selected-clip: -1;
+
+    // Clips pertencentes ao projeto.
+    // O TrackRow apenas filtra os clips do próprio track.
+    in property <[ClipData]> clips: [];
+
+
+    // =====================================================
+    // MÉTRICA DA TIMELINE
+    // =====================================================
+
     in property <length> px-per-beat: 40px;
+
     in property <length> px-per-bar: 160px;
+
     in property <length> row-height: 64px;
-    in property <color> track-color: Theme.clip-midi;
+
+
+    // =====================================================
+    // RÉGUA / GRID
+    // =====================================================
 
     in property <[int]> bar-range: [
         0, 1, 2, 3,
@@ -17,124 +41,212 @@ export component TrackRow inherits Rectangle {
         12, 13, 14, 15
     ];
 
+
+    // =====================================================
+    // FERRAMENTA ATIVA
+    //
+    // 0 = Select
+    // 1 = Slice
+    // 2 = Stretch
+    // 3 = Draw
+    // 4 = Erase
+    // =====================================================
+
     in property <int> active-tool: 0;
 
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
+
     callback clip-selected(int);
+
     callback slice-requested(int, float);
 
-    height: 64px;
-    width: 100%;
-    background: Theme.base;
 
-    for bar in root.bar-range: Rectangle {
-        x: bar * root.px-per-bar;
+    // =====================================================
+    // DIMENSÕES
+    // =====================================================
+
+    height: root.row-height;
+
+
+    // =====================================================
+    // FUNDO DA TRACK
+    // =====================================================
+
+    background:
+        root.selected-track
+            ? Theme.surface-high
+            : Theme.base;
+
+
+    // =====================================================
+    // HIGHLIGHT DA TRACK SELECIONADA
+    // =====================================================
+
+    Rectangle {
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: parent.height;
+
+        background:
+            root.selected-track
+                ? Theme.surface-high.transparentize(0.25)
+                : transparent;
+    }
+
+
+    // =====================================================
+    // GRID VERTICAL
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+
+        x:
+            i * root.px-per-bar;
+
+        y: 0;
+
         width: 1px;
-        height: 100%;
-        background: Theme.surface-high;
+
+        height: parent.height;
+
+        background:
+            Math.mod(i, 4) == 0
+                ? Theme.border
+                : Theme.border.transparentize(0.45);
     }
 
-    if root.track-index == 0: TrackClip {
-        name: "Drums A";
-        clip-id: 0;
-        beat: 0;
-        len: 8;
-        clip-color: root.track-color;
-        px-per-beat: root.px-per-beat;
-        row-height: root.row-height;
-        track-index: 0;
-        selected: root.selected-clip == 0;
-        active-tool: root.active-tool;
 
-        clicked(i) => {
-            root.clip-selected(i);
-        }
+    // =====================================================
+    // LINHA INFERIOR
+    // =====================================================
 
-        slice-requested(id, pos) => {
-            root.slice-requested(id, pos);
-        }
+    Rectangle {
+        x: 0;
+
+        y:
+            parent.height - 1px;
+
+        width: parent.width;
+
+        height: 1px;
+
+        background: Theme.border;
     }
 
-    if root.track-index == 0: TrackClip {
-        name: "Drums B";
-        clip-id: 1;
-        beat: 12;
-        len: 4;
-        clip-color: root.track-color;
-        px-per-beat: root.px-per-beat;
-        row-height: root.row-height;
-        track-index: 0;
-        selected: root.selected-clip == 1;
-        active-tool: root.active-tool;
 
-        clicked(i) => {
-            root.clip-selected(i);
+    // =====================================================
+    // CLIPS
+    //
+    // O TrackRow não cria nem modifica clips.
+    //
+    // Ele recebe o array do projeto e renderiza somente
+    // os clips cujo track-index corresponde ao seu track.
+    // =====================================================
+
+    for clip in root.clips: TrackClip {
+
+        // ---------------------------------------------
+        // FILTRO
+        // ---------------------------------------------
+
+        visible:
+            clip.track-index == root.track-index;
+
+
+        // ---------------------------------------------
+        // IDENTIDADE
+        // ---------------------------------------------
+
+        name:
+            clip.name;
+
+        clip-id:
+            clip.id;
+
+        track-index:
+            root.track-index;
+
+
+        // ---------------------------------------------
+        // POSIÇÃO
+        // ---------------------------------------------
+
+        beat:
+            clip.beat;
+
+
+        // ---------------------------------------------
+        // DURAÇÃO
+        // ---------------------------------------------
+
+        len:
+            clip.len;
+
+
+        // ---------------------------------------------
+        // TIPO / COR
+        // ---------------------------------------------
+
+        clip-color:
+            clip.is-midi
+                ? Theme.clip-midi
+                : Theme.clip-audio;
+
+
+        is-midi:
+            clip.is-midi;
+
+
+        // ---------------------------------------------
+        // ESCALA
+        // ---------------------------------------------
+
+        px-per-beat:
+            root.px-per-beat;
+
+        row-height:
+            root.row-height;
+
+
+        // ---------------------------------------------
+        // SELEÇÃO
+        // ---------------------------------------------
+
+        selected:
+            root.selected-clip == clip.id;
+
+
+        // ---------------------------------------------
+        // FERRAMENTA
+        // ---------------------------------------------
+
+        active-tool:
+            root.active-tool;
+
+
+        // ---------------------------------------------
+        // CLIQUE
+        // ---------------------------------------------
+
+        clicked(id) => {
+            root.clip-selected(id);
         }
 
-        slice-requested(id, pos) => {
-            root.slice-requested(id, pos);
-        }
-    }
 
-    if root.track-index == 1: TrackClip {
-        name: "Bass A";
-        clip-id: 2;
-        beat: 0;
-        len: 16;
-        clip-color: root.track-color;
-        px-per-beat: root.px-per-beat;
-        row-height: root.row-height;
-        track-index: 1;
-        selected: root.selected-clip == 2;
-        active-tool: root.active-tool;
+        // ---------------------------------------------
+        // SLICE
+        // ---------------------------------------------
 
-        clicked(i) => {
-            root.clip-selected(i);
-        }
-
-        slice-requested(id, pos) => {
-            root.slice-requested(id, pos);
-        }
-    }
-
-    if root.track-index == 2: TrackClip {
-        name: "Vocal Verse";
-        clip-id: 3;
-        beat: 0;
-        len: 16;
-        clip-color: root.track-color;
-        px-per-beat: root.px-per-beat;
-        row-height: root.row-height;
-        track-index: 2;
-        selected: root.selected-clip == 3;
-        active-tool: root.active-tool;
-
-        clicked(i) => {
-            root.clip-selected(i);
-        }
-
-        slice-requested(id, pos) => {
-            root.slice-requested(id, pos);
-        }
-    }
-
-    if root.track-index == 3: TrackClip {
-        name: "Synth Pad";
-        clip-id: 4;
-        beat: 0;
-        len: 32;
-        clip-color: root.track-color;
-        px-per-beat: root.px-per-beat;
-        row-height: root.row-height;
-        track-index: 3;
-        selected: root.selected-clip == 4;
-        active-tool: root.active-tool;
-
-        clicked(i) => {
-            root.clip-selected(i);
-        }
-
-        slice-requested(id, pos) => {
-            root.slice-requested(id, pos);
+        slice-requested(id, position) => {
+            root.slice-requested(
+                id,
+                position
+            );
         }
     }
 }

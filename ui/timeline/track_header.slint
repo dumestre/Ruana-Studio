@@ -1,61 +1,414 @@
 import { Theme } from "../theme.slint";
 
+// ================================================================
+// CONTROL BUTTON
+// ================================================================
+
+component ControlButton inherits Rectangle {
+    in property <string> label: "";
+    in property <bool> active: false;
+    in property <color> active-background: Theme.accent;
+    in property <color> active-color: Theme.base;
+
+    callback clicked();
+
+    width: 22px;
+    height: 22px;
+
+    border-radius: 5px;
+
+    background:
+        root.active
+            ? root.active-background
+            : area.has-hover
+                ? Theme.surface-high
+                : transparent;
+
+    opacity:
+        area.pressed
+            ? 0.65
+            : 1.0;
+
+    animate background {
+        duration: 100ms;
+    }
+
+    animate opacity {
+        duration: 60ms;
+    }
+
+    Text {
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: parent.height;
+
+        text: root.label;
+
+        color:
+            root.active
+                ? root.active-color
+                : Theme.text-dim;
+
+        font-size: 9px;
+        font-weight: 700;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    area := TouchArea {
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: parent.height;
+
+        mouse-cursor: pointer;
+
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+
+// ================================================================
+// TRACK HEADER ROW
+// ================================================================
+
 export component TrackHeaderRow inherits Rectangle {
-    in property <string> name: "";
+
+    // ============================================================
+    // DADOS
+    // ============================================================
+
+    in property <string> name: "Track";
+    in property <string> track-type: "MIDI";
     in property <color> track-color: Theme.clip-midi;
+
     in property <bool> selected: false;
     in property <int> track-index: 0;
 
+    in-out property <bool> muted: false;
+    in-out property <bool> solo: false;
+    in-out property <bool> record-armed: false;
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
+
     callback clicked(int);
+    callback mute-clicked(int);
+    callback solo-clicked(int);
+    callback record-clicked(int);
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    pure function track-type-letter(t: string) -> string {
+        if t == "MIDI" {
+            return "M";
+        }
+
+        if t == "AUDIO" {
+            return "A";
+        }
+
+        if t == "BUS" {
+            return "B";
+        }
+
+        if t == "MASTER" {
+            return "Σ";
+        }
+
+        return "I";
+    }
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
 
     height: 64px;
 
-    background: self.selected
-        ? Theme.surface-high
-        : Theme.surface;
+    // ============================================================
+    // FUNDO
+    // ============================================================
 
-    Rectangle {
-        y: parent.height - 1px;
-        width: 100%;
-        height: 1px;
-        background: Theme.border;
+    background:
+        root.selected
+            ? Theme.surface-high
+            : Theme.surface;
+
+    animate background {
+        duration: 100ms;
     }
 
+    // ============================================================
+    // HOVER / SELEÇÃO
+    // ============================================================
+
+    Rectangle {
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: parent.height;
+
+        background:
+            root.selected
+                ? root.track-color.transparentize(0.88)
+                : selection-area.has-hover
+                    ? Theme.surface-high.transparentize(0.45)
+                    : transparent;
+
+        animate background {
+            duration: 100ms;
+        }
+    }
+
+    // ============================================================
+    // INDICADOR DE TRACK
+    // ============================================================
+
+    Rectangle {
+        x: 0;
+        y: 7px;
+
+        width: root.selected ? 4px : 3px;
+        height: parent.height - 14px;
+
+        background: root.track-color;
+
+        border-radius: 2px;
+
+        animate width {
+            duration: 100ms;
+        }
+    }
+
+    // ============================================================
+    // BORDA INFERIOR
+    // ============================================================
+
+    Rectangle {
+        x: 0;
+        y: parent.height - 1px;
+
+        width: parent.width;
+        height: 1px;
+
+        background: Theme.border;
+
+        opacity:
+            root.selected
+                ? 1.0
+                : 0.7;
+    }
+
+    // ============================================================
+    // ÁREA DE SELEÇÃO
+    // ============================================================
+
+    selection-area := TouchArea {
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: parent.height;
+
+        mouse-cursor: pointer;
+
+        clicked => {
+            root.clicked(root.track-index);
+        }
+    }
+
+    // ============================================================
+    // CONTEÚDO
+    // ============================================================
+
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
+        x: 12px;
+        y: 0;
+
+        width: parent.width - 20px;
+        height: parent.height;
+
         spacing: 8px;
-        cross-axis-alignment: CrossAxisAlignment.center;
+
+        // ========================================================
+        // TYPE BADGE
+        // ========================================================
 
         Rectangle {
-            width: 6px;
-            height: 30px;
-            background: root.track-color;
-            border-radius: 2px;
+            width: 28px;
+            height: 28px;
+
+            background:
+                root.track-color.transparentize(0.84);
+
+            border-radius: 7px;
+
+            border-width:
+                root.selected
+                    ? 1px
+                    : 0px;
+
+            border-color:
+                root.track-color.transparentize(0.35);
+
+            Text {
+                x: 0;
+                y: 0;
+
+                width: parent.width;
+                height: parent.height;
+
+                text:
+                    root.track-type-letter(root.track-type);
+
+                color: root.track-color;
+
+                font-size: 11px;
+                font-weight: 800;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
         }
 
+        // ========================================================
+        // INFORMAÇÕES DA TRACK
+        // ========================================================
+
         VerticalLayout {
+            alignment: LayoutAlignment.center;
+
             spacing: 2px;
 
             Text {
                 text: root.name;
+
                 color: Theme.text-primary;
+
                 font-size: 12px;
+                font-weight: 600;
+
                 vertical-alignment: center;
+
+                overflow: elide;
             }
 
             Text {
-                text: "MIDI";
-                color: Theme.text-dim;
-                font-size: 9px;
+                text: root.track-type;
+
+                color:
+                    root.selected
+                        ? root.track-color
+                        : Theme.text-dim;
+
+                font-size: 8px;
+                font-weight: 600;
+
                 vertical-alignment: center;
+
+                overflow: elide;
             }
         }
-    }
 
-    TouchArea {
-        clicked => {
-            root.clicked(root.track-index);
+        // ========================================================
+        // ESPAÇADOR
+        // ========================================================
+
+        Rectangle {
+            horizontal-stretch: 1;
+        }
+
+        // ========================================================
+        // CONTROLES
+        // ========================================================
+
+        Rectangle {
+            width: 78px;
+            height: 26px;
+
+            background: Theme.surface-high;
+
+            border-radius: 7px;
+
+            border-width: 1px;
+            border-color: Theme.border;
+
+            HorizontalLayout {
+                x: 2px;
+                y: 2px;
+
+                width: parent.width - 4px;
+                height: parent.height - 4px;
+
+                spacing: 1px;
+
+                // ------------------------------------------------
+                // MUTE
+                // ------------------------------------------------
+
+                ControlButton {
+                    label: "M";
+
+                    active: root.muted;
+
+                    active-background: Theme.warn;
+
+                    active-color: Theme.base;
+
+                    clicked => {
+                        root.muted = !root.muted;
+                        root.mute-clicked(root.track-index);
+                    }
+                }
+
+                // ------------------------------------------------
+                // SOLO
+                // ------------------------------------------------
+
+                ControlButton {
+                    label: "S";
+
+                    active: root.solo;
+
+                    active-background: root.track-color;
+
+                    active-color: Theme.base;
+
+                    clicked => {
+                        root.solo = !root.solo;
+                        root.solo-clicked(root.track-index);
+                    }
+                }
+
+                // ------------------------------------------------
+                // RECORD
+                // ------------------------------------------------
+
+                ControlButton {
+                    label: "R";
+
+                    active: root.record-armed;
+
+                    active-background: Theme.accent;
+
+                    active-color: Theme.base;
+
+                    clicked => {
+                        root.record-armed = !root.record-armed;
+                        root.record-clicked(root.track-index);
+                    }
+                }
+            }
         }
     }
 }

@@ -2,58 +2,124 @@ import { Theme } from "../theme.slint";
 import { TrackHeaderRow } from "track_header.slint";
 
 export component TimelineHeader inherits Rectangle {
+    // =====================================================
+    // DADOS
+    // =====================================================
+
     in property <[string]> track-names: [];
     in property <int> selected-track: 0;
     in property <length> ruler-height: 30px;
 
+    // =====================================================
+    // CALLBACK
+    // =====================================================
+
     callback track-clicked(int);
+
+    // =====================================================
+    // FUNDO
+    // =====================================================
 
     background: Theme.surface;
 
+    // =====================================================
+    // DIVISÓRIA ENTRE HEADER E TIMELINE
+    // =====================================================
+
     Rectangle {
         x: parent.width - 1px;
+        y: 0;
+
         width: 1px;
-        height: 100%;
+        height: parent.height;
+
         background: Theme.border;
     }
 
+    // =====================================================
+    // HEADER SUPERIOR
+    // =====================================================
+
     Rectangle {
-        width: 100%;
+        x: 0;
+        y: 0;
+
+        width: parent.width;
         height: root.ruler-height;
+
         background: Theme.surface;
 
+        // Linha inferior
         Rectangle {
+            x: 0;
             y: parent.height - 1px;
-            width: 100%;
+
+            width: parent.width;
             height: 1px;
+
             background: Theme.border;
         }
 
+        // Pequeno indicador visual
+        Rectangle {
+            x: 8px;
+            y: parent.height - 3px;
+
+            width: 24px;
+            height: 2px;
+
+            background: Theme.accent;
+
+            opacity: 0.55;
+        }
+
+        // Título
         Text {
-            text: "TRACK";
-            width: 100%;
-            height: 100%;
+            x: 10px;
+            y: 0;
+
+            width: parent.width - 20px;
+            height: parent.height;
+
+            text: "TRACKS";
+
             color: Theme.text-dim;
-            font-size: 10px;
-            horizontal-alignment: center;
+
+            font-size: 9px;
+            font-weight: 700;
+
+            horizontal-alignment: left;
             vertical-alignment: center;
+
+            overflow: elide;
         }
     }
 
+    // =====================================================
+    // TRACK HEADERS
+    // =====================================================
+
     VerticalLayout {
+        x: 0;
         y: root.ruler-height;
-        width: 100%;
+
+        width: parent.width;
         height: parent.height - root.ruler-height;
+
         spacing: 0;
 
         for name[i] in root.track-names: TrackHeaderRow {
             name: name;
-            track-color: i == 2
-                ? Theme.clip-audio
-                : Theme.clip-midi;
 
-            selected: root.selected-track == i;
             track-index: i;
+
+            track-color:
+                i == 2
+                    ? Theme.clip-audio
+                    : Theme.clip-midi;
+
+            selected:
+                root.selected-track == i;
 
             clicked(idx) => {
                 root.track-clicked(idx);

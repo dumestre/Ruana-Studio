@@ -1017,10 +1017,6 @@ version = "0.1.0"
 [[package]]
 name = "daw-media"
 version = "0.1.0"
-dependencies = [
- "slint",
- "slint-build",
-]
 
 [[package]]
 name = "daw-midi"
@@ -1328,6 +1324,7 @@ dependencies = [
 name = "ferrum-studio"
 version = "0.1.0"
 dependencies = [
+ "daw-core",
  "slint",
  "slint-build",
 ]

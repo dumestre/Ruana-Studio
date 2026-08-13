@@ -15,28 +15,114 @@ export component TimelineRuler inherits Rectangle {
 
     background: Theme.surface;
 
+    clip: true;
+
+    // =====================================================
+    // LINHA INFERIOR
+    // =====================================================
+
     Rectangle {
+        x: 0;
         y: parent.height - 1px;
-        width: 100%;
+
+        width: parent.width;
         height: 1px;
+
         background: Theme.border;
     }
+
+    // =====================================================
+    // LINHAS DOS COMPASSOS
+    // =====================================================
 
     for i in root.bar-range: Rectangle {
         x: i * root.px-per-bar;
+        y: 0;
+
         width: 1px;
-        height: 100%;
+        height: parent.height;
+
         background: Theme.border;
+
+        opacity: 0.85;
     }
 
+    // =====================================================
+    // SUBDIVISÕES DO COMPASSO
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+        x: i * root.px-per-bar + root.px-per-bar / 4;
+        y: parent.height - 7px;
+
+        width: 1px;
+        height: 6px;
+
+        background: Theme.text-dim;
+
+        opacity: 0.45;
+    }
+
+    for i in root.bar-range: Rectangle {
+        x: i * root.px-per-bar + root.px-per-bar / 2;
+        y: parent.height - 10px;
+
+        width: 1px;
+        height: 9px;
+
+        background: Theme.text-dim;
+
+        opacity: 0.55;
+    }
+
+    for i in root.bar-range: Rectangle {
+        x: i * root.px-per-bar + (root.px-per-bar * 3) / 4;
+        y: parent.height - 7px;
+
+        width: 1px;
+        height: 6px;
+
+        background: Theme.text-dim;
+
+        opacity: 0.45;
+    }
+
+    // =====================================================
+    // NÚMERO DO COMPASSO
+    // =====================================================
+
     for i in root.bar-range: Text {
-        x: i * root.px-per-bar + 5px;
+        x: i * root.px-per-bar + 6px;
         y: 0;
-        width: 60px;
-        height: 100%;
+
+        width: root.px-per-bar - 8px;
+        height: parent.height - 8px;
+
         text: "" + (i + 1);
+
         color: Theme.text-dim;
+
         font-size: 10px;
+        font-weight: 600;
+
         vertical-alignment: center;
+
+        overflow: elide;
+    }
+
+    // =====================================================
+    // MARCA PRINCIPAL DO COMPASSO
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+        x: i * root.px-per-bar;
+        y: parent.height - 13px;
+
+        width: 2px;
+        height: 13px;
+
+        background: Theme.text-primary;
+
+        opacity: 0.65;
     }
 }
