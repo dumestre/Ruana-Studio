@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
 
 // ================================================================
 // CONTROL BUTTON
@@ -97,6 +98,8 @@ export component TrackHeaderRow inherits Rectangle {
     in-out property <bool> solo: false;
     in-out property <bool> record-armed: false;
 
+    in-out property <bool> automation-enabled: false;
+
     // ============================================================
     // CALLBACKS
     // ============================================================
@@ -105,6 +108,7 @@ export component TrackHeaderRow inherits Rectangle {
     callback mute-clicked(int);
     callback solo-clicked(int);
     callback record-clicked(int);
+    callback automation-clicked(int);
 
     // ============================================================
     // HELPERS
@@ -334,7 +338,22 @@ export component TrackHeaderRow inherits Rectangle {
         // ========================================================
         // CONTROLES
         // ========================================================
-
+        
+        Button {
+                    icon: @image-url("../icons/rec.svg");
+                    icon-color: Theme.danger;
+                    toggled: root.record-armed;
+                    toggled-bg: Theme.danger;
+                    toggled-fg: Theme.base;
+            width: 26px;
+                    borderless: true;
+                    subtle-toggled: true;
+                    clicked => {
+                        root.record-armed = !root.record-armed;
+                        root.record-clicked(root.track-index);
+                    }
+                }
+                
         Rectangle {
             width: 78px;
             height: 26px;
@@ -394,23 +413,29 @@ export component TrackHeaderRow inherits Rectangle {
                 }
 
                 // ------------------------------------------------
-                // RECORD
+                // AUTOMATION
                 // ------------------------------------------------
 
                 ControlButton {
-                    label: "R";
+                    label: "A";
 
-                    active: root.record-armed;
+                    active: root.automation-enabled;
 
-                    active-background: Theme.accent;
+                    active-background: Theme.clip-midi;
 
                     active-color: Theme.base;
 
                     clicked => {
-                        root.record-armed = !root.record-armed;
-                        root.record-clicked(root.track-index);
+                        root.automation-enabled = !root.automation-enabled;
+                        root.automation-clicked(root.track-index);
                     }
                 }
+
+                // ------------------------------------------------
+                // RECORD (ícone igual ao da transport bar)
+                // ------------------------------------------------
+
+                
             }
         }
     }

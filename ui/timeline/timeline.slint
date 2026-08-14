@@ -941,7 +941,8 @@ export component Timeline inherits Rectangle {
         Image {
 
             visible:
-                tool-cursor.enabled;
+                tool-cursor.enabled
+                && tool-cursor.has-hover;
 
             source:
                 root.active-tool == 2
