@@ -52,6 +52,32 @@ export component BrowserItem inherits Rectangle {
             overflow: elide;
         }
 
+        // Ícone (à direita, não empurra o texto)
+        Text {
+            text: root.icon;
+            visible: root.icon-image.width == 0;
+
+            color: root.selected
+                ? Theme.accent
+                : Theme.text-dim;
+
+            font-size: 10px;
+
+            vertical-alignment: center;
+        }
+
+        Image {
+            source: root.icon-image;
+            visible: root.icon-image.width > 0;
+
+            width: 12px;
+            height: 12px;
+
+            colorize: root.selected
+                ? Theme.accent
+                : Theme.text-dim;
+        }
+
         // Tipo / informação
         Text {
             text: root.type;
