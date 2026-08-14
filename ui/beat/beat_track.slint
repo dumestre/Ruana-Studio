@@ -5,6 +5,8 @@ export component BeatTrack inherits Rectangle {
     in-out property <int> track-index: 0;
     in property <string> track-name: "Kick";
 
+    in property <color> track-color: Theme.accent;
+
     in-out property <bool> active: true;
     in-out property <bool> solo: false;
 
@@ -195,25 +197,41 @@ export component BeatTrack inherits Rectangle {
         }
 
 
-        Text {
+        Rectangle {
             horizontal-stretch: 1;
+            height: 24px;
 
-            text: root.track-name;
+            background: root.track-color;
 
-            color: root.active
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: root.selected
                 ? Theme.text-primary
-                : Theme.text-dim;
+                : Theme.border;
 
-            font-size: 10px;
+            opacity: root.active ? 1.0 : 0.35;
 
-            vertical-alignment: center;
+            Text {
+                text: root.track-name;
 
-            overflow: elide;
+                width: 100%;
+                height: 100%;
+
+                color: #1a1a1a;
+                font-size: 10px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+
+                overflow: elide;
+            }
         }
     }
 
     // Overlay on the name area only (after the fixed-width controls),
     // so it doesn't squeeze the name Text out of the layout.
+    // Left click selects the track, right click opens the track menu.
     TouchArea {
         x: 139px;
         y: 0;
@@ -221,11 +239,15 @@ export component BeatTrack inherits Rectangle {
         height: 100%;
         mouse-cursor: pointer;
 
-        clicked => {
-            if (root.track-menu-open-index == root.track-index) {
-                root.track-menu-open-index = -1;
-            } else {
-                root.track-menu-open-index = root.track-index;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                root.selected-changed();
+            } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                if (root.track-menu-open-index == root.track-index) {
+                    root.track-menu-open-index = -1;
+                } else {
+                    root.track-menu-open-index = root.track-index;
+                }
             }
         }
     }

@@ -76,6 +76,10 @@ export component BeatContent inherits Rectangle {
     in-out property <[int]> track-mixer-channel:
         [0, 1, 2, 3, 4, 5, 6, 7];
 
+    in-out property <[color]> track-colors:
+        [Theme.accent, Theme.ok, Theme.warn, Theme.danger,
+         Theme.activ, #4895EF, #E76F51, #B08D57];
+
     in-out property <int> selected-track: 0;
 
     in-out property <int> grid-resolution: 16;
@@ -130,6 +134,7 @@ export component BeatContent inherits Rectangle {
     property <length> tracks-left: 12px;
     property <length> tracks-top: beat-header.y + beat-header.height + 10px + 1px + 10px;
     property <length> menu-y: beat-header.y + beat-header.height + 2px;
+    property <length> track-menu-height: 4px + 9 * 24px + 2 * 1px + 26px + 11 * 1px;
 
     // Ícone pré-carregado no init para evitar decodificação
     // (e lag) na primeira vez que o cursor aparece na grade.
@@ -222,6 +227,8 @@ export component BeatContent inherits Rectangle {
 
                     track-name: root.instrument-names[inst];
 
+                    track-color: root.track-colors[inst];
+
                     active: root.track-active[inst];
                     active-changed(v) => { root.track-active[inst] = v; }
 
@@ -286,15 +293,7 @@ export component BeatContent inherits Rectangle {
 
                     track-active: root.track-active[inst];
 
-                    accent-color:
-                        inst == 0 ? Theme.accent :
-                        inst == 1 ? Theme.ok :
-                        inst == 2 ? Theme.warn :
-                        inst == 3 ? Theme.danger :
-                        inst == 4 ? Theme.activ :
-                        inst == 5 ? #4895EF :
-                        inst == 6 ? #E76F51 :
-                        #B08D57;
+                    accent-color: root.track-colors[inst];
                 }
 
                 grid-touch := TouchArea {
@@ -388,6 +387,7 @@ export component BeatContent inherits Rectangle {
         z: 30;
 
         VerticalLayout {
+            alignment: LayoutAlignment.stretch;
             padding: 2px;
             spacing: 1px;
 
@@ -434,7 +434,7 @@ export component BeatContent inherits Rectangle {
         y: root.menu-y;
 
         width: 160px;
-        height: 5 * 28px + 4px;
+        height: (root.pattern-indexes.length + 6) * 25px;
 
         background: Theme.surface-high;
 
@@ -615,10 +615,13 @@ export component BeatContent inherits Rectangle {
 
     if root.track-menu-open-index >= 0 : Rectangle {
         x: root.tracks-left + 8px;
-        y: root.tracks-top + 33px + root.track-menu-open-index * 30px;
+        y: root.tracks-top + 33px + root.track-menu-open-index * 30px
+            + root.track-menu-height > self.height
+            ? root.tracks-top + 33px + root.track-menu-open-index * 30px - root.track-menu-height
+            : root.tracks-top + 33px + root.track-menu-open-index * 30px;
 
         width: 160px;
-        height: 8 * 26px + 4px;
+        height: root.track-menu-height;
 
         background: Theme.surface-high;
 
@@ -873,6 +876,48 @@ export component BeatContent inherits Rectangle {
                     clicked => {
                         root.insert-pattern(root.track-menu-open-index, 16);
                         root.track-menu-open-index = -1;
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 156px;
+                height: 26px;
+
+                background: transparent;
+                border-radius: 3px;
+
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 1px;
+                    cross-axis-alignment: CrossAxisAlignment.center;
+
+                    Text {
+                        text: "Color";
+                        width: 32px;
+                        color: Theme.text-dim;
+                        font-size: 9px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+
+                    for c in root.track-colors: Rectangle {
+                        width: 12px;
+                        height: 12px;
+
+                        background: c;
+                        border-radius: 2px;
+                        border-width: 1px;
+                        border-color: root.track-colors[root.track-menu-open-index] == c
+                            ? Theme.text-primary
+                            : Theme.border;
+
+                        TouchArea {
+                            clicked => {
+                                root.track-colors[root.track-menu-open-index] = c;
+                                root.track-menu-open-index = -1;
+                            }
+                        }
                     }
                 }
             }
