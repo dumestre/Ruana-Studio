@@ -332,28 +332,13 @@ export component TrackHeaderRow inherits Rectangle {
         // ========================================================
 
         Rectangle {
-            horizontal-stretch: 1;
+horizontal-stretch: 1;
         }
-
+        
         // ========================================================
         // CONTROLES
         // ========================================================
         
-        Button {
-                    icon: @image-url("../icons/rec.svg");
-                    icon-color: Theme.danger;
-                    toggled: root.record-armed;
-                    toggled-bg: Theme.danger;
-                    toggled-fg: #1E1E1E;
-            width: 26px;
-                    borderless: true;
-                    subtle-toggled: true;
-                    clicked => {
-                        root.record-armed = !root.record-armed;
-                        root.record-clicked(root.track-index);
-                    }
-                }
-                
         Rectangle {
             width: 78px;
             height: 26px;
@@ -430,27 +415,24 @@ export component TrackHeaderRow inherits Rectangle {
                         root.automation-clicked(root.track-index);
                     }
                 }
+            }
+        }
+        
+        // Record button fora do retângulo (mesmo estilo da transport bar)
+        Button {
+            icon: @image-url("../icons/rec.svg");
+            icon-color: Theme.danger;
+            toggled: root.record-armed;
+            toggled-bg: Theme.danger;
+            toggled-fg: Theme.base;
+            borderless: true;
+            icon-size: 14px;
+            height: 24px;
+            preferred-width: 24px;
 
-                // ------------------------------------------------
-                // RECORD (ícone igual ao da transport bar)
-                // ------------------------------------------------
-
-                Button {
-                    icon: @image-url("../icons/rec.svg");
-                    icon-color: Theme.danger;
-                    toggled: root.record-armed;
-                    toggled-bg: Theme.danger;
-                    toggled-fg: Theme.base;
-                    borderless: true;
-                    icon-size: 14px;
-                    height: 24px;
-                    preferred-width: 24px;
-
-                    clicked => {
-                        root.record-armed = !root.record-armed;
-                        root.record-clicked(root.track-index);
-                    }
-                }
+            clicked => {
+                root.record-armed = !root.record-armed;
+                root.record-clicked(root.track-index);
             }
         }
     }
