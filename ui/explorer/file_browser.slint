@@ -1,9 +1,35 @@
 import { Theme } from "../theme.slint";
 import { BrowserItem } from "../components/browser_item.slint";
 
+export struct FileEntry {
+    name: string,
+    type: string,
+}
 
 export component FileBrowser inherits Rectangle {
     in-out property <string> current-path: "Project";
+
+    in property <[FileEntry]> favorites: [
+        { name: "My Samples", type: "Folder" },
+        { name: "Vocals", type: "Folder" },
+    ];
+
+    in property <[FileEntry]> project: [
+        { name: "Ferrum Studio", type: "Folder" },
+        { name: "Audio", type: "Folder" },
+        { name: "Samples", type: "Folder" },
+        { name: "Presets", type: "Folder" },
+    ];
+
+    in property <[FileEntry]> computer: [
+        { name: "This PC", type: "Computer" },
+        { name: "C:", type: "Drive" },
+        { name: "D:", type: "Drive" },
+    ];
+
+    in-out property <int> selected-index: 2;
+
+    callback file-selected(string, string);
 
     background: transparent;
 
@@ -123,19 +149,17 @@ export component FileBrowser inherits Rectangle {
             }
         }
 
-        BrowserItem {
-            name: "My Samples";
-            type: "Folder";
-            horizontal-stretch: 1;
+        for entry[index] in root.favorites : BrowserItem {
+            name: entry.name;
+            type: entry.type;
+            selected: root.selected-index == index;
             icon: "";
             icon-image: @image-url("../icons/folder.svg");
-        }
 
-        BrowserItem {
-            name: "Vocals";
-            type: "Folder";
-            icon: "";
-            icon-image: @image-url("../icons/folder.svg");
+            clicked => {
+                root.selected-index = index;
+                root.file-selected(entry.name, entry.type);
+            }
         }
 
 
@@ -158,33 +182,17 @@ export component FileBrowser inherits Rectangle {
             }
         }
 
-        BrowserItem {
-            name: "Ferrum Studio";
-            type: "Folder";
+        for entry[index] in root.project : BrowserItem {
+            name: entry.name;
+            type: entry.type;
+            selected: root.selected-index == root.favorites.length + index;
             icon: "";
             icon-image: @image-url("../icons/folder.svg");
-            selected: true;
-        }
 
-        BrowserItem {
-            name: "Audio";
-            type: "Folder";
-            icon: "";
-            icon-image: @image-url("../icons/folder.svg");
-        }
-
-        BrowserItem {
-            name: "Samples";
-            type: "Folder";
-            icon: "";
-            icon-image: @image-url("../icons/folder.svg");
-        }
-
-        BrowserItem {
-            name: "Presets";
-            type: "Folder";
-            icon: "";
-            icon-image: @image-url("../icons/folder.svg");
+            clicked => {
+                root.selected-index = root.favorites.length + index;
+                root.file-selected(entry.name, entry.type);
+            }
         }
 
 
@@ -207,25 +215,17 @@ export component FileBrowser inherits Rectangle {
             }
         }
 
-        BrowserItem {
-            name: "This PC";
-            type: "Computer";
+        for entry[index] in root.computer : BrowserItem {
+            name: entry.name;
+            type: entry.type;
+            selected: root.selected-index == root.favorites.length + root.project.length + index;
             icon: "";
             icon-image: @image-url("../icons/disk.svg");
-        }
 
-        BrowserItem {
-            name: "C:";
-            type: "Drive";
-            icon: "";
-            icon-image: @image-url("../icons/disk.svg");
-        }
-
-        BrowserItem {
-            name: "D:";
-            type: "Drive";
-            icon: "";
-            icon-image: @image-url("../icons/disk.svg");
+            clicked => {
+                root.selected-index = root.favorites.length + root.project.length + index;
+                root.file-selected(entry.name, entry.type);
+            }
         }
     }
 }

@@ -17,48 +17,24 @@ export component BrowserItem inherits Rectangle {
 
     border-radius: 3px;
 
+    // Indicador de seleção (sobreposto na borda esquerda)
+    Rectangle {
+        x: 0px;
+        y: (parent.height - self.height) / 2;
+        width: 2px;
+        height: 18px;
+        visible: root.selected;
+
+        background: Theme.accent;
+        border-radius: 1px;
+    }
+
     HorizontalLayout {
-        padding-left: 4px;
+        padding-left: 3px;
         padding-right: 7px;
-        spacing: 5px;
+        spacing: 3px;
         alignment: LayoutAlignment.start;
         cross-axis-alignment: CrossAxisAlignment.center;
-
-        // Indicador de seleção
-        Rectangle {
-            width: 2px;
-            height: root.selected ? 18px : 0px;
-
-            background: Theme.accent;
-            border-radius: 1px;
-        }
-
-        // Ícone
-        Text {
-            text: root.icon;
-            visible: root.icon-image.width == 0;
-
-            width: 16px;
-
-            color: root.selected
-                ? Theme.accent
-                : Theme.text-dim;
-
-            font-size: 10px;
-
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-
-        Image {
-            source: root.icon-image;
-            visible: root.icon-image.width > 0;
-            width: 14px;
-            height: 14px;
-            colorize: root.selected
-                ? Theme.accent
-                : Theme.text-dim;
-        }
 
         // Nome
         Text {
@@ -89,7 +65,14 @@ export component BrowserItem inherits Rectangle {
         }
     }
 
-    TouchArea {
+    states [
+        hovered when touch.has-hover && !root.selected: {
+            background: Theme.surface-high;
+        }
+    ]
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
         clicked => {
             root.clicked();
         }

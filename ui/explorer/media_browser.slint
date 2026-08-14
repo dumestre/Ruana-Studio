@@ -43,6 +43,10 @@ export component MediaBrowser inherits Rectangle {
 
     in-out property <string> category-filter: "All";
 
+    in-out property <int> selected-index: -1;
+
+    callback media-selected(string, string);
+
     background: transparent;
 
     VerticalLayout {
@@ -273,15 +277,21 @@ export component MediaBrowser inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                for item in root.media : BrowserItem {
+                for item[index] in root.media : BrowserItem {
                     visible: root.category-filter == "All"
                         || item.category == root.category-filter;
 
                     name: item.name;
                     type: item.type;
 
+                    selected: root.selected-index == index;
                     icon: "";
                     icon-image: @image-url("../icons/media.svg");
+
+                    clicked => {
+                        root.selected-index = index;
+                        root.media-selected(item.name, item.type);
+                    }
                 }
             }
         }

@@ -43,6 +43,10 @@ export component PluginBrowser inherits Rectangle {
 
     in-out property <string> format-filter: "All";
 
+    in-out property <int> selected-index: -1;
+
+    callback plugin-selected(string, string);
+
     background: transparent;
 
     VerticalLayout {
@@ -241,15 +245,21 @@ export component PluginBrowser inherits Rectangle {
                     vertical-alignment: TextVerticalAlignment.center;
                 }
 
-                for plugin in root.plugins : BrowserItem {
+                for plugin[index] in root.plugins : BrowserItem {
                     visible: root.format-filter == "All"
                         || plugin.type == root.format-filter;
 
                     name: plugin.name;
                     type: plugin.type;
 
+                    selected: root.selected-index == index;
                     icon: "";
                     icon-image: @image-url("../icons/plugin.svg");
+
+                    clicked => {
+                        root.selected-index = index;
+                        root.plugin-selected(plugin.name, plugin.type);
+                    }
                 }
             }
         }
