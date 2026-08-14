@@ -23,6 +23,37 @@ export component TimelineRuler inherits Rectangle {
 
 
     // =====================================================
+    // FUNDO ALTERNADO POR COMPASSO (igual ao beat sequencer)
+    // =====================================================
+    //
+    // A cada 4 batidas (1 compasso), alterna entre dois tons.
+    // Math.mod(Math.floor(beat / 4), 2) == 1 -> tom mais escuro
+    // Como bar-range já é por compasso (i = 0,1,2...), 
+    // Math.mod(i, 2) == 1 já faz a alternância correta.
+
+    for i in root.bar-range: Rectangle {
+
+        x:
+            i * root.px-per-bar;
+
+        y: 0;
+
+        width:
+            root.px-per-bar;
+
+        height:
+            parent.height;
+
+        background:
+            Math.mod(i, 2) == 1
+                ? #2A2A2A
+                : #323232;
+
+        z: -1;
+    }
+
+
+    // =====================================================
     // LINHA INFERIOR
     // =====================================================
 

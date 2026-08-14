@@ -373,6 +373,33 @@ export component Timeline inherits Rectangle {
 
 
             // =============================================
+            // FUNDO ALTERNADO POR COMPASSO (igual ao beat sequencer)
+            // =============================================
+
+            for i in root.bar-range: Rectangle {
+
+                x:
+                    i * root.px-per-bar;
+
+                y:
+                    root.ruler-height;
+
+                width:
+                    root.px-per-bar;
+
+                height:
+                    parent.height - root.ruler-height;
+
+                background:
+                    Math.mod(i, 2) == 1
+                        ? #2A2A2A
+                        : #323232;
+
+                z: -1;
+            }
+
+
+            // =============================================
             // GRID VERTICAL
             //
             // COMPASSOS: cor alterna a cada compasso.
