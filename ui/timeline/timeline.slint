@@ -195,8 +195,18 @@ export component Timeline inherits Rectangle {
             height:
                 parent.height;
 
-            property <bool> middle-pressed:
-                false;
+            property <bool> middle-pressed: false;
+            property <bool> dragging: false;
+            property <length> drag-start-x: 0px;
+            property <length> drag-start-y: 0px;
+            property <length> drag-start-scroll-x: 0px;
+            property <length> drag-start-scroll-y: 0px;
+
+            clicked => {
+                if root.active-tool == 0 {
+                    root.selected-clip = -1;
+                }
+            }
 
             pointer-event(event) => {
 
@@ -204,11 +214,29 @@ export component Timeline inherits Rectangle {
                     && event.button == PointerEventButton.middle {
 
                     self.middle-pressed = true;
+                    self.dragging = true;
+                    self.drag-start-x = self.mouse-x;
+                    self.drag-start-y = self.mouse-y;
+                    self.drag-start-scroll-x = root.scroll-x;
+                    self.drag-start-scroll-y = root.scroll-y;
+                }
 
-                } else if event.kind == PointerEventKind.up
+                else if event.kind == PointerEventKind.up
                     && event.button == PointerEventButton.middle {
 
                     self.middle-pressed = false;
+                    self.dragging = false;
+                }
+
+                else if event.kind == PointerEventKind.move
+                    && self.dragging {
+
+                    root.scroll-x = max(0px, min(root.max-scroll-x,
+                        self.drag-start-scroll-x - (self.mouse-x - self.drag-start-x)
+                    ));
+                    root.scroll-y = max(0px, min(root.max-scroll-y,
+                        self.drag-start-scroll-y - (self.mouse-y - self.drag-start-y)
+                    ));
                 }
             }
 
@@ -232,7 +260,8 @@ export component Timeline inherits Rectangle {
                     let content-x = (mouse-x + root.scroll-x) / old-zoom;
                     let new-scroll-x = content-x * new-zoom - mouse-x;
 
-                    root.zoom-to(new-zoom, new-scroll-x);
+                    root.zoom = new-zoom;
+                    root.scroll-x = max(0px, min(root.max-scroll-x, new-scroll-x));
 
                 } else if event.modifiers.alt {
 
@@ -270,7 +299,7 @@ export component Timeline inherits Rectangle {
                             min(
                                 root.max-scroll-x,
                                 root.scroll-x
-                                + event.delta-x
+                                - event.delta-x
                             )
                         );
 
@@ -280,7 +309,7 @@ export component Timeline inherits Rectangle {
                             min(
                                 root.max-scroll-y,
                                 root.scroll-y
-                                + event.delta-y
+                                - event.delta-y
                             )
                         );
                 }
