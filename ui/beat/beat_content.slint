@@ -229,6 +229,8 @@ export component BeatContent inherits Rectangle {
 
                     track-color: root.track-colors[inst];
 
+                    track-menu-open-index <=> root.track-menu-open-index;
+
                     active: root.track-active[inst];
                     active-changed(v) => { root.track-active[inst] = v; }
 
