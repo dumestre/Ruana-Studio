@@ -54,6 +54,7 @@ export component Transport inherits Rectangle {
             icon: root.playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
             icon-color: Theme.accent;
             toggled: root.playing;
+            toggled-bg: #f26a21;
             subtle-toggled: true;
             toggled-icon-color: Theme.accent;
             clicked => {

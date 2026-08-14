@@ -1,50 +1,88 @@
 import { BeatContent } from "beat_content.slint";
 
 export component Beat inherits Rectangle {
+    in-out property <[[bool]]> patterns: [[
+        true, false, false, false,
+        false, false, false, false,
+        true, false, false, false,
+        false, false, false, false,
+
+        false, false, false, false,
+        true, false, false, false,
+        false, false, false, false,
+        true, false, false, false,
+
+        false, false, false, false,
+        false, false, true, false,
+        false, false, false, false,
+        false, false, true, false,
+
+        true, false, true, false,
+        true, false, true, false,
+        true, false, true, false,
+        true, false, true, false,
+
+        false, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+        false, false, true, false,
+
+        false, false, false, false,
+        false, true, false, false,
+        false, false, false, false,
+        false, false, false, false,
+
+        true, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+
+        false, false, false, true,
+        false, false, false, true,
+        false, false, false, true,
+        false, false, false, true
+    ]];
+    in-out property <int> current-pattern: 0;
     in-out property <[bool]> steps: [];
 
     in-out property <int> playhead: -1;
-
     in-out property <int> grid-resolution: 16;
-
     in-out property <bool> playing: false;
-
     in-out property <float> humanize: 0.0;
     in-out property <float> swing: 0.0;
-
     in-out property <string> beat-name: "BEAT SEQUENCER";
-
-    in-out property <[int]> resolution-options:
-        [8, 16, 32, 64];
-
+    in-out property <[int]> resolution-options: [8, 16, 32, 64];
     in-out property <[string]> instrument-names:
-        ["Kick", "Snare", "Clap", "Closed Hat",
-         "Open Hat", "Tom", "Cymbal", "Perc"];
-
-    in-out property <[bool]> track-active:
-        [true, true, true, true, true, true, true, true];
-
-    in-out property <[bool]> track-solo:
-        [false, false, false, false, false, false, false, false];
-
-    in-out property <[float]> track-pan:
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-
-    in-out property <[float]> track-volume:
-        [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
-
-    in-out property <[int]> track-mixer-channel:
-        [0, 1, 2, 3, 4, 5, 6, 7];
-
+        ["Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Tom", "Cymbal", "Perc"];
+    in-out property <[bool]> track-active: [true, true, true, true, true, true, true, true];
+    in-out property <[bool]> track-solo: [false, false, false, false, false, false, false, false];
+    in-out property <[float]> track-pan: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    in-out property <[float]> track-volume: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+    in-out property <[int]> track-mixer-channel: [0, 1, 2, 3, 4, 5, 6, 7];
     in-out property <int> selected-track: 0;
 
     callback close-requested;
     callback add-track-requested;
     callback grid-resolution-changed(int);
     callback track-selected(int);
+    callback duplicate-beat;
+    callback copy-beat;
+    callback clear-beat;
+    callback delete-beat;
+    callback copy-track(int);
+    callback duplicate-track(int);
+    callback delete-track(int);
+    callback clear-track(int);
+    callback insert-pattern(int, int);
+    callback pattern-changed(int);
 
     width: 800px;
     height: 480px;
+
+    property <[bool]> current-steps:
+        root.patterns.length > 0 && root.current-pattern < root.patterns.length
+            ? root.patterns[root.current-pattern]
+            : [];
 
     BeatContent {
         width: 100%;
@@ -52,35 +90,87 @@ export component Beat inherits Rectangle {
 
         steps <=> root.steps;
         playhead <=> root.playhead;
-
         grid-resolution <=> root.grid-resolution;
         playing <=> root.playing;
-
         humanize <=> root.humanize;
         swing <=> root.swing;
-
         beat-name <=> root.beat-name;
         resolution-options <=> root.resolution-options;
-
         instrument-names <=> root.instrument-names;
-
         track-active <=> root.track-active;
         track-solo <=> root.track-solo;
-
         track-pan <=> root.track-pan;
         track-volume <=> root.track-volume;
-
         track-mixer-channel <=> root.track-mixer-channel;
         selected-track <=> root.selected-track;
+        current-pattern <=> root.current-pattern;
+        patterns <=> root.patterns;
 
         close-requested => { root.close-requested(); }
         add-track-requested => { root.add-track-requested(); }
         grid-resolution-changed(value) => { root.grid-resolution-changed(value); }
         track-selected(index) => { root.track-selected(index); }
+        step-toggled(idx, val) => {
+            if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
+                root.patterns[root.current-pattern][idx] = val;
+            }
+        }
+        duplicate-beat => { root.duplicate-beat(); }
+        copy-beat => { root.copy-beat(); }
+        clear-beat => { root.clear-beat(); }
+        delete-beat => { root.delete-beat(); }
+        copy-track(track) => { root.copy-track(track); }
+        duplicate-track(track) => { root.duplicate-track(track); }
+        delete-track(track) => { root.delete-track(track); }
+        clear-track(track) => { root.clear-track(track); }
+        insert-pattern(track, interval) => { root.insert-pattern(track, interval); }
+        pattern-changed(idx) => { root.pattern-changed(idx); }
     }
 }
 
 export component BeatPopup inherits Rectangle {
+    in-out property <[[bool]]> patterns: [[
+        true, false, false, false,
+        false, false, false, false,
+        true, false, false, false,
+        false, false, false, false,
+
+        false, false, false, false,
+        true, false, false, false,
+        false, false, false, false,
+        true, false, false, false,
+
+        false, false, false, false,
+        false, false, true, false,
+        false, false, false, false,
+        false, false, true, false,
+
+        true, false, true, false,
+        true, false, true, false,
+        true, false, true, false,
+        true, false, true, false,
+
+        false, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+        false, false, true, false,
+
+        false, false, false, false,
+        false, true, false, false,
+        false, false, false, false,
+        false, false, false, false,
+
+        true, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+        false, false, false, false,
+
+        false, false, false, true,
+        false, false, false, true,
+        false, false, false, true,
+        false, false, false, true
+    ]];
+    in-out property <int> current-pattern: 0;
     in-out property <[bool]> steps: [];
     in-out property <int> playhead: -1;
     in-out property <int> grid-resolution: 16;
@@ -90,18 +180,12 @@ export component BeatPopup inherits Rectangle {
     in-out property <string> beat-name: "BEAT SEQUENCER";
     in-out property <[int]> resolution-options: [8, 16, 32, 64];
     in-out property <[string]> instrument-names:
-        ["Kick", "Snare", "Clap", "Closed Hat",
-         "Open Hat", "Tom", "Cymbal", "Perc"];
-    in-out property <[bool]> track-active:
-        [true, true, true, true, true, true, true, true];
-    in-out property <[bool]> track-solo:
-        [false, false, false, false, false, false, false, false];
-    in-out property <[float]> track-pan:
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-    in-out property <[float]> track-volume:
-        [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
-    in-out property <[int]> track-mixer-channel:
-        [0, 1, 2, 3, 4, 5, 6, 7];
+        ["Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Tom", "Cymbal", "Perc"];
+    in-out property <[bool]> track-active: [true, true, true, true, true, true, true, true];
+    in-out property <[bool]> track-solo: [false, false, false, false, false, false, false, false];
+    in-out property <[float]> track-pan: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    in-out property <[float]> track-volume: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+    in-out property <[int]> track-mixer-channel: [0, 1, 2, 3, 4, 5, 6, 7];
     in-out property <int> selected-track: 0;
     in-out property <length> popup-x: 24px;
     in-out property <length> popup-y: 80px;
@@ -110,6 +194,16 @@ export component BeatPopup inherits Rectangle {
 
     callback open-requested;
     callback close-requested;
+    callback duplicate-beat;
+    callback copy-beat;
+    callback clear-beat;
+    callback delete-beat;
+    callback copy-track(int);
+    callback duplicate-track(int);
+    callback delete-track(int);
+    callback clear-track(int);
+    callback insert-pattern(int, int);
+    callback pattern-changed(int);
 
     open-requested => { root.open = true; }
 
@@ -123,26 +217,21 @@ export component BeatPopup inherits Rectangle {
 
         steps <=> root.steps;
         playhead <=> root.playhead;
-
         grid-resolution <=> root.grid-resolution;
         playing <=> root.playing;
-
         humanize <=> root.humanize;
         swing <=> root.swing;
-
         beat-name <=> root.beat-name;
         resolution-options <=> root.resolution-options;
-
         instrument-names <=> root.instrument-names;
-
         track-active <=> root.track-active;
         track-solo <=> root.track-solo;
-
         track-pan <=> root.track-pan;
         track-volume <=> root.track-volume;
-
         track-mixer-channel <=> root.track-mixer-channel;
         selected-track <=> root.selected-track;
+        current-pattern <=> root.current-pattern;
+        patterns <=> root.patterns;
 
         close-requested => {
             root.open = false;
@@ -151,6 +240,21 @@ export component BeatPopup inherits Rectangle {
         add-track-requested => { }
         grid-resolution-changed(value) => { }
         track-selected(index) => { }
+        step-toggled(idx, val) => {
+            if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
+                root.patterns[root.current-pattern][idx] = val;
+            }
+        }
+        duplicate-beat => { root.duplicate-beat(); }
+        copy-beat => { root.copy-beat(); }
+        clear-beat => { root.clear-beat(); }
+        delete-beat => { root.delete-beat(); }
+        copy-track(track) => { root.copy-track(track); }
+        duplicate-track(track) => { root.duplicate-track(track); }
+        delete-track(track) => { root.delete-track(track); }
+        clear-track(track) => { root.clear-track(track); }
+        insert-pattern(track, interval) => { root.insert-pattern(track, interval); }
+        pattern-changed(idx) => { root.pattern-changed(idx); }
     }
 
     out property <bool> mouse-over: content.mouse-over;

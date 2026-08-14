@@ -9,12 +9,22 @@ export component BeatHeader inherits Rectangle {
     in-out property <int> grid-resolution: 16;
 
     in-out property <bool> grid-dropdown-open: false;
+    in-out property <bool> beat-menu-open: false;
+
+    in-out property <int> current-pattern: 0;
+    in-out property <[[bool]]> patterns: [[]];
+    in-out property <[int]> pattern-indexes: [0];
 
     in property <[int]> resolution-options: [8, 16, 32, 64];
 
     callback close-requested;
     callback add-track-requested;
     callback grid-resolution-changed(int);
+    callback duplicate-beat;
+    callback copy-beat;
+    callback clear-beat;
+    callback delete-beat;
+    callback pattern-changed(int);
 
     height: 34px;
     background: transparent;
@@ -160,6 +170,21 @@ export component BeatHeader inherits Rectangle {
             }
         }
 
+        menu-button := Button {
+            width: 24px;
+            height: 24px;
+
+            border-radius: 12px;
+
+            icon: @image-url("../icons/menu_dots.svg");
+            icon-size: 14px;
+            icon-color: Theme.text-dim;
+
+            clicked => {
+                root.beat-menu-open = !root.beat-menu-open;
+            }
+        }
+
         Button {
             width: 24px;
             height: 24px;
@@ -176,60 +201,8 @@ export component BeatHeader inherits Rectangle {
         }
     }
 
-    if root.grid-dropdown-open : Rectangle {
-        x: steps-button.x;
-        y: 38px;
-
-        width: 62px;
-        height: root.resolution-options.length * 26px + 4px;
-
-        background: Theme.surface-high;
-
-        border-radius: 4px;
-        border-width: 1px;
-        border-color: Theme.border;
-
-        z: 20;
-
-        VerticalLayout {
-            padding: 2px;
-            spacing: 1px;
-
-            for option in root.resolution-options: Rectangle {
-                width: 58px;
-                height: 24px;
-
-                background: option == root.grid-resolution
-                    ? Theme.accent
-                    : transparent;
-
-                border-radius: 3px;
-
-                Text {
-                    text: "" + option;
-
-                    width: 100%;
-                    height: 100%;
-
-                    color: option == root.grid-resolution
-                        ? Theme.text-primary
-                        : Theme.text-dim;
-
-                    font-size: 9px;
-                    font-weight: 700;
-
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.grid-resolution = option;
-                        root.grid-resolution-changed(option);
-                        root.grid-dropdown-open = false;
-                    }
-                }
-            }
-        }
-    }
+    // Anchors for the dropdown menus, which are rendered at the parent
+    // (BeatContent) root level so they paint above the track grid.
+    out property <length> steps-anchor-x: steps-button.x;
+    out property <length> beat-anchor-x: menu-button.x + menu-button.width;
 }

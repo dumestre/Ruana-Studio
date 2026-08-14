@@ -14,6 +14,8 @@ export component BeatTrack inherits Rectangle {
 
     in property <bool> selected: false;
 
+    in-out property <int> track-menu-open-index: -1;
+
     callback selected-changed;
     callback active-changed(bool);
     callback solo-changed(bool);
@@ -207,6 +209,24 @@ export component BeatTrack inherits Rectangle {
             vertical-alignment: center;
 
             overflow: elide;
+        }
+    }
+
+    // Overlay on the name area only (after the fixed-width controls),
+    // so it doesn't squeeze the name Text out of the layout.
+    TouchArea {
+        x: 139px;
+        y: 0;
+        width: parent.width - 140px;
+        height: 100%;
+        mouse-cursor: pointer;
+
+        clicked => {
+            if (root.track-menu-open-index == root.track-index) {
+                root.track-menu-open-index = -1;
+            } else {
+                root.track-menu-open-index = root.track-index;
+            }
         }
     }
 }
