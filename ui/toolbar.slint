@@ -120,9 +120,15 @@ export component Toolbar inherits Rectangle {
             cross-axis-alignment: CrossAxisAlignment.center;
 
         Button {
+            
+            height: 20px;
             icon: @image-url("icons/minimize.svg");
             icon-size: 14px;
+            preferred-height: 0px;
+            preferred-width: 0px;
             text: "";
+            width: 20px;
+            corner-radius: 13px;
             clicked => {
                 root.minimize();
             }
@@ -132,11 +138,14 @@ export component Toolbar inherits Rectangle {
             background: transparent;
         }
         Button {
+            height: 20px;
             icon: root.full-screen
                 ? @image-url("icons/restore.svg")
                 : @image-url("icons/maximize.svg");
-            icon-size: 14px;
+            icon-size: 10px;
             text: "";
+            width: 20px;
+            corner-radius: 13px;
             clicked => {
                 root.full-screen = !root.full-screen;
             }
@@ -146,10 +155,13 @@ export component Toolbar inherits Rectangle {
             background: transparent;
         }
         Button {
+            height: 20px;
             icon: @image-url("icons/close.svg");
             icon-color: Colors.crimson;
-            icon-size: 20px;
+            icon-size: 14px;
             text: "";
+            width: 20px;
+            corner-radius: 13px;
             clicked => {
                 root.close();
             }
