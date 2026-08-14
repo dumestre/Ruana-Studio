@@ -7,6 +7,8 @@ export component Preview inherits Rectangle {
     in property <bool> playing: false;
     in property <float> progress: 0.0;
 
+    private property <bool> has-file: root.file-name != "No file selected";
+
     callback play();
     callback stop();
 
@@ -63,6 +65,8 @@ export component Preview inherits Rectangle {
             background: Theme.surface;
 
             border-radius: 2px;
+
+            opacity: root.has-file ? 1.0 : 0.4;
 
             // Linha central
             Rectangle {
@@ -139,7 +143,9 @@ export component Preview inherits Rectangle {
 
                 Image {
                     source: @image-url("../icons/play.svg");
-                    colorize: Colors.beige;
+                    colorize: root.has-file
+                        ? Theme.accent
+                        : Theme.text-dim;
                     width: 16px;
                     height: 16px;
                     horizontal-alignment: center;
@@ -147,6 +153,7 @@ export component Preview inherits Rectangle {
                 }
 
                 TouchArea {
+                    enabled: root.has-file;
                     clicked => {
                         if root.playing {
                             root.stop();

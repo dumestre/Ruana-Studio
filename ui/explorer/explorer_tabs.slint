@@ -45,14 +45,21 @@ component ExplorerTab inherits Rectangle {
                 ? Theme.text-primary
                 : Theme.text-dim;
 
-            font-size: 9px;
+            font-size: 11px;
             horizontal-alignment: TextHorizontalAlignment.center;
 
             vertical-alignment: center;
         }
     }
 
-    TouchArea {
+    states [
+        hovered when touch.has-hover && !root.active: {
+            background: Theme.surface-high;
+        }
+    ]
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
         clicked => {
             root.clicked();
         }
