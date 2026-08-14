@@ -359,35 +359,6 @@ export component MainWindow inherits Window {
 
 
                 // =============================================
-                // SPLITTER DO TRACK PANEL
-                //
-                // TrackPanel está à esquerda.
-                //
-                // ← aumenta TrackPanel
-                // → diminui TrackPanel
-                //
-                // O valor do splitter é a única fonte
-                // de verdade da largura do TrackPanel.
-                // =============================================
-
-                SplitterVerticalGrowLeft {
-
-          
-                    value <=>
-                        root.tracks-header-width;
-
-                    min-value:
-                        120px;
-
-                    max-value:
-                        420px;
-
-                    z:
-                        50;
-                }
-
-
-                // =============================================
                 // TIMELINE
                 //
                 // Ocupa automaticamente todo o espaço
@@ -449,6 +420,46 @@ export component MainWindow inherits Window {
 
 
  Rectangle { min-width: 16px; min-height: 16px; /* @lsp:ignore-node */ }                }
+            }
+
+            // =============================================
+            // SPLITTER DO TRACK PANEL
+            //
+            // TrackPanel está à esquerda.
+            //
+            // ← aumenta TrackPanel
+            // → diminui TrackPanel
+            //
+            // O valor do splitter é a única fonte
+            // de verdade da largura do TrackPanel.
+            //
+            // Posicionado fora do layout para descer
+            // até a borda inferior (como o do Explorer).
+            // =============================================
+
+            SplitterVerticalGrowLeft {
+
+                x:
+                    root.left-panel-width
+                    + root.tracks-header-width;
+
+                y: 0;
+
+                width: 5px;
+
+                height: 100%;
+
+                value <=>
+                    root.tracks-header-width;
+
+                min-value:
+                    120px;
+
+                max-value:
+                    420px;
+
+                z:
+                    50;
             }
 
 
