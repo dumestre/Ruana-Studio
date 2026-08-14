@@ -71,12 +71,13 @@ export component TrackRow inherits Rectangle {
 
     // =====================================================
     // FUNDO
+    //
+    // Transparente: o fundo alternado por compasso é
+    // desenhado pela Timeline atrás das linhas de clips.
     // =====================================================
 
     background:
-        root.selected-track
-            ? Theme.surface-high
-            : Theme.base;
+        transparent;
 
 
     // =====================================================
@@ -96,7 +97,7 @@ export component TrackRow inherits Rectangle {
 
         background:
             root.selected-track
-                ? Theme.surface-high.transparentize(0.25)
+                ? Theme.surface-high.transparentize(0.15)
                 : transparent;
     }
 
