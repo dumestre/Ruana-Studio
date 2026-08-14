@@ -43,29 +43,30 @@ export component Toolbar inherits Rectangle {
         }
 
         HorizontalLayout {
+            spacing: 2px;
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
-        Button { preferred-width: 0px;
-            text: "New"; borderless: true;
-            text-color: Colors.beige;
-            letter-spacing: 1px;
-            width: 35px; clicked => {} }
-        Button { preferred-width: 0px;
-            text: "Open"; borderless: true;
-            text-color: Colors.beige;
-            letter-spacing: 1px;
-            width: 35px; clicked => {} }
-        Button { preferred-width: 0px;
-            text: "Save"; borderless: true;
-            text-color: Colors.beige;
-            letter-spacing: 1px;
-            width: 37px; clicked => {} }
-        Button { preferred-width: 0px;
-            text: "Save As"; borderless: true;
-            text-color: Colors.beige;
-            letter-spacing: 1px;
-            width: 48px; clicked => {} }
+            Button {
+                text: "New"; borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 2px;
+                clicked => {} }
+            Button {
+                text: "Open"; borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 2px;
+                clicked => {} }
+            Button {
+                text: "Save"; borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 2px;
+                clicked => {} }
+            Button {
+                text: "Save As"; borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 2px;
+                clicked => {} }
         }
 
         Rectangle {
