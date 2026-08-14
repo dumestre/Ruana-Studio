@@ -7,6 +7,7 @@ export component TimelineHeader inherits Rectangle {
     in property <[string]> track-names: [];
     in property <int> selected-track: 0;
     in property <length> ruler-height: 30px;
+    in property <float> zoom-y: 1.0;
 
     callback track-clicked(int);
     callback add-track-requested(string);
@@ -181,6 +182,9 @@ export component TimelineHeader inherits Rectangle {
 
             selected:
                 root.selected-track == i;
+
+            zoom-y:
+                root.zoom-y;
 
 
             clicked(index) => {

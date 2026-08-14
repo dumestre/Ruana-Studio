@@ -91,6 +91,8 @@ export component TrackHeaderRow inherits Rectangle {
     in property <bool> selected: false;
     in property <int> track-index: 0;
 
+    in property <float> zoom-y: 1.0;
+
     in-out property <bool> muted: false;
     in-out property <bool> solo: false;
     in-out property <bool> record-armed: false;
@@ -128,11 +130,11 @@ export component TrackHeaderRow inherits Rectangle {
         return "I";
     }
 
-    // ============================================================
-    // DIMENSÕES
+// ============================================================
+    // DIMENS��ES
     // ============================================================
 
-    height: 64px;
+    height: 64px * root.zoom-y;
 
     // ============================================================
     // FUNDO
