@@ -82,7 +82,11 @@ export component Toolbar inherits Rectangle {
         
         Button {
             text: "SNAP";
+            height: 22px;
             toggled: root.snap-enabled;
+            toggled-bg: Theme.accent;
+            toggled-fg: Theme.base;
+            subtle-toggled: true;
             clicked => {
                 root.snap-enabled = !root.snap-enabled;
                 root.snap-toggled(root.snap-enabled);
@@ -90,7 +94,11 @@ export component Toolbar inherits Rectangle {
         }
         Button {
             text: "GRID";
+            height: 22px;
             toggled: root.grid-enabled;
+            toggled-bg: Theme.accent;
+            toggled-fg: Theme.base;
+            subtle-toggled: true;
             clicked => {
                 root.grid-enabled = !root.grid-enabled;
                 root.grid-toggled(root.grid-enabled);
