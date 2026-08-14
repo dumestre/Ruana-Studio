@@ -507,11 +507,20 @@ export component MainWindow inherits Window {
 
                 height: 16px;
 
-                value <=>
+                value:
                     root.zoom-level;
 
                 min-value: 0.5;
                 max-value: 4.0;
+
+                zoom-requested(new-zoom) => {
+                    let old-zoom = timeline.zoom;
+                    root.zoom-level = new-zoom;
+                    timeline.zoom = new-zoom;
+                    timeline.scroll-x = max(0px, min(timeline.max-scroll-x,
+                        ((timeline.width / 2 + timeline.scroll-x) / old-zoom) * new-zoom - timeline.width / 2
+                    ));
+                }
 
                 z: 60;
             }

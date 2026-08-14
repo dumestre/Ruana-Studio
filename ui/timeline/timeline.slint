@@ -23,6 +23,7 @@ export component Timeline inherits Rectangle {
 
     in-out property <float> zoom-y: 1.0;
 
+    callback zoom-to(float, length);
 
     // =====================================================
     // SCROLL
@@ -223,31 +224,15 @@ export component Timeline inherits Rectangle {
                         && !event.modifiers.alt
                     ) {
 
-                    root.zoom =
-                        max(
-                            0.5,
-                            min(
-                                4.0,
-                                root.zoom
-                                * (
-                                    dz > 0px
-                                        ? 0.9
-                                        : 1.1
-                                )
-                            )
-                        );
+                    let old-zoom = root.zoom;
+                    let factor = dz > 0px ? 0.9 : 1.1;
+                    let new-zoom = max(0.5, min(4.0, old-zoom * factor));
 
-                    root.scroll-x =
-                        min(
-                            root.scroll-x,
-                            root.max-scroll-x
-                        );
+                    let mouse-x = self.mouse-x;
+                    let content-x = (mouse-x + root.scroll-x) / old-zoom;
+                    let new-scroll-x = content-x * new-zoom - mouse-x;
 
-                    root.scroll-y =
-                        min(
-                            root.scroll-y,
-                            root.max-scroll-y
-                        );
+                    root.zoom-to(new-zoom, new-scroll-x);
 
                 } else if event.modifiers.alt {
 

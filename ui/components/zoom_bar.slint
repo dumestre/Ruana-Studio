@@ -24,6 +24,8 @@ export component ZoomBarHorizontal inherits Rectangle {
     property <length> start-abs-x: 0px;
     property <float> start-value: 0.0;
 
+    callback zoom-requested(float);
+
     height: 16px;
 
     background:
@@ -74,11 +76,9 @@ export component ZoomBarHorizontal inherits Rectangle {
                 mouse-cursor: pointer;
 
                 clicked => {
-                    root.value =
-                        max(
-                            root.min-value,
-                            root.value - root.step
-                        );
+                    let new-value = max(root.min-value, root.value - root.step);
+                    root.value = new-value;
+                    root.zoom-requested(new-value);
                 }
             }
         }
@@ -182,6 +182,7 @@ export component ZoomBarHorizontal inherits Rectangle {
                                     * root.range
                                 )
                             );
+                        root.zoom-requested(root.value);
 
                     } else if root.dragging
                         && event.kind == PointerEventKind.up {
@@ -229,11 +230,9 @@ export component ZoomBarHorizontal inherits Rectangle {
                 mouse-cursor: pointer;
 
                 clicked => {
-                    root.value =
-                        min(
-                            root.max-value,
-                            root.value + root.step
-                        );
+                    let new-value = min(root.max-value, root.value + root.step);
+                    root.value = new-value;
+                    root.zoom-requested(new-value);
                 }
             }
         }
