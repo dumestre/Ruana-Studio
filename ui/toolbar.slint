@@ -42,19 +42,39 @@ export component Toolbar inherits Rectangle {
             background: transparent;
         }
 
-        Button { text: "New"; borderless: true;
-            text-color: Colors.beige; clicked => {} }
-        Button { text: "Open"; borderless: true;
-            text-color: Colors.beige; clicked => {} }
-        Button { text: "Save"; borderless: true;
-            text-color: Colors.beige; clicked => {} }
-        Button { text: "Save As"; borderless: true;
-            text-color: Colors.beige; clicked => {} }
+        HorizontalLayout {
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+        Button { preferred-width: 0px;
+            text: "New"; borderless: true;
+            text-color: Colors.beige;
+            letter-spacing: 1px;
+            width: 35px; clicked => {} }
+        Button { preferred-width: 0px;
+            text: "Open"; borderless: true;
+            text-color: Colors.beige;
+            letter-spacing: 1px;
+            width: 35px; clicked => {} }
+        Button { preferred-width: 0px;
+            text: "Save"; borderless: true;
+            text-color: Colors.beige;
+            letter-spacing: 1px;
+            width: 37px; clicked => {} }
+        Button { preferred-width: 0px;
+            text: "Save As"; borderless: true;
+            text-color: Colors.beige;
+            letter-spacing: 1px;
+            width: 48px; clicked => {} }
+        }
 
         Rectangle {
             width: 1px;
             background: Theme.border;
         }
+
+        HorizontalLayout{
+            alignment: LayoutAlignment.center;
 
         Button {
             height: 20px;
@@ -103,12 +123,15 @@ export component Toolbar inherits Rectangle {
             toggled: root.grid-enabled;
             toggled-bg: Theme.accent;
             toggled-fg: Theme.base;
+            width: 32px;
+            preferred-width: 0px;
             subtle-toggled: true;
             clicked => {
                 root.grid-enabled = !root.grid-enabled;
                 root.grid-toggled(root.grid-enabled);
             }
         }
+    }
 
         Rectangle {
             horizontal-stretch: 1;
@@ -116,7 +139,7 @@ export component Toolbar inherits Rectangle {
         }
 
         HorizontalLayout {
-            alignment: LayoutAlignment.end;
+            alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
         Button {

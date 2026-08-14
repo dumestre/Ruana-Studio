@@ -15,6 +15,7 @@ export component Button inherits Rectangle {
     in property <bool> borderless: false;
     in property <bool> keep-icon-color: false;
     in property <length> corner-radius: 4px;
+    in property <length> letter-spacing: 0px;
     callback clicked;
 
     background: Theme.surface;
@@ -39,6 +40,7 @@ export component Button inherits Rectangle {
         visible: root.text != "";
         color: root.text-color;
         font-size: 11px;
+        letter-spacing: root.letter-spacing;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         horizontal-alignment: center;
