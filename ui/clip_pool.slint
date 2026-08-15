@@ -14,15 +14,16 @@ export component ClipItemVisual inherits Rectangle {
     border-color: Theme.border;
 
     HorizontalLayout {
-        padding-left: 6px;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        padding-left: 0px;
         padding-right: 6px;
         spacing: 8px;
 
         Rectangle {
-            width: 8px;
-            height: 100%;
+            width: 4px;
+            height: 90%;
             background: root.clip-color;
-            border-radius: 2px;
+            border-radius: 8px;
         }
 
         VerticalLayout {
@@ -138,6 +139,8 @@ export component ClipPool inherits Rectangle {
     }
 
     VerticalLayout {
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
         padding: 8px;
         spacing: 8px;
 
