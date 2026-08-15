@@ -188,6 +188,12 @@ export component MainWindow inherits Window {
     private property <float> drag-speed:
         0.0;
 
+    // Valor que o ghost realmente renderiza: persegue o alvo
+    // drag-tilt no timer drag_decay (125Hz), dando movimento
+    // suave tanto no arrasto quanto na volta a zero.
+    private property <angle> drag-tilt-display:
+        0deg;
+
 
     // =====================================================
     // LAYOUT PRINCIPAL
@@ -393,6 +399,7 @@ export component MainWindow inherits Window {
                         root.drag-active = true;
                         root.drag-inited = false;
                         root.drag-tilt = 0deg;
+                        root.drag-tilt-display = 0deg;
                         root.drag-speed = 0.0;
                     }
 
@@ -514,6 +521,7 @@ export component MainWindow inherits Window {
                         root.drag-active = false;
                         root.drag-inited = false;
                         root.drag-tilt = 0deg;
+                        root.drag-tilt-display = 0deg;
                         root.drag-speed = 0.0;
                     }
                 }
@@ -995,17 +1003,12 @@ export component MainWindow inherits Window {
                 height: 38px;
 
                 transform-rotation:
-                    root.drag-tilt;
+                    root.drag-tilt-display;
 
                 transform-origin:
                     { x: (root.left-panel-width - 16px) / 2, y: 19px };
 
                 z: 200;
-
-                animate transform-rotation {
-                    duration: 300ms;
-                    easing: cubic-bezier(0.22, 1.0, 0.36, 1.0);
-                }
 
 
                 // Glow suave ao redor
@@ -1203,7 +1206,7 @@ export component MainWindow inherits Window {
 
     drag_decay := Timer {
 
-        interval: 30ms;
+        interval: 8ms;
 
         running:
             root.drag-active
@@ -1211,11 +1214,18 @@ export component MainWindow inherits Window {
 
         triggered() => {
 
+            // Decai o alvo (mesma meia-vida de antes).
             root.drag-tilt =
-                root.drag-tilt * 0.85;
+                root.drag-tilt * 0.88;
 
             root.drag-speed =
-                root.drag-speed * 0.85;
+                root.drag-speed * 0.88;
+
+            // O exibido persegue o alvo suavemente (125Hz).
+            root.drag-tilt-display +=
+                (root.drag-tilt
+                    - root.drag-tilt-display)
+                * 0.5;
         }
     }
 }
