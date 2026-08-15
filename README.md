@@ -1,4 +1,4 @@
-# Ferrum Studio
+# Ruana Studio
 
 DAW (Digital Audio Workstation) nativa desenvolvida em **Rust**, com **Slint** para a interface gráfica.
 

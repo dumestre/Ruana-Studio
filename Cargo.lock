@@ -1349,16 +1349,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-studio"
-version = "0.1.0"
-dependencies = [
- "daw-core",
- "daw-media",
- "slint",
- "slint-build",
-]
-
-[[package]]
 name = "field-offset"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4142,6 +4132,16 @@ dependencies = [
  "snafu",
  "unicode-linebreak",
  "unicode-width",
+]
+
+[[package]]
+name = "ruana-studio"
+version = "0.1.0"
+dependencies = [
+ "daw-core",
+ "daw-media",
+ "slint",
+ "slint-build",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "ferrum-studio"
+name = "ruana-studio"
 version.workspace = true
 edition.workspace = true
 

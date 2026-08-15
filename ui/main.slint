@@ -26,7 +26,7 @@ export component MainWindow inherits Window {
     // =====================================================
 
     title:
-        "Ferrum Studio";
+        "Ruana Studio";
 
     preferred-width:
         1380px;
@@ -566,7 +566,7 @@ export component MainWindow inherits Window {
                 )
                 - 5px;
 
-            property <length> timeline-area-h:
+property <length> timeline-area-h:
                 self.height
                 - (
                     root.mixer-visible
@@ -575,19 +575,24 @@ export component MainWindow inherits Window {
                 );
 
 
-            // =================================================
-            // ÁREA PRINCIPAL
-            //
-            // LeftPanel
-            // TrackPanel
-            // Splitter
-            // Timeline
-            //
-            // O Timeline recebe automaticamente todo o espaço
-            // restante.
-            // =================================================
+            // Rodapé de zoom + scroll horizontal (16px + 14px).
+            // Sempre acima do slot do mixer — não some quando o mixer
+            // está oculto; a timeline expande por baixo.
 
-            HorizontalLayout {
+
+// =================================================
+// ÁREA PRINCIPAL
+//
+// LeftPanel
+// TrackPanel
+// Splitter
+// Timeline
+//
+// O Timeline recebe automaticamente todo o espaço
+// restante.
+// =================================================
+
+HorizontalLayout {
 
                 spacing:
                     0;
@@ -1293,7 +1298,7 @@ export component MainWindow inherits Window {
                 Text {
 
                     text:
-                        "Ferrum Studio 0.1.0";
+                        "Ruana Studio 0.1.0";
 
                     color:
                         Theme.text-dim;

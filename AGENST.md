@@ -1,4 +1,4 @@
-# Ferrum Studio  Windows > Linux > MacOS
+# Ruana Studio  Windows > Linux > MacOS
 
 
 DAW (Digital Audio Workstation) nativa desenvolvida em **Rust**, com **Slint** para a interface gráfica.
