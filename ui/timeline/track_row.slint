@@ -16,6 +16,18 @@ export component TrackRow inherits Rectangle {
 
     in property <[ClipData]> clips: [];
 
+    in property <[int]> added-ids: [];
+
+    in property <[int]> added-tracks: [];
+
+    in property <[string]> added-names: [];
+
+    in property <[float]> added-beats: [];
+
+    in property <[bool]> added-midi: [];
+
+    in property <int> added-count: 0;
+
 
     // =====================================================
     // MÉTRICAS
@@ -224,6 +236,73 @@ export component TrackRow inherits Rectangle {
         // =================================================
         // SLICE
         // =================================================
+
+        slice-requested(
+            id,
+            position
+        ) => {
+
+            root.slice-requested(
+                id,
+                position
+            );
+        }
+    }
+
+
+    // =====================================================
+    // CLIPS ADICIONADOS POR DRAG & DROP
+    //
+    // Mesma renderização, mas vindos do vetor fixo gerenciado
+    // em .slint (funciona no preview sem backend).
+    // =====================================================
+
+    for i in root.added-count: TrackClip {
+
+        visible:
+            root.added-tracks[i] == root.track-index;
+
+        name:
+            root.added-names[i];
+
+        clip-id:
+            root.added-ids[i];
+
+        track-index:
+            root.track-index;
+
+        beat:
+            root.added-beats[i];
+
+        len:
+            4.0;
+
+        clip-color:
+            root.added-midi[i]
+                ? Theme.clip-midi
+                : Theme.clip-audio;
+
+        is-midi:
+            root.added-midi[i];
+
+        px-per-beat:
+            root.px-per-beat;
+
+        row-height:
+            root.row-height;
+
+        selected:
+            root.selected-clip == root.added-ids[i];
+
+        active-tool:
+            root.active-tool;
+
+        clicked(id) => {
+
+            root.clip-selected(
+                id
+            );
+        }
 
         slice-requested(
             id,

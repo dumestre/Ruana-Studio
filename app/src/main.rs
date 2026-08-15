@@ -1,6 +1,6 @@
 slint::include_modules!();
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -60,24 +60,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Projeto placeholder do daw-core — o core não conhece a UI.
     let project = Project::demo();
-    let (tracks_model, clips_model) = bind_project(&ui, &project);
-
-    // Drop de clip do ClipPool na timeline.
-    {
-        let next_id = Rc::new(Cell::new(1000));
-        ui.on_clip_dropped(move |track, beat, name, is_midi| {
-            let id = next_id.get();
-            next_id.set(id + 1);
-            clips_model.push(ClipData {
-                id,
-                track_index: track,
-                name,
-                beat,
-                len: 4.0,
-                is_midi,
-            });
-        });
-    }
+    let (tracks_model, _clips_model) = bind_project(&ui, &project);
 
     // Adiciona tracks via botão "+" da timeline.
     {

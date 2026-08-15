@@ -66,6 +66,18 @@ export component Timeline inherits Rectangle {
 
     in property <[ClipData]> clips: [];
 
+    in property <[int]> added-ids: [];
+
+    in property <[int]> added-tracks: [];
+
+    in property <[string]> added-names: [];
+
+    in property <[float]> added-beats: [];
+
+    in property <[bool]> added-midi: [];
+
+    in property <int> added-count: 0;
+
 
     // =====================================================
     // PREVIEW DE DROP (arrasto do ClipPool)
@@ -832,6 +844,24 @@ export component Timeline inherits Rectangle {
 
                     clips:
                         root.clips;
+
+                    added-ids:
+                        root.added-ids;
+
+                    added-tracks:
+                        root.added-tracks;
+
+                    added-names:
+                        root.added-names;
+
+                    added-beats:
+                        root.added-beats;
+
+                    added-midi:
+                        root.added-midi;
+
+                    added-count:
+                        root.added-count;
 
                     px-per-beat:
                         root.px-per-beat;

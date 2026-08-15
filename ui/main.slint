@@ -109,13 +109,21 @@ export component MainWindow inherits Window {
 
     // =====================================================
     // DADOS
+    //
+    // Clips iniciais: no preview (sem Rust) a UI usa estes
+    // valores; no app compilado o backend sobrescreve via
+    // set_clips().
     // =====================================================
 
     in-out property <[float]> mixer-meters:
         [0, 0, 0, 0, 0];
 
     in-out property <[ClipData]> clips:
-        [];
+        [
+            { id: 0, track-index: 0, name: "Drums A", beat: 0.0, len: 4.0, is-midi: true },
+            { id: 1, track-index: 1, name: "Bass A", beat: 0.0, len: 8.0, is-midi: true },
+            { id: 2, track-index: 2, name: "Vocal Verse", beat: 0.0, len: 4.0, is-midi: false }
+        ];
 
     in-out property <[string]> track-names:
         [
@@ -124,6 +132,31 @@ export component MainWindow inherits Window {
             "Vocal",
             "Synth"
         ];
+
+    // Clips criados pelo drag & drop, 100% em .slint (funciona
+    // no preview sem compilar). O Slint não permite append em
+    // arrays, então usamos slots fixos (16) + um contador, com
+    // arrays paralelos de escalares.
+    in-out property <[int]> added-ids:
+        [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1];
+
+    in-out property <[int]> added-tracks:
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    in-out property <[string]> added-names:
+        ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""];
+
+    in-out property <[float]> added-beats:
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+    in-out property <[bool]> added-midi:
+        [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+
+    in-out property <int> added-count:
+        0;
+
+    private property <int> drag-next-id:
+        100;
 
 
     // =====================================================
@@ -337,12 +370,19 @@ export component MainWindow inherits Window {
             if local-x >= 0px
                 && local-y >= 30px {
 
-                root.clip-dropped(
-                    root.drag-drop-track,
-                    root.drag-snap-beat,
-                    root.drag-name,
-                    root.drag-is-midi
-                );
+                // Inserção 100% em .slint: funciona no preview
+                // sem backend. Id único + slot fixo + contador
+                // (o Slint não permite append em arrays).
+                if root.added-count < 16 {
+                    let id = root.drag-next-id;
+                    root.drag-next-id = id + 1;
+                    root.added-ids[root.added-count] = id;
+                    root.added-tracks[root.added-count] = root.drag-drop-track;
+                    root.added-names[root.added-count] = root.drag-name;
+                    root.added-beats[root.added-count] = root.drag-snap-beat;
+                    root.added-midi[root.added-count] = root.drag-is-midi;
+                    root.added-count += 1;
+                }
             }
         }
 
@@ -640,6 +680,24 @@ export component MainWindow inherits Window {
 
                     clips:
                         root.clips;
+
+                    added-ids:
+                        root.added-ids;
+
+                    added-tracks:
+                        root.added-tracks;
+
+                    added-names:
+                        root.added-names;
+
+                    added-beats:
+                        root.added-beats;
+
+                    added-midi:
+                        root.added-midi;
+
+                    added-count:
+                        root.added-count;
 
                     drop-visible:
                         root.drag-active
