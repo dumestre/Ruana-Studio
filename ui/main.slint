@@ -497,9 +497,8 @@ export component MainWindow inherits Window {
                             && root.drag-inited
                             && root.track-names.length > 0 {
 
-                            // Converte as coordenadas da janela
-                            // para o espaço local do Timeline via
-                            // absolute-position.
+                            // Garante WYSIWYG: o clip cai exatamente
+                            // onde o preview (snap) mostrou.
                             let tl = timeline.absolute-position;
 
                             let local-x =
@@ -513,43 +512,9 @@ export component MainWindow inherits Window {
                             if local-x >= 0px
                                 && local-y >= 30px {
 
-                                let content-x =
-                                    local-x
-                                    + timeline.scroll-x;
-
-                                let content-y =
-                                    local-y
-                                    + timeline.scroll-y;
-
-                                let beat =
-                                    max(
-                                        0.0,
-                                        round(
-                                            (content-x
-                                                / (40px * root.zoom-level))
-                                            * 2.0
-                                        )
-                                        / 2.0
-                                    );
-
-                                let raw-track =
-                                    floor(
-                                        (content-y - 30px)
-                                            / (64px * root.zoom-y-level)
-                                    );
-
-                                let track =
-                                    max(
-                                        0,
-                                        min(
-                                            raw-track,
-                                            root.track-names.length - 1
-                                        )
-                                    );
-
                                 root.clip-dropped(
-                                    track,
-                                    beat,
+                                    root.drag-drop-track,
+                                    root.drag-snap-beat,
                                     root.drag-name,
                                     root.drag-is-midi
                                 );
@@ -640,7 +605,9 @@ export component MainWindow inherits Window {
                         root.clips;
 
                     drop-visible:
-                        root.drag-over-timeline;
+                        root.drag-active
+                        && root.drag-inited
+                        && root.drag-over-timeline;
 
                     drop-x:
                         root.drag-snap-beat * timeline.px-per-beat;
