@@ -4,7 +4,9 @@
 pub mod clip;
 pub mod project;
 pub mod track;
+pub mod transport;
 
 pub use clip::{Clip, ClipKind};
 pub use project::Project;
 pub use track::{Track, TrackKind};
+pub use transport::Transport;
