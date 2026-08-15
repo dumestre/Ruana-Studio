@@ -1,25 +1,7 @@
 import { Theme } from "theme.slint";
-
-import { Transport } from "transport.slint";
-import { Toolbar } from "toolbar.slint";
-import { EditToolbar } from "edit_toolbar.slint";
-import { ClipPool, ClipItemVisual } from "clip_pool.slint";
-import { Timeline } from "timeline/timeline.slint";
 import { ClipData } from "timeline/clip_data.slint";
-import { Explorer } from "explorer/explorer.slint";
-import { Mixer } from "mixer.slint";
 import { BeatPopup } from "beat/beat.slint";
-import {
-    SplitterVerticalGrowLeft,
-    SplitterVerticalGrowRight,
-    SplitterHorizontal
-} from "components/splitter.slint";
-
-import { ZoomBarHorizontal, ZoomBarVertical } from "components/zoom_bar.slint";
-
-import { BottomToolbar } from "components/bottom_toolbar.slint";
-import { ScrollBarHorizontal, ScrollBarVertical } from "components/scrollbar.slint";
-import { TrackPanel } from "timeline/TrackPanel.slint";
+import { Workspace } from "windows/workspace.slint";
 
 
 export component MainWindow inherits Window {
@@ -51,9 +33,6 @@ export component MainWindow inherits Window {
 
     full-screen:
         true;
-
-    forward-focus:
-        keyboard-focus;
 
 
     // =====================================================
@@ -242,43 +221,10 @@ in-out property <bool> mixer-visible:
     private property <angle> drag-tilt-display:
         0deg;
 
-    // True quando o cursor está sobre a área de conteúdo da
-    // timeline (abaixo da régua): o ghost passa a encaixar no
-    // grid, mostrando exatamente onde o clip vai cair.
-    private property <bool> drag-over-timeline:
-        root.drag-x >= timeline.absolute-position.x
-        && root.drag-x <= timeline.absolute-position.x + timeline.width
-        && root.drag-y >= timeline.absolute-position.y + timeline.ruler-height;
-
-    // Beat (meio-tom) do snap, igual à fórmula do drop.
-    private property <float> drag-snap-beat:
-        max(
-            0.0,
-            round(
-                ((root.drag-x
-                    - timeline.absolute-position.x
-                    + timeline.scroll-x)
-                    / timeline.px-per-beat)
-                * 2.0
-            )
-            / 2.0
-        );
-
-    // Track sob o cursor, igual à fórmula do drop.
-    private property <int> drag-drop-track:
-        max(
-            0,
-            min(
-                floor(
-                    (root.drag-y
-                        - timeline.absolute-position.y
-                        + timeline.scroll-y
-                        - timeline.ruler-height)
-                        / timeline.row-height
-                ),
-                max(0, root.track-names.length - 1)
-            )
-        );
+    // Propriedades de drag computadas no Workspace e sincronizadas via binding
+    property <bool> drag-over-timeline: false;
+    property <float> drag-snap-beat: 0.0;
+    property <int> drag-drop-track: 0;
 
 
     // =====================================================
@@ -368,32 +314,17 @@ in-out property <bool> mixer-visible:
 
         if root.drag-active
             && root.drag-inited
-            && root.track-names.length > 0 {
+            && root.track-names.length > 0
+            && root.drag-over-timeline {
 
-            // Garante WYSIWYG: o clip cai exatamente
-            // onde o preview (snap) mostrou.
-            let tl = timeline.absolute-position;
-
-            let local-x =
-                root.drag-x
-                - tl.x;
-
-            let local-y =
-                root.drag-y
-                - tl.y;
-
-            if local-x >= 0px
-                && local-y >= 30px {
-
-                // O core é dono dos dados: a UI só emite a
-                // intenção; o bridge (Rust) cria o clip.
-                root.clip-dropped(
-                    root.drag-drop-track,
-                    root.drag-snap-beat,
-                    root.drag-name,
-                    root.drag-is-midi
-                );
-            }
+            // O core é dono dos dados: a UI só emite a
+            // intenção; o bridge (Rust) cria o clip.
+            root.clip-dropped(
+                root.drag-drop-track,
+                root.drag-snap-beat,
+                root.drag-name,
+                root.drag-is-midi
+            );
         }
 
         root.drag-active = false;
@@ -426,979 +357,72 @@ in-out property <bool> mixer-visible:
 
             } else {
 
-                reject
+                reject;
             }
         }
-
     }
 
     init => {
         undo-scope.focus();
     }
 
-    VerticalLayout {
-
-        alignment:
-            LayoutAlignment.stretch;
-
-        cross-axis-alignment:
-            CrossAxisAlignment.stretch;
-
-        spacing:
-            0;
-
-
-        // =================================================
-        // TOOLBAR
-        // =================================================
-
-        Toolbar {
-
-            full-screen <=>
-                root.full-screen;
-
-
-            zoom-in => {
-
-                root.zoom-level =
-                    min(
-                        root.zoom-level + 0.25,
-                        4.0
-                    );
-            }
-
-
-            zoom-out => {
-
-                root.zoom-level =
-                    max(
-                        root.zoom-level - 0.25,
-                        0.5
-                    );
-            }
-
-
-            close => {
-
-                root.close();
-            }
-
-
-            minimize => {
-
-                root.minimize();
-            }
-        }
-
-
-        // =================================================
-        // TRANSPORT
-        // =================================================
-
-        Transport {
-
-            playing <=>
-                root.playing;
-
-            position <=>
-                root.transport-position;
-
-
-            play-state-changed(state) => {
-
-                root.play-state-changed(
-                    state
-                );
-            }
-        }
-
-
-        // =================================================
-        // EDIT TOOLBAR
-        // =================================================
-
-        EditToolbar {
-
-            active-tool <=>
-                root.active-tool;
-
-            beat-open <=>
-                root.beat-open;
-
-            explorer-visible <=>
-                root.explorer-visible;
-
-            mixer-visible <=>
-                root.mixer-visible;
-        }
-
-
-        // =================================================
-        // ÁREA DE TRABALHO
-        // =================================================
-
-        workspace := Rectangle {
-
-            width:
-                100%;
-
-            height:
-                100%;
-
-
-            // =================================================
-            // ÁREA VISÍVEL DA TIMELINE
-            //
-            // Mesma matemática do Mixer/Explorer.
-            // =================================================
-
-            property <length> timeline-area-x:
-                root.left-panel-width
-                + root.tracks-header-width;
-
-            property <length> timeline-area-w:
-                self.width
-                - root.left-panel-width
-                - root.tracks-header-width
-                - (
-                    root.explorer-visible
-                        ? root.explorer-width + 5px
-                        : 0px
-                )
-                - 5px;
-
-property <length> timeline-area-h:
-                self.height
-                - (
-                    root.mixer-visible
-                        ? root.mixer-height + 5px
-                        : 0px
-                )
-                - bottom-toolbar.height;
-
-
-            // Rodapé de zoom + scroll horizontal (16px + 14px).
-            // Sempre acima do slot do mixer — não some quando o mixer
-            // está oculto; a timeline expande por baixo.
-
-
-// =================================================
-// ÁREA PRINCIPAL
-//
-// LeftPanel
-// TrackPanel
-// Splitter
-// Timeline
-//
-// O Timeline recebe automaticamente todo o espaço
-// restante.
-// =================================================
-
-HorizontalLayout {
-
-                spacing:
-                    0;
-
-                cross-axis-alignment:
-                    CrossAxisAlignment.stretch;
-
-
-                // =============================================
-                // CLIP POOL
-                // =============================================
-
-                clip_pool := ClipPool {
-
-                    width:
-                        root.left-panel-width;
-
-                    selected-track <=>
-                        root.selected-track;
-
-                    track-names:
-                        root.track-names;
-
-
-                    // =========================================
-                    // DRAG & DROP
-                    // =========================================
-
-                    clip-drag-started(
-                        name,
-                        position,
-                        duration,
-                        color,
-                        is-midi
-                    ) => {
-                        root.drag-begin(name, position, duration, color, is-midi);
-                    }
-
-
-                    clip-drag-moved(
-                        x,
-                        y
-                    ) => {
-                        root.drag-move(x, y);
-                    }
-
-
-                    clip-drag-finished() => {
-                        root.drag-end();
-                    }
-                }
-
-
-                // =============================================
-                // TRACK PANEL
-                // =============================================
-
-                TrackPanel {
-
-                    width:
-                        root.tracks-header-width;
-
-                    selected-track <=>
-                        root.selected-track;
-
-                    track-names:
-                        root.track-names;
-
-                    zoom-y:
-                        root.zoom-y-level;
-
-
-                    track-clicked(index) => {
-
-                        root.selected-track =
-                            index;
-                    }
-
-
-                    add-track-requested(type) => {
-
-                        root.add-track-requested(
-                            type
-                        );
-                    }
-                }
-
-
-                // =============================================
-                // TIMELINE
-                //
-                // Ocupa automaticamente todo o espaço
-                // restante do HorizontalLayout.
-                //
-                // Quando TrackPanel aumenta:
-                //     Timeline diminui.
-                //
-                // Quando TrackPanel diminui:
-                //     Timeline aumenta.
-                // =============================================
-
-                timeline := Timeline {
-
-                    horizontal-stretch:
-                        1;
-
-                    selected-track <=>
-                        root.selected-track;
-
-                    position:
-                        root.transport-position;
-
-                    zoom <=>
-                        root.zoom-level;
-
-                    zoom-y <=>
-                        root.zoom-y-level;
-
-                    track-names:
-                        root.track-names;
-
-                    active-tool:
-                        root.active-tool;
-
-                    clips:
-                        root.clips;
-
-                    drop-visible:
-                        root.drag-active
-                        && root.drag-inited
-                        && root.drag-over-timeline;
-
-                    drop-x:
-                        root.drag-snap-beat * timeline.px-per-beat;
-
-                    drop-track:
-                        root.drag-drop-track;
-
-                    drop-len-beats:
-                        4.0;
-
-
-                    select-track(index) => {
-
-                        root.selected-track =
-                            index;
-                    }
-
-
-                    clip-selected(index) => {
-
-                        root.selected-track =
-                            index;
-                    }
-
-
-                    clip-slice-requested(
-                        id,
-                        position
-                    ) => {
-
-                        root.clip-slice-requested(
-                            id,
-                            position
-                        );
-                    }
-
-                    clip-move-started(id, beat) => {
-                        root.clip-move-started(id, beat);
-                    }
-
-                    clip-move-delta(id, delta) => {
-                        root.clip-move-delta(id, delta);
-                    }
-
-                    clip-move-finished(id) => {
-                        root.clip-move-finished(id);
-                    }
-
-
- Rectangle { min-width: 16px; min-height: 16px; /* @lsp:ignore-node */ }                }
-            }
-
-            // =============================================
-            // SPLITTER DO TRACK PANEL
-            //
-            // TrackPanel está à esquerda.
-            //
-            // ← aumenta TrackPanel
-            // → diminui TrackPanel
-            //
-            // O valor do splitter é a única fonte
-            // de verdade da largura do TrackPanel.
-            //
-            // Posicionado fora do layout para descer
-            // até a borda inferior (como o do Explorer).
-            // =============================================
-
-            SplitterVerticalGrowLeft {
-
-                x:
-                    root.left-panel-width
-                    + root.tracks-header-width;
-
-                y: 0;
-
-                width: 5px;
-
-                height: 100%;
-
-                value <=>
-                    root.tracks-header-width;
-
-                min-value:
-                    120px;
-
-                max-value:
-                    420px;
-
-                z:
-                    50;
-            }
-
-
-            // =================================================
-            // BARRAS DA TIMELINE
-            //
-            // Rodapé: scroll horizontal + zoom horizontal.
-            // Lateral direita: scroll vertical + zoom vertical.
-            // =================================================
-
-            ScrollBarHorizontal {
-
-                x:
-                    parent.timeline-area-x;
-
-                y:
-                    parent.timeline-area-h
-                    - 14px;
-
-                width:
-                    parent.timeline-area-w
-                    - 32px;
-
-                height: 14px;
-
-                value <=>
-                    timeline.scroll-x;
-
-                max-value:
-                    timeline.max-scroll-x;
-
-                thumb-size:
-                    parent.timeline-area-w
-                    * parent.timeline-area-w
-                    / (
-                        parent.timeline-area-w
-                        + timeline.max-scroll-x
-                    );
-
-                z: 60;
-            }
-
-
-            ZoomBarHorizontal {
-
-                x:
-                    parent.timeline-area-x;
-
-                y:
-                    parent.timeline-area-h
-                    - 14px
-                    - 16px;
-
-                width:
-                    parent.timeline-area-w
-                    - 32px;
-
-                height: 16px;
-
-                value:
-                    root.zoom-level;
-
-                min-value: 0.5;
-                max-value: 4.0;
-
-                zoom-requested(new-zoom) => {
-                    let old-zoom = timeline.zoom;
-                    root.zoom-level = new-zoom;
-                    timeline.zoom = new-zoom;
-                    timeline.scroll-x = max(0px, min(timeline.max-scroll-x,
-                        ((timeline.width / 2 + timeline.scroll-x) / old-zoom) * new-zoom - timeline.width / 2
-                    ));
-                }
-
-                z: 60;
-            }
-
-
-            ScrollBarVertical {
-
-                x:
-                    parent.timeline-area-x
-                    + parent.timeline-area-w
-                    - 14px;
-
-                y: 0;
-
-                width: 14px;
-
-                height:
-                    parent.timeline-area-h
-                    - 30px;
-
-                value <=>
-                    timeline.scroll-y;
-
-                max-value:
-                    timeline.max-scroll-y;
-
-                thumb-size:
-                    parent.timeline-area-h
-                    * parent.timeline-area-h
-                    / (
-                        parent.timeline-area-h
-                        + timeline.max-scroll-y
-                    );
-
-                z: 60;
-            }
-
-
-            ZoomBarVertical {
-
-                x:
-                    parent.timeline-area-x
-                    + parent.timeline-area-w
-                    - 30px;
-
-                y: 0;
-
-                width: 16px;
-
-                height:
-                    parent.timeline-area-h
-                    - 30px;
-
-                value <=>
-                    root.zoom-y-level;
-
-                min-value: 0.4;
-                max-value: 3.0;
-
-                z: 60;
-                keyboard-focus := FocusScope {
-                
-                    width:
-                        100%;
-                
-                    height:
-                        100%;
-                
-                
-                    key-pressed(event) => {
-                
-                        if (
-                            event.text == Key.Space
-                            && beat_popup.is-open
-                            && beat_popup.mouse-over
-                        ) {
-                
-                            beat_popup.playing =
-                                !beat_popup.playing;
-                
-                            accept;
-                
-                        } else {
-                
-                            reject;
-                        }
-                    }
-                }
-            }
-
-
-            // =================================================
-            // MIXER SPLITTER
-            // =================================================
-
-            SplitterHorizontal {
-
-                x:
-                    root.left-panel-width
-                    + root.tracks-header-width;
-
-                y:
-                    parent.height
-                    - root.mixer-height
-                    - 5px;
-
-                width:
-                    parent.width
-                    - root.left-panel-width
-                    - root.tracks-header-width
-                    - (
-                        root.explorer-visible
-                            ? root.explorer-width + 5px
-                            : 0px
-                    );
-
-                visible:
-                    root.mixer-visible;
-
-                value <=>
-                    root.mixer-height;
-
-                min-value:
-                    120px;
-
-                max-value:
-                    600px;
-
-                z:
-                    30;
-            }
-
-
-            // =================================================
-            // MIXER
-            // =================================================
-
-            Mixer {
-
-                x:
-                    root.left-panel-width
-                    + root.tracks-header-width;
-
-                y:
-                    parent.height
-                    - root.mixer-height;
-
-                width:
-                    parent.width
-                    - root.left-panel-width
-                    - root.tracks-header-width
-                    - (
-                        root.explorer-visible
-                            ? root.explorer-width + 5px
-                            : 0px
-                    );
-
-                height:
-                    root.mixer-height;
-
-                visible:
-                    root.mixer-visible;
-
-                meters <=>
-                    root.mixer-meters;
-
-                mutes <=>
-                    root.mixer-mutes;
-                soloes <=>
-                    root.mixer-soloes;
-                arms <=>
-                    root.mixer-arms;
-                volumes <=>
-                    root.mixer-volumes;
-                pans <=>
-                    root.mixer-pans;
-
-                channel-param-changed(idx, param, val) => {
-                    root.mixer-param-changed(idx, param, val);
-                }
-
-                z:
-                    30;
-            }
-
-
-            // =================================================
-            // EXPLORER SPLITTER
-            //
-            // Explorer está à direita.
-            //
-            // ← diminui Explorer
-            // → aumenta Explorer
-            // =================================================
-
-            SplitterVerticalGrowRight {
-
-                x:
-                    parent.width
-                    - root.explorer-width
-                    - 5px;
-
-                y:
-                    0;
-
-                height:
-                    100%;
-
-                visible:
-                    root.explorer-visible;
-
-                value <=>
-                    root.explorer-width;
-
-                min-value:
-                    220px;
-
-                max-value:
-                    500px;
-
-                z:
-                    40;
-            }
-
-
-            // =================================================
-            // EXPLORER
-            // =================================================
-
-            Explorer {
-
-                x:
-                    parent.width
-                    - root.explorer-width;
-
-                y:
-                    0;
-
-                width:
-                    root.explorer-width;
-
-                height:
-                    100%;
-
-                visible:
-                    root.explorer-visible;
-
-                z:
-                    40;
-
-                // Filesystem properties (forwarded from root)
-                current-path <=> root.explorer-current-path;
-                path-history <=> root.explorer-path-history;
-                history-index <=> root.explorer-history-index;
-                entries <=> root.explorer-entries;
-
-                // Áudio do Media Browser: mesmo esquema de
-                // drag & drop do ClipPool.
-                audio-drag-started(name, type, color, is-midi) => {
-                    root.drag-begin(name, "", "", color, is-midi);
-                }
-
-                audio-drag-moved(x, y) => {
-                    root.drag-move(x, y);
-                }
-
-                audio-drag-finished() => {
-                    root.drag-end();
-                }
-
-                explorer-path-changed(path) => {
-                    root.explorer-path-changed(path);
-                }
-
-                explorer-directory-entered(path) => {
-                    root.explorer-directory-entered(path);
-                }
-
-                explorer-go-up() => {
-                    root.explorer-go-up();
-                }
-            }
-
-
-            // =================================================
-            // GHOST DO ARRASTO
-            //
-            // Cópia idêntica do ClipItem do pool: segue o mouse
-            // e inclina conforme a velocidade (estilo FL Studio).
-            //
-            // As coordenadas de arrasto são relativas à janela
-            // (absolute-position), então convertemos subtraindo
-            // a posição da área de trabalho.
-            // =================================================
-
-            Rectangle {
-
-                visible:
-                    root.drag-active
-                    && root.drag-inited;
-
-                x:
-                    root.drag-over-timeline
-                        ? timeline.absolute-position.x
-                            - workspace.absolute-position.x
-                            - timeline.scroll-x
-                            + root.drag-snap-beat * timeline.px-per-beat
-                        : root.drag-x - workspace.absolute-position.x - (root.left-panel-width - 16px) / 2;
-
-                y:
-                    root.drag-y - workspace.absolute-position.y - 19px;
-
-                width:
-                    root.left-panel-width - 16px;
-
-                height: 38px;
-
-                transform-rotation:
-                    root.drag-tilt-display;
-
-                transform-origin:
-                    { x: (root.left-panel-width - 16px) / 2, y: 19px };
-
-                z: 200;
-
-
-                // Glow suave ao redor
-                Rectangle {
-
-                    x: -3px;
-                    y: -3px;
-
-                    width:
-                        parent.width + 6px;
-
-                    height:
-                        parent.height + 6px;
-
-                    background:
-                        root.drag-color.transparentize(0.65);
-
-                    border-radius: 7px;
-
-                    z: -1;
-                }
-
-
-                // Cópia idêntica do item do pool
-                ClipItemVisual {
-
-                    width: 100%;
-                    height: 100%;
-
-                    name: root.drag-name;
-                    position: root.drag-position;
-                    duration: root.drag-duration;
-                    clip-color: root.drag-color;
-                    is-midi: root.drag-is-midi;
-                }
-            }
-        }
-
-
-        // =====================================================
-        // STATUS DIVIDER
-        // =====================================================
-
-        Rectangle {
-
-            width:
-                100%;
-
-            height:
-                1px;
-
-            background:
-                Theme.border;
-        }
-
-
-        // =====================================================
-        // STATUS BAR
-        // =====================================================
-
-        Rectangle {
-
-            width:
-                100%;
-
-            height:
-                22px;
-
-            background:
-                Theme.surface;
-
-
-            HorizontalLayout {
-
-                padding-left:
-                    8px;
-
-                padding-right:
-                    8px;
-
-                spacing:
-                    16px;
-
-
-                Text {
-
-                    text:
-                        "Ruana Studio 0.1.0";
-
-                    color:
-                        Theme.text-dim;
-
-                    font-size:
-                        10px;
-
-                    vertical-alignment:
-                        center;
-                }
-
-
-                Rectangle {
-
-                    horizontal-stretch:
-                        1;
-
-                    background:
-                        transparent;
-                }
-
-
-                Text {
-
-                    text:
-                        "120 BPM";
-
-                    color:
-                        Theme.text-dim;
-
-                    font-size:
-                        10px;
-
-                    vertical-alignment:
-                        center;
-                }
-
-
-                Text {
-
-                    text:
-                        "44.1 kHz";
-
-                    color:
-                        Theme.text-dim;
-
-                    font-size:
-                        10px;
-
-                    vertical-alignment:
-                        center;
-                }
-
-
-                Text {
-
-                    text:
-                        "24-bit";
-
-                    color:
-                        Theme.text-dim;
-
-                    font-size:
-                        10px;
-
-                    vertical-alignment:
-                        center;
-                }
-
-
-                Text {
-
-                    text:
-                        "FASE 1 - UI";
-
-                    color:
-                        Theme.accent;
-
-                    font-size:
-                        10px;
-
-                    vertical-alignment:
-                        center;
-                }
-}
-        }
-
-    // =====================================================
-    // BARRA INFERIOR COM ABASS
-    // =====================================================
-
-    bottom-toolbar := BottomToolbar {
-
-        toolbar-height <=>
-            bottom-toolbar.height;
+    Workspace {
+        full-screen <=> root.full-screen;
+        zoom-level <=> root.zoom-level;
+        playing <=> root.playing;
+        transport-position <=> root.transport-position;
+        selected-track <=> root.selected-track;
+        active-tool <=> root.active-tool;
+        beat-open <=> root.beat-open;
+        explorer-visible <=> root.explorer-visible;
+        mixer-visible <=> root.mixer-visible;
+        left-panel-width <=> root.left-panel-width;
+        tracks-header-width <=> root.tracks-header-width;
+        explorer-width <=> root.explorer-width;
+        mixer-height <=> root.mixer-height;
+        track-names <=> root.track-names;
+        clips <=> root.clips;
+        zoom-y-level <=> root.zoom-y-level;
+        drag-active <=> root.drag-active;
+        drag-inited <=> root.drag-inited;
+        drag-over-timeline <=> root.drag-over-timeline;
+        drag-snap-beat <=> root.drag-snap-beat;
+        drag-drop-track <=> root.drag-drop-track;
+        drag-x <=> root.drag-x;
+        drag-y <=> root.drag-y;
+        drag-name <=> root.drag-name;
+        drag-position <=> root.drag-position;
+        drag-duration <=> root.drag-duration;
+        drag-color <=> root.drag-color;
+        drag-is-midi <=> root.drag-is-midi;
+        drag-tilt-display <=> root.drag-tilt-display;
+        mixer-meters <=> root.mixer-meters;
+        mixer-mutes <=> root.mixer-mutes;
+        mixer-soloes <=> root.mixer-soloes;
+        mixer-arms <=> root.mixer-arms;
+        mixer-volumes <=> root.mixer-volumes;
+        mixer-pans <=> root.mixer-pans;
+        explorer-current-path <=> root.explorer-current-path;
+        explorer-path-history <=> root.explorer-path-history;
+        explorer-history-index <=> root.explorer-history-index;
+        explorer-entries <=> root.explorer-entries;
+
+        close => { root.close(); }
+        minimize => { root.minimize(); }
+        play-state-changed(state) => { root.play-state-changed(state); }
+        add-track-requested(type) => { root.add-track-requested(type); }
+        clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
+        clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
+        clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
+        clip-move-finished(id) => { root.clip-move-finished(id); }
+        mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+        explorer-path-changed(path) => { root.explorer-path-changed(path); }
+        explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
+        explorer-go-up() => { root.explorer-go-up(); }
+        drag-begin(name, position, duration, color, is-midi) => { root.drag-begin(name, position, duration, color, is-midi); }
+        drag-move(x, y) => { root.drag-move(x, y); }
+        drag-end() => { root.drag-end(); }
     }
-    }
-    
 
     // =====================================================
     // BEAT POPUP
