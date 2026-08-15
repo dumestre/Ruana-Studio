@@ -11,13 +11,14 @@ export component BottomToolbar inherits Rectangle {
     height: 40px;
     in-out property <length> toolbar-height:
         self.height;
-    background: Theme.surface;
+    background: Theme.base;
 
     // Tab bar
     HorizontalLayout {
         spacing: 1px;
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.stretch;
+        height: 100%;
 
         // Tab: Sampler
         Button {
@@ -72,29 +73,5 @@ export component BottomToolbar inherits Rectangle {
                 root.mixer-visible = !root.mixer-visible;
             }
         }
-    }
-
-    // Sampler area - shows when selected-tab == 0
-    Rectangle {
-        visible: root.selected-tab == 0;
-        width: 100%;
-        height: root.toolbar-height;
-        background: Theme.base;
-    }
-
-    // Piano Roll area - shows when selected-tab == 1
-    Rectangle {
-        visible: root.selected-tab == 1;
-        width: 100%;
-        height: root.toolbar-height;
-        background: Theme.base;
-    }
-
-    // Timeline area - shows when selected-tab >= 2
-    Rectangle {
-        visible: root.selected-tab >= 2;
-        width: 100%;
-        height: root.toolbar-height;
-        background: Theme.base;
     }
 }
