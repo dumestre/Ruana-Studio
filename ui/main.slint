@@ -1364,18 +1364,18 @@ export component MainWindow inherits Window {
 
         triggered() => {
 
-            // Decai o alvo (mesma meia-vida de antes).
+            // Decai o alvo mais rápido (0.8 em vez de 0.88).
             root.drag-tilt =
-                root.drag-tilt * 0.88;
+                root.drag-tilt * 0.8;
 
             root.drag-speed =
-                root.drag-speed * 0.88;
+                root.drag-speed * 0.8;
 
-            // O exibido persegue o alvo suavemente (125Hz).
+            // O exibido persegue o alvo mais agressivamente (0.7 em vez de 0.5).
             root.drag-tilt-display +=
                 (root.drag-tilt
                     - root.drag-tilt-display)
-                * 0.5;
+                * 0.7;
         }
     }
 }
