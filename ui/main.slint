@@ -182,6 +182,12 @@ export component MainWindow inherits Window {
     private property <length> drag-last-x:
         0px;
 
+    // Estimativa de velocidade horizontal (px por evento),
+    // com suavização: sobe com o pico dos eventos e decai
+    // no timer drag_decay.
+    private property <float> drag-speed:
+        0.0;
+
 
     // =====================================================
     // LAYOUT PRINCIPAL
@@ -387,6 +393,7 @@ export component MainWindow inherits Window {
                         root.drag-active = true;
                         root.drag-inited = false;
                         root.drag-tilt = 0deg;
+                        root.drag-speed = 0.0;
                     }
 
 
@@ -411,12 +418,23 @@ export component MainWindow inherits Window {
                             // quando o mouse para.
                             let dx = x - root.drag-last-x;
                             let dir = dx >= 0px ? 1.0 : -1.0;
-                            let speed = (dx < 0px ? -dx : dx) / 1px;
+                            let instant = (dx < 0px ? -dx : dx) / 1px;
+
+                            // Mantém o pico da velocidade (com
+                            // decay no timer), para que um arrasto
+                            // rápido e contínuo incline de verdade.
+                            root.drag-speed =
+                                max(
+                                    instant,
+                                    root.drag-speed * 0.8
+                                );
 
                             root.drag-tilt =
                                 max(
                                     min(
-                                        dir * speed * 0.2deg,
+                                        dir
+                                            * root.drag-speed
+                                            * 0.45deg,
                                         25deg
                                     ),
                                     -25deg
@@ -496,6 +514,7 @@ export component MainWindow inherits Window {
                         root.drag-active = false;
                         root.drag-inited = false;
                         root.drag-tilt = 0deg;
+                        root.drag-speed = 0.0;
                     }
                 }
 
@@ -1193,7 +1212,10 @@ export component MainWindow inherits Window {
         triggered() => {
 
             root.drag-tilt =
-                root.drag-tilt * 0.75;
+                root.drag-tilt * 0.85;
+
+            root.drag-speed =
+                root.drag-speed * 0.85;
         }
     }
 }
