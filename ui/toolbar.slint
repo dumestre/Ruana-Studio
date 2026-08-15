@@ -4,6 +4,7 @@ export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
     in-out property <bool> grid-enabled: true;
     in-out property <bool> full-screen: false;
+    in-out property <bool> jump-to-pattern: false;
     
     
 
@@ -13,6 +14,7 @@ export component Toolbar inherits Rectangle {
     callback grid-toggled(bool);
     callback close;
     callback minimize;
+    callback page-toggled(bool);
 
     height: 34px;
     background: Theme.surface;
@@ -108,9 +110,29 @@ export component Toolbar inherits Rectangle {
         Rectangle {
             width: 8px;
         }
+
+        Button {
+            text: "";
+            borderless: true;
+            height: 22px;
+            width: 22px;
+            icon: @image-url("icons/pagejump.svg");
+            icon-size: 16px;
+            toggled-bg: Theme.accent;
+            toggled-fg: Theme.on-accent;
+            clicked => {
+                root.jump-to-pattern = !root.jump-to-pattern;
+                root.page-toggled(root.jump-to-pattern);
+            }
+        }
+
+         Rectangle {
+            width: 8px;
+        }
+
         
        
-        Button {
+Button {
             icon: @image-url("icons/snap.svg");
             filled-icon: @image-url("icons/snap_filled.svg");
             icon-size: 16px;
@@ -120,13 +142,13 @@ export component Toolbar inherits Rectangle {
             toggled: root.snap-enabled;
             toggled-bg: Theme.accent;
             toggled-fg: Theme.on-accent;
-            toggled-icon-color: Theme.on-accent;
             borderless: true;
             clicked => {
                 root.snap-enabled = !root.snap-enabled;
                 root.snap-toggled(root.snap-enabled);
             }
         }
+        
         Button {
             text: "GRID";
             borderless: false;
@@ -142,6 +164,7 @@ export component Toolbar inherits Rectangle {
             clicked => {
                 root.grid-enabled = !root.grid-enabled;
                 root.grid-toggled(root.grid-enabled);
+                root.page-toggled(root.jump-to-pattern);
             }
         }
     }
