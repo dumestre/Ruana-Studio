@@ -194,6 +194,28 @@ export component MainWindow inherits Window {
     private property <angle> drag-tilt-display:
         0deg;
 
+    // True quando o cursor está sobre a área de conteúdo da
+    // timeline (abaixo da régua): o ghost passa a encaixar no
+    // grid, mostrando exatamente onde o clip vai cair.
+    private property <bool> drag-over-timeline:
+        root.drag-x >= timeline.absolute-position.x
+        && root.drag-x <= timeline.absolute-position.x + timeline.width
+        && root.drag-y >= timeline.absolute-position.y + timeline.ruler-height;
+
+    // Beat (meio-tom) do snap, igual à fórmula do drop.
+    private property <float> drag-snap-beat:
+        max(
+            0.0,
+            round(
+                ((root.drag-x
+                    - timeline.absolute-position.x
+                    + timeline.scroll-x)
+                    / timeline.px-per-beat)
+                * 2.0
+            )
+            / 2.0
+        );
+
 
     // =====================================================
     // LAYOUT PRINCIPAL
@@ -992,7 +1014,12 @@ export component MainWindow inherits Window {
                     && root.drag-inited;
 
                 x:
-                    root.drag-x - workspace.absolute-position.x - (root.left-panel-width - 16px) / 2;
+                    root.drag-over-timeline
+                        ? timeline.absolute-position.x
+                            - workspace.absolute-position.x
+                            - timeline.scroll-x
+                            + root.drag-snap-beat * timeline.px-per-beat
+                        : root.drag-x - workspace.absolute-position.x - (root.left-panel-width - 16px) / 2;
 
                 y:
                     root.drag-y - workspace.absolute-position.y - 19px;

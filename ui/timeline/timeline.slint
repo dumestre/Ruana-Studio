@@ -80,7 +80,7 @@ export component Timeline inherits Rectangle {
     // ESCALA
     // =====================================================
 
-    property <length> px-per-beat:
+    out property <length> px-per-beat:
         40px * self.zoom;
 
     property <length> px-per-bar:
@@ -95,7 +95,7 @@ export component Timeline inherits Rectangle {
     // DIMENSÕES
     // =====================================================
 
-    property <length> ruler-height: 30px;
+    out property <length> ruler-height: 30px;
 
     property <length> row-height:
         64px * self.zoom-y;
