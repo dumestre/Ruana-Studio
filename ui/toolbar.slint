@@ -112,19 +112,23 @@ export component Toolbar inherits Rectangle {
         }
 
         Button {
-            text: "";
-            borderless: true;
-            height: 22px;
-            width: 22px;
-            icon: @image-url("icons/pagejump.svg");
-            icon-size: 16px;
-            toggled-bg: Theme.accent;
-            toggled-fg: Theme.on-accent;
-            clicked => {
-                root.jump-to-pattern = !root.jump-to-pattern;
-                root.page-toggled(root.jump-to-pattern);
-            }
-        }
+    text: "";
+    borderless: true;
+    height: 22px;
+    width: 22px;
+    icon: @image-url("icons/pagejump.svg");
+    icon-size: 22px;
+    icon-color: Theme.text-dim;
+
+    toggled: root.jump-to-pattern;
+    toggled-bg: Theme.accent;
+    toggled-fg: Theme.on-accent;
+
+    clicked => {
+        root.jump-to-pattern = !root.jump-to-pattern;
+        root.page-toggled(root.jump-to-pattern);
+    }
+}
 
          Rectangle {
             width: 8px;
