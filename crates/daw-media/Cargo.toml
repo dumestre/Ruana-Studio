@@ -2,3 +2,7 @@
 name = "daw-media"
 version.workspace = true
 edition.workspace = true
+
+[dependencies]
+hound = "3.5"
+dirs = "5.0"

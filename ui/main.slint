@@ -89,6 +89,15 @@ export component MainWindow inherits Window {
     in-out property <bool> mixer-visible:
         true;
 
+    // Filesystem properties (forwarded to Explorer)
+    in-out property <string> explorer-current-path:
+        "";
+    in-out property <[string]> explorer-path-history:
+        [];
+    in-out property <int> explorer-history-index:
+        -1;
+    in-out property <[string]> explorer-entries:
+        [];
 
     // =====================================================
     // DIMENSÕES
@@ -162,11 +171,19 @@ export component MainWindow inherits Window {
 
     callback clip-slice-requested(int, float);
 
+    callback clip-move-started(int, float);
+    callback clip-move-delta(int, float);
+    callback clip-move-finished(int);
+
     callback undo-requested;
 
     callback redo-requested;
 
     callback mixer-param-changed(int, string, float);
+
+    callback explorer-path-changed(string);
+    callback explorer-directory-entered(string);
+    callback explorer-go-up();
 
 
     // =====================================================
@@ -738,6 +755,18 @@ export component MainWindow inherits Window {
                         );
                     }
 
+                    clip-move-started(id, beat) => {
+                        root.clip-move-started(id, beat);
+                    }
+
+                    clip-move-delta(id, delta) => {
+                        root.clip-move-delta(id, delta);
+                    }
+
+                    clip-move-finished(id) => {
+                        root.clip-move-finished(id);
+                    }
+
 
  Rectangle { min-width: 16px; min-height: 16px; /* @lsp:ignore-node */ }                }
             }
@@ -1103,6 +1132,12 @@ export component MainWindow inherits Window {
                 z:
                     40;
 
+                // Filesystem properties (forwarded from root)
+                current-path <=> root.explorer-current-path;
+                path-history <=> root.explorer-path-history;
+                history-index <=> root.explorer-history-index;
+                entries <=> root.explorer-entries;
+
                 // Áudio do Media Browser: mesmo esquema de
                 // drag & drop do ClipPool.
                 audio-drag-started(name, type, color, is-midi) => {
@@ -1115,6 +1150,18 @@ export component MainWindow inherits Window {
 
                 audio-drag-finished() => {
                     root.drag-end();
+                }
+
+                explorer-path-changed(path) => {
+                    root.explorer-path-changed(path);
+                }
+
+                explorer-directory-entered(path) => {
+                    root.explorer-directory-entered(path);
+                }
+
+                explorer-go-up() => {
+                    root.explorer-go-up();
                 }
             }
 

@@ -14,9 +14,19 @@ export component Explorer inherits Rectangle {
     in-out property <string> preview-file-name: "Ferrum Studio";
     in-out property <string> preview-file-info: "Folder";
 
+    // Filesystem properties
+    in-out property <string> current-path: "";
+    in-out property <[string]> path-history: [];
+    in-out property <int> history-index: -1;
+    in-out property <[string]> entries: [];
+
     callback audio-drag-started(string, string, color, bool);
     callback audio-drag-moved(length, length);
     callback audio-drag-finished();
+
+    callback explorer-path-changed(string);
+    callback explorer-directory-entered(string);
+    callback explorer-go-up();
 
     preferred-width: 300px;
     width: 300px;
@@ -95,16 +105,36 @@ export component Explorer inherits Rectangle {
             background: transparent;
 
             if root.browser-mode == 0 : FileBrowser {
-                file-selected(name, type) => {
+                entries: [];
+                current-path: "";
+                path-history: [];
+                history-index: -1;
+                selected-index: -1;
+
+                path-changed(path) => {
+                    root.explorer-path-changed(path);
+                }
+                file-selected(name, type, path) => {
                     root.preview-file-name = name;
-                    root.preview-file-info = type;
+                    root.preview-file-info = type + " | " + path;
+                }
+                directory-entered(path) => {
+                    root.explorer-directory-entered(path);
+                }
+                explorer-go-up() => {
+                    root.explorer-go-up();
                 }
             }
 
             if root.browser-mode == 1 : MediaBrowser {
-                media-selected(name, type) => {
+                media: [];
+                categories: ["All", "Loops", "One-Shot", "Vocals", "MIDI"];
+                category-filter: "All";
+                selected-index: -1;
+
+                media-selected(name, type, path) => {
                     root.preview-file-name = name;
-                    root.preview-file-info = type;
+                    root.preview-file-info = type + " | " + path;
                 }
 
                 audio-drag-started(name, type, color, is-midi) => {

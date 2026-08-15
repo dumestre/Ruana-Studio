@@ -4,32 +4,22 @@ import { BrowserItem } from "../components/browser_item.slint";
 export struct FileEntry {
     name: string,
     type: string,
+    path: string,
+    is-directory: bool,
 }
 
 export component FileBrowser inherits Rectangle {
-    in-out property <string> current-path: "Project";
+    in property <[FileEntry]> entries: [];
+    in property <string> current-path: "";
+    in property <[string]> path-history: [];
+    in property <int> history-index: -1;
 
-    in property <[FileEntry]> favorites: [
-        { name: "My Samples", type: "Folder" },
-        { name: "Vocals", type: "Folder" },
-    ];
+    in-out property <int> selected-index: -1;
 
-    in property <[FileEntry]> project: [
-        { name: "Ferrum Studio", type: "Folder" },
-        { name: "Audio", type: "Folder" },
-        { name: "Samples", type: "Folder" },
-        { name: "Presets", type: "Folder" },
-    ];
-
-    in property <[FileEntry]> computer: [
-        { name: "This PC", type: "Computer" },
-        { name: "C:", type: "Drive" },
-        { name: "D:", type: "Drive" },
-    ];
-
-    in-out property <int> selected-index: 2;
-
-    callback file-selected(string, string);
+    callback path-changed(string);
+    callback file-selected(string, string, string); // name, type, path
+    callback directory-entered(string); // path
+    callback explorer-go-up();
 
     background: transparent;
 
@@ -38,14 +28,9 @@ export component FileBrowser inherits Rectangle {
         cross-axis-alignment: CrossAxisAlignment.stretch;
         spacing: 5px;
 
-
-        // =====================================================
         // NAVEGAÇÃO
-        // =====================================================
-
         Rectangle {
             height: 28px;
-
             background: Theme.base;
             border-width: 1px;
             border-color: Theme.border;
@@ -63,15 +48,21 @@ export component FileBrowser inherits Rectangle {
                     height: 24px;
                     background: transparent;
                     border-radius: 3px;
-                    opacity: 0.45;
+                    opacity: root.history-index > 0 ? 1.0 : 0.45;
 
                     Image {
                         source: @image-url("../icons/arrow_back.svg");
-
                         width: 14px;
                         height: 14px;
-
                         colorize: Theme.text-dim;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            if root.history-index > 0 {
+                                root.path-changed(root.path-history[root.history-index - 1]);
+                            }
+                        }
                     }
                 }
 
@@ -80,15 +71,21 @@ export component FileBrowser inherits Rectangle {
                     height: 24px;
                     background: transparent;
                     border-radius: 3px;
-                    opacity: 0.45;
+                    opacity: root.history-index < root.path-history.length - 1 ? 1.0 : 0.45;
 
                     Image {
                         source: @image-url("../icons/arrow_fwd.svg");
-
                         width: 14px;
                         height: 14px;
-
                         colorize: Theme.text-dim;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            if root.history-index < root.path-history.length - 1 {
+                                root.path-changed(root.path-history[root.history-index + 1]);
+                            }
+                        }
                     }
                 }
 
@@ -101,27 +98,28 @@ export component FileBrowser inherits Rectangle {
 
                     Image {
                         source: @image-url("../icons/arrow_up.svg");
-
                         width: 14px;
                         height: 14px;
-
                         colorize: Theme.text-dim;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.explorer-go-up();
+                        }
                     }
                 }
 
                 Rectangle {
                     width: 1px;
                     height: 16px;
-
                     background: Theme.border;
                 }
 
                 Text {
                     text: root.current-path;
-
                     color: Theme.text-primary;
                     font-size: 9px;
-
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                     overflow: elide;
@@ -129,102 +127,45 @@ export component FileBrowser inherits Rectangle {
             }
         }
 
-
-        // =====================================================
-        // FAVORITES
-        // =====================================================
-
+        // LISTA DE ARQUIVOS
         Rectangle {
-            height: 20px;
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
             background: transparent;
 
-            Text {
-                text: "FAVORITES";
+            VerticalLayout {
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.stretch;
+                spacing: 1px;
 
-                color: Theme.text-dim;
-                font-size: 8px;
-                font-weight: 700;
+                for entry[index] in root.entries : BrowserItem {
+                    name: entry.name;
+                    type: entry.type;
+                    selected: root.selected-index == index;
+                    icon: "";
+                    icon-image:
+                        entry.is-directory
+                            ? @image-url("../icons/folder.svg")
+                            : @image-url("../icons/audio.svg");
+                    drag-enabled: !entry.is-directory && entry.type == "WAV";
 
-                vertical-alignment: center;
-            }
-        }
+                    clicked => {
+                        root.selected-index = index;
+                        if entry.is-directory {
+                            root.directory-entered(entry.path);
+                        } else {
+                            root.file-selected(entry.name, entry.type, entry.path);
+                        }
+                    }
 
-        for entry[index] in root.favorites : BrowserItem {
-            name: entry.name;
-            type: entry.type;
-            selected: root.selected-index == index;
-            icon: "";
-            icon-image: @image-url("../icons/folder.svg");
-
-            clicked => {
-                root.selected-index = index;
-                root.file-selected(entry.name, entry.type);
-            }
-        }
-
-
-        // =====================================================
-        // PROJECT
-        // =====================================================
-
-        Rectangle {
-            height: 20px;
-            background: transparent;
-
-            Text {
-                text: "PROJECT";
-
-                color: Theme.text-dim;
-                font-size: 8px;
-                font-weight: 700;
-
-                vertical-alignment: center;
-            }
-        }
-
-        for entry[index] in root.project : BrowserItem {
-            name: entry.name;
-            type: entry.type;
-            selected: root.selected-index == root.favorites.length + index;
-            icon: "";
-            icon-image: @image-url("../icons/folder.svg");
-
-            clicked => {
-                root.selected-index = root.favorites.length + index;
-                root.file-selected(entry.name, entry.type);
-            }
-        }
-
-
-        // =====================================================
-        // COMPUTER
-        // =====================================================
-
-        Rectangle {
-            height: 20px;
-            background: transparent;
-
-            Text {
-                text: "COMPUTER";
-
-                color: Theme.text-dim;
-                font-size: 8px;
-                font-weight: 700;
-
-                vertical-alignment: center;
-            }
-        }
-
-        for entry[index] in root.computer : BrowserItem {
-            name: entry.name;
-            type: entry.type;
-            selected: root.selected-index == root.favorites.length + root.project.length + index;
-            icon: "";
-            icon-image: @image-url("../icons/disk.svg");
-
-            clicked => {
-                root.selected-index = root.favorites.length + root.project.length + index;
-                root.file-selected(entry.name, entry.type);
+                    drag-started() => {
+                        // forward para o parent
+                    }
+                    drag-moved(x, y) => {
+                    }
+                    drag-finished() => {
+                    }
+                }
             }
         }
     }

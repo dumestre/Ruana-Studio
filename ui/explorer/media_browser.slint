@@ -5,47 +5,17 @@ export struct MediaItem {
     name: string,
     type: string,
     category: string,
+    path: string,
 }
 
 export component MediaBrowser inherits Rectangle {
-    in property <[MediaItem]> media: [
-        {
-            name: "Kick_01.wav",
-            type: "WAV",
-            category: "One-Shot"
-        },
-        {
-            name: "Kick_02.wav",
-            type: "WAV",
-            category: "One-Shot"
-        },
-        {
-            name: "Snare_01.wav",
-            type: "WAV",
-            category: "One-Shot"
-        },
-        {
-            name: "Hat_Closed.wav",
-            type: "WAV",
-            category: "One-Shot"
-        },
-        {
-            name: "Bass_Loop_128.wav",
-            type: "WAV",
-            category: "Loops"
-        },
-        {
-            name: "Vocal_Female.wav",
-            type: "WAV",
-            category: "Vocals"
-        }
-    ];
-
+    in property <[MediaItem]> media: [];
+    in property <[string]> categories: ["All", "Loops", "One-Shot", "Vocals", "MIDI"];
     in-out property <string> category-filter: "All";
 
     in-out property <int> selected-index: -1;
 
-    callback media-selected(string, string);
+    callback media-selected(string, string, string); // name, type, path
 
     callback audio-drag-started(string, string, color, bool);
     callback audio-drag-moved(length, length);
@@ -61,7 +31,6 @@ export component MediaBrowser inherits Rectangle {
         // Cabeçalho
         Rectangle {
             height: 26px;
-
             background: Theme.base;
             border-width: 1px;
             border-color: Theme.border;
@@ -76,19 +45,15 @@ export component MediaBrowser inherits Rectangle {
 
                 Image {
                     source: @image-url("../icons/media.svg");
-
                     width: 15px;
                     height: 15px;
-
                     colorize: Theme.accent;
                 }
 
                 Text {
                     text: "Media";
-
                     color: Theme.text-primary;
                     font-size: 9px;
-
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
@@ -105,152 +70,29 @@ export component MediaBrowser inherits Rectangle {
                 cross-axis-alignment: CrossAxisAlignment.center;
                 spacing: 3px;
 
-                Rectangle {
-                    width: 40px;
-                    height: 23px;
-
-                    background: root.category-filter == "All"
-                        ? Theme.surface-high
-                        : transparent;
-
-                    border-radius: 3px;
-
-                    Text {
-                        text: "All";
-
-                        color: root.category-filter == "All"
-                            ? Theme.text-primary
-                            : Theme.text-dim;
-
-                        font-size: 8px;
-
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            root.category-filter = "All";
-                        }
-                    }
-                }
-
-                Rectangle {
-                    width: 52px;
-                    height: 23px;
-
-                    background: root.category-filter == "Loops"
-                        ? Theme.surface-high
-                        : transparent;
-
-                    border-radius: 3px;
-
-                    Text {
-                        text: "Loops";
-
-                        color: root.category-filter == "Loops"
-                            ? Theme.accent
-                            : Theme.text-dim;
-
-                        font-size: 8px;
-
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            root.category-filter = "Loops";
-                        }
-                    }
-                }
-
-                Rectangle {
-                    width: 62px;
-                    height: 23px;
-
-                    background: root.category-filter == "One-Shot"
-                        ? Theme.surface-high
-                        : transparent;
-
-                    border-radius: 3px;
-
-                    Text {
-                        text: "One-Shot";
-
-                        color: root.category-filter == "One-Shot"
-                            ? Theme.accent
-                            : Theme.text-dim;
-
-                        font-size: 8px;
-
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            root.category-filter = "One-Shot";
-                        }
-                    }
-                }
-
-                Rectangle {
+                for cat[index] in root.categories : Rectangle {
                     width: 48px;
                     height: 23px;
 
-                    background: root.category-filter == "Vocals"
+                    background: root.category-filter == cat
                         ? Theme.surface-high
                         : transparent;
 
                     border-radius: 3px;
 
                     Text {
-                        text: "Vocals";
-
-                        color: root.category-filter == "Vocals"
+                        text: cat;
+                        color: root.category-filter == cat
                             ? Theme.accent
                             : Theme.text-dim;
-
                         font-size: 8px;
-
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
 
                     TouchArea {
                         clicked => {
-                            root.category-filter = "Vocals";
-                        }
-                    }
-                }
-
-                Rectangle {
-                    width: 42px;
-                    height: 23px;
-
-                    background: root.category-filter == "MIDI"
-                        ? Theme.surface-high
-                        : transparent;
-
-                    border-radius: 3px;
-
-                    Text {
-                        text: "MIDI";
-
-                        color: root.category-filter == "MIDI"
-                            ? Theme.accent
-                            : Theme.text-dim;
-
-                        font-size: 8px;
-
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            root.category-filter = "MIDI";
+                            root.category-filter = cat;
                         }
                     }
                 }
@@ -261,7 +103,6 @@ export component MediaBrowser inherits Rectangle {
         Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
-
             background: transparent;
 
             VerticalLayout {
@@ -271,13 +112,10 @@ export component MediaBrowser inherits Rectangle {
 
                 Text {
                     text: "MEDIA";
-
                     height: 20px;
-
                     color: Theme.text-dim;
                     font-size: 8px;
                     font-weight: 700;
-
                     vertical-alignment: center;
                 }
 
@@ -287,17 +125,14 @@ export component MediaBrowser inherits Rectangle {
 
                     name: item.name;
                     type: item.type;
-
                     selected: root.selected-index == index;
                     icon: "";
                     icon-image: @image-url("../icons/media.svg");
-
-                    drag-enabled:
-                        item.type == "WAV";
+                    drag-enabled: item.type == "WAV";
 
                     clicked => {
                         root.selected-index = index;
-                        root.media-selected(item.name, item.type);
+                        root.media-selected(item.name, item.type, item.path);
                     }
 
                     drag-started() => {

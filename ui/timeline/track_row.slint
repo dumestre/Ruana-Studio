@@ -60,6 +60,10 @@ export component TrackRow inherits Rectangle {
 
     callback slice-requested(int, float);
 
+    callback clip-move-started(int, float);
+    callback clip-move-delta(int, float);
+    callback clip-move-finished(int);
+
 
     // =====================================================
     // DIMENSÃO
@@ -234,6 +238,18 @@ export component TrackRow inherits Rectangle {
                 id,
                 position
             );
+        }
+
+        clip-move-started(id, beat) => {
+            root.clip-move-started(id, beat);
+        }
+
+        clip-move-delta(id, delta) => {
+            root.clip-move-delta(id, delta);
+        }
+
+        clip-move-finished(id) => {
+            root.clip-move-finished(id);
         }
     }
 }

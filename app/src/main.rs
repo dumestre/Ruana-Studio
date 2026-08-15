@@ -1,6 +1,7 @@
 slint::include_modules!();
 
 use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -9,6 +10,7 @@ use daw_core::mixer::MixerParam;
 use daw_core::project::{ChangeKind, DocumentEvent, Project};
 use daw_core::track::TrackKind;
 use daw_core::transport::Transport;
+use daw_media::{filesystem::default_samples_dir, filesystem::list_directory};
 use slint::Model;
 
 fn next_random(seed: &mut u64) -> f32 {
@@ -88,7 +90,37 @@ fn initial_bind(
     ui.set_mixer_volumes(Rc::new(slint::VecModel::from(volumes)).into());
     ui.set_mixer_pans(Rc::new(slint::VecModel::from(pans)).into());
 
+    // Inicializa file browser com pasta de samples padrão
+    let samples_dir = default_samples_dir();
+    std::fs::create_dir_all(&samples_dir).ok();
+    let initial_path = samples_dir.to_string_lossy().to_string();
+    ui.set_explorer_current_path(initial_path.clone().into());
+    ui.set_explorer_path_history(Rc::new(slint::VecModel::from(vec![initial_path.into()])).into());
+    ui.set_explorer_history_index(0);
+
     (tracks_model, clips_model)
+}
+
+/// Carrega o diretório e atualiza o FileBrowser na UI.
+fn load_directory(ui: &MainWindow, path: &Path) {
+    match list_directory(path) {
+        Ok(entries) => {
+            let file_entries: Vec<slint::SharedString> = entries
+                .iter()
+                .map(|e| {
+                    let entry_type = if e.is_directory { "Folder" } else { "File" };
+                    format!("{}\t{}\t{}\t{}", e.name, entry_type, e.path.display(), e.is_directory)
+                })
+                .map(|s| s.into())
+                .collect();
+            // TODO: Atualizar o FileBrowser com entries
+            // Por enquanto logamos
+            println!("Loaded directory: {} ({} entries)", path.display(), entries.len());
+        }
+        Err(e) => {
+            eprintln!("Failed to load directory {}: {}", path.display(), e);
+        }
+    }
 }
 
 /// Índice da linha do modelo cujo clip tem o id informado.
@@ -194,7 +226,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let transport = Rc::new(RefCell::new(Transport::default()));
 
     let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow());
-    bind_document_events(&project.borrow(), tracks_model, clips_model);
+    bind_document_events(&project.borrow(), tracks_model, clips_model.clone());
 
     // Drop de clip (ClipPool / Explorer) → core (evento reprojeta).
     {
@@ -247,6 +279,50 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // Mover clip via drag (ferramenta select).
+    {
+        let project = project.clone();
+        let clips_model = clips_model.clone();
+        ui.on_clip_move_started(move |id, _beat| {
+            // Armazena o beat original para referência visual
+            let mut proj = project.borrow_mut();
+            if let Some(clip) = proj.clip(id as u64) {
+                // Armazena o beat original no campo `beat` do modelo para referência
+                // O delta será aplicado visualmente no modelo
+            }
+        });
+    }
+
+    // Mover clip: delta durante o drag (feedback visual imediato)
+    {
+        let clips_model = clips_model.clone();
+        ui.on_clip_move_delta(move |id, delta| {
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(mut clip) = clips_model.row_data(i) {
+                    let new_beat = (clip.beat + delta).max(0.0);
+                    clip.beat = new_beat;
+                    clips_model.set_row_data(i, clip);
+                }
+            }
+        });
+    }
+
+    // Mover clip: finalizado → persiste no core
+    {
+        let project = project.clone();
+        let clips_model = clips_model.clone();
+        ui.on_clip_move_finished(move |id| {
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(clip) = clips_model.row_data(i) {
+                    let new_beat = clip.beat.round().max(0.0) as u32;
+                    let track_id = clip.track_index as u64;
+                    let mut proj = project.borrow_mut();
+                    proj.move_clip(id as u64, track_id, new_beat);
+                }
+            }
+        });
+    }
+
     // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.
     {
         let p = project.clone();
@@ -279,6 +355,70 @@ fn main() -> Result<(), slint::PlatformError> {
                 ui.set_mixer_arms(Rc::new(slint::VecModel::from(arms)).into());
                 ui.set_mixer_volumes(Rc::new(slint::VecModel::from(volumes)).into());
                 ui.set_mixer_pans(Rc::new(slint::VecModel::from(pans)).into());
+            }
+        });
+    }
+
+    // Filesystem: navegação de diretórios
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_path_changed(move |path| {
+            if let Some(ui) = ui_weak.upgrade() {
+                let path = PathBuf::from(path.as_str());
+                if path.is_dir() {
+                    // Atualiza histórico
+                    let history: Vec<slint::SharedString> = ui.get_explorer_path_history().iter().collect();
+                    let idx = ui.get_explorer_history_index();
+                    let mut new_history = history[..=idx as usize].to_vec();
+                    new_history.push(slint::SharedString::from(path.to_string_lossy().as_ref()));
+                    ui.set_explorer_path_history(Rc::new(slint::VecModel::from(new_history)).into());
+                    ui.set_explorer_history_index(idx + 1);
+                    ui.set_explorer_current_path(slint::SharedString::from(path.to_string_lossy().as_ref()));
+
+                    // Carrega entradas
+                    if let Ok(entries) = list_directory(&path) {
+                        let file_entries: Vec<slint::SharedString> = entries
+                            .iter()
+                            .map(|e| {
+                                let entry_type = if e.is_directory { "Folder" } else { "File" };
+                                format!("{}\t{}\t{}\t{}", e.name, entry_type, e.path.display(), e.is_directory)
+                            })
+                            .map(|s| s.into())
+                            .collect();
+                        ui.set_explorer_entries(Rc::new(slint::VecModel::from(file_entries)).into());
+}
+            }
+        }
+        });
+    }
+
+    // Filesystem: entrar em diretório
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_directory_entered(move |path| {
+            if let Some(ui) = ui_weak.upgrade() {
+                let path_buf = PathBuf::from(path.as_str());
+                if path_buf.is_dir() {
+                    let history: Vec<slint::SharedString> = ui.get_explorer_path_history().iter().collect();
+                    let idx = ui.get_explorer_history_index();
+                    let mut new_history = history[..=idx as usize].to_vec();
+                    new_history.push(slint::SharedString::from(path_buf.to_string_lossy().as_ref()));
+                    ui.set_explorer_path_history(Rc::new(slint::VecModel::from(new_history)).into());
+                    ui.set_explorer_history_index(idx + 1);
+                    ui.set_explorer_current_path(slint::SharedString::from(path_buf.to_string_lossy().as_ref()));
+
+                    if let Ok(entries) = list_directory(&path_buf) {
+                        let file_entries: Vec<slint::SharedString> = entries
+                            .iter()
+                            .map(|e| {
+                                let entry_type = if e.is_directory { "Folder" } else { "File" };
+                                format!("{}\t{}\t{}\t{}", e.name, entry_type, e.path.display(), e.is_directory)
+                            })
+                            .map(|s| slint::SharedString::from(s.as_str()))
+                            .collect();
+                        ui.set_explorer_entries(Rc::new(slint::VecModel::from(file_entries)).into());
+                    }
+                }
             }
         });
     }

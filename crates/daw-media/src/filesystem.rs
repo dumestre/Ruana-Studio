@@ -36,3 +36,11 @@ pub fn list_directory(path: impl AsRef<Path>) -> io::Result<Vec<FileEntry>> {
 
     Ok(entries)
 }
+
+/// Retorna a pasta de samples padrão (documents/FerrumStudio/samples ou similar)
+pub fn default_samples_dir() -> PathBuf {
+    dirs::document_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("FerrumStudio")
+        .join("samples")
+}

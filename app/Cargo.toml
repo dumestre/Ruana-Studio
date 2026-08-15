@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 daw-core = { path = "../crates/daw-core" }
+daw-media = { path = "../crates/daw-media" }
 slint = { workspace = true, features = ["renderer-skia"] }
 
 [build-dependencies]

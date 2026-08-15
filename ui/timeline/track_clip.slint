@@ -400,6 +400,10 @@ export component TrackClip inherits Rectangle {
     }
 
 
+    callback clip-move-started(int, float); // clip-id, start-beat
+    callback clip-move-delta(int, float); // clip-id, delta-beats
+    callback clip-move-finished(int); // clip-id
+
     // =====================================================
     // TOUCH
     // =====================================================
@@ -456,6 +460,37 @@ export component TrackClip inherits Rectangle {
                         self.mouse-x;
                 }
             }
+
+            // =================================================
+            // DRAG PARA MOVER CLIP (tool 0, não nas bordas)
+            // =================================================
+
+            if root.active-tool == 0 && !root.on-edge {
+
+                if event.kind == PointerEventKind.down {
+
+                    self.drag-start-x = self.mouse-x;
+                    self.drag-start-beat = root.beat;
+                    self.dragging = true;
+                    root.clip-move-started(root.clip-id, root.beat);
+
+                } else if event.kind == PointerEventKind.move && self.dragging {
+
+                    let dx = self.mouse-x - self.drag-start-x;
+                    let delta_beats = dx / root.px-per-beat;
+                    root.clip-move-delta(root.clip-id, delta_beats);
+
+                } else if event.kind == PointerEventKind.up && self.dragging {
+
+                    self.dragging = false;
+                    root.clip-move-finished(root.clip-id);
+                }
+            }
         }
+
+        // Estado do drag
+        private property <length> drag-start-x: 0px;
+        private property <float> drag-start-beat: 0.0;
+        private property <bool> dragging: false;
     }
 }
