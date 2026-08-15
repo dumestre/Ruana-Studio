@@ -429,6 +429,7 @@ in-out property <bool> mixer-visible:
                 reject
             }
         }
+
     }
 
     init => {
@@ -1384,9 +1385,8 @@ HorizontalLayout {
                     vertical-alignment:
                         center;
                 }
-            }
+}
         }
-    }
 
     // =====================================================
     // BARRA INFERIOR COM ABASS
@@ -1397,12 +1397,12 @@ HorizontalLayout {
         toolbar-height <=>
             bottom-toolbar.height;
     }
-
+    }
+    
 
     // =====================================================
     // BEAT POPUP
     // =====================================================
-
     beat_popup := BeatPopup {
 
         open <=>
