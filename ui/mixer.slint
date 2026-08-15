@@ -8,15 +8,27 @@ component MixerChannel inherits Rectangle {
     in property <string> name: "";
     in property <color> channel-color: Theme.accent;
     in property <bool> is-master: false;
-    in-out property <bool> muted: false;
-    in-out property <bool> soloed: false;
-    in-out property <bool> arm: false;
-    in-out property <float> volume: 0.8;
-    in-out property <float> pan: 0.5;
-    in-out property <float> level: 0.0;
+    in property <int> channel-index: 0;
 
-    property <string> pan-display: root.pan < 0.45 ? "L" + ((0.5 - root.pan) * 100).to-fixed(0) : root.pan > 0.55 ? "R" + ((root.pan - 0.5) * 100).to-fixed(0) : "C";
-    property <string> vol-display: (root.volume * 60 - 60).to-fixed(1) + " dB";
+    // Estado vem de arrays do core via o componente pai (Mixer)
+    in property <bool> muted: false;
+    in property <bool> soloed: false;
+    in property <bool> arm: false;
+    in property <float> volume: 0.8;
+    in property <float> pan: 0.5;
+    in property <float> level: 0.0;
+
+    // Callbacks para o core (emitidos pelo Mixer)
+    callback param-changed(int, string, float);
+
+    property <string> pan-display:
+        root.pan < 0.45
+            ? "L" + ((0.5 - root.pan) * 100).to-fixed(0)
+            : root.pan > 0.55
+                ? "R" + ((root.pan - 0.5) * 100).to-fixed(0)
+                : "C";
+    property <string> vol-display:
+        (root.volume * 60 - 60).to-fixed(1) + " dB";
 
     width: 105px;
     background: Theme.surface;
@@ -39,17 +51,14 @@ component MixerChannel inherits Rectangle {
         VerticalLayout {alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.stretch;
             spacing: 2px;
-            
-
 
             Text {
-                text: "";
+                text: root.name;
                 color: Theme.text-primary;
                 font-size: 11px;
                 font-weight: 700;
                 horizontal-alignment: center;
                 vertical-alignment: center;
-                
             }
 
             Rectangle {
@@ -64,22 +73,34 @@ component MixerChannel inherits Rectangle {
         HorizontalLayout {
             spacing: 2px;
             alignment: center;
-            
+
             Button {
                 text: "M";
                 width: 28px;
                 height: 20px;
                 toggled: root.muted;
                 toggled-bg: Colors.gold;
-                clicked => { root.muted = !root.muted; }
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "muted",
+                        root.muted ? 0.0 : 1.0
+                    );
+                }
             }
-            
+
             if (!root.is-master): Button {
                 text: "S";
                 width: 28px;
                 height: 20px;
                 toggled: root.soloed;
-                clicked => { root.soloed = !root.soloed; }
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "soloed",
+                        root.soloed ? 0.0 : 1.0
+                    );
+                }
             }
             if (root.is-master): Rectangle {
                 width: 28px;
@@ -92,7 +113,13 @@ component MixerChannel inherits Rectangle {
                 width: 28px;
                 height: 20px;
                 toggled: root.arm;
-                clicked => { root.arm = !root.arm; }
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "arm",
+                        root.arm ? 0.0 : 1.0
+                    );
+                }
             }
             if (root.is-master): Rectangle {
                 width: 28px;
@@ -122,7 +149,7 @@ component MixerChannel inherits Rectangle {
             }
         }
 
-        // Posição Estratégica DAW: Controle de Pan no topo logo abaixo dos FX
+        // Pan
         VerticalLayout {
             spacing: 2px;
             alignment: LayoutAlignment.center;
@@ -141,20 +168,26 @@ component MixerChannel inherits Rectangle {
                     caption: "";
                     value: root.pan;
                     display-value: root.pan-display;
-                    changed(v) => { root.pan = v; }
+                    changed(v) => {
+                        root.param-changed(
+                            root.channel-index,
+                            "pan",
+                            v
+                        );
+                    }
                 }
 
                 VerticalLayout {
                     spacing: 0;
                     alignment: center;
                     cross-axis-alignment: CrossAxisAlignment.center;
-                    
+
                     Rectangle { /* @lsp:ignore-node */ }
                 }
             }
         }
 
-        // Seção Principal: Fader de Volume acoplado lado a lado com o Meter de Áudio (Padrão de DAW Profissional)
+        // Fader + Meter
         HorizontalLayout {
             spacing: 6px;
             alignment: LayoutAlignment.space-evenly;
@@ -171,10 +204,16 @@ component MixerChannel inherits Rectangle {
                 Fader {
                     value: root.volume;
                     caption: "";
-                    changed(v) => { root.volume = v; }
+                    changed(v) => {
+                        root.param-changed(
+                            root.channel-index,
+                            "volume",
+                            v
+                        );
+                    }
                 }
 
-                // Display de dB posicionado logo abaixo do fader para leitura imediata
+                // Display de dB
                 Rectangle {
                     width: 62px;
                     height: 18px;
@@ -196,7 +235,7 @@ component MixerChannel inherits Rectangle {
                 }
             }
 
-            // Meter de Áudio vertical em paralelo direto com o curso do fader
+            // Meter
             Meter {
                 level: root.level;
                 width: 12px;
@@ -211,7 +250,16 @@ export component Mixer inherits Rectangle {
     in-out property <[float]> meters: [0, 0, 0, 0, 0];
     in property <[string]> names: ["Drums", "Bass", "Vocal", "Synth", "Master"];
 
-    
+    // Estado do mixer vindo do core (arrays indexados por canal)
+    in-out property <[bool]> mutes: [false, false, false, false, false];
+    in-out property <[bool]> soloes: [false, false, false, false, false];
+    in-out property <[bool]> arms: [false, false, false, false, false];
+    in-out property <[float]> volumes: [0.8, 0.8, 0.8, 0.8, 0.8];
+    in-out property <[float]> pans: [0.5, 0.5, 0.5, 0.5, 0.5];
+
+    // Callback para o core
+    callback channel-param-changed(int, string, float);
+
     background: Theme.surface;
     border-radius: 8px;
 
@@ -236,6 +284,17 @@ export component Mixer inherits Rectangle {
                 channel-color: i == 4 ? Theme.text-primary : Theme.accent;
                 is-master: i == 4;
                 level: level;
+                channel-index: i;
+
+                muted: root.mutes[i];
+                soloed: root.soloes[i];
+                arm: root.arms[i];
+                volume: root.volumes[i];
+                pan: root.pans[i];
+
+                param-changed(idx, param, val) => {
+                    root.channel-param-changed(idx, param, val);
+                }
             }
         }
     }

@@ -1,5 +1,7 @@
 //! Tipos de trilha da DAW.
 
+use crate::mixer::MixerChannel;
+
 /// Tipo de uma trilha.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrackKind {
@@ -45,6 +47,8 @@ pub struct Track {
     pub id: u64,
     pub name: String,
     pub kind: TrackKind,
+    /// Parâmetros do canal no mixer.
+    pub mixer: MixerChannel,
 }
 
 impl Track {
@@ -54,6 +58,7 @@ impl Track {
             id,
             name: name.into(),
             kind,
+            mixer: MixerChannel::default(),
         }
     }
 

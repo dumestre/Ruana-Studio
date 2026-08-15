@@ -5,9 +5,11 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use daw_core::clip::{Clip, ClipKind};
-use daw_core::project::Project;
+use daw_core::mixer::MixerParam;
+use daw_core::project::{ChangeKind, DocumentEvent, Project};
 use daw_core::track::TrackKind;
 use daw_core::transport::Transport;
+use slint::Model;
 
 fn next_random(seed: &mut u64) -> f32 {
     *seed = seed
@@ -29,21 +31,159 @@ fn to_clip_data(clip: &Clip) -> ClipData {
     }
 }
 
-/// Reconstrói os modelos de tracks e clips a partir do core.
+/// Extrai o estado do mixer do projeto (trilhas + master) como arrays.
+fn mixer_state(project: &Project) -> (Vec<bool>, Vec<bool>, Vec<bool>, Vec<f32>, Vec<f32>) {
+    let n = project.tracks.len() + 1; // trilhas + master
+    let mut mutes = Vec::with_capacity(n);
+    let mut soloes = Vec::with_capacity(n);
+    let mut arms = Vec::with_capacity(n);
+    let mut volumes = Vec::with_capacity(n);
+    let mut pans = Vec::with_capacity(n);
+
+    for t in &project.tracks {
+        mutes.push(t.mixer.muted);
+        soloes.push(t.mixer.soloed);
+        arms.push(t.mixer.armed);
+        volumes.push(t.mixer.volume);
+        pans.push(t.mixer.pan);
+    }
+    // Master
+    mutes.push(project.master_mixer.muted);
+    soloes.push(project.master_mixer.soloed);
+    arms.push(project.master_mixer.armed);
+    volumes.push(project.master_mixer.volume);
+    pans.push(project.master_mixer.pan);
+
+    (mutes, soloes, arms, volumes, pans)
+}
+
+/// Preenche os modelos da UI a partir do estado inicial do core.
 ///
-/// O core (Project) é a fonte de verdade; a UI é uma projeção.
-/// Reprojeção total é suficiente na Fase A — reprojeção granular
-/// (push/set_row_data) chega com os eventos reativos na Fase B.
-fn reproject(ui: &MainWindow, project: &Project) {
+/// Retorna os `VecModel` compartilhados para que o assinante de
+/// eventos possa atualizá-los granularmente em runtime.
+fn initial_bind(
+    ui: &MainWindow,
+    project: &Project,
+) -> (
+    Rc<slint::VecModel<slint::SharedString>>,
+    Rc<slint::VecModel<ClipData>>,
+) {
     let track_names: Vec<slint::SharedString> = project
         .tracks
         .iter()
         .map(|t| t.name.clone().into())
         .collect();
-    ui.set_track_names(Rc::new(slint::VecModel::from(track_names)).into());
+    let tracks_model = Rc::new(slint::VecModel::from(track_names));
+    ui.set_track_names(tracks_model.clone().into());
 
     let clips: Vec<ClipData> = project.clips.iter().map(to_clip_data).collect();
-    ui.set_clips(Rc::new(slint::VecModel::from(clips)).into());
+    let clips_model = Rc::new(slint::VecModel::from(clips));
+    ui.set_clips(clips_model.clone().into());
+
+    // Mixer inicial
+    let (mutes, soloes, arms, volumes, pans) = mixer_state(project);
+    ui.set_mixer_mutes(Rc::new(slint::VecModel::from(mutes)).into());
+    ui.set_mixer_soloes(Rc::new(slint::VecModel::from(soloes)).into());
+    ui.set_mixer_arms(Rc::new(slint::VecModel::from(arms)).into());
+    ui.set_mixer_volumes(Rc::new(slint::VecModel::from(volumes)).into());
+    ui.set_mixer_pans(Rc::new(slint::VecModel::from(pans)).into());
+
+    (tracks_model, clips_model)
+}
+
+/// Índice da linha do modelo cujo clip tem o id informado.
+fn clip_row(model: &slint::VecModel<ClipData>, id: i32) -> Option<usize> {
+    (0..model.row_count()).find(|&i| model.row_data(i).map(|c| c.id == id).unwrap_or(false))
+}
+
+/// Aplica um `DocumentEvent` aos modelos da UI.
+///
+/// `undo = true` reverte a mudança (caso contrário aplica/refaz).
+/// Nunca toca no `Project` — apenas nos modelos, pois é chamado
+/// de dentro de uma mutação do core (reentrância proibida).
+fn apply_change(
+    tracks_model: &slint::VecModel<slint::SharedString>,
+    clips_model: &slint::VecModel<ClipData>,
+    event: &DocumentEvent,
+    undo: bool,
+) {
+    match event {
+        DocumentEvent::TrackAdded(track) => {
+            if undo {
+                let track_id = track.id as i32;
+                let mut i = 0;
+                while i < clips_model.row_count() {
+                    if clips_model
+                        .row_data(i)
+                        .map(|c| c.track_index == track_id)
+                        .unwrap_or(false)
+                    {
+                        clips_model.remove(i);
+                    } else {
+                        i += 1;
+                    }
+                }
+                if tracks_model.row_count() > 0 {
+                    tracks_model.remove(tracks_model.row_count() - 1);
+                }
+            } else {
+                tracks_model.push(track.name.clone().into());
+            }
+        }
+        DocumentEvent::ClipAdded(clip) => {
+            if undo {
+                if let Some(i) = clip_row(clips_model, clip.id as i32) {
+                    clips_model.remove(i);
+                }
+            } else {
+                clips_model.push(to_clip_data(clip));
+            }
+        }
+        DocumentEvent::ClipSliced {
+            original,
+            left,
+            right,
+        } => {
+            if undo {
+                if let Some(i) = clip_row(clips_model, right.id as i32) {
+                    clips_model.remove(i);
+                }
+                if let Some(i) = clip_row(clips_model, original.id as i32) {
+                    clips_model.set_row_data(i, to_clip_data(original));
+                }
+            } else {
+                if let Some(i) = clip_row(clips_model, left.id as i32) {
+                    clips_model.set_row_data(i, to_clip_data(left));
+                }
+                clips_model.push(to_clip_data(right));
+            }
+        }
+        DocumentEvent::ClipMoved { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data));
+            }
+        }
+        DocumentEvent::ClipDeleted(clip) => {
+            if undo {
+                clips_model.push(to_clip_data(clip));
+            } else if let Some(i) = clip_row(clips_model, clip.id as i32) {
+                clips_model.remove(i);
+            }
+        }
+    }
+}
+
+/// Assina os eventos do documento e mantém os modelos da UI
+/// sincronizados de forma granular.
+fn bind_document_events(
+    project: &Project,
+    tracks_model: Rc<slint::VecModel<slint::SharedString>>,
+    clips_model: Rc<slint::VecModel<ClipData>>,
+) {
+    project.subscribe(move |event, kind| {
+        apply_change(&tracks_model, &clips_model, event, kind == ChangeKind::Undo);
+    });
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -53,11 +193,11 @@ fn main() -> Result<(), slint::PlatformError> {
     let project = Rc::new(RefCell::new(Project::demo()));
     let transport = Rc::new(RefCell::new(Transport::default()));
 
-    reproject(&ui, &project.borrow());
+    let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow());
+    bind_document_events(&project.borrow(), tracks_model, clips_model);
 
-    // Drop de clip (ClipPool / Explorer) → core → reprojeção.
+    // Drop de clip (ClipPool / Explorer) → core (evento reprojeta).
     {
-        let ui_weak = ui.as_weak();
         let project = project.clone();
         ui.on_clip_dropped(move |track, beat, name, is_midi| {
             let kind = if is_midi {
@@ -67,20 +207,15 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             let track_id = track.max(0) as u64;
             let start = beat.round().max(0.0) as u32;
-
             let mut proj = project.borrow_mut();
             if proj.track(track_id).is_some() {
                 proj.add_clip(track_id, kind, name.as_str(), start, 4);
-            }
-            if let Some(ui) = ui_weak.upgrade() {
-                reproject(&ui, &proj);
             }
         });
     }
 
     // Adiciona tracks via botão "+" da timeline → core.
     {
-        let ui_weak = ui.as_weak();
         let project = project.clone();
         ui.on_add_track_requested(move |kind| {
             let kind = match kind.as_str() {
@@ -92,19 +227,14 @@ fn main() -> Result<(), slint::PlatformError> {
                 "MASTER" => TrackKind::Master,
                 _ => TrackKind::Midi,
             };
-
             let mut proj = project.borrow_mut();
             let count = proj.tracks.len() + 1;
             proj.add_track(kind, format!("{} {count}", kind.base_name()));
-            if let Some(ui) = ui_weak.upgrade() {
-                reproject(&ui, &proj);
-            }
         });
     }
 
     // Slice de clip (ferramenta de corte) → core.
     {
-        let ui_weak = ui.as_weak();
         let project = project.clone();
         ui.on_clip_slice_requested(move |id, position| {
             let id = id as u64;
@@ -114,8 +244,41 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             let at = clip.start_beat + position.round().max(0.0) as u32;
             proj.slice_clip(id, at);
+        });
+    }
+
+    // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.
+    {
+        let p = project.clone();
+        ui.on_undo_requested(move || {
+            p.borrow_mut().undo();
+        });
+        let p = project.clone();
+        ui.on_redo_requested(move || {
+            p.borrow_mut().redo();
+        });
+    }
+
+    // Parâmetros do mixer → core.
+    {
+        let project = project.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_mixer_param_changed(move |channel, param, value| {
+            let param = match MixerParam::from_str(param.as_str()) {
+                Some(p) => p,
+                None => return,
+            };
+            let mut proj = project.borrow_mut();
+            proj.set_mixer_param(channel as usize, param, value);
+            // Reprojeta o mixer imediatamente (o core é fonte de verdade)
+            let proj = project.borrow();
+            let (mutes, soloes, arms, volumes, pans) = mixer_state(&proj);
             if let Some(ui) = ui_weak.upgrade() {
-                reproject(&ui, &proj);
+                ui.set_mixer_mutes(Rc::new(slint::VecModel::from(mutes)).into());
+                ui.set_mixer_soloes(Rc::new(slint::VecModel::from(soloes)).into());
+                ui.set_mixer_arms(Rc::new(slint::VecModel::from(arms)).into());
+                ui.set_mixer_volumes(Rc::new(slint::VecModel::from(volumes)).into());
+                ui.set_mixer_pans(Rc::new(slint::VecModel::from(pans)).into());
             }
         });
     }

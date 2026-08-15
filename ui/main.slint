@@ -118,6 +118,18 @@ export component MainWindow inherits Window {
     in-out property <[float]> mixer-meters:
         [0, 0, 0, 0, 0];
 
+    // Estado do mixer (projetado do core)
+    in-out property <[bool]> mixer-mutes:
+        [false, false, false, false, false];
+    in-out property <[bool]> mixer-soloes:
+        [false, false, false, false, false];
+    in-out property <[bool]> mixer-arms:
+        [false, false, false, false, false];
+    in-out property <[float]> mixer-volumes:
+        [0.8, 0.8, 0.8, 0.8, 0.8];
+    in-out property <[float]> mixer-pans:
+        [0.5, 0.5, 0.5, 0.5, 0.5];
+
     in-out property <[ClipData]> clips:
         [
             { id: 0, track-index: 0, name: "Drums A", beat: 0.0, len: 4.0, is-midi: true },
@@ -149,6 +161,12 @@ export component MainWindow inherits Window {
     callback clip-dropped(int, float, string, bool);
 
     callback clip-slice-requested(int, float);
+
+    callback undo-requested;
+
+    callback redo-requested;
+
+    callback mixer-param-changed(int, string, float);
 
 
     // =====================================================
@@ -369,6 +387,33 @@ export component MainWindow inherits Window {
     // =====================================================
     // LAYOUT PRINCIPAL
     // =====================================================
+
+    undo-scope := FocusScope {
+
+        key-pressed(event) => {
+
+            if event.modifiers.control
+                && event.text == "z" {
+
+                root.undo-requested();
+                accept
+
+            } else if event.modifiers.control
+                && event.text == "y" {
+
+                root.redo-requested();
+                accept
+
+            } else {
+
+                reject
+            }
+        }
+    }
+
+    init => {
+        undo-scope.focus();
+    }
 
     VerticalLayout {
 
@@ -973,6 +1018,21 @@ export component MainWindow inherits Window {
 
                 meters <=>
                     root.mixer-meters;
+
+                mutes <=>
+                    root.mixer-mutes;
+                soloes <=>
+                    root.mixer-soloes;
+                arms <=>
+                    root.mixer-arms;
+                volumes <=>
+                    root.mixer-volumes;
+                pans <=>
+                    root.mixer-pans;
+
+                channel-param-changed(idx, param, val) => {
+                    root.mixer-param-changed(idx, param, val);
+                }
 
                 z:
                     30;

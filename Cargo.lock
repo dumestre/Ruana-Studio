@@ -1013,6 +1013,9 @@ version = "0.1.0"
 [[package]]
 name = "daw-core"
 version = "0.1.0"
+dependencies = [
+ "daw-midi",
+]
 
 [[package]]
 name = "daw-media"

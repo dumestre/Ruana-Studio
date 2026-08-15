@@ -1,1 +1,3 @@
-//! daw-midi — eventos MIDI (Fase 4). Placeholder durante a Fase 1.
+pub mod pattern;
+
+pub use pattern::{BeatPatterns, DrumPattern, DrumTrackParams};

@@ -2,11 +2,15 @@
 //! Contém o modelo conceitual da DAW. Nenhuma dependência de UI/Slint.
 
 pub mod clip;
+pub mod history;
+pub mod mixer;
 pub mod project;
 pub mod track;
 pub mod transport;
 
 pub use clip::{Clip, ClipKind};
-pub use project::Project;
+pub use history::History;
+pub use mixer::{MixerChannel, MixerParam};
+pub use project::{ChangeKind, DocumentEvent, Project};
 pub use track::{Track, TrackKind};
 pub use transport::Transport;
