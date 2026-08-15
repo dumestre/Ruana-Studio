@@ -68,6 +68,23 @@ export component Timeline inherits Rectangle {
 
 
     // =====================================================
+    // PREVIEW DE DROP (arrasto do ClipPool)
+    //
+    // Mostra onde o clip vai cair: slot translúcido com uma
+    // linha sólida na borda esquerda (na linha da grid do
+    // snap), apenas na track sob o cursor.
+    // =====================================================
+
+    in property <bool> drop-visible: false;
+
+    in property <length> drop-x: 0px;
+
+    in property <int> drop-track: 0;
+
+    in property <float> drop-len-beats: 4.0;
+
+
+    // =====================================================
     // CALLBACKS
     // =====================================================
 
@@ -97,7 +114,7 @@ export component Timeline inherits Rectangle {
 
     out property <length> ruler-height: 30px;
 
-    property <length> row-height:
+    out property <length> row-height:
         64px * self.zoom-y;
 
 
@@ -856,6 +873,56 @@ export component Timeline inherits Rectangle {
                             position
                         );
                     }
+                }
+            }
+
+
+            // =============================================
+            // PREVIEW DE DROP
+            //
+            // Desenhado sobre os tracks (z: 8): mostra o slot
+            // do clip na track sob o cursor, com a linha da
+            // grid onde o snap vai acontecer.
+            // =============================================
+
+            Rectangle {
+
+                visible:
+                    root.drop-visible;
+
+                x:
+                    root.drop-x;
+
+                y:
+                    root.ruler-height
+                    + root.drop-track * root.row-height;
+
+                width:
+                    root.drop-len-beats
+                    * root.px-per-beat;
+
+                height:
+                    root.row-height;
+
+                background:
+                    Theme.accent.transparentize(0.85);
+
+                z: 8;
+
+                // Linha da grid do snap (borda esquerda)
+                Rectangle {
+
+                    x: 0;
+                    y: 0;
+
+                    width: 2px;
+
+                    height: parent.height;
+
+                    background:
+                        Theme.accent;
+
+                    z: 1;
                 }
             }
 
