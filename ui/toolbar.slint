@@ -76,6 +76,7 @@ export component Toolbar inherits Rectangle {
 
         HorizontalLayout{
             alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
         Button {
             height: 20px;
@@ -97,21 +98,21 @@ export component Toolbar inherits Rectangle {
         }
 
         Rectangle {
-            width: 1px;
-            background: Theme.border;
+            width: 8px;
         }
         
        
         Button {
             icon: @image-url("icons/snap.svg");
+            filled-icon: @image-url("icons/snap_filled.svg");
             icon-size: 16px;
             icon-color: Theme.text-dim;
             height: 22px;
             width: 22px;
             toggled: root.snap-enabled;
             toggled-bg: Theme.accent;
-            toggled-fg: Theme.text-primary;
-            toggled-icon-color: Theme.text-primary;
+            toggled-fg: Theme.on-accent;
+            toggled-icon-color: Theme.on-accent;
             borderless: true;
             clicked => {
                 root.snap-enabled = !root.snap-enabled;
@@ -120,8 +121,11 @@ export component Toolbar inherits Rectangle {
         }
         Button {
             text: "GRID";
-            height: 22px;
-            toggled: root.grid-enabled;
+            borderless: false;
+            enabled: true;
+            height: 14px;
+            icon-size: 12px;
+            toggled: true;
             toggled-bg: Theme.accent;
             toggled-fg: Theme.base;
             width: 32px;

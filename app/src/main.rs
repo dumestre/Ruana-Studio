@@ -1,6 +1,6 @@
 slint::include_modules!();
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -20,9 +20,15 @@ fn next_random(seed: &mut u64) -> f32 {
 /// A UI nunca recebe estruturas do core diretamente;
 /// ela recebe DTOs (ClipData) próprios da camada Slint.
 ///
-/// Retorna o modelo de tracks para permitir adicionar
-/// novas tracks em runtime (botão "+" da timeline).
-fn bind_project(ui: &MainWindow, project: &Project) -> Rc<slint::VecModel<slint::SharedString>> {
+/// Retorna (modelo de tracks, modelo de clips) para permitir
+/// adicionar tracks/clips em runtime.
+fn bind_project(
+    ui: &MainWindow,
+    project: &Project,
+) -> (
+    Rc<slint::VecModel<slint::SharedString>>,
+    Rc<slint::VecModel<ClipData>>,
+) {
     let track_names: Vec<slint::SharedString> = project
         .tracks
         .iter()
@@ -43,9 +49,10 @@ fn bind_project(ui: &MainWindow, project: &Project) -> Rc<slint::VecModel<slint:
             is_midi: c.is_midi(),
         })
         .collect();
-    ui.set_clips(Rc::new(slint::VecModel::from(clips)).into());
+    let clips_model = Rc::new(slint::VecModel::from(clips));
+    ui.set_clips(clips_model.clone().into());
 
-    tracks_model
+    (tracks_model, clips_model)
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -53,7 +60,24 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Projeto placeholder do daw-core — o core não conhece a UI.
     let project = Project::demo();
-    let tracks_model = bind_project(&ui, &project);
+    let (tracks_model, clips_model) = bind_project(&ui, &project);
+
+    // Drop de clip do ClipPool na timeline.
+    {
+        let next_id = Rc::new(Cell::new(1000));
+        ui.on_clip_dropped(move |track, beat, name, is_midi| {
+            let id = next_id.get();
+            next_id.set(id + 1);
+            clips_model.push(ClipData {
+                id,
+                track_index: track,
+                name,
+                beat,
+                len: 4.0,
+                is_midi,
+            });
+        });
+    }
 
     // Adiciona tracks via botão "+" da timeline.
     {

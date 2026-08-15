@@ -1,8 +1,9 @@
 import { Theme } from "theme.slint";
+
 import { Transport } from "transport.slint";
 import { Toolbar } from "toolbar.slint";
 import { EditToolbar } from "edit_toolbar.slint";
-import { LeftPanel } from "left_panel.slint";
+import { ClipPool, ClipItemVisual } from "clip_pool.slint";
 import { Timeline } from "timeline/timeline.slint";
 import { ClipData } from "timeline/clip_data.slint";
 import { Explorer } from "explorer/explorer.slint";
@@ -137,6 +138,50 @@ export component MainWindow inherits Window {
 
     callback add-track-requested(string);
 
+    callback clip-dropped(int, float, string, bool);
+
+
+    // =====================================================
+    // DRAG & DROP (clip do ClipPool → timeline)
+    //
+    // O ghost segue o mouse e "balança" como no FL Studio:
+    // a inclinação é proporcional à velocidade horizontal
+    // do arrasto e volta suavemente a 0 quando para.
+    // =====================================================
+
+    in-out property <bool> drag-active:
+        false;
+
+    in-out property <bool> drag-inited:
+        false;
+
+    in-out property <string> drag-name:
+        "";
+
+    in-out property <string> drag-position:
+        "";
+
+    in-out property <string> drag-duration:
+        "";
+
+    in-out property <color> drag-color:
+        Theme.clip-midi;
+
+    in-out property <bool> drag-is-midi:
+        true;
+
+    in-out property <length> drag-x:
+        0px;
+
+    in-out property <length> drag-y:
+        0px;
+
+    in-out property <angle> drag-tilt:
+        0deg;
+
+    private property <length> drag-last-x:
+        0px;
+
 
     // =====================================================
     // LAYOUT PRINCIPAL
@@ -243,7 +288,7 @@ export component MainWindow inherits Window {
         // ÁREA DE TRABALHO
         // =================================================
 
-        Rectangle {
+        workspace := Rectangle {
 
             width:
                 100%;
@@ -307,10 +352,10 @@ export component MainWindow inherits Window {
 
 
                 // =============================================
-                // LEFT PANEL
+                // CLIP POOL
                 // =============================================
 
-                LeftPanel {
+                clip_pool := ClipPool {
 
                     width:
                         root.left-panel-width;
@@ -320,6 +365,138 @@ export component MainWindow inherits Window {
 
                     track-names:
                         root.track-names;
+
+
+                    // =========================================
+                    // DRAG & DROP
+                    // =========================================
+
+                    clip-drag-started(
+                        name,
+                        position,
+                        duration,
+                        color,
+                        is-midi
+                    ) => {
+
+                        root.drag-name = name;
+                        root.drag-position = position;
+                        root.drag-duration = duration;
+                        root.drag-color = color;
+                        root.drag-is-midi = is-midi;
+                        root.drag-active = true;
+                        root.drag-inited = false;
+                        root.drag-tilt = 0deg;
+                    }
+
+
+                    clip-drag-moved(
+                        x,
+                        y
+                    ) => {
+
+                        // Coordenadas relativas à janela
+                        // (via absolute-position).
+
+                        root.drag-x = x;
+                        root.drag-y = y;
+
+                        if root.drag-inited {
+
+                            // Inclinação proporcional à força do
+                            // arrasto (velocidade entre eventos):
+                            // mais rápido = mais inclinado, no
+                            // sentido do movimento. O Timer
+                            // drag_decay devolve a rotação a 0
+                            // quando o mouse para.
+                            let dx = x - root.drag-last-x;
+                            let dir = dx >= 0px ? 1.0 : -1.0;
+                            let speed = (dx < 0px ? -dx : dx) / 1px;
+
+                            root.drag-tilt =
+                                max(
+                                    min(
+                                        dir * speed * 0.2deg,
+                                        25deg
+                                    ),
+                                    -25deg
+                                );
+                        }
+
+                        root.drag-last-x = x;
+                        root.drag-inited = true;
+                    }
+
+
+                    clip-drag-finished() => {
+
+                        if root.drag-active
+                            && root.drag-inited
+                            && root.track-names.length > 0 {
+
+                            // Converte as coordenadas da janela
+                            // para o espaço local do Timeline via
+                            // absolute-position.
+                            let tl = timeline.absolute-position;
+
+                            let local-x =
+                                root.drag-x
+                                - tl.x;
+
+                            let local-y =
+                                root.drag-y
+                                - tl.y;
+
+                            if local-x >= 0px
+                                && local-y >= 30px {
+
+                                let content-x =
+                                    local-x
+                                    + timeline.scroll-x;
+
+                                let content-y =
+                                    local-y
+                                    + timeline.scroll-y;
+
+                                let beat =
+                                    max(
+                                        0.0,
+                                        round(
+                                            (content-x
+                                                / (40px * root.zoom-level))
+                                            * 2.0
+                                        )
+                                        / 2.0
+                                    );
+
+                                let raw-track =
+                                    floor(
+                                        (content-y - 30px)
+                                            / (64px * root.zoom-y-level)
+                                    );
+
+                                let track =
+                                    max(
+                                        0,
+                                        min(
+                                            raw-track,
+                                            root.track-names.length - 1
+                                        )
+                                    );
+
+                                root.clip-dropped(
+                                    track,
+                                    beat,
+                                    root.drag-name,
+                                    root.drag-is-midi
+                                );
+                            }
+                        }
+
+                        root.drag-active = false;
+                        root.drag-inited = false;
+                        root.drag-tilt = 0deg;
+                    }
                 }
 
 
@@ -768,6 +945,84 @@ export component MainWindow inherits Window {
                 z:
                     40;
             }
+
+
+            // =================================================
+            // GHOST DO ARRASTO
+            //
+            // Cópia idêntica do ClipItem do pool: segue o mouse
+            // e inclina conforme a velocidade (estilo FL Studio).
+            //
+            // As coordenadas de arrasto são relativas à janela
+            // (absolute-position), então convertemos subtraindo
+            // a posição da área de trabalho.
+            // =================================================
+
+            Rectangle {
+
+                visible:
+                    root.drag-active
+                    && root.drag-inited;
+
+                x:
+                    root.drag-x - workspace.absolute-position.x - (root.left-panel-width - 16px) / 2;
+
+                y:
+                    root.drag-y - workspace.absolute-position.y - 19px;
+
+                width:
+                    root.left-panel-width - 16px;
+
+                height: 38px;
+
+                transform-rotation:
+                    root.drag-tilt;
+
+                transform-origin:
+                    { x: (root.left-panel-width - 16px) / 2, y: 19px };
+
+                z: 200;
+
+                animate transform-rotation {
+                    duration: 300ms;
+                    easing: cubic-bezier(0.22, 1.0, 0.36, 1.0);
+                }
+
+
+                // Glow suave ao redor
+                Rectangle {
+
+                    x: -3px;
+                    y: -3px;
+
+                    width:
+                        parent.width + 6px;
+
+                    height:
+                        parent.height + 6px;
+
+                    background:
+                        root.drag-color.transparentize(0.65);
+
+                    border-radius: 7px;
+
+                    z: -1;
+                }
+
+
+                // Cópia idêntica do item do pool
+                ClipItemVisual {
+
+                    width: 100%;
+                    height: 100%;
+
+                    name: root.drag-name;
+                    position: root.drag-position;
+                    duration: root.drag-duration;
+                    clip-color: root.drag-color;
+                    is-midi: root.drag-is-midi;
+                }
+            }
         }
 
 
@@ -917,5 +1172,28 @@ export component MainWindow inherits Window {
 
         open <=>
             root.beat-open;
+    }
+
+
+    // =====================================================
+    // TIMER DO TILT (efeito ioiô)
+    //
+    // Enquanto o arrasto está ativo e o mouse parado, decai
+    // a inclinação continuamente até a rotação zerar.
+    // =====================================================
+
+    drag_decay := Timer {
+
+        interval: 30ms;
+
+        running:
+            root.drag-active
+            && root.drag-inited;
+
+        triggered() => {
+
+            root.drag-tilt =
+                root.drag-tilt * 0.75;
+        }
     }
 }

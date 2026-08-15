@@ -34,21 +34,22 @@ export component Fader {
     Rectangle {
         width: 4px;
         height: parent.height * root.value;
+        opacity: 0.5;
         x: (parent.width - self.width) / 2;
         y: parent.height - self.height;
         background: Theme.accent;
         border-radius: 2px;
     }
 
-    Rectangle {
-        width: 24px;
-        height: 12px;
+    Image {
+        width: 30px;
+        height: 25px;
         x: (parent.width - self.width) / 2;
         y: min(max(parent.height - parent.height * root.value - self.height / 2, 0px), parent.height - self.height);
-        background: Theme.surface;
-        border-width: 1px;
-        border-color: Theme.accent;
-        border-radius: 3px;
+        source: @image-url("../icons/fader.png");
+        horizontal-tiling: ImageTiling.none;
+        image-fit: ImageFit.contain;
+        image-rendering: ImageRendering.smooth;
     }
 
     Text {

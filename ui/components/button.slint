@@ -3,6 +3,7 @@ import { Theme } from "../theme.slint";
 export component Button inherits Rectangle {
     in property <string> text: "";
     in property <image> icon: @image-url("");
+    in property <image> filled-icon: @image-url("");
     in property <bool> toggled: false;
     in property <bool> enabled: true;
     in property <color> icon-color: Theme.text-dim;
@@ -10,7 +11,7 @@ export component Button inherits Rectangle {
     in property <color> text-color: Theme.text-dim;
     in property <color> toggled-icon-color: Theme.accent;
     in property <color> toggled-bg: Theme.accent;
-    in property <color> toggled-fg: Theme.text-primary;
+    in property <color> toggled-fg: Theme.on-accent;
     in property <bool> subtle-toggled: false;
     in property <bool> borderless: false;
     in property <bool> keep-icon-color: false;
@@ -28,7 +29,9 @@ export component Button inherits Rectangle {
     preferred-width: max(30px, (root.icon.width > 0 ? root.icon-size : label.preferred-width) + 2 * root.padding-x);
 
     icon-image := Image {
-        source: root.icon;
+        source: (root.toggled && !root.subtle-toggled && root.filled-icon.width > 0)
+            ? root.filled-icon
+            : root.icon;
         visible: root.icon.width > 0;
         width: root.icon-size;
         height: root.icon-size;
@@ -65,7 +68,7 @@ export component Button inherits Rectangle {
             icon-image.colorize: self.subtle-toggled ? root.toggled-icon-color : self.toggled-fg;
         }
         active when self.enabled && touch.pressed: {
-            icon-image.colorize: self.keep-icon-color ? (self.toggled ? root.toggled-icon-color : root.icon-color) : Theme.accent-hover;
+            icon-image.colorize: self.keep-icon-color ? (self.toggled ? root.toggled-icon-color : root.icon-color) : (self.toggled ? root.toggled-fg : Theme.accent-hover);
         }
     ]
 
