@@ -14,7 +14,10 @@ import {
     SplitterVerticalGrowRight,
     SplitterHorizontal
 } from "components/splitter.slint";
+
 import { ZoomBarHorizontal, ZoomBarVertical } from "components/zoom_bar.slint";
+
+import { BottomToolbar } from "components/bottom_toolbar.slint";
 import { ScrollBarHorizontal, ScrollBarVertical } from "components/scrollbar.slint";
 import { TrackPanel } from "timeline/TrackPanel.slint";
 
@@ -85,9 +88,9 @@ export component MainWindow inherits Window {
 
     in-out property <bool> explorer-visible:
         true;
-
-    in-out property <bool> mixer-visible:
+in-out property <bool> mixer-visible:
         true;
+
 
     // Filesystem properties (forwarded to Explorer)
     in-out property <string> explorer-current-path:
@@ -572,7 +575,8 @@ property <length> timeline-area-h:
                     root.mixer-visible
                         ? root.mixer-height + 5px
                         : 0px
-                );
+                )
+                - bottom-toolbar.height;
 
 
             // Rodapé de zoom + scroll horizontal (16px + 14px).
@@ -1385,6 +1389,16 @@ HorizontalLayout {
                 }
             }
         }
+    }
+
+    // =====================================================
+    // BARRA INFERIOR COM ABASS
+    // =====================================================
+
+    bottom-toolbar := BottomToolbar {
+
+        toolbar-height <=>
+            bottom-toolbar.height;
     }
 
 
