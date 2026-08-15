@@ -1,11 +1,71 @@
+import { Button } from "../components/button.slint";
 import { Theme } from "../theme.slint";
 
-export component PianoRollArea inherits Rectangle {
-    background: Theme.base;
+component PanelHeader inherits Rectangle {
+    in property <string> title: "";
+    in-out property <bool> expanded: false;
+    callback expand-toggle();
+
+    height: 28px;
+    background: Theme.surface;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        alignment: LayoutAlignment.space-between;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        height: 100%;
+
+        Text {
+            text: root.title;
+            color: Theme.text-primary;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        Button {
+            width: 24px;
+            height: 22px;
+            icon: @image-url("../icons/arrow_up.svg");
+            icon-size: 14px;
+            borderless: true;
+            icon-color: Theme.text-dim;
+            toggled: root.expanded;
+            toggled-icon-color: Theme.accent;
+            clicked => { root.expand-toggle(); }
+        }
+    }
 
     Rectangle {
+        y: parent.height - 1px;
         width: 100%;
-        height: 100%;
-        background: Theme.base;
+        height: 1px;
+        background: Theme.border;
+    }
+}
+
+export component PianoRollArea inherits Rectangle {
+    in-out property <bool> expanded: false;
+    callback expand-toggle();
+
+    background: Theme.base;
+
+    VerticalLayout {
+        spacing: 0;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
+
+        PanelHeader {
+            title: "Piano Roll";
+            expanded <=> root.expanded;
+            expand-toggle => { root.expand-toggle(); }
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            background: Theme.base;
+            vertical-stretch: 1;
+        }
     }
 }

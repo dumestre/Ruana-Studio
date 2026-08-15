@@ -483,7 +483,7 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    ui.on_close(move || {
+    ui.on_window_close(move || {
         std::process::exit(0);
     });
 

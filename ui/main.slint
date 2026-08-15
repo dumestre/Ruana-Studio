@@ -67,8 +67,6 @@ export component MainWindow inherits Window {
 
     in-out property <bool> explorer-visible:
         true;
-in-out property <bool> mixer-visible:
-        true;
 
 
     // Filesystem properties (forwarded to Explorer)
@@ -88,7 +86,7 @@ in-out property <bool> mixer-visible:
     in-out property <length> explorer-width:
         300px;
 
-    in-out property <length> mixer-height:
+    in-out property <length> bottom-panel-height:
         215px;
 
     in-out property <length> left-panel-width:
@@ -143,7 +141,7 @@ in-out property <bool> mixer-visible:
 
     callback play-state-changed(bool);
 
-    callback close;
+    callback window-close;
 
     callback minimize;
 
@@ -375,11 +373,10 @@ in-out property <bool> mixer-visible:
         active-tool <=> root.active-tool;
         beat-open <=> root.beat-open;
         explorer-visible <=> root.explorer-visible;
-        mixer-visible <=> root.mixer-visible;
         left-panel-width <=> root.left-panel-width;
         tracks-header-width <=> root.tracks-header-width;
         explorer-width <=> root.explorer-width;
-        mixer-height <=> root.mixer-height;
+        bottom-panel-height <=> root.bottom-panel-height;
         track-names <=> root.track-names;
         clips <=> root.clips;
         zoom-y-level <=> root.zoom-y-level;
@@ -407,7 +404,7 @@ in-out property <bool> mixer-visible:
         explorer-history-index <=> root.explorer-history-index;
         explorer-entries <=> root.explorer-entries;
 
-        close => { root.close(); }
+        close => { root.window-close(); }
         minimize => { root.minimize(); }
         play-state-changed(state) => { root.play-state-changed(state); }
         add-track-requested(type) => { root.add-track-requested(type); }

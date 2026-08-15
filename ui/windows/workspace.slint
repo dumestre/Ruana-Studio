@@ -7,6 +7,8 @@ import { Timeline } from "../timeline/timeline.slint";
 import { ClipData } from "../timeline/clip_data.slint";
 import { Explorer } from "../explorer/explorer.slint";
 import { Mixer } from "../mixer.slint";
+import { SamplerArea } from "../components/sampler_area.slint";
+import { PianoRollArea } from "../components/piano_roll_area.slint";
 import { SplitterVerticalGrowLeft, SplitterVerticalGrowRight, SplitterHorizontal } from "../components/splitter.slint";
 import { ZoomBarHorizontal, ZoomBarVertical } from "../components/zoom_bar.slint";
 import { ScrollBarHorizontal, ScrollBarVertical } from "../components/scrollbar.slint";
@@ -22,16 +24,15 @@ export component Workspace inherits Rectangle {
     in-out property <int> active-tool: 0;
     in-out property <bool> beat-open: false;
     in-out property <bool> explorer-visible: true;
-    in-out property <bool> mixer-visible: true;
     in-out property <length> left-panel-width: 230px;
     in-out property <length> tracks-header-width: 200px;
     in-out property <length> explorer-width: 300px;
-    in-out property <length> mixer-height: 215px;
+    in-out property <length> bottom-panel-height: 215px;
     in-out property <[string]> track-names: ["Drums", "Bass", "Vocal", "Synth"];
     in-out property <[ClipData]> clips: [];
     in-out property <float> zoom-y-level: 1.0;
     in-out property <bool> drag-active: false;
-in-out property <bool> drag-inited: false;
+    in-out property <bool> drag-inited: false;
 
     in-out property <bool> drag-over-timeline: false;
     in-out property <float> drag-snap-beat: 0.0;
@@ -54,7 +55,7 @@ in-out property <bool> drag-inited: false;
     in-out property <string> explorer-current-path: "";
     in-out property <[string]> explorer-path-history: [];
     in-out property <int> explorer-history-index: -1;
-in-out property <[string]> explorer-entries: [];
+    in-out property <[string]> explorer-entries: [];
 
     callback close();
     callback minimize();
@@ -74,6 +75,8 @@ in-out property <[string]> explorer-entries: [];
 
     width: 100%;
     height: 100%;
+
+    property <bool> bottom-panel-expanded: false;
 
     VerticalLayout {
         alignment: LayoutAlignment.stretch;
@@ -106,204 +109,261 @@ in-out property <[string]> explorer-entries: [];
             active-tool <=> root.active-tool;
             beat-open <=> root.beat-open;
             explorer-visible <=> root.explorer-visible;
-            mixer-visible <=> root.mixer-visible;
         }
 
-        // WORKSPACE AREA
+        // MAIN WORKSPACE AREA
         workspace := Rectangle {
             width: 100%;
             vertical-stretch: 1;
 
-            property <length> timeline-area-x:
-                root.left-panel-width + root.tracks-header-width;
-
-            property <length> timeline-area-w:
-                self.width
-                - root.left-panel-width
-                - root.tracks-header-width
-                - (root.explorer-visible ? root.explorer-width + 5px : 0px)
-                - 5px;
-
-            property <length> timeline-area-h:
-                self.height
-                - (root.mixer-visible ? root.mixer-height + 5px : 0px)
-                - bottom-toolbar.height;
-
-            HorizontalLayout {
-                spacing: 0;
-                cross-axis-alignment: CrossAxisAlignment.stretch;
-
-                // CLIP POOL
-                clip_pool := ClipPool {
-                    width: root.left-panel-width;
-                    selected-track <=> root.selected-track;
-                    track-names: root.track-names;
-
-                    clip-drag-started(name, position, duration, color, is-midi) => {
-                        root.drag-begin(name, position, duration, color, is-midi);
-                    }
-                    clip-drag-moved(x, y) => { root.drag-move(x, y); }
-                    clip-drag-finished() => { root.drag-end(); }
-                }
-
-                // TRACK PANEL
-                TrackPanel {
-                    width: root.tracks-header-width;
-                    selected-track <=> root.selected-track;
-                    track-names: root.track-names;
-                    zoom-y: root.zoom-y-level;
-                    track-clicked(index) => { root.selected-track = index; }
-                    add-track-requested(type) => { root.add-track-requested(type); }
-                }
-
-                // TIMELINE
-                timeline := Timeline {
-                    horizontal-stretch: 1;
-                    selected-track <=> root.selected-track;
-                    position: root.transport-position;
-                    zoom <=> root.zoom-level;
-                    zoom-y <=> root.zoom-y-level;
-                    track-names: root.track-names;
-                    active-tool: root.active-tool;
-                    clips: root.clips;
-                    drop-visible: root.drag-active && root.drag-inited && root.drag-over-timeline;
-                    drop-x: root.drag-snap-beat * timeline.px-per-beat;
-                    drop-track: root.drag-drop-track;
-                    drop-len-beats: 4.0;
-                    select-track(index) => { root.selected-track = index; }
-                    clip-selected(index) => { root.selected-track = index; }
-                    clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
-                    clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
-                    clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
-                    clip-move-finished(id) => { root.clip-move-finished(id); }
-                    Rectangle { min-width: 16px; min-height: 16px; }
-                }
-            }
-
-            // SPLITTER TRACK PANEL
-            SplitterVerticalGrowLeft {
-                x: root.left-panel-width + root.tracks-header-width;
+            // CLIP POOL (left)
+            clip_pool := ClipPool {
+                x: 0;
                 y: 0;
-                width: 5px;
+                width: root.left-panel-width;
                 height: 100%;
-                value <=> root.tracks-header-width;
-                min-value: 120px;
-                max-value: 420px;
-                z: 50;
-            }
+                selected-track <=> root.selected-track;
+                track-names: root.track-names;
 
-            // TIMELINE BARS
-            ScrollBarHorizontal {
-                x: parent.timeline-area-x;
-                y: parent.timeline-area-h - 14px;
-                width: parent.timeline-area-w - 32px;
-                height: 14px;
-                value <=> timeline.scroll-x;
-                max-value: timeline.max-scroll-x;
-                thumb-size: parent.timeline-area-w * parent.timeline-area-w / (parent.timeline-area-w + timeline.max-scroll-x);
-                z: 60;
-            }
-
-            ZoomBarHorizontal {
-                x: parent.timeline-area-x;
-                y: parent.timeline-area-h - 14px - 16px;
-                width: parent.timeline-area-w - 32px;
-                height: 16px;
-                value: root.zoom-level;
-                min-value: 0.5;
-                max-value: 4.0;
-                zoom-requested(new-zoom) => {
-                    let old-zoom = timeline.zoom;
-                    root.zoom-level = new-zoom;
-                    timeline.zoom = new-zoom;
-                    timeline.scroll-x = max(0px, min(timeline.max-scroll-x,
-                        ((timeline.width / 2 + timeline.scroll-x) / old-zoom) * new-zoom - timeline.width / 2
-                    ));
+                clip-drag-started(name, position, duration, color, is-midi) => {
+                    root.drag-begin(name, position, duration, color, is-midi);
                 }
-                z: 60;
+                clip-drag-moved(x, y) => { root.drag-move(x, y); }
+                clip-drag-finished() => { root.drag-end(); }
             }
 
-            ScrollBarVertical {
-                x: parent.timeline-area-x + parent.timeline-area-w - 14px;
+            // TRACK PANEL + TIMELINE (center)
+            center-panel := Rectangle {
+                x: root.left-panel-width;
                 y: 0;
-                width: 14px;
-                height: parent.timeline-area-h - 30px;
-                value <=> timeline.scroll-y;
-                max-value: timeline.max-scroll-y;
-                thumb-size: parent.timeline-area-h * parent.timeline-area-h / (parent.timeline-area-h + timeline.max-scroll-y);
-                z: 60;
+                width: parent.width - root.left-panel-width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                height: parent.height - root.bottom-panel-height - 5px;
+
+                VerticalLayout {
+                    spacing: 0;
+                    alignment: LayoutAlignment.stretch;
+                    cross-axis-alignment: CrossAxisAlignment.stretch;
+                    height: 100%;
+
+                    HorizontalLayout {
+                        spacing: 0;
+                        cross-axis-alignment: CrossAxisAlignment.stretch;
+                        height: 100%;
+
+                        // TRACK PANEL
+                        TrackPanel {
+                            width: root.tracks-header-width;
+                            selected-track <=> root.selected-track;
+                            track-names: root.track-names;
+                            zoom-y: root.zoom-y-level;
+                            track-clicked(index) => { root.selected-track = index; }
+                            add-track-requested(type) => { root.add-track-requested(type); }
+                        }
+
+                        // TIMELINE
+                        timeline := Timeline {
+                            horizontal-stretch: 1;
+                            selected-track <=> root.selected-track;
+                            position: root.transport-position;
+                            zoom <=> root.zoom-level;
+                            zoom-y <=> root.zoom-y-level;
+                            track-names: root.track-names;
+                            active-tool: root.active-tool;
+                            clips: root.clips;
+                            drop-visible: root.drag-active && root.drag-inited && root.drag-over-timeline;
+                            drop-x: root.drag-snap-beat * timeline.px-per-beat;
+                            drop-track: root.drag-drop-track;
+                            drop-len-beats: 4.0;
+                            select-track(index) => { root.selected-track = index; }
+                            clip-selected(index) => { root.selected-track = index; }
+                            clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
+                            clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
+                            clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
+                            clip-move-finished(id) => { root.clip-move-finished(id); }
+                            Rectangle { min-width: 16px; min-height: 16px; }
+                        }
+                    }
+                }
+
+                // SPLITTER TRACK PANEL
+                SplitterVerticalGrowLeft {
+                    x: root.tracks-header-width;
+                    y: 0;
+                    width: 5px;
+                    height: 100%;
+                    value <=> root.tracks-header-width;
+                    min-value: 120px;
+                    max-value: 420px;
+                    z: 50;
+                }
+
+                // TIMELINE BARS
+                ScrollBarHorizontal {
+                    x: root.tracks-header-width;
+                    y: parent.height - 14px;
+                    width: parent.width - root.tracks-header-width - 32px;
+                    height: 14px;
+                    value <=> timeline.scroll-x;
+                    max-value: timeline.max-scroll-x;
+                    thumb-size: parent.width * parent.width / (parent.width + timeline.max-scroll-x);
+                    z: 60;
+                }
+
+                ZoomBarHorizontal {
+                    x: root.tracks-header-width;
+                    y: parent.height - 14px - 16px;
+                    width: parent.width - root.tracks-header-width - 32px;
+                    height: 16px;
+                    value: root.zoom-level;
+                    min-value: 0.5;
+                    max-value: 4.0;
+                    zoom-requested(new-zoom) => {
+                        let old-zoom = timeline.zoom;
+                        root.zoom-level = new-zoom;
+                        timeline.zoom = new-zoom;
+                        timeline.scroll-x = max(0px, min(timeline.max-scroll-x,
+                            ((timeline.width / 2 + timeline.scroll-x) / old-zoom) * new-zoom - timeline.width / 2
+                        ));
+                    }
+                    z: 60;
+                }
+
+                ScrollBarVertical {
+                    x: parent.width - 14px;
+                    y: 0;
+                    width: 14px;
+                    height: parent.height - 30px;
+                    value <=> timeline.scroll-y;
+                    max-value: timeline.max-scroll-y;
+                    thumb-size: parent.height * parent.height / (parent.height + timeline.max-scroll-y);
+                    z: 60;
+                }
+
+                ZoomBarVertical {
+                    x: parent.width - 30px;
+                    y: 0;
+                    width: 16px;
+                    height: parent.height - 30px;
+                    value <=> root.zoom-y-level;
+                    min-value: 0.4;
+                    max-value: 3.0;
+                    z: 60;
+                }
             }
 
-            ZoomBarVertical {
-                x: parent.timeline-area-x + parent.timeline-area-w - 30px;
-                y: 0;
-                width: 16px;
-                height: parent.timeline-area-h - 30px;
-                value <=> root.zoom-y-level;
-                min-value: 0.4;
-                max-value: 3.0;
-                z: 60;
-            }
-
-            // MIXER SPLITTER
+            // SPLITTER BETWEEN UPPER AREA AND BOTTOM PANEL
             SplitterHorizontal {
-                x: root.left-panel-width + root.tracks-header-width;
-                y: parent.height - root.mixer-height - 5px;
-                width: parent.width - root.left-panel-width - root.tracks-header-width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
-                visible: root.mixer-visible;
-                value <=> root.mixer-height;
+                x: 0;
+                y: parent.height - root.bottom-panel-height - 5px;
+                width: parent.width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                height: 5px;
+                value <=> root.bottom-panel-height;
                 min-value: 120px;
                 max-value: 600px;
                 z: 30;
             }
 
-            // MIXER
-            Mixer {
-                x: root.left-panel-width + root.tracks-header-width;
-                y: parent.height - root.mixer-height;
-                width: parent.width - root.left-panel-width - root.tracks-header-width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
-                height: root.mixer-height;
-                visible: root.mixer-visible;
-                meters <=> root.mixer-meters;
-                mutes <=> root.mixer-mutes;
-                soloes <=> root.mixer-soloes;
-                arms <=> root.mixer-arms;
-                volumes <=> root.mixer-volumes;
-                pans <=> root.mixer-pans;
-                channel-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
-                z: 30;
+            // BOTTOM PANEL: Dynamic content (Mixer / Sampler / Piano Roll)
+            bottom-panel := Rectangle {
+                x: 0;
+                y: parent.height - root.bottom-panel-height;
+                width: parent.width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                height: root.bottom-panel-height;
+                background: Theme.surface;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+
+                property <int> current-tab: bottom-toolbar.selected-tab;
+
+                VerticalLayout {
+                    spacing: 0;
+                    alignment: LayoutAlignment.stretch;
+                    cross-axis-alignment: CrossAxisAlignment.stretch;
+                    height: 100%;
+
+                    // Dynamic content based on selected tab
+                    Rectangle {
+                        width: 100%;
+                        vertical-stretch: 1;
+                        clip: true;
+
+                        Mixer {
+                            width: 100%;
+                            height: 100%;
+                            visible: bottom-panel.current-tab == 0;
+                            expanded <=> root.bottom-panel-expanded;
+                            expand-toggle => { root.bottom-panel-expanded = !root.bottom-panel-expanded; }
+                            meters <=> root.mixer-meters;
+                            mutes <=> root.mixer-mutes;
+                            soloes <=> root.mixer-soloes;
+                            arms <=> root.mixer-arms;
+                            volumes <=> root.mixer-volumes;
+                            pans <=> root.mixer-pans;
+                            channel-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+                        }
+
+                        SamplerArea {
+                            width: 100%;
+                            height: 100%;
+                            visible: bottom-panel.current-tab == 1;
+                            expanded <=> root.bottom-panel-expanded;
+                            expand-toggle => { root.bottom-panel-expanded = !root.bottom-panel-expanded; }
+                        }
+
+                        PianoRollArea {
+                            width: 100%;
+                            height: 100%;
+                            visible: bottom-panel.current-tab == 2;
+                            expanded <=> root.bottom-panel-expanded;
+                            expand-toggle => { root.bottom-panel-expanded = !root.bottom-panel-expanded; }
+                        }
+
+                        Rectangle {
+                            visible: bottom-panel.current-tab == 3;
+                            width: 100%;
+                            height: 100%;
+                            background: Theme.base;
+                        }
+                    }
+                }
             }
 
-            // EXPLORER SPLITTER
-            SplitterVerticalGrowRight {
-                x: parent.width - root.explorer-width - 5px;
-                y: 0;
-                height: 100%;
-                visible: root.explorer-visible;
-                value <=> root.explorer-width;
-                min-value: 220px;
-                max-value: 500px;
-                z: 40;
-            }
-
-            // EXPLORER
-            Explorer {
+            // EXPLORER (right)
+            Rectangle {
                 x: parent.width - root.explorer-width;
                 y: 0;
                 width: root.explorer-width;
                 height: 100%;
                 visible: root.explorer-visible;
-                z: 40;
-                current-path <=> root.explorer-current-path;
-                path-history <=> root.explorer-path-history;
-                history-index <=> root.explorer-history-index;
-                entries <=> root.explorer-entries;
-                audio-drag-started(name, type, color, is-midi) => { root.drag-begin(name, "", "", color, is-midi); }
-                audio-drag-moved(x, y) => { root.drag-move(x, y); }
-                audio-drag-finished() => { root.drag-end(); }
-                explorer-path-changed(path) => { root.explorer-path-changed(path); }
-                explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
-                explorer-go-up() => { root.explorer-go-up(); }
+
+                SplitterVerticalGrowRight {
+                    x: -5px;
+                    y: 0;
+                    width: 5px;
+                    height: 100%;
+                    value <=> root.explorer-width;
+                    min-value: 220px;
+                    max-value: 500px;
+                    z: 40;
+                }
+
+                Explorer {
+                    x: 0;
+                    y: 0;
+                    width: root.explorer-width;
+                    height: 100%;
+                    z: 40;
+                    current-path <=> root.explorer-current-path;
+                    path-history <=> root.explorer-path-history;
+                    history-index <=> root.explorer-history-index;
+                    entries <=> root.explorer-entries;
+                    audio-drag-started(name, type, color, is-midi) => { root.drag-begin(name, "", "", color, is-midi); }
+                    audio-drag-moved(x, y) => { root.drag-move(x, y); }
+                    audio-drag-finished() => { root.drag-end(); }
+                    explorer-path-changed(path) => { root.explorer-path-changed(path); }
+                    explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
+                    explorer-go-up() => { root.explorer-go-up(); }
+                }
             }
 
             // DRAG GHOST
@@ -366,7 +426,7 @@ in-out property <[string]> explorer-entries: [];
             }
         }
 
-        // BOTTOM TOOLBAR
+        // BOTTOM TOOLBAR (Tab bar)
         bottom-toolbar := BottomToolbar {
             toolbar-height <=> bottom-toolbar.height;
         }

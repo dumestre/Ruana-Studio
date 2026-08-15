@@ -3,15 +3,17 @@ import { Theme } from "../theme.slint";
 
 export component BottomToolbar inherits Rectangle {
     in-out property <int> selected-tab: 0;
-    in-out property <bool> sampler-visible: true;
-    in-out property <bool> piano-visible: false;
-    in-out property <bool> explorer-visible: true;
-    in-out property <bool> mixer-visible: true;
 
-    height: 40px;
+    height: 32px;
     in-out property <length> toolbar-height:
         self.height;
     background: Theme.base;
+
+    Rectangle {
+        width: 100%;
+        height: 1px;
+        background: Theme.border;
+    }
 
     // Tab bar
     HorizontalLayout {
@@ -20,58 +22,44 @@ export component BottomToolbar inherits Rectangle {
         cross-axis-alignment: CrossAxisAlignment.stretch;
         height: 100%;
 
-        // Tab: Sampler
+        // Tab: Mixer
         Button {
-            text: "S";
-            width: 40px;
-            height: 38px;
+            text: "Mixer";
+            width: 80px;
+            height: 30px;
             toggled: root.selected-tab == 0;
             toggled-bg: Theme.accent;
-            clicked => {
-                root.selected-tab = 0;
-                root.sampler-visible = true;
-                root.piano-visible = false;
-            }
+            clicked => { root.selected-tab = 0; }
+        }
+
+        // Tab: Sampler
+        Button {
+            text: "Sampler";
+            width: 80px;
+            height: 30px;
+            toggled: root.selected-tab == 1;
+            toggled-bg: Theme.accent;
+            clicked => { root.selected-tab = 1; }
         }
 
         // Tab: Piano Roll
         Button {
-            text: "P";
-            width: 40px;
-            height: 38px;
-            toggled: root.selected-tab == 1;
+            text: "Piano Roll";
+            width: 90px;
+            height: 30px;
+            toggled: root.selected-tab == 2;
             toggled-bg: Theme.accent;
-            clicked => {
-                root.selected-tab = 1;
-                root.sampler-visible = false;
-                root.piano-visible = true;
-            }
+            clicked => { root.selected-tab = 2; }
         }
 
         // Tab: Explorer
         Button {
-            text: "E";
-            width: 40px;
-            height: 38px;
-            toggled: root.selected-tab == 2;
-            toggled-bg: Theme.accent;
-            clicked => {
-                root.selected-tab = 2;
-                // Explorer visibility handled separately
-            }
-        }
-
-        // Tab: Mixer
-        Button {
-            text: "M";
-            width: 40px;
-            height: 38px;
+            text: "Explorer";
+            width: 80px;
+            height: 30px;
             toggled: root.selected-tab == 3;
             toggled-bg: Theme.accent;
-            clicked => {
-                root.selected-tab = 3;
-                root.mixer-visible = !root.mixer-visible;
-            }
+            clicked => { root.selected-tab = 3; }
         }
     }
 }
