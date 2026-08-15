@@ -14,6 +14,10 @@ export component Explorer inherits Rectangle {
     in-out property <string> preview-file-name: "Ferrum Studio";
     in-out property <string> preview-file-info: "Folder";
 
+    callback audio-drag-started(string, string, color, bool);
+    callback audio-drag-moved(length, length);
+    callback audio-drag-finished();
+
     preferred-width: 300px;
     width: 300px;
     
@@ -101,6 +105,18 @@ export component Explorer inherits Rectangle {
                 media-selected(name, type) => {
                     root.preview-file-name = name;
                     root.preview-file-info = type;
+                }
+
+                audio-drag-started(name, type, color, is-midi) => {
+                    root.audio-drag-started(name, type, color, is-midi);
+                }
+
+                audio-drag-moved(x, y) => {
+                    root.audio-drag-moved(x, y);
+                }
+
+                audio-drag-finished() => {
+                    root.audio-drag-finished();
                 }
             }
 

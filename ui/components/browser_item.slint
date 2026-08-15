@@ -6,8 +6,14 @@ export component BrowserItem inherits Rectangle {
     in property <string> icon: "♫";
     in property <image> icon-image: @image-url("");
     in property <bool> selected: false;
+    in property <bool> drag-enabled: false;
 
     callback clicked();
+    callback drag-started();
+    callback drag-moved(length, length);
+    callback drag-finished();
+
+    in-out property <bool> dragging: false;
 
     height: 28px;
 
@@ -99,8 +105,50 @@ export component BrowserItem inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
+
+        property <bool> is-down: false;
+        property <length> press-x: 0px;
+        property <length> press-y: 0px;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down
+                && event.button == PointerEventButton.left
+                && root.drag-enabled {
+                self.is-down = true;
+                self.press-x = self.mouse-x;
+                self.press-y = self.mouse-y;
+            } else if event.kind == PointerEventKind.up
+                && self.is-down {
+                self.is-down = false;
+                if root.dragging {
+                    root.dragging = false;
+                    root.drag-finished();
+                }
+            } else if event.kind == PointerEventKind.move
+                && self.is-down {
+                if !root.dragging {
+                    let dx = self.mouse-x - self.press-x;
+                    let dy = self.mouse-y - self.press-y;
+                    if (dx < 0px ? -dx : dx) > 6px
+                        || (dy < 0px ? -dy : dy) > 6px {
+                        root.dragging = true;
+                        root.drag-started();
+                    }
+                }
+                if root.dragging {
+                    let win = self.absolute-position;
+                    root.drag-moved(
+                        self.mouse-x + win.x,
+                        self.mouse-y + win.y
+                    );
+                }
+            }
+        }
+
         clicked => {
-            root.clicked();
+            if !root.dragging {
+                root.clicked();
+            }
         }
     }
 }

@@ -234,6 +234,127 @@ export component MainWindow inherits Window {
 
 
     // =====================================================
+    // DRAG COMPARTILHADO (ClipPool + Explorer → timeline)
+    //
+    // Callbacks alimentados pelo ClipPool e pelo Explorer de
+    // áudio. Ghost, tilt, snap e drop preview são os mesmos
+    // para as duas origens.
+    // =====================================================
+
+    callback drag-begin(string, string, string, color, bool);
+    callback drag-move(length, length);
+    callback drag-end();
+
+
+    drag-begin(
+        name,
+        position,
+        duration,
+        color,
+        is-midi
+    ) => {
+
+        root.drag-name = name;
+        root.drag-position = position;
+        root.drag-duration = duration;
+        root.drag-color = color;
+        root.drag-is-midi = is-midi;
+        root.drag-active = true;
+        root.drag-inited = false;
+        root.drag-tilt = 0deg;
+        root.drag-tilt-display = 0deg;
+        root.drag-speed = 0.0;
+    }
+
+
+    drag-move(
+        x,
+        y
+    ) => {
+
+        // Coordenadas relativas à janela
+        // (via absolute-position).
+
+        root.drag-x = x;
+        root.drag-y = y;
+
+        if root.drag-inited {
+
+            // Inclinação proporcional à força do
+            // arrasto (velocidade entre eventos):
+            // mais rápido = mais inclinado, no
+            // sentido do movimento. O Timer
+            // drag_decay devolve a rotação a 0
+            // quando o mouse para.
+            let dx = x - root.drag-last-x;
+            let dir = dx >= 0px ? 1.0 : -1.0;
+            let instant = (dx < 0px ? -dx : dx) / 1px;
+
+            // Mantém o pico da velocidade (com
+            // decay no timer), para que um arrasto
+            // rápido e contínuo incline de verdade.
+            root.drag-speed =
+                max(
+                    instant,
+                    root.drag-speed * 0.8
+                );
+
+            root.drag-tilt =
+                max(
+                    min(
+                        dir
+                            * root.drag-speed
+                            * 0.45deg,
+                        25deg
+                    ),
+                    -25deg
+                );
+        }
+
+        root.drag-last-x = x;
+        root.drag-inited = true;
+    }
+
+
+    drag-end() => {
+
+        if root.drag-active
+            && root.drag-inited
+            && root.track-names.length > 0 {
+
+            // Garante WYSIWYG: o clip cai exatamente
+            // onde o preview (snap) mostrou.
+            let tl = timeline.absolute-position;
+
+            let local-x =
+                root.drag-x
+                - tl.x;
+
+            let local-y =
+                root.drag-y
+                - tl.y;
+
+            if local-x >= 0px
+                && local-y >= 30px {
+
+                root.clip-dropped(
+                    root.drag-drop-track,
+                    root.drag-snap-beat,
+                    root.drag-name,
+                    root.drag-is-midi
+                );
+            }
+        }
+
+        root.drag-active = false;
+        root.drag-inited = false;
+        root.drag-tilt = 0deg;
+        root.drag-tilt-display = 0deg;
+        root.drag-speed = 0.0;
+    }
+
+
+    // =====================================================
     // LAYOUT PRINCIPAL
     // =====================================================
 
@@ -428,17 +549,7 @@ export component MainWindow inherits Window {
                         color,
                         is-midi
                     ) => {
-
-                        root.drag-name = name;
-                        root.drag-position = position;
-                        root.drag-duration = duration;
-                        root.drag-color = color;
-                        root.drag-is-midi = is-midi;
-                        root.drag-active = true;
-                        root.drag-inited = false;
-                        root.drag-tilt = 0deg;
-                        root.drag-tilt-display = 0deg;
-                        root.drag-speed = 0.0;
+                        root.drag-begin(name, position, duration, color, is-midi);
                     }
 
 
@@ -446,86 +557,12 @@ export component MainWindow inherits Window {
                         x,
                         y
                     ) => {
-
-                        // Coordenadas relativas à janela
-                        // (via absolute-position).
-
-                        root.drag-x = x;
-                        root.drag-y = y;
-
-                        if root.drag-inited {
-
-                            // Inclinação proporcional à força do
-                            // arrasto (velocidade entre eventos):
-                            // mais rápido = mais inclinado, no
-                            // sentido do movimento. O Timer
-                            // drag_decay devolve a rotação a 0
-                            // quando o mouse para.
-                            let dx = x - root.drag-last-x;
-                            let dir = dx >= 0px ? 1.0 : -1.0;
-                            let instant = (dx < 0px ? -dx : dx) / 1px;
-
-                            // Mantém o pico da velocidade (com
-                            // decay no timer), para que um arrasto
-                            // rápido e contínuo incline de verdade.
-                            root.drag-speed =
-                                max(
-                                    instant,
-                                    root.drag-speed * 0.8
-                                );
-
-                            root.drag-tilt =
-                                max(
-                                    min(
-                                        dir
-                                            * root.drag-speed
-                                            * 0.45deg,
-                                        25deg
-                                    ),
-                                    -25deg
-                                );
-                        }
-
-                        root.drag-last-x = x;
-                        root.drag-inited = true;
+                        root.drag-move(x, y);
                     }
 
 
                     clip-drag-finished() => {
-
-                        if root.drag-active
-                            && root.drag-inited
-                            && root.track-names.length > 0 {
-
-                            // Garante WYSIWYG: o clip cai exatamente
-                            // onde o preview (snap) mostrou.
-                            let tl = timeline.absolute-position;
-
-                            let local-x =
-                                root.drag-x
-                                - tl.x;
-
-                            let local-y =
-                                root.drag-y
-                                - tl.y;
-
-                            if local-x >= 0px
-                                && local-y >= 30px {
-
-                                root.clip-dropped(
-                                    root.drag-drop-track,
-                                    root.drag-snap-beat,
-                                    root.drag-name,
-                                    root.drag-is-midi
-                                );
-                            }
-                        }
-
-                        root.drag-active = false;
-                        root.drag-inited = false;
-                        root.drag-tilt = 0deg;
-                        root.drag-tilt-display = 0deg;
-                        root.drag-speed = 0.0;
+                        root.drag-end();
                     }
                 }
 
@@ -988,6 +1025,20 @@ export component MainWindow inherits Window {
 
                 z:
                     40;
+
+                // Áudio do Media Browser: mesmo esquema de
+                // drag & drop do ClipPool.
+                audio-drag-started(name, type, color, is-midi) => {
+                    root.drag-begin(name, "", "", color, is-midi);
+                }
+
+                audio-drag-moved(x, y) => {
+                    root.drag-move(x, y);
+                }
+
+                audio-drag-finished() => {
+                    root.drag-end();
+                }
             }
 
 
