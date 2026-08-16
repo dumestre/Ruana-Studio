@@ -27,47 +27,50 @@ export component EditToolbar inherits Rectangle {
         cross-axis-alignment: CrossAxisAlignment.center;
 
         HorizontalLayout {
-            spacing: 0px;
+            spacing: 3px;
             alignment: LayoutAlignment.center;
             cross-axis-alignment: CrossAxisAlignment.center;
 
-        Button {
-            width: 28px;
-            height: 26px;
-            icon: @image-url("icons/select.svg");
-            filled-icon: @image-url("icons/select_filled.svg");
-            icon-size: 17px;
-            text: "";
-            borderless: true;
-            toggled: root.active-tool == 0;
+            // Select - 0
+            Button {
+                width: 28px;
+                height: 26px;
+                icon: @image-url("icons/select.svg");
+                filled-icon: @image-url("icons/select_filled.svg");
+                icon-size: 17px;
+                text: "";
+                borderless: true;
+                toggled: root.active-tool == 0;
 
-            clicked => {
-                root.active-tool = 0;
-                root.tool-changed(0);
+                clicked => {
+                    root.active-tool = 0;
+                    root.tool-changed(0);
+                }
             }
-        }
 
-        Button {
-            width: 28px;
-            height: 26px;
-            icon: @image-url("icons/slice.svg");
-            filled-icon: @image-url("icons/slice_filled.svg");
-            icon-size: 17px;
-            text: "";
-            borderless: true;
-            toggled: root.active-tool == 1;
+            // Slice - 1
+            Button {
+                width: 28px;
+                height: 26px;
+                icon: @image-url("icons/slice.svg");
+                filled-icon: @image-url("icons/slice_filled.svg");
+                icon-size: 17px;
+                text: "";
+                borderless: true;
+                toggled: root.active-tool == 1;
 
-            clicked => {
-                root.active-tool = 1;
-                root.tool-changed(1);
+                clicked => {
+                    root.active-tool = 1;
+                    root.tool-changed(1);
+                }
             }
-        }
 
-        Button {
-            width: 28px;
-            height: 26px;
-            icon: @image-url("icons/stretch.svg");
-            filled-icon: @image-url("icons/stretch_filled.svg");
+            // Glue - 2
+            Button {
+                width: 28px;
+                height: 26px;
+            icon: @image-url("icons/glue.svg");
+            filled-icon: @image-url("icons/glue_filled.svg");
             icon-size: 17px;
             text: "";
             borderless: true;
@@ -77,13 +80,14 @@ export component EditToolbar inherits Rectangle {
                 root.active-tool = 2;
                 root.tool-changed(2);
             }
-        }
+            }
 
-        Button {
-            width: 28px;
-            height: 26px;
-            icon: @image-url("icons/draw.svg");
-            filled-icon: @image-url("icons/draw_filled.svg");
+            // Stretch - 3
+            Button {
+                width: 28px;
+                height: 26px;
+            icon: @image-url("icons/stretch.svg");
+            filled-icon: @image-url("icons/stretch_filled.svg");
             icon-size: 17px;
             text: "";
             borderless: true;
@@ -93,14 +97,14 @@ export component EditToolbar inherits Rectangle {
                 root.active-tool = 3;
                 root.tool-changed(3);
             }
-        }
+            }
 
-        Button {
-            width: 28px;
-            height: 26px;
-            icon: @image-url("icons/erase.svg");
-            filled-icon: @image-url("icons/erase_filled.svg");
-            icon-color: #9a9a9a;
+            // Draw - 4
+            Button {
+                width: 28px;
+                height: 26px;
+            icon: @image-url("icons/draw.svg");
+            filled-icon: @image-url("icons/draw_filled.svg");
             icon-size: 17px;
             text: "";
             borderless: true;
@@ -110,70 +114,87 @@ export component EditToolbar inherits Rectangle {
                 root.active-tool = 4;
                 root.tool-changed(4);
             }
+            }
+
+            // Erase - 5
+            Button {
+                width: 28px;
+                height: 26px;
+            icon: @image-url("icons/erase.svg");
+            filled-icon: @image-url("icons/erase_filled.svg");
+            icon-color: #9a9a9a;
+            icon-size: 17px;
+            text: "";
+            borderless: true;
+            toggled: root.active-tool == 5;
+
+            clicked => {
+                root.active-tool = 5;
+                root.tool-changed(5);
+            }
+            }
         }
-    }
-
-
-        
 
         Rectangle {
             width: 1px;
             height: 20px;
             background: Theme.border;
         }
+
         HorizontalLayout {
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
-        
+            // Beat / Drum
+            Button {
+                width: 28px;
+                height: 26px;
+                icon: @image-url("icons/drum.svg");
+                icon-size: 17px;
+                text: "";
+                borderless: true;
+                toggled: root.beat-open;
+                subtle-toggled: true;
+                toggled-icon-color: Theme.accent;
 
-        Button {
-            width: 28px;
-            height: 26px;
-            icon: @image-url("icons/drum.svg");
-            icon-size: 17px;
-            text: "";
-            borderless: true;
-            toggled: root.beat-open;
-            subtle-toggled: true;
-            toggled-icon-color: Theme.accent;
+                clicked => {
+                    root.beat-open = !root.beat-open;
+                }
+            }
 
-            clicked => {
-                root.beat-open = !root.beat-open;
+            // Explorer
+            Button {
+                width: 28px;
+                height: 26px;
+                icon: @image-url("icons/folder.svg");
+                icon-size: 17px;
+                text: "";
+                borderless: true;
+                toggled: root.explorer-visible;
+                subtle-toggled: true;
+                toggled-icon-color: Theme.accent;
+
+                clicked => {
+                    root.explorer-visible = !root.explorer-visible;
+                }
+            }
+
+            // Panel
+            Button {
+                width: 28px;
+                height: 26px;
+                icon: @image-url("icons/restore.svg");
+                icon-size: 17px;
+                text: "";
+                borderless: true;
+                toggled: root.panel-visible;
+                subtle-toggled: true;
+                toggled-icon-color: Theme.accent;
+
+                clicked => {
+                    root.panel-visible = !root.panel-visible;
+                }
             }
         }
-
-        Button {
-            width: 28px;
-            height: 26px;
-            icon: @image-url("icons/folder.svg");
-            icon-size: 17px;
-            text: "";
-            borderless: true;
-            toggled: root.explorer-visible;
-            subtle-toggled: true;
-            toggled-icon-color: Theme.accent;
-
-            clicked => {
-                root.explorer-visible = !root.explorer-visible;
-            }
-        }
-
-        Button {
-            width: 28px;
-            height: 26px;
-            icon: @image-url("icons/restore.svg");
-            icon-size: 17px;
-            text: "";
-            borderless: true;
-            toggled: root.panel-visible;
-            subtle-toggled: true;
-            toggled-icon-color: Theme.accent;
-
-            clicked => {
-                root.panel-visible = !root.panel-visible;
-            }
-        }
-    }
     }
 }

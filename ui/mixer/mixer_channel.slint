@@ -1,0 +1,374 @@
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+import { PanKnob } from "../components/knob.slint";
+import { Fader } from "../components/fader.slint";
+import { Meter } from "../components/meter.slint";
+import { InsertSlot } from "insert_slot.slint";
+
+export component MixerChannel inherits Rectangle {
+
+    // ==========================================
+    // IDENTIDADE
+    // ==========================================
+
+    in property <string> name: "";
+    in property <color> channel-color: Theme.accent;
+    in property <bool> is-master: false;
+    in property <int> channel-index: 0;
+
+    // Mantido porque o Mixer já fornece essa propriedade
+    in property <length> available-height: 200px;
+
+    // ==========================================
+    // ESTADO
+    // ==========================================
+
+    in property <bool> muted: false;
+    in property <bool> soloed: false;
+    in property <bool> arm: false;
+
+    in property <float> volume: 0.8;
+    in property <float> pan: 0.5;
+    in property <float> level: 0.0;
+
+    // ==========================================
+    // INSERTS
+    // ==========================================
+
+    in property <int> max-slot-count: 8;
+    in property <int> insert-count: 0;
+    in property <[string]> insert-names: [];
+    in property <[bool]> insert-enabled: [];
+
+    // ==========================================
+    // CALLBACKS
+    // ==========================================
+
+    callback param-changed(int, string, float);
+
+    callback insert-add();
+    callback insert-remove(int);
+    callback insert-toggle(int);
+
+    // ==========================================
+    // DISPLAY
+    // ==========================================
+
+    property <string> pan-display:
+        root.pan < 0.45
+            ? "L" + ((0.5 - root.pan) * 100).to-fixed(0)
+            : root.pan > 0.55
+                ? "R" + ((root.pan - 0.5) * 100).to-fixed(0)
+                : "C";
+
+    property <string> vol-display:
+        (root.volume * 60 - 60).to-fixed(1) + " dB";
+
+    // ==========================================
+    // CHANNEL
+    // ==========================================
+
+    width: 100px;
+    background: Theme.surface;
+
+    // ==========================================
+    // DIVISÓRIA
+    // ==========================================
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: parent.height;
+
+        background: Theme.border;
+    }
+
+    // ==========================================
+    // CHANNEL STRIP
+    // ==========================================
+
+    VerticalLayout {
+        padding: 5px;
+        spacing: 4px;
+
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
+
+        // ======================================
+        // HEADER
+        // ======================================
+
+        VerticalLayout {
+            height: 24px;
+
+            spacing: 2px;
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.stretch;
+
+            Text {
+                text: root.name;
+
+                color: Theme.text-primary;
+
+                font-size: 10px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+
+                height: 15px;
+            }
+
+            Rectangle {
+                width: 100%;
+                height: 2px;
+
+                background: root.channel-color;
+                border-radius: 1px;
+            }
+        }
+
+        // ======================================
+        // MUTE / SOLO / RECORD
+        // ======================================
+
+        HorizontalLayout {
+            height: 18px;
+
+            spacing: 2px;
+
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+            // MUTE
+            Button {
+                width: 27px;
+                height: 18px;
+
+                text: "M";
+
+                toggled: root.muted;
+                toggled-bg: Theme.warn;
+
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "muted",
+                        root.muted ? 0.0 : 1.0
+                    );
+                }
+            }
+
+            // SOLO
+            if !root.is-master: Button {
+                width: 27px;
+                height: 18px;
+
+                text: "S";
+
+                toggled: root.soloed;
+                toggled-bg: Theme.accent;
+
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "soloed",
+                        root.soloed ? 0.0 : 1.0
+                    );
+                }
+            }
+
+            // RECORD
+            if !root.is-master: Button {
+                width: 27px;
+                height: 18px;
+
+                text: "R";
+
+                toggled: root.arm;
+                toggled-bg: Theme.danger;
+
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "arm",
+                        root.arm ? 0.0 : 1.0
+                    );
+                }
+            }
+        }
+
+        // ======================================
+        // INSERTS
+        // ======================================
+
+        VerticalLayout {
+            spacing: 2px;
+
+            alignment: LayoutAlignment.start;
+            cross-axis-alignment: CrossAxisAlignment.stretch;
+
+            vertical-stretch: 0;
+
+            for j in [0, 1, 2, 3, 4, 5, 6, 7]: InsertSlot {
+                visible: j < root.insert-count;
+
+                slot-index: j;
+
+                name: root.insert-names[
+                    root.channel-index * root.max-slot-count + j
+                ];
+
+                enabled: root.insert-enabled[
+                    root.channel-index * root.max-slot-count + j
+                ];
+
+                toggle() => {
+                    root.insert-toggle(j);
+                }
+
+                remove() => {
+                    root.insert-remove(j);
+                }
+            }
+
+            // ADD INSERT
+            Button {
+                text: "+";
+
+                width: 100%;
+                height: 18px;
+
+                padding-x: 0px;
+
+                corner-radius: 3px;
+
+                text-color: Theme.text-dim;
+
+                clicked => {
+                    root.insert-add();
+                }
+            }
+        }
+
+        // ======================================
+        // PAN
+        // ======================================
+
+        VerticalLayout {
+            height: 40px;
+
+            spacing: 0px;
+
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+            vertical-stretch: 0;
+
+            PanKnob {
+                width: 32px;
+                height: 38px;
+
+                caption: "";
+
+                value: root.pan;
+                display-value: root.pan-display;
+
+                changed(v) => {
+                    root.param-changed(
+                        root.channel-index,
+                        "pan",
+                        v
+                    );
+                }
+            }
+        }
+
+        // ======================================
+        // FADER + METER
+        // ======================================
+
+        HorizontalLayout {
+            spacing: 5px;
+
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            // ==================================
+            // FADER
+            // ==================================
+
+            VerticalLayout {
+                spacing: 3px;
+
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                Fader {
+                    value: root.volume;
+                    caption: "";
+
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+
+                    changed(v) => {
+                        root.param-changed(
+                            root.channel-index,
+                            "volume",
+                            v
+                        );
+                    }
+                }
+
+                // ==================================
+                // DB DISPLAY
+                // ==================================
+
+                Rectangle {
+                    width: 52px;
+                    height: 16px;
+
+                    background: Theme.base;
+
+                    border-radius: 3px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+
+                    Text {
+                        text: root.vol-display;
+
+                        width: 100%;
+                        height: 100%;
+
+                        color: Theme.text-primary;
+
+                        font-size: 8px;
+                        font-weight: 600;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // ==================================
+            // LEVEL METER
+            // ==================================
+
+            Meter {
+                width: 8px;
+
+                level: root.level;
+                active: root.level > 0.05;
+
+                vertical-stretch: 1;
+            }
+        }
+    }
+}

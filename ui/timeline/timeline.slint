@@ -91,6 +91,7 @@ export component Timeline inherits Rectangle {
     callback select-track(int);
     callback clip-selected(int);
     callback clip-slice-requested(int, float);
+    callback clip-glue-requested(int);
     callback clip-move-started(int, float);
     callback clip-move-delta(int, float);
     callback clip-move-finished(int);
@@ -877,6 +878,10 @@ export component Timeline inherits Rectangle {
                         );
                     }
 
+                    glue-requested(id) => {
+                        root.clip-glue-requested(id);
+                    }
+
                     clip-move-started(id, beat) => {
                         root.clip-move-started(id, beat);
                     }
@@ -1051,9 +1056,9 @@ export component Timeline inherits Rectangle {
             parent.height;
 
         enabled:
-            root.active-tool == 2
-            || root.active-tool == 3
-            || root.active-tool == 4;
+            root.active-tool == 3
+            || root.active-tool == 4
+            || root.active-tool == 5;
 
         mouse-cursor:
             none;
@@ -1068,9 +1073,9 @@ export component Timeline inherits Rectangle {
                 && tool-cursor.has-hover;
 
             source:
-                root.active-tool == 2
+                root.active-tool == 3
                     ? root.cursor-icon-stretch
-                    : root.active-tool == 3
+                    : root.active-tool == 4
                         ? root.cursor-icon-draw
                         : root.cursor-icon-erase;
 

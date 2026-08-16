@@ -3,32 +3,59 @@ import { Theme } from "../theme.slint";
 export component Meter {
     in property <float> level: 0.0;
     in property <bool> active: false;
-    in property <length> meter-height: 90px;
 
-    width: 12px;
-    height: root.meter-height;
+    width: 8px;
+    min-height: 40px;
 
-    property <color> bar-color: self.level > 0.92 ? Theme.danger : self.level > 0.75 ? Theme.warn : Theme.ok;
-    property <float> smooth-level: self.level;
+    // ==========================================
+    // CORES
+    // ==========================================
+
+    property <color> bar-color:
+        root.level > 0.92
+            ? Theme.danger
+            : root.level > 0.75
+                ? Theme.warn
+                : Theme.ok;
+
+    // ==========================================
+    // SMOOTH LEVEL
+    // ==========================================
+
+    property <float> smooth-level: root.level;
 
     animate smooth-level {
         duration: 70ms;
     }
 
+    // ==========================================
+    // BACKGROUND
+    // ==========================================
+
     Rectangle {
         width: 100%;
         height: 100%;
+
         background: Theme.surface-high;
+
         border-radius: 3px;
         border-width: 1px;
         border-color: Theme.border;
     }
 
+    // ==========================================
+    // LEVEL
+    // ==========================================
+
     Rectangle {
         width: 100%;
+
         height: parent.height * root.smooth-level;
+
         y: parent.height - self.height;
+
         background: root.bar-color;
+
         border-radius: 3px;
 
         states [

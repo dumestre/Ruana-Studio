@@ -1,4 +1,4 @@
-import { Mixer } from "../mixer.slint";
+import { Mixer } from "../mixer/mixer.slint";
 import { SamplerArea } from "../components/sampler_area.slint";
 import { PianoRollArea } from "../components/piano_roll_area.slint";
 import { Button } from "../components/button.slint";
@@ -20,8 +20,20 @@ export component FloatPanel inherits Window {
     in-out property <[float]> mixer-volumes: [0.8, 0.8, 0.8, 0.8, 0.8];
     in-out property <[float]> mixer-pans: [0.5, 0.5, 0.5, 0.5, 0.5];
 
+    // Inserts do mixer (espelhados do core via Rust)
+    in-out property <[int]> mixer-insert-counts: [0, 0, 0, 0, 0];
+    in-out property <[string]> mixer-insert-names: [];
+    in-out property <[bool]> mixer-insert-enabled: [];
+    in-out property <int> mixer-max-inserts: 8;
+
+    // Altura natural do conteúdo do mixer (lida pelo Rust para dimensionar a janela).
+    in-out property <length> mixer-natural-height: mixer-content.natural-height;
+
     callback close-panel();
     callback mixer-param-changed(int, string, float);
+    callback mixer-insert-added(int);
+    callback mixer-insert-removed(int, int);
+    callback mixer-insert-toggled(int, int);
     callback resize-cancel();
     callback resize-move(length, length);
     callback resize-end();
@@ -45,6 +57,8 @@ export component FloatPanel inherits Window {
             width: 100%;
             height: 28px;
             background: Theme.surface;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
 
             HorizontalLayout {
                 padding-left: 10px;
@@ -88,9 +102,11 @@ export component FloatPanel inherits Window {
             width: 100%;
             height: 100%;
             vertical-stretch: 1;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
             clip: true;
 
-            Mixer {
+            mixer-content := Mixer {
                 width: 100%;
                 height: 100%;
                 visible: root.tool-tab == 0;
@@ -101,7 +117,14 @@ export component FloatPanel inherits Window {
                 arms <=> root.mixer-arms;
                 volumes <=> root.mixer-volumes;
                 pans <=> root.mixer-pans;
+                insert-counts <=> root.mixer-insert-counts;
+                insert-names <=> root.mixer-insert-names;
+                insert-enabled <=> root.mixer-insert-enabled;
+                max-inserts <=> root.mixer-max-inserts;
                 channel-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+                channel-insert-added(ch) => { root.mixer-insert-added(ch); }
+                channel-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
+                channel-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }
             }
 
             SamplerArea {

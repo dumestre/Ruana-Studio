@@ -48,6 +48,14 @@ pub enum DocumentEvent {
         new: Clip,
     },
     ClipDeleted(Clip),
+    ClipsGlued {
+        /// Clip da esquerda antes da fusão (para o undo restaurar o comprimento).
+        left_before: Clip,
+        /// Clip da esquerda após a fusão (estado atual, comprimento estendido).
+        left: Clip,
+        /// Clip da direita que foi fundido e removido.
+        right: Clip,
+    },
 }
 
 /// Um projeto da DAW.
@@ -81,12 +89,22 @@ impl Project {
     /// Representa o arranjo mockado usado para testar o fluxo:
     /// trilhas Drums/Bass/Vocal/Synth com clips de exemplo.
     pub fn demo() -> Self {
-        let tracks = vec![
+        let mut tracks = vec![
             Track::new(0, "Drums", TrackKind::Midi),
             Track::new(1, "Bass", TrackKind::Midi),
             Track::new(2, "Vocal", TrackKind::Audio),
             Track::new(3, "Synth", TrackKind::Midi),
         ];
+        tracks[0].mixer.add_insert("Kick Pro");
+        tracks[0].mixer.add_insert("Drum Comp");
+        tracks[1].mixer.add_insert("Bass Amp");
+        tracks[1].mixer.add_insert("Saturator");
+        tracks[2].mixer.add_insert("Vocal Chain");
+        tracks[3].mixer.add_insert("Delay");
+        tracks[3].mixer.add_insert("Chorus");
+        tracks[3].mixer.add_insert("Filter");
+        let mut master_mixer = MixerChannel::default();
+        master_mixer.add_insert("Master Limiter");
 
         let clips = vec![
             Clip::midi(0, 0, "Drums", 0, 4),
@@ -100,6 +118,7 @@ impl Project {
         Self {
             tracks,
             clips,
+            master_mixer,
             beat_patterns: {
                 let mut bp = BeatPatterns::new();
                 bp.add_pattern(DrumPattern::new(
@@ -198,6 +217,12 @@ impl Project {
             DocumentEvent::ClipDeleted(clip) => {
                 self.clips.retain(|c| c.id != clip.id);
             }
+            DocumentEvent::ClipsGlued { left, right, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == left.id) {
+                    *existing = left.clone();
+                }
+                self.clips.retain(|c| c.id != right.id);
+            }
         }
         self.emit(event, ChangeKind::Apply);
     }
@@ -226,6 +251,16 @@ impl Project {
             }
             DocumentEvent::ClipDeleted(clip) => {
                 self.clips.push(clip.clone());
+            }
+            DocumentEvent::ClipsGlued {
+                left_before,
+                right,
+                ..
+            } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == left_before.id) {
+                    *existing = left_before.clone();
+                }
+                self.clips.push(right.clone());
             }
         }
         self.emit(event, ChangeKind::Undo);
@@ -367,6 +402,42 @@ impl Project {
         Some(right_id)
     }
 
+    /// Funde um clip com o clip adjacente imediatamente à direita na mesma
+    /// trilha (mesmo tipo de conteúdo), se existir.
+    ///
+    /// O clip da esquerda fica com o comprimento somado e o da direita é
+    /// removido. Retorna o id do clip removido, ou `None` se não há vizinho.
+    pub fn glue_clip(&mut self, clip_id: u64) -> Option<u64> {
+        let index = self.clips.iter().position(|c| c.id == clip_id)?;
+        let left = self.clips[index].clone();
+        let right_index = self
+            .clips
+            .iter()
+            .position(|c| {
+                c.track_id == left.track_id
+                    && c.kind == left.kind
+                    && c.start_beat == left.start_beat + left.length_beats
+            })?;
+        let right = self.clips[right_index].clone();
+
+        let left_before = left.clone();
+        let mut left = left;
+        left.length_beats += right.length_beats;
+
+        self.clips[index] = left.clone();
+        self.clips.remove(right_index);
+
+        let removed_id = right.id;
+        let event = DocumentEvent::ClipsGlued {
+            left_before,
+            left,
+            right,
+        };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        Some(removed_id)
+    }
+
     /// Move um clip para outra trilha/posição.
     ///
     /// Retorna `false` se o clip ou a trilha de destino não existem.
@@ -420,6 +491,48 @@ impl Project {
         };
         target.set(param, value);
         true
+    }
+
+    /// Adiciona um insert ao canal do mixer.
+    ///
+    /// Endereçamento igual a [`set_mixer_param`]. Retorna `false` se o
+    /// canal não existe.
+    pub fn add_mixer_insert(&mut self, channel: usize) -> bool {
+        let target: &mut MixerChannel = if channel < self.tracks.len() {
+            &mut self.tracks[channel].mixer
+        } else if channel == self.tracks.len() {
+            &mut self.master_mixer
+        } else {
+            return false;
+        };
+        target.add_insert(format!("Insert {}", target.inserts.len() + 1));
+        true
+    }
+
+    /// Remove um insert do canal do mixer. Retorna `false` se o canal ou
+    /// o slot não existem.
+    pub fn remove_mixer_insert(&mut self, channel: usize, index: usize) -> bool {
+        let target: &mut MixerChannel = if channel < self.tracks.len() {
+            &mut self.tracks[channel].mixer
+        } else if channel == self.tracks.len() {
+            &mut self.master_mixer
+        } else {
+            return false;
+        };
+        target.remove_insert(index)
+    }
+
+    /// Alterna o bypass de um insert. Retorna `false` se o canal ou o slot
+    /// não existem.
+    pub fn toggle_mixer_insert(&mut self, channel: usize, index: usize) -> bool {
+        let target: &mut MixerChannel = if channel < self.tracks.len() {
+            &mut self.tracks[channel].mixer
+        } else if channel == self.tracks.len() {
+            &mut self.master_mixer
+        } else {
+            return false;
+        };
+        target.toggle_insert(index)
     }
 
     // =====================================================
@@ -629,6 +742,86 @@ mod tests {
     }
 
     #[test]
+    fn glue_clip_merges_adjacent() {
+        let mut project = demo();
+        let right_id = project.slice_clip(0, 2).unwrap();
+
+        let removed = project.glue_clip(0).unwrap();
+        assert_eq!(removed, right_id);
+
+        let left = project.clip(0).unwrap();
+        assert_eq!(left.start_beat, 0);
+        assert_eq!(left.length_beats, 4);
+        assert!(project.clip(right_id).is_none());
+        assert_eq!(project.clips.len(), 6);
+    }
+
+    #[test]
+    fn glue_clip_rejects_non_adjacent() {
+        let mut project = demo();
+        assert_eq!(project.glue_clip(1), None);
+        assert_eq!(project.clip(1).unwrap().length_beats, 6);
+
+        let gap = project.add_clip(0, ClipKind::Midi, "Far", 12, 2).unwrap();
+        assert_eq!(project.glue_clip(0), None);
+        assert!(project.clip(gap).is_some());
+    }
+
+    #[test]
+    fn glue_clip_rejects_wrong_kind_or_track() {
+        let mut project = demo();
+        project.add_clip(1, ClipKind::Audio, "Audio", 10, 2);
+        assert_eq!(project.glue_clip(1), None);
+
+        let other_track = project.add_clip(3, ClipKind::Midi, "Synth 02", 10, 2).unwrap();
+        assert_eq!(project.glue_clip(other_track), None);
+    }
+
+    #[test]
+    fn glue_clip_rejects_missing_clip() {
+        let mut project = demo();
+        assert_eq!(project.glue_clip(999), None);
+    }
+
+    #[test]
+    fn glue_clip_emits_event() {
+        let mut project = demo();
+        let events: Rc<RefCell<Vec<DocumentEvent>>> = Rc::new(RefCell::new(Vec::new()));
+        {
+            let events = events.clone();
+            project.subscribe(move |event, _| {
+                events.borrow_mut().push(event.clone());
+            });
+        }
+
+        project.slice_clip(0, 2);
+        project.glue_clip(0);
+
+        let events = events.borrow();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[1], DocumentEvent::ClipsGlued { .. }));
+    }
+
+    #[test]
+    fn undo_redo_glue_restores_clips() {
+        let mut project = demo();
+        let right_id = project.slice_clip(0, 2).unwrap();
+        project.glue_clip(0);
+
+        project.undo();
+        let left = project.clip(0).unwrap();
+        assert_eq!(left.length_beats, 2);
+        assert!(project.clip(right_id).is_some());
+        assert_eq!(project.clips.len(), 7);
+
+        project.redo();
+        let left = project.clip(0).unwrap();
+        assert_eq!(left.length_beats, 4);
+        assert!(project.clip(right_id).is_none());
+        assert_eq!(project.clips.len(), 6);
+    }
+
+    #[test]
     fn move_clip_relocates() {
         let mut project = demo();
         assert!(project.move_clip(1, 3, 0));
@@ -799,5 +992,36 @@ mod tests {
         assert_eq!(kinds[0], ChangeKind::Apply);
         assert_eq!(kinds[1], ChangeKind::Undo);
         assert_eq!(kinds[2], ChangeKind::Apply);
+    }
+
+    #[test]
+    fn demo_seeds_inserts() {
+        let project = demo();
+        assert_eq!(project.tracks[0].mixer.inserts.len(), 2);
+        assert_eq!(project.tracks[3].mixer.inserts.len(), 3);
+        assert_eq!(project.master_mixer.inserts.len(), 1);
+        assert_eq!(project.master_mixer.inserts[0].name, "Master Limiter");
+    }
+
+    #[test]
+    fn mixer_insert_mutations() {
+        let mut project = demo();
+
+        assert!(project.add_mixer_insert(1));
+        assert_eq!(project.tracks[1].mixer.inserts.len(), 3);
+        assert_eq!(project.tracks[1].mixer.inserts[2].name, "Insert 3");
+
+        assert!(project.toggle_mixer_insert(1, 2));
+        assert!(!project.tracks[1].mixer.inserts[2].enabled);
+
+        assert!(project.remove_mixer_insert(1, 2));
+        assert_eq!(project.tracks[1].mixer.inserts.len(), 2);
+
+        assert!(project.add_mixer_insert(project.tracks.len()));
+        assert_eq!(project.master_mixer.inserts.len(), 2);
+
+        assert!(!project.add_mixer_insert(999));
+        assert!(!project.remove_mixer_insert(1, 99));
+        assert!(!project.toggle_mixer_insert(1, 99));
     }
 }

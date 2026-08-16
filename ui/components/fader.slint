@@ -3,62 +3,102 @@ import { Theme } from "../theme.slint";
 export component Fader {
     in-out property <float> value: 0.75;
     in property <string> caption: "";
-    in property <length> fader-height: 110px;
+
     callback changed(float);
 
     width: 34px;
-    height: root.fader-height;
+    min-height: 50px;
 
     touch := TouchArea {
         mouse-cursor: pointer;
+
         moved => {
             if (self.pressed) {
-                root.value = max(0, min(1, 1 - touch.mouse-y / root.height));
+                root.value = max(
+                    0,
+                    min(
+                        1,
+                        1 - touch.mouse-y / root.height
+                    )
+                );
+
                 root.changed(root.value);
             }
         }
+
         pointer-event(event) => {
             if (event.kind == PointerEventKind.down) {
-                root.value = max(0, min(1, 1 - touch.mouse-y / root.height));
+                root.value = max(
+                    0,
+                    min(
+                        1,
+                        1 - touch.mouse-y / root.height
+                    )
+                );
+
+                root.changed(root.value);
             }
         }
     }
 
+    // Trilho
     Rectangle {
         width: 4px;
         height: 100%;
         x: (parent.width - self.width) / 2;
+
         background: Theme.surface-high;
         border-radius: 2px;
     }
 
+    // Valor
     Rectangle {
         width: 4px;
         height: parent.height * root.value;
-        opacity: 0.5;
+
         x: (parent.width - self.width) / 2;
         y: parent.height - self.height;
+
+        opacity: 0.5;
         background: Theme.accent;
         border-radius: 2px;
     }
 
+    // Cap
     Image {
         width: 30px;
         height: 25px;
+
         x: (parent.width - self.width) / 2;
-        y: min(max(parent.height - parent.height * root.value - self.height / 2, 0px), parent.height - self.height);
+
+        y: min(
+            max(
+                parent.height
+                    - parent.height * root.value
+                    - self.height / 2,
+                0px
+            ),
+            parent.height - self.height
+        );
+
         source: @image-url("../icons/fader.png");
+
         horizontal-tiling: ImageTiling.none;
         image-fit: ImageFit.contain;
         image-rendering: ImageRendering.smooth;
     }
 
+    // Caption
     Text {
         text: root.caption;
+
         y: parent.height - 14px;
+
         width: parent.width;
+
         color: Theme.text-dim;
         font-size: 9px;
+
         horizontal-alignment: center;
         vertical-alignment: top;
     }

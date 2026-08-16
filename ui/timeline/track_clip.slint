@@ -37,6 +37,8 @@ export component TrackClip inherits Rectangle {
 
     callback slice-requested(int, float);
 
+    callback glue-requested(int);
+
 
     // =====================================================
     // DIMENSÕES
@@ -422,7 +424,7 @@ export component TrackClip inherits Rectangle {
                 : root.active-tool == 0
                     && root.on-edge
                         ? ew-resize
-                        : root.active-tool >= 2
+                        : root.active-tool >= 3
                             ? none
                             : pointer;
 
@@ -458,6 +460,16 @@ export component TrackClip inherits Rectangle {
 
                     root.slice-preview-x =
                         self.mouse-x;
+                }
+            }
+
+            // =================================================
+            // GLUE (tool 2): funde com o clip adjacente à direita
+            // =================================================
+
+            if root.active-tool == 2 {
+                if event.kind == PointerEventKind.down {
+                    root.glue-requested(root.clip-id);
                 }
             }
 

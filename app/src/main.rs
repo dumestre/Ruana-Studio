@@ -21,6 +21,9 @@ fn next_random(seed: &mut u64) -> f32 {
     r
 }
 
+/// Máximo de slots de insert renderizados por canal no mixer.
+const MAX_INSERTS: usize = 8;
+
 /// Mapeia um clip do core para o DTO da camada Slint.
 fn to_clip_data(clip: &Clip) -> ClipData {
     ClipData {
@@ -59,6 +62,37 @@ fn mixer_state(project: &Project) -> (Vec<bool>, Vec<bool>, Vec<bool>, Vec<f32>,
     (mutes, soloes, arms, volumes, pans)
 }
 
+/// Extrai o estado de inserts do mixer como arrays achatados.
+///
+/// Cada canal ocupa `MAX_INSERTS` entradas em `names`/`enabled`
+/// (índice `canal * MAX_INSERTS + slot`). Retorna as contagens por
+/// canal, nomes, estados e o maior nº de inserts entre todos os canais.
+fn mixer_inserts_state(
+    project: &Project,
+) -> (Vec<i32>, Vec<slint::SharedString>, Vec<bool>, i32) {
+    let n = project.tracks.len() + 1; // trilhas + master
+    let mut counts = Vec::with_capacity(n);
+    let mut names = vec![slint::SharedString::default(); n * MAX_INSERTS];
+    let mut enabled = vec![false; n * MAX_INSERTS];
+    let mut max_count = 0;
+    for (channel, mixer) in project
+        .tracks
+        .iter()
+        .map(|t| &t.mixer)
+        .chain(std::iter::once(&project.master_mixer))
+        .enumerate()
+    {
+        counts.push(mixer.inserts.len() as i32);
+        max_count = max_count.max(mixer.inserts.len() as i32);
+        for (slot, insert) in mixer.inserts.iter().enumerate() {
+            let idx = channel * MAX_INSERTS + slot;
+            names[idx] = insert.name.clone().into();
+            enabled[idx] = insert.enabled;
+        }
+    }
+    (counts, names, enabled, max_count)
+}
+
 /// Preenche os modelos da UI a partir do estado inicial do core.
 ///
 /// Retorna os `VecModel` compartilhados para que o assinante de
@@ -89,6 +123,13 @@ fn initial_bind(
     ui.set_mixer_arms(Rc::new(slint::VecModel::from(arms)).into());
     ui.set_mixer_volumes(Rc::new(slint::VecModel::from(volumes)).into());
     ui.set_mixer_pans(Rc::new(slint::VecModel::from(pans)).into());
+
+    // Inserts iniciais
+    let (insert_counts, insert_names, insert_enabled, max_inserts) = mixer_inserts_state(project);
+    ui.set_mixer_insert_counts(Rc::new(slint::VecModel::from(insert_counts)).into());
+    ui.set_mixer_insert_names(Rc::new(slint::VecModel::from(insert_names)).into());
+    ui.set_mixer_insert_enabled(Rc::new(slint::VecModel::from(insert_enabled)).into());
+    ui.set_mixer_max_inserts(max_inserts);
 
     // Inicializa file browser com pasta de samples padrão
     let samples_dir = default_samples_dir();
@@ -203,6 +244,25 @@ fn apply_change(
                 clips_model.remove(i);
             }
         }
+        DocumentEvent::ClipsGlued {
+            left_before,
+            left,
+            right,
+        } => {
+            if undo {
+                if let Some(i) = clip_row(clips_model, left_before.id as i32) {
+                    clips_model.set_row_data(i, to_clip_data(left_before));
+                }
+                clips_model.push(to_clip_data(right));
+            } else {
+                if let Some(i) = clip_row(clips_model, left.id as i32) {
+                    clips_model.set_row_data(i, to_clip_data(left));
+                }
+                if let Some(i) = clip_row(clips_model, right.id as i32) {
+                    clips_model.remove(i);
+                }
+            }
+        }
     }
 }
 
@@ -257,12 +317,20 @@ fn main() -> Result<(), slint::PlatformError> {
             let arms = Rc::new(slint::VecModel::from(arms));
             let volumes = Rc::new(slint::VecModel::from(volumes));
             let pans = Rc::new(slint::VecModel::from(pans));
+            let (insert_counts, insert_names, insert_enabled, max_inserts) = mixer_inserts_state(&proj);
+            let insert_counts = Rc::new(slint::VecModel::from(insert_counts));
+            let insert_names = Rc::new(slint::VecModel::from(insert_names));
+            let insert_enabled = Rc::new(slint::VecModel::from(insert_enabled));
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_mixer_mutes(mutes.clone().into());
                 ui.set_mixer_soloes(soloes.clone().into());
                 ui.set_mixer_arms(arms.clone().into());
                 ui.set_mixer_volumes(volumes.clone().into());
                 ui.set_mixer_pans(pans.clone().into());
+                ui.set_mixer_insert_counts(insert_counts.clone().into());
+                ui.set_mixer_insert_names(insert_names.clone().into());
+                ui.set_mixer_insert_enabled(insert_enabled.clone().into());
+                ui.set_mixer_max_inserts(max_inserts);
             }
             let slots = panels.borrow();
             for slot in slots.iter().flatten() {
@@ -271,6 +339,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 slot.set_mixer_arms(arms.clone().into());
                 slot.set_mixer_volumes(volumes.clone().into());
                 slot.set_mixer_pans(pans.clone().into());
+                slot.set_mixer_insert_counts(insert_counts.clone().into());
+                slot.set_mixer_insert_names(insert_names.clone().into());
+                slot.set_mixer_insert_enabled(insert_enabled.clone().into());
+                slot.set_mixer_max_inserts(max_inserts);
 
                 // Mixer flutuante: a largura acompanha o nº de canais.
                 if slot.get_tool_tab() == 0 {
@@ -362,6 +434,56 @@ fn main() -> Result<(), slint::PlatformError> {
                 });
             }
 
+            // Ajusta a janela flutuante do mixer ao conteúdo: largura pelos
+            // canais e altura pela cadeia de inserts (com teto).
+            let fit_mixer_window = {
+                let project = project.clone();
+                let p_weak = p.as_weak();
+                move || {
+                    let Some(p) = p_weak.upgrade() else {
+                        return;
+                    };
+                    if p.get_tool_tab() != 0 {
+                        return;
+                    }
+                    let sf = p.window().scale_factor();
+                    let proj = project.borrow();
+                    let w = ((proj.tracks.len() + 1) as f32 * 105.0 * sf) as u32;
+                    let h = (p.get_mixer_natural_height().clamp(240.0, 640.0) * sf) as u32;
+                    p.window().set_size(slint::PhysicalSize::new(w, h));
+                }
+            };
+
+            // Inserts do mixer na janela flutuante → core (reajusta a altura).
+            {
+                let project = project.clone();
+                let apply_mixer = apply_mixer.clone();
+                let fit = fit_mixer_window.clone();
+                p.on_mixer_insert_added(move |channel| {
+                    project.borrow_mut().add_mixer_insert(channel as usize);
+                    apply_mixer();
+                    fit();
+                });
+            }
+            {
+                let project = project.clone();
+                let apply_mixer = apply_mixer.clone();
+                let fit = fit_mixer_window.clone();
+                p.on_mixer_insert_removed(move |channel, slot| {
+                    project.borrow_mut().remove_mixer_insert(channel as usize, slot as usize);
+                    apply_mixer();
+                    fit();
+                });
+            }
+            {
+                let project = project.clone();
+                let apply_mixer = apply_mixer.clone();
+                p.on_mixer_insert_toggled(move |channel, slot| {
+                    project.borrow_mut().toggle_mixer_insert(channel as usize, slot as usize);
+                    apply_mixer();
+                });
+            }
+
             // Redimensionamento da janela flutuante pelo canto inferior direito.
             {
                 let p_weak = p.as_weak();
@@ -396,8 +518,9 @@ fn main() -> Result<(), slint::PlatformError> {
                             return;
                         };
                         if is_mixer {
-                            // Mixer: largura é automática (segue os canais); só a altura redimensiona.
-                            let new_h = (h0 as f32 + (y - y0) * sf).max(240.0 * sf) as u32;
+                            // Mixer: largura é automática (segue os canais); só a altura
+                            // redimensiona, limitada entre o mínimo e o teto (640 lógicos).
+                            let new_h = ((h0 as f32 + (y - y0) * sf).clamp(240.0 * sf, 640.0 * sf)) as u32;
                             win.set_size(slint::PhysicalSize::new(win.size().width, new_h));
                         } else {
                             let new_w = (w0 as f32 + (x - x0) * sf).max(360.0 * sf) as u32;
@@ -415,6 +538,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
             sync_floated();
             apply_mixer();
+            fit_mixer_window();
         });
     }
 
@@ -470,6 +594,14 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             let at = clip.start_beat + position.round().max(0.0) as u32;
             proj.slice_clip(id, at);
+        });
+    }
+
+    // Glue de clip (ferramenta cola) → core: funde com o vizinho à direita.
+    {
+        let project = project.clone();
+        ui.on_clip_glue_requested(move |id| {
+            project.borrow_mut().glue_clip(id as u64);
         });
     }
 
@@ -538,6 +670,28 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             };
             project.borrow_mut().set_mixer_param(channel as usize, param, value);
+            apply_mixer();
+        });
+    }
+
+    // Inserts do mixer (janela principal) → core.
+    {
+        let project_add = project.clone();
+        let apply_mixer = apply_mixer_state.clone();
+        ui.on_mixer_insert_added(move |channel| {
+            project_add.borrow_mut().add_mixer_insert(channel as usize);
+            apply_mixer();
+        });
+        let project_rm = project.clone();
+        let apply_mixer = apply_mixer_state.clone();
+        ui.on_mixer_insert_removed(move |channel, slot| {
+            project_rm.borrow_mut().remove_mixer_insert(channel as usize, slot as usize);
+            apply_mixer();
+        });
+        let project_tg = project.clone();
+        let apply_mixer = apply_mixer_state.clone();
+        ui.on_mixer_insert_toggled(move |channel, slot| {
+            project_tg.borrow_mut().toggle_mixer_insert(channel as usize, slot as usize);
             apply_mixer();
         });
     }

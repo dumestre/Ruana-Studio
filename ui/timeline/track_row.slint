@@ -60,6 +60,8 @@ export component TrackRow inherits Rectangle {
 
     callback slice-requested(int, float);
 
+    callback glue-requested(int);
+
     callback clip-move-started(int, float);
     callback clip-move-delta(int, float);
     callback clip-move-finished(int);
@@ -238,6 +240,10 @@ export component TrackRow inherits Rectangle {
                 id,
                 position
             );
+        }
+
+        glue-requested(id) => {
+            root.glue-requested(id);
         }
 
         clip-move-started(id, beat) => {

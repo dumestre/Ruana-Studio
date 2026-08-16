@@ -6,7 +6,7 @@ import { ClipPool, ClipItemVisual } from "../clip_pool.slint";
 import { Timeline } from "../timeline/timeline.slint";
 import { ClipData } from "../timeline/clip_data.slint";
 import { Explorer } from "../explorer/explorer.slint";
-import { Mixer } from "../mixer.slint";
+import { Mixer } from "../mixer/mixer.slint";
 import { SamplerArea } from "../components/sampler_area.slint";
 import { PianoRollArea } from "../components/piano_roll_area.slint";
 import { SplitterVerticalGrowLeft, SplitterVerticalGrowRight, SplitterHorizontal } from "../components/splitter.slint";
@@ -52,6 +52,10 @@ export component Workspace inherits Rectangle {
     in-out property <[bool]> mixer-arms: [false, false, false, false, false];
     in-out property <[float]> mixer-volumes: [0.8, 0.8, 0.8, 0.8, 0.8];
     in-out property <[float]> mixer-pans: [0.5, 0.5, 0.5, 0.5, 0.5];
+    in-out property <[int]> mixer-insert-counts: [0, 0, 0, 0, 0];
+    in-out property <[string]> mixer-insert-names: [];
+    in-out property <[bool]> mixer-insert-enabled: [];
+    in-out property <int> mixer-max-inserts: 8;
     in-out property <string> explorer-current-path: "";
     in-out property <[string]> explorer-path-history: [];
     in-out property <int> explorer-history-index: -1;
@@ -62,10 +66,14 @@ export component Workspace inherits Rectangle {
     callback play-state-changed(bool);
     callback add-track-requested(string);
     callback clip-slice-requested(int, float);
+    callback clip-glue-requested(int);
     callback clip-move-started(int, float);
     callback clip-move-delta(int, float);
     callback clip-move-finished(int);
     callback mixer-param-changed(int, string, float);
+    callback mixer-insert-added(int);
+    callback mixer-insert-removed(int, int);
+    callback mixer-insert-toggled(int, int);
     callback explorer-path-changed(string);
     callback explorer-directory-entered(string);
     callback explorer-go-up();
@@ -73,8 +81,7 @@ export component Workspace inherits Rectangle {
     callback drag-move(length, length);
     callback drag-end();
 
-    width: 100%;
-    height: 100%;
+
 
     property <bool> bottom-panel-visible: false;
     in-out property <[bool]> floated: [false, false, false];
@@ -184,6 +191,7 @@ export component Workspace inherits Rectangle {
                             select-track(index) => { root.selected-track = index; }
                             clip-selected(index) => { root.selected-track = index; }
                             clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
+                            clip-glue-requested(id) => { root.clip-glue-requested(id); }
                             clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
                             clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
                             clip-move-finished(id) => { root.clip-move-finished(id); }
@@ -302,7 +310,14 @@ export component Workspace inherits Rectangle {
                         arms <=> root.mixer-arms;
                         volumes <=> root.mixer-volumes;
                         pans <=> root.mixer-pans;
+                        insert-counts <=> root.mixer-insert-counts;
+                        insert-names <=> root.mixer-insert-names;
+                        insert-enabled <=> root.mixer-insert-enabled;
+                        max-inserts <=> root.mixer-max-inserts;
                         channel-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+                        channel-insert-added(ch) => { root.mixer-insert-added(ch); }
+                        channel-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
+                        channel-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }
                     }
 
                     SamplerArea {

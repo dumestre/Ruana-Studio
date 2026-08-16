@@ -37,6 +37,24 @@ impl MixerParam {
     }
 }
 
+/// Slot de insert (efeito/processador) encadeado no canal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InsertSlot {
+    /// Nome do processador (ex.: "Compressor").
+    pub name: String,
+    /// Se o slot está ativo (false = bypass).
+    pub enabled: bool,
+}
+
+impl InsertSlot {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            enabled: true,
+        }
+    }
+}
+
 /// Canal do mixer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MixerChannel {
@@ -47,6 +65,8 @@ pub struct MixerChannel {
     pub muted: bool,
     pub soloed: bool,
     pub armed: bool,
+    /// Cadeia de inserts (efeitos) do canal, em ordem de processamento.
+    pub inserts: Vec<InsertSlot>,
 }
 
 impl Default for MixerChannel {
@@ -57,6 +77,7 @@ impl Default for MixerChannel {
             muted: false,
             soloed: false,
             armed: false,
+            inserts: Vec::new(),
         }
     }
 }
@@ -70,6 +91,31 @@ impl MixerChannel {
             MixerParam::Muted => self.muted = value >= 0.5,
             MixerParam::Soloed => self.soloed = value >= 0.5,
             MixerParam::Armed => self.armed = value >= 0.5,
+        }
+    }
+
+    /// Adiciona um insert ao fim da cadeia.
+    pub fn add_insert(&mut self, name: impl Into<String>) {
+        self.inserts.push(InsertSlot::new(name));
+    }
+
+    /// Remove um insert por índice. Retorna `false` se fora do range.
+    pub fn remove_insert(&mut self, index: usize) -> bool {
+        if index < self.inserts.len() {
+            self.inserts.remove(index);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Alterna o bypass de um insert. Retorna `false` se fora do range.
+    pub fn toggle_insert(&mut self, index: usize) -> bool {
+        if let Some(slot) = self.inserts.get_mut(index) {
+            slot.enabled = !slot.enabled;
+            true
+        } else {
+            false
         }
     }
 }
@@ -111,5 +157,30 @@ mod tests {
         assert_eq!(MixerParam::from_str("soloed"), Some(MixerParam::Soloed));
         assert_eq!(MixerParam::from_str("arm"), Some(MixerParam::Armed));
         assert_eq!(MixerParam::from_str("wat"), None);
+    }
+
+    #[test]
+    fn inserts_start_empty() {
+        let ch = MixerChannel::default();
+        assert!(ch.inserts.is_empty());
+    }
+
+    #[test]
+    fn add_remove_toggle_inserts() {
+        let mut ch = MixerChannel::default();
+        ch.add_insert("Compressor");
+        ch.add_insert("EQ");
+        assert_eq!(ch.inserts.len(), 2);
+        assert!(ch.inserts[0].enabled);
+        assert_eq!(ch.inserts[0].name, "Compressor");
+
+        assert!(ch.toggle_insert(0));
+        assert!(!ch.inserts[0].enabled);
+        assert!(!ch.toggle_insert(9));
+
+        assert!(ch.remove_insert(0));
+        assert_eq!(ch.inserts.len(), 1);
+        assert_eq!(ch.inserts[0].name, "EQ");
+        assert!(!ch.remove_insert(5));
     }
 }

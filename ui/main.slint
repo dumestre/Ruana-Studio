@@ -125,6 +125,16 @@ export component MainWindow inherits Window {
     in-out property <[float]> mixer-pans:
         [0.5, 0.5, 0.5, 0.5, 0.5];
 
+    // Inserts do mixer (projetado do core)
+    in-out property <[int]> mixer-insert-counts:
+        [0, 0, 0, 0, 0];
+    in-out property <[string]> mixer-insert-names:
+        [];
+    in-out property <[bool]> mixer-insert-enabled:
+        [];
+    in-out property <int> mixer-max-inserts:
+        8;
+
     in-out property <[ClipData]> clips:
         [
             { id: 0, track-index: 0, name: "Drums A", beat: 0.0, len: 4.0, is-midi: true },
@@ -157,6 +167,8 @@ export component MainWindow inherits Window {
 
     callback clip-slice-requested(int, float);
 
+    callback clip-glue-requested(int);
+
     callback clip-move-started(int, float);
     callback clip-move-delta(int, float);
     callback clip-move-finished(int);
@@ -166,6 +178,10 @@ export component MainWindow inherits Window {
     callback redo-requested;
 
     callback mixer-param-changed(int, string, float);
+
+    callback mixer-insert-added(int);
+    callback mixer-insert-removed(int, int);
+    callback mixer-insert-toggled(int, int);
 
     callback explorer-path-changed(string);
     callback explorer-directory-entered(string);
@@ -408,6 +424,10 @@ export component MainWindow inherits Window {
         mixer-arms <=> root.mixer-arms;
         mixer-volumes <=> root.mixer-volumes;
         mixer-pans <=> root.mixer-pans;
+        mixer-insert-counts <=> root.mixer-insert-counts;
+        mixer-insert-names <=> root.mixer-insert-names;
+        mixer-insert-enabled <=> root.mixer-insert-enabled;
+        mixer-max-inserts <=> root.mixer-max-inserts;
         explorer-current-path <=> root.explorer-current-path;
         explorer-path-history <=> root.explorer-path-history;
         explorer-history-index <=> root.explorer-history-index;
@@ -418,10 +438,14 @@ export component MainWindow inherits Window {
         play-state-changed(state) => { root.play-state-changed(state); }
         add-track-requested(type) => { root.add-track-requested(type); }
         clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
+        clip-glue-requested(id) => { root.clip-glue-requested(id); }
         clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
         clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
         clip-move-finished(id) => { root.clip-move-finished(id); }
         mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+        mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
+        mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
+        mixer-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }
         explorer-path-changed(path) => { root.explorer-path-changed(path); }
         explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
         explorer-go-up() => { root.explorer-go-up(); }
