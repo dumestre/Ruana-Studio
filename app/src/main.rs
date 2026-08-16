@@ -228,14 +228,27 @@ fn main() -> Result<(), slint::PlatformError> {
     let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow());
     bind_document_events(&project.borrow(), tracks_model, clips_model.clone());
 
-    // Slot da janela flutuante (None quando encaixada/fechada).
-    let float_panel: Rc<RefCell<Option<FloatPanel>>> = Rc::new(RefCell::new(None));
+    // Slots das janelas flutuantes, um por tool (0=Mixer, 1=Sampler, 2=Piano Roll).
+    let float_panels: Rc<RefCell<[Option<FloatPanel>; 3]>> = Rc::new(RefCell::new([None, None, None]));
 
-    // Reaplica o estado do mixer nas janelas (principal + flutuante) a partir do core.
+    // Espelha quais janelas estão abertas na propriedade `floated` da UI.
+    let sync_floated = {
+        let ui_weak = ui.as_weak();
+        let panels = float_panels.clone();
+        move || {
+            let p = panels.borrow();
+            let arr: Vec<bool> = vec![p[0].is_some(), p[1].is_some(), p[2].is_some()];
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_floated(Rc::new(slint::VecModel::from(arr)).into());
+            }
+        }
+    };
+
+    // Reaplica o estado do mixer nas janelas (principal + todas as flutuantes) a partir do core.
     let apply_mixer_state = {
         let project = project.clone();
         let ui_weak = ui.as_weak();
-        let float_slot = float_panel.clone();
+        let panels = float_panels.clone();
         move || {
             let proj = project.borrow();
             let (mutes, soloes, arms, volumes, pans) = mixer_state(&proj);
@@ -251,31 +264,47 @@ fn main() -> Result<(), slint::PlatformError> {
                 ui.set_mixer_volumes(volumes.clone().into());
                 ui.set_mixer_pans(pans.clone().into());
             }
-            if let Some(p) = float_slot.borrow().as_ref() {
-                p.set_mixer_mutes(mutes.into());
-                p.set_mixer_soloes(soloes.into());
-                p.set_mixer_arms(arms.into());
-                p.set_mixer_volumes(volumes.into());
-                p.set_mixer_pans(pans.into());
+            let slots = panels.borrow();
+            for slot in slots.iter().flatten() {
+                slot.set_mixer_mutes(mutes.clone().into());
+                slot.set_mixer_soloes(soloes.clone().into());
+                slot.set_mixer_arms(arms.clone().into());
+                slot.set_mixer_volumes(volumes.clone().into());
+                slot.set_mixer_pans(pans.clone().into());
             }
         }
     };
 
-    // Janela flutuante: desacopla o tool (Mixer/Sampler/Piano Roll) para uma janela própria.
+    // Janelas flutuantes: cada tool desacopla para a própria janela, várias ao mesmo tempo.
     {
         let project = project.clone();
         let ui_weak = ui.as_weak();
-        let float_slot = float_panel.clone();
+        let panels = float_panels.clone();
         let apply_mixer = apply_mixer_state.clone();
-        ui.on_float_toggle(move || {
+        let sync_floated = sync_floated.clone();
+        ui.on_float_toggle(move |tab| {
             let ui = match ui_weak.upgrade() {
                 Some(u) => u,
                 None => return,
             };
-            let mut slot = float_slot.borrow_mut();
-            if let Some(p) = slot.take() {
-                p.hide().ok();
-                ui.set_float_visible(false);
+            let idx = tab as usize;
+            if idx > 2 {
+                return;
+            }
+
+            // Se já existe, fecha; senão, cria.
+            let should_open;
+            {
+                let mut slots = panels.borrow_mut();
+                if let Some(p) = slots[idx].take() {
+                    p.hide().ok();
+                    should_open = false;
+                } else {
+                    should_open = true;
+                }
+            }
+            sync_floated();
+            if !should_open {
                 return;
             }
 
@@ -283,34 +312,32 @@ fn main() -> Result<(), slint::PlatformError> {
                 Ok(p) => p,
                 Err(_) => return,
             };
-            p.set_tool_tab(ui.get_float_tab());
+            p.set_tool_tab(tab);
             p.set_mixer_meters(ui.get_mixer_meters());
 
             // Fecha via botão da própria janela flutuante.
             {
                 let ui_weak = ui_weak.clone();
-                let float_slot = float_slot.clone();
+                let panels = panels.clone();
+                let sync = sync_floated.clone();
                 p.on_close_panel(move || {
-                    if let Some(ui) = ui_weak.upgrade() {
-                        ui.set_float_visible(false);
-                    }
-                    if let Some(p) = float_slot.borrow_mut().take() {
+                    if let Some(p) = panels.borrow_mut()[idx].take() {
                         p.hide().ok();
                     }
+                    sync();
                 });
             }
 
             // Fecha via botão X do sistema.
             {
                 let ui_weak = ui_weak.clone();
-                let float_slot = float_slot.clone();
+                let panels = panels.clone();
+                let sync = sync_floated.clone();
                 p.window().on_close_requested(move || {
-                    if let Some(ui) = ui_weak.upgrade() {
-                        ui.set_float_visible(false);
-                    }
-                    if let Some(p) = float_slot.borrow_mut().take() {
+                    if let Some(p) = panels.borrow_mut()[idx].take() {
                         p.hide().ok();
                     }
+                    sync();
                     slint::CloseRequestResponse::HideWindow
                 });
             }
@@ -329,8 +356,11 @@ fn main() -> Result<(), slint::PlatformError> {
             }
 
             p.show().ok();
-            *slot = Some(p);
-            apply_mixer();
+            {
+                let mut slots = panels.borrow_mut();
+                slots[idx] = Some(p);
+            }
+            sync_floated();
         });
     }
 
@@ -553,12 +583,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let meter_timer = Rc::new(slint::Timer::default());
     {
         let ui_weak = ui.as_weak();
-        let float_slot = float_panel.clone();
+        let panels = float_panels.clone();
         let timer = meter_timer.clone();
         ui.on_play_state_changed(move |playing| {
             if playing {
                 let ui_weak = ui_weak.clone();
-                let float_slot = float_slot.clone();
+                let panels = panels.clone();
                 let timer = timer.clone();
                 timer.start(
                     slint::TimerMode::Repeated,
@@ -572,8 +602,9 @@ fn main() -> Result<(), slint::PlatformError> {
                             }
                             let model = Rc::new(slint::VecModel::from(levels));
                             ui.set_mixer_meters(model.clone().into());
-                            if let Some(p) = float_slot.borrow().as_ref() {
-                                p.set_mixer_meters(model.into());
+                            let slots = panels.borrow();
+                            for slot in slots.iter().flatten() {
+                                slot.set_mixer_meters(model.clone().into());
                             }
                         }
                     },

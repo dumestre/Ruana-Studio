@@ -92,11 +92,8 @@ export component MainWindow inherits Window {
     in-out property <length> bottom-panel-height:
         215px;
 
-    in-out property <bool> float-visible:
-        false;
-
-    in-out property <int> float-tab:
-        0;
+    in-out property <[bool]> floated:
+        [false, false, false];
 
     in-out property <length> left-panel-width:
         230px;
@@ -174,7 +171,7 @@ export component MainWindow inherits Window {
     callback explorer-directory-entered(string);
     callback explorer-go-up();
 
-    callback float-toggle;
+    callback float-toggle(int);
 
 
     // =====================================================
@@ -388,8 +385,7 @@ export component MainWindow inherits Window {
         tracks-header-width <=> root.tracks-header-width;
         explorer-width <=> root.explorer-width;
         bottom-panel-height <=> root.bottom-panel-height;
-        float-visible <=> root.float-visible;
-        float-tab <=> root.float-tab;
+        floated <=> root.floated;
         track-names <=> root.track-names;
         clips <=> root.clips;
         zoom-y-level <=> root.zoom-y-level;
@@ -429,7 +425,7 @@ export component MainWindow inherits Window {
         explorer-path-changed(path) => { root.explorer-path-changed(path); }
         explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
         explorer-go-up() => { root.explorer-go-up(); }
-        float-toggle => { root.float-toggle(); }
+        float-toggle(tab) => { root.float-toggle(tab); }
         drag-begin(name, position, duration, color, is-midi) => { root.drag-begin(name, position, duration, color, is-midi); }
         drag-move(x, y) => { root.drag-move(x, y); }
         drag-end() => { root.drag-end(); }

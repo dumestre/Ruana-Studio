@@ -77,11 +77,10 @@ export component Workspace inherits Rectangle {
     height: 100%;
 
     property <bool> bottom-panel-visible: false;
-    in-out property <bool> float-visible: false;
-    in-out property <int> float-tab: 0;
+    in-out property <[bool]> floated: [false, false, false];
     in-out property <int> selected-tab: -1;
 
-    callback float-toggle();
+    callback float-toggle(int);
 
     VerticalLayout {
         alignment: LayoutAlignment.stretch;
@@ -295,12 +294,8 @@ export component Workspace inherits Rectangle {
                         width: 100%;
                         height: 100%;
                         visible: bottom-panel.current-tab == 0;
-                        floating: root.float-visible && root.float-tab == 0;
-                        float-toggle => {
-                            root.float-tab = 0;
-                            root.float-visible = !root.float-visible;
-                            root.float-toggle();
-                        }
+                        floating: root.floated[0];
+                        float-toggle => { root.float-toggle(0); }
                         meters <=> root.mixer-meters;
                         mutes <=> root.mixer-mutes;
                         soloes <=> root.mixer-soloes;
@@ -314,24 +309,16 @@ export component Workspace inherits Rectangle {
                         width: 100%;
                         height: 100%;
                         visible: bottom-panel.current-tab == 1;
-                        floating: root.float-visible && root.float-tab == 1;
-                        float-toggle => {
-                            root.float-tab = 1;
-                            root.float-visible = !root.float-visible;
-                            root.float-toggle();
-                        }
+                        floating: root.floated[1];
+                        float-toggle => { root.float-toggle(1); }
                     }
 
                     PianoRollArea {
                         width: 100%;
                         height: 100%;
                         visible: bottom-panel.current-tab == 2;
-                        floating: root.float-visible && root.float-tab == 2;
-                        float-toggle => {
-                            root.float-tab = 2;
-                            root.float-visible = !root.float-visible;
-                            root.float-toggle();
-                        }
+                        floating: root.floated[2];
+                        float-toggle => { root.float-toggle(2); }
                     }
 
                     Rectangle {
