@@ -3,9 +3,10 @@ import { Theme } from "../theme.slint";
 export component Meter {
     in property <float> level: 0.0;
     in property <bool> active: false;
+    in property <length> meter-height: 90px;
 
     width: 12px;
-    height: 90px;
+    height: root.meter-height;
 
     property <color> bar-color: self.level > 0.92 ? Theme.danger : self.level > 0.75 ? Theme.warn : Theme.ok;
     property <float> smooth-level: self.level;

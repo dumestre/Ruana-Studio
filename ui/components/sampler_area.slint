@@ -6,12 +6,12 @@ component PanelHeader inherits Rectangle {
     in-out property <bool> expanded: false;
     callback expand-toggle();
 
-    height: 28px;
+    height: 26px;
     background: Theme.surface;
 
     HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
+        padding-left: 10px;
+        padding-right: 10px;
         alignment: LayoutAlignment.space-between;
         cross-axis-alignment: CrossAxisAlignment.center;
         height: 100%;
@@ -19,17 +19,18 @@ component PanelHeader inherits Rectangle {
         Text {
             text: root.title;
             color: Theme.text-primary;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 600;
         }
 
         Button {
-            width: 24px;
-            height: 22px;
+            width: 22px;
+            height: 20px;
             icon: @image-url("../icons/arrow_up.svg");
-            icon-size: 14px;
+            icon-size: 12px;
             borderless: true;
             icon-color: Theme.text-dim;
+            transform-rotation: root.expanded ? 180deg : 0deg;
             toggled: root.expanded;
             toggled-icon-color: Theme.accent;
             clicked => { root.expand-toggle(); }

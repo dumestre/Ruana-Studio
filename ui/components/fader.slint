@@ -3,10 +3,11 @@ import { Theme } from "../theme.slint";
 export component Fader {
     in-out property <float> value: 0.75;
     in property <string> caption: "";
+    in property <length> fader-height: 110px;
     callback changed(float);
 
     width: 34px;
-    height: 110px;
+    height: root.fader-height;
 
     touch := TouchArea {
         mouse-cursor: pointer;
