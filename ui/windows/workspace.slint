@@ -281,6 +281,11 @@ export component Workspace inherits Rectangle {
                     cross-axis-alignment: CrossAxisAlignment.stretch;
                     height: 100%;
 
+                    // Tab bar (top of panel)
+                    bottom-toolbar := BottomToolbar {
+                        toolbar-height <=> bottom-toolbar.height;
+                    }
+
                     // Dynamic content based on selected tab
                     Rectangle {
                         width: 100%;
@@ -424,11 +429,6 @@ export component Workspace inherits Rectangle {
                 Text { text: "24-bit"; color: Theme.text-dim; font-size: 10px; vertical-alignment: center; }
                 Text { text: "FASE 1 - UI"; color: Theme.accent; font-size: 10px; vertical-alignment: center; }
             }
-        }
-
-        // BOTTOM TOOLBAR (Tab bar)
-        bottom-toolbar := BottomToolbar {
-            toolbar-height <=> bottom-toolbar.height;
         }
 
         // Timer to update computed drag properties
