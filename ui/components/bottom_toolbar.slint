@@ -19,14 +19,14 @@ export component BottomToolbar inherits Rectangle {
     HorizontalLayout {
         spacing: 1px;
         alignment: LayoutAlignment.stretch;
-        cross-axis-alignment: CrossAxisAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
         height: 100%;
 
         // Tab: Mixer
         Button {
             text: "Mixer";
-            width: 65px;
-            height: 24px;
+            width: 40px;
+            height: 15px;
             toggled: root.selected-tab == 0;
             toggled-bg: Theme.accent;
             clicked => { root.selected-tab = 0; }
@@ -36,7 +36,7 @@ export component BottomToolbar inherits Rectangle {
         Button {
             text: "Sampler";
             width: 70px;
-            height: 24px;
+            height: 15px;
             toggled: root.selected-tab == 1;
             toggled-bg: Theme.accent;
             clicked => { root.selected-tab = 1; }
@@ -46,20 +46,11 @@ export component BottomToolbar inherits Rectangle {
         Button {
             text: "Piano Roll";
             width: 78px;
-            height: 24px;
+            height: 15px;
             toggled: root.selected-tab == 2;
             toggled-bg: Theme.accent;
             clicked => { root.selected-tab = 2; }
         }
 
-        // Tab: Explorer
-        Button {
-            text: "Explorer";
-            width: 70px;
-            height: 24px;
-            toggled: root.selected-tab == 3;
-            toggled-bg: Theme.accent;
-            clicked => { root.selected-tab = 3; }
-        }
     }
 }
