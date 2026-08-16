@@ -28,10 +28,11 @@ component MixerHeader inherits Rectangle {
         Button {
             width: 22px;
             height: 20px;
-            icon: @image-url("icons/maximize.svg");
+            icon: @image-url("icons/expand_diag.svg");
             icon-size: 12px;
             borderless: true;
             icon-color: Theme.text-dim;
+            transform-rotation: root.floating ? 180deg : 0deg;
             toggled: root.floating;
             toggled-icon-color: Theme.accent;
             clicked => { root.float-toggle(); }

@@ -79,7 +79,7 @@ export component Workspace inherits Rectangle {
     property <bool> bottom-panel-visible: false;
     in-out property <bool> float-visible: false;
     in-out property <int> float-tab: 0;
-    in-out property <int> selected-tab: 0;
+    in-out property <int> selected-tab: -1;
 
     callback float-toggle();
 
@@ -446,7 +446,6 @@ export component Workspace inherits Rectangle {
             toolbar-height <=> bottom-toolbar.height;
             selected-tab <=> root.selected-tab;
             panel-visible <=> root.bottom-panel-visible;
-            panel-toggle => { root.bottom-panel-visible = !root.bottom-panel-visible; }
         }
 
         // Timer to update computed drag properties

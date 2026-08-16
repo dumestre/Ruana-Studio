@@ -2,25 +2,20 @@ import { Button } from "../components/button.slint";
 import { Theme } from "../theme.slint";
 
 export component BottomToolbar inherits Rectangle {
-    in-out property <int> selected-tab: 0;
+    in-out property <int> selected-tab: -1;
     in-out property <bool> panel-visible: false;
-    callback panel-toggle();
 
     height: 26px;
     in-out property <length> toolbar-height:
         self.height;
     background: Theme.base;
 
-    Rectangle {
-        width: 100%;
-        height: 1px;
-        background: Theme.border;
-    }
+
 
     // Tab bar
     HorizontalLayout {
         spacing: 1px;
-        alignment: LayoutAlignment.start;
+        alignment: LayoutAlignment.center;
         cross-axis-alignment: CrossAxisAlignment.center;
         height: 100%;
         padding: 5px;
@@ -31,7 +26,15 @@ export component BottomToolbar inherits Rectangle {
             height: 15px;
             toggled: root.selected-tab == 0;
             toggled-bg: Theme.accent;
-            clicked => { root.selected-tab = 0; }
+            clicked => {
+                if root.selected-tab == 0 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 0;
+                    root.panel-visible = true;
+                }
+            }
         }
 
         // Tab: Sampler
@@ -40,7 +43,15 @@ export component BottomToolbar inherits Rectangle {
             height: 15px;
             toggled: root.selected-tab == 1;
             toggled-bg: Theme.accent;
-            clicked => { root.selected-tab = 1; }
+            clicked => {
+                if root.selected-tab == 1 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 1;
+                    root.panel-visible = true;
+                }
+            }
         }
 
         // Tab: Piano Roll
@@ -49,24 +60,15 @@ export component BottomToolbar inherits Rectangle {
             height: 15px;
             toggled: root.selected-tab == 2;
             toggled-bg: Theme.accent;
-            clicked => { root.selected-tab = 2; }
+            clicked => {
+                if root.selected-tab == 2 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 2;
+                    root.panel-visible = true;
+                }
+            }
         }
-
-        Rectangle { horizontal-stretch: 1; background: transparent; }
-
-        // Toggle docked panel (expand/collapse)
-        Button {
-            width: 22px;
-            height: 15px;
-            icon: @image-url("../icons/arrow_up.svg");
-            icon-size: 12px;
-            borderless: true;
-            icon-color: Theme.text-dim;
-            transform-rotation: root.panel-visible ? 180deg : 0deg;
-            toggled: root.panel-visible;
-            toggled-icon-color: Theme.accent;
-            clicked => { root.panel-toggle(); }
-        }
-
     }
 }
