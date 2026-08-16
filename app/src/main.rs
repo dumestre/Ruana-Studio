@@ -355,6 +355,45 @@ fn main() -> Result<(), slint::PlatformError> {
                 });
             }
 
+            // Redimensionamento da janela flutuante pelo canto inferior direito.
+            {
+                let p_weak = p.as_weak();
+                let state: Rc<RefCell<Option<(u32, u32, f32, f32)>>> = Rc::new(RefCell::new(None));
+                p.on_resize_cancel({
+                    let state = state.clone();
+                    move || {
+                        *state.borrow_mut() = None;
+                    }
+                });
+                p.on_resize_end({
+                    let state = state.clone();
+                    move || {
+                        *state.borrow_mut() = None;
+                    }
+                });
+                p.on_resize_move({
+                    let state = state.clone();
+                    let p_weak = p_weak.clone();
+                    move |x, y| {
+                        let Some(panel) = p_weak.upgrade() else {
+                            return;
+                        };
+                        let win = panel.window();
+                        let sf = win.scale_factor();
+                        let mut st = state.borrow_mut();
+                        // Primeiro move do drag → ancora o tamanho inicial e o ponteiro.
+                        let Some((w0, h0, x0, y0)) = *st else {
+                            let sz = win.size();
+                            *st = Some((sz.width, sz.height, x, y));
+                            return;
+                        };
+                        let new_w = (w0 as f32 + (x - x0) * sf).max(360.0 * sf) as u32;
+                        let new_h = (h0 as f32 + (y - y0) * sf).max(240.0 * sf) as u32;
+                        win.set_size(slint::PhysicalSize::new(new_w, new_h));
+                    }
+                });
+            }
+
             p.show().ok();
             {
                 let mut slots = panels.borrow_mut();

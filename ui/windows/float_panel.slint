@@ -7,7 +7,8 @@ import { Theme } from "../theme.slint";
 export component FloatPanel inherits Window {
     title: "Floating Tool";
     no-frame: true;
-    full-screen: true;
+    width: 640px;
+    height: 400px;
 
     in-out property <int> tool-tab: 0;
 
@@ -21,11 +22,16 @@ export component FloatPanel inherits Window {
 
     callback close-panel();
     callback mixer-param-changed(int, string, float);
+    callback resize-cancel();
+    callback resize-move(length, length);
+    callback resize-end();
 
     property <string> header-title:
         root.tool-tab == 0 ? "Mixer"
         : root.tool-tab == 1 ? "Sampler"
         : "Piano Roll";
+
+    property <length> resize-corner: 16px;
 
     background: Theme.base;
 
@@ -111,6 +117,47 @@ export component FloatPanel inherits Window {
                 visible: root.tool-tab == 2;
                 show-header: false;
             }
+        }
+    }
+
+    // Handle de redimensionamento no canto inferior direito.
+    // Pega a posição do ponteiro relativa à janela usando
+    // absolute-position + mouse-x/y (o handle acompanha o canto).
+    resize-handle := Rectangle {
+        x: root.width - resize-corner;
+        y: root.height - resize-corner;
+        width: resize-corner;
+        height: resize-corner;
+        background: transparent;
+
+        TouchArea {
+            mouse-cursor: MouseCursor.nwse-resize;
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.down) {
+                    root.resize-cancel();
+                } else if (ev.kind == PointerEventKind.up) {
+                    root.resize-end();
+                }
+            }
+            moved => {
+                root.resize-move(
+                    self.absolute-position.x + self.mouse-x,
+                    self.absolute-position.y + self.mouse-y
+                );
+            }
+        }
+
+        Path {
+            x: 3px;
+            y: 3px;
+            width: 10px;
+            height: 10px;
+            stroke: Theme.text-dim;
+            stroke-width: 1px;
+            MoveTo { x: 0; y: 10; }
+            LineTo { x: 10; y: 0; }
+            MoveTo { x: 0; y: 5; }
+            LineTo { x: 5; y: 0; }
         }
     }
 }
