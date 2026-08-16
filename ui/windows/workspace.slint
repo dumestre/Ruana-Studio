@@ -77,6 +77,8 @@ export component Workspace inherits Rectangle {
     height: 100%;
 
     property <bool> bottom-panel-expanded: false;
+    property <bool> bottom-panel-visible: true;
+    property <length> expanded-panel-height: max(400px, root.height * 0.6);
 
     VerticalLayout {
         alignment: LayoutAlignment.stretch;
@@ -109,6 +111,7 @@ export component Workspace inherits Rectangle {
             active-tool <=> root.active-tool;
             beat-open <=> root.beat-open;
             explorer-visible <=> root.explorer-visible;
+            panel-visible <=> root.bottom-panel-visible;
         }
 
         // MAIN WORKSPACE AREA
@@ -137,7 +140,9 @@ export component Workspace inherits Rectangle {
                 x: root.left-panel-width;
                 y: 0;
                 width: parent.width - root.left-panel-width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
-                height: parent.height - root.bottom-panel-height - 5px;
+                height: root.bottom-panel-visible
+                    ? parent.height - root.bottom-panel-height - 5px
+                    : parent.height;
 
                 VerticalLayout {
                     spacing: 0;
@@ -253,6 +258,7 @@ export component Workspace inherits Rectangle {
 
             // SPLITTER BETWEEN UPPER AREA AND BOTTOM PANEL
             SplitterHorizontal {
+                visible: root.bottom-panel-visible;
                 x: root.left-panel-width;
                 y: parent.height - root.bottom-panel-height - 5px;
                 width: center-panel.width;
@@ -265,6 +271,7 @@ export component Workspace inherits Rectangle {
 
             // BOTTOM PANEL: Dynamic content (Mixer / Sampler / Piano Roll)
             bottom-panel := Rectangle {
+                visible: root.bottom-panel-visible;
                 x: root.left-panel-width;
                 y: parent.height - root.bottom-panel-height;
                 width: center-panel.width;
@@ -297,7 +304,10 @@ export component Workspace inherits Rectangle {
                             height: 100%;
                             visible: bottom-panel.current-tab == 0;
                             expanded <=> root.bottom-panel-expanded;
-                            expand-toggle => { root.bottom-panel-expanded = !root.bottom-panel-expanded; }
+                            expand-toggle => {
+                                root.bottom-panel-expanded = !root.bottom-panel-expanded;
+                                root.bottom-panel-height = root.bottom-panel-expanded ? root.expanded-panel-height : 215px;
+                            }
                             meters <=> root.mixer-meters;
                             mutes <=> root.mixer-mutes;
                             soloes <=> root.mixer-soloes;
@@ -312,7 +322,10 @@ export component Workspace inherits Rectangle {
                             height: 100%;
                             visible: bottom-panel.current-tab == 1;
                             expanded <=> root.bottom-panel-expanded;
-                            expand-toggle => { root.bottom-panel-expanded = !root.bottom-panel-expanded; }
+                            expand-toggle => {
+                                root.bottom-panel-expanded = !root.bottom-panel-expanded;
+                                root.bottom-panel-height = root.bottom-panel-expanded ? root.expanded-panel-height : 215px;
+                            }
                         }
 
                         PianoRollArea {
@@ -320,7 +333,10 @@ export component Workspace inherits Rectangle {
                             height: 100%;
                             visible: bottom-panel.current-tab == 2;
                             expanded <=> root.bottom-panel-expanded;
-                            expand-toggle => { root.bottom-panel-expanded = !root.bottom-panel-expanded; }
+                            expand-toggle => {
+                                root.bottom-panel-expanded = !root.bottom-panel-expanded;
+                                root.bottom-panel-height = root.bottom-panel-expanded ? root.expanded-panel-height : 215px;
+                            }
                         }
 
                         Rectangle {

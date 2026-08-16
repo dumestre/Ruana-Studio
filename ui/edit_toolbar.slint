@@ -6,6 +6,7 @@ export component EditToolbar inherits Rectangle {
 
     in-out property <bool> beat-open: false;
     in-out property <bool> explorer-visible: true;
+    in-out property <bool> panel-visible: true;
 
     callback tool-changed(int);
 
@@ -155,6 +156,22 @@ export component EditToolbar inherits Rectangle {
 
             clicked => {
                 root.explorer-visible = !root.explorer-visible;
+            }
+        }
+
+        Button {
+            width: 28px;
+            height: 26px;
+            icon: @image-url("icons/restore.svg");
+            icon-size: 17px;
+            text: "";
+            borderless: true;
+            toggled: root.panel-visible;
+            subtle-toggled: true;
+            toggled-icon-color: Theme.accent;
+
+            clicked => {
+                root.panel-visible = !root.panel-visible;
             }
         }
     }
