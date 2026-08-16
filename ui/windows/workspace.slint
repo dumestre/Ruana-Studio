@@ -253,9 +253,9 @@ export component Workspace inherits Rectangle {
 
             // SPLITTER BETWEEN UPPER AREA AND BOTTOM PANEL
             SplitterHorizontal {
-                x: 0;
+                x: root.left-panel-width;
                 y: parent.height - root.bottom-panel-height - 5px;
-                width: parent.width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                width: center-panel.width;
                 height: 5px;
                 value <=> root.bottom-panel-height;
                 min-value: 120px;
@@ -265,9 +265,9 @@ export component Workspace inherits Rectangle {
 
             // BOTTOM PANEL: Dynamic content (Mixer / Sampler / Piano Roll)
             bottom-panel := Rectangle {
-                x: 0;
+                x: root.left-panel-width;
                 y: parent.height - root.bottom-panel-height;
-                width: parent.width - (root.explorer-visible ? root.explorer-width + 5px : 0px);
+                width: center-panel.width;
                 height: root.bottom-panel-height;
                 background: Theme.surface;
                 border-top-left-radius: 8px;
