@@ -3,8 +3,8 @@ import { Theme } from "../theme.slint";
 
 component PanelHeader inherits Rectangle {
     in property <string> title: "";
-    in-out property <bool> expanded: false;
-    callback expand-toggle();
+    in-out property <bool> floating: false;
+    callback float-toggle();
 
     height: 26px;
     background: Theme.surface;
@@ -26,14 +26,13 @@ component PanelHeader inherits Rectangle {
         Button {
             width: 22px;
             height: 20px;
-            icon: @image-url("../icons/arrow_up.svg");
+            icon: @image-url("../icons/maximize.svg");
             icon-size: 12px;
             borderless: true;
             icon-color: Theme.text-dim;
-            transform-rotation: root.expanded ? 180deg : 0deg;
-            toggled: root.expanded;
+            toggled: root.floating;
             toggled-icon-color: Theme.accent;
-            clicked => { root.expand-toggle(); }
+            clicked => { root.float-toggle(); }
         }
     }
 
@@ -46,8 +45,8 @@ component PanelHeader inherits Rectangle {
 }
 
 export component PianoRollArea inherits Rectangle {
-    in-out property <bool> expanded: false;
-    callback expand-toggle();
+    in-out property <bool> floating: false;
+    callback float-toggle();
 
     background: Theme.base;
 
@@ -58,8 +57,8 @@ export component PianoRollArea inherits Rectangle {
 
         PanelHeader {
             title: "Piano Roll";
-            expanded <=> root.expanded;
-            expand-toggle => { root.expand-toggle(); }
+            floating <=> root.floating;
+            float-toggle => { root.float-toggle(); }
         }
 
         Rectangle {

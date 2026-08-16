@@ -76,9 +76,12 @@ export component Workspace inherits Rectangle {
     width: 100%;
     height: 100%;
 
-    property <bool> bottom-panel-expanded: false;
-    property <bool> bottom-panel-visible: true;
-    property <length> expanded-panel-height: max(400px, root.height * 0.6);
+    property <bool> bottom-panel-visible: false;
+    in-out property <bool> float-visible: false;
+    in-out property <int> float-tab: 0;
+    in-out property <int> selected-tab: 0;
+
+    callback float-toggle();
 
     VerticalLayout {
         alignment: LayoutAlignment.stretch;
@@ -282,69 +285,60 @@ export component Workspace inherits Rectangle {
 
                 property <int> current-tab: bottom-toolbar.selected-tab;
 
-                VerticalLayout {
-                    spacing: 0;
-                    alignment: LayoutAlignment.stretch;
-                    cross-axis-alignment: CrossAxisAlignment.stretch;
+                // Dynamic content based on selected tab
+                Rectangle {
+                    width: 100%;
                     height: 100%;
+                    clip: true;
 
-                    // Tab bar (top of panel)
-                    bottom-toolbar := BottomToolbar {
-                        toolbar-height <=> bottom-toolbar.height;
+                    Mixer {
+                        width: 100%;
+                        height: 100%;
+                        visible: bottom-panel.current-tab == 0;
+                        floating: root.float-visible && root.float-tab == 0;
+                        float-toggle => {
+                            root.float-tab = 0;
+                            root.float-visible = !root.float-visible;
+                            root.float-toggle();
+                        }
+                        meters <=> root.mixer-meters;
+                        mutes <=> root.mixer-mutes;
+                        soloes <=> root.mixer-soloes;
+                        arms <=> root.mixer-arms;
+                        volumes <=> root.mixer-volumes;
+                        pans <=> root.mixer-pans;
+                        channel-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
                     }
 
-                    // Dynamic content based on selected tab
-                    Rectangle {
+                    SamplerArea {
                         width: 100%;
-                        vertical-stretch: 1;
-                        clip: true;
-
-                        Mixer {
-                            width: 100%;
-                            height: 100%;
-                            visible: bottom-panel.current-tab == 0;
-                            expanded <=> root.bottom-panel-expanded;
-                            expand-toggle => {
-                                root.bottom-panel-expanded = !root.bottom-panel-expanded;
-                                root.bottom-panel-height = root.bottom-panel-expanded ? root.expanded-panel-height : 215px;
-                            }
-                            meters <=> root.mixer-meters;
-                            mutes <=> root.mixer-mutes;
-                            soloes <=> root.mixer-soloes;
-                            arms <=> root.mixer-arms;
-                            volumes <=> root.mixer-volumes;
-                            pans <=> root.mixer-pans;
-                            channel-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+                        height: 100%;
+                        visible: bottom-panel.current-tab == 1;
+                        floating: root.float-visible && root.float-tab == 1;
+                        float-toggle => {
+                            root.float-tab = 1;
+                            root.float-visible = !root.float-visible;
+                            root.float-toggle();
                         }
+                    }
 
-                        SamplerArea {
-                            width: 100%;
-                            height: 100%;
-                            visible: bottom-panel.current-tab == 1;
-                            expanded <=> root.bottom-panel-expanded;
-                            expand-toggle => {
-                                root.bottom-panel-expanded = !root.bottom-panel-expanded;
-                                root.bottom-panel-height = root.bottom-panel-expanded ? root.expanded-panel-height : 215px;
-                            }
+                    PianoRollArea {
+                        width: 100%;
+                        height: 100%;
+                        visible: bottom-panel.current-tab == 2;
+                        floating: root.float-visible && root.float-tab == 2;
+                        float-toggle => {
+                            root.float-tab = 2;
+                            root.float-visible = !root.float-visible;
+                            root.float-toggle();
                         }
+                    }
 
-                        PianoRollArea {
-                            width: 100%;
-                            height: 100%;
-                            visible: bottom-panel.current-tab == 2;
-                            expanded <=> root.bottom-panel-expanded;
-                            expand-toggle => {
-                                root.bottom-panel-expanded = !root.bottom-panel-expanded;
-                                root.bottom-panel-height = root.bottom-panel-expanded ? root.expanded-panel-height : 215px;
-                            }
-                        }
-
-                        Rectangle {
-                            visible: bottom-panel.current-tab == 3;
-                            width: 100%;
-                            height: 100%;
-                            background: Theme.base;
-                        }
+                    Rectangle {
+                        visible: bottom-panel.current-tab == 3;
+                        width: 100%;
+                        height: 100%;
+                        background: Theme.base;
                     }
                 }
             }
@@ -445,6 +439,14 @@ export component Workspace inherits Rectangle {
                 Text { text: "24-bit"; color: Theme.text-dim; font-size: 10px; vertical-alignment: center; }
                 Text { text: "FASE 1 - UI"; color: Theme.accent; font-size: 10px; vertical-alignment: center; }
             }
+        }
+
+        // BOTTOM TOOLBAR (tabs + expand/collapse docked panel)
+        bottom-toolbar := BottomToolbar {
+            toolbar-height <=> bottom-toolbar.height;
+            selected-tab <=> root.selected-tab;
+            panel-visible <=> root.bottom-panel-visible;
+            panel-toggle => { root.bottom-panel-visible = !root.bottom-panel-visible; }
         }
 
         // Timer to update computed drag properties

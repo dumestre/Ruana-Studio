@@ -5,8 +5,8 @@ import { Meter } from "components/meter.slint";
 import { Theme } from "theme.slint";
 
 component MixerHeader inherits Rectangle {
-    in-out property <bool> expanded: false;
-    callback expand-toggle();
+    in-out property <bool> floating: false;
+    callback float-toggle();
 
     height: 26px;
     background: Theme.surface;
@@ -28,14 +28,13 @@ component MixerHeader inherits Rectangle {
         Button {
             width: 22px;
             height: 20px;
-            icon: @image-url("icons/arrow_up.svg");
+            icon: @image-url("icons/maximize.svg");
             icon-size: 12px;
             borderless: true;
             icon-color: Theme.text-dim;
-            transform-rotation: root.expanded ? 180deg : 0deg;
-            toggled: root.expanded;
+            toggled: root.floating;
             toggled-icon-color: Theme.accent;
-            clicked => { root.expand-toggle(); }
+            clicked => { root.float-toggle(); }
         }
     }
 
@@ -307,8 +306,8 @@ export component Mixer inherits Rectangle {
     in-out property <[float]> volumes: [0.8, 0.8, 0.8, 0.8, 0.8];
     in-out property <[float]> pans: [0.5, 0.5, 0.5, 0.5, 0.5];
 
-    in-out property <bool> expanded: false;
-    callback expand-toggle();
+    in-out property <bool> floating: false;
+    callback float-toggle();
 
     // Callback para o core
     callback channel-param-changed(int, string, float);
@@ -322,8 +321,8 @@ export component Mixer inherits Rectangle {
         cross-axis-alignment: CrossAxisAlignment.stretch;
 
         MixerHeader {
-            expanded <=> root.expanded;
-            expand-toggle => { root.expand-toggle(); }
+            floating <=> root.floating;
+            float-toggle => { root.float-toggle(); }
         }
 
         flickable := Flickable {

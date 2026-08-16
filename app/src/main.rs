@@ -228,6 +228,112 @@ fn main() -> Result<(), slint::PlatformError> {
     let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow());
     bind_document_events(&project.borrow(), tracks_model, clips_model.clone());
 
+    // Slot da janela flutuante (None quando encaixada/fechada).
+    let float_panel: Rc<RefCell<Option<FloatPanel>>> = Rc::new(RefCell::new(None));
+
+    // Reaplica o estado do mixer nas janelas (principal + flutuante) a partir do core.
+    let apply_mixer_state = {
+        let project = project.clone();
+        let ui_weak = ui.as_weak();
+        let float_slot = float_panel.clone();
+        move || {
+            let proj = project.borrow();
+            let (mutes, soloes, arms, volumes, pans) = mixer_state(&proj);
+            let mutes = Rc::new(slint::VecModel::from(mutes));
+            let soloes = Rc::new(slint::VecModel::from(soloes));
+            let arms = Rc::new(slint::VecModel::from(arms));
+            let volumes = Rc::new(slint::VecModel::from(volumes));
+            let pans = Rc::new(slint::VecModel::from(pans));
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_mixer_mutes(mutes.clone().into());
+                ui.set_mixer_soloes(soloes.clone().into());
+                ui.set_mixer_arms(arms.clone().into());
+                ui.set_mixer_volumes(volumes.clone().into());
+                ui.set_mixer_pans(pans.clone().into());
+            }
+            if let Some(p) = float_slot.borrow().as_ref() {
+                p.set_mixer_mutes(mutes.into());
+                p.set_mixer_soloes(soloes.into());
+                p.set_mixer_arms(arms.into());
+                p.set_mixer_volumes(volumes.into());
+                p.set_mixer_pans(pans.into());
+            }
+        }
+    };
+
+    // Janela flutuante: desacopla o tool (Mixer/Sampler/Piano Roll) para uma janela própria.
+    {
+        let project = project.clone();
+        let ui_weak = ui.as_weak();
+        let float_slot = float_panel.clone();
+        let apply_mixer = apply_mixer_state.clone();
+        ui.on_float_toggle(move || {
+            let ui = match ui_weak.upgrade() {
+                Some(u) => u,
+                None => return,
+            };
+            let mut slot = float_slot.borrow_mut();
+            if let Some(p) = slot.take() {
+                p.hide().ok();
+                ui.set_float_visible(false);
+                return;
+            }
+
+            let p = match FloatPanel::new() {
+                Ok(p) => p,
+                Err(_) => return,
+            };
+            p.set_tool_tab(ui.get_float_tab());
+            p.set_mixer_meters(ui.get_mixer_meters());
+
+            // Fecha via botão da própria janela flutuante.
+            {
+                let ui_weak = ui_weak.clone();
+                let float_slot = float_slot.clone();
+                p.on_close_panel(move || {
+                    if let Some(ui) = ui_weak.upgrade() {
+                        ui.set_float_visible(false);
+                    }
+                    if let Some(p) = float_slot.borrow_mut().take() {
+                        p.hide().ok();
+                    }
+                });
+            }
+
+            // Fecha via botão X do sistema.
+            {
+                let ui_weak = ui_weak.clone();
+                let float_slot = float_slot.clone();
+                p.window().on_close_requested(move || {
+                    if let Some(ui) = ui_weak.upgrade() {
+                        ui.set_float_visible(false);
+                    }
+                    if let Some(p) = float_slot.borrow_mut().take() {
+                        p.hide().ok();
+                    }
+                    slint::CloseRequestResponse::HideWindow
+                });
+            }
+
+            // Ajustes feitos dentro da janela flutuante → core (reprojeta tudo).
+            {
+                let project = project.clone();
+                let apply_mixer = apply_mixer.clone();
+                p.on_mixer_param_changed(move |channel, param, value| {
+                    let Some(param) = MixerParam::from_str(param.as_str()) else {
+                        return;
+                    };
+                    project.borrow_mut().set_mixer_param(channel as usize, param, value);
+                    apply_mixer();
+                });
+            }
+
+            p.show().ok();
+            *slot = Some(p);
+            apply_mixer();
+        });
+    }
+
     // Drop de clip (ClipPool / Explorer) → core (evento reprojeta).
     {
         let project = project.clone();
@@ -338,24 +444,13 @@ fn main() -> Result<(), slint::PlatformError> {
     // Parâmetros do mixer → core.
     {
         let project = project.clone();
-        let ui_weak = ui.as_weak();
+        let apply_mixer = apply_mixer_state.clone();
         ui.on_mixer_param_changed(move |channel, param, value| {
-            let param = match MixerParam::from_str(param.as_str()) {
-                Some(p) => p,
-                None => return,
+            let Some(param) = MixerParam::from_str(param.as_str()) else {
+                return;
             };
-            let mut proj = project.borrow_mut();
-            proj.set_mixer_param(channel as usize, param, value);
-            // Reprojeta o mixer imediatamente (o core é fonte de verdade)
-            let proj = project.borrow();
-            let (mutes, soloes, arms, volumes, pans) = mixer_state(&proj);
-            if let Some(ui) = ui_weak.upgrade() {
-                ui.set_mixer_mutes(Rc::new(slint::VecModel::from(mutes)).into());
-                ui.set_mixer_soloes(Rc::new(slint::VecModel::from(soloes)).into());
-                ui.set_mixer_arms(Rc::new(slint::VecModel::from(arms)).into());
-                ui.set_mixer_volumes(Rc::new(slint::VecModel::from(volumes)).into());
-                ui.set_mixer_pans(Rc::new(slint::VecModel::from(pans)).into());
-            }
+            project.borrow_mut().set_mixer_param(channel as usize, param, value);
+            apply_mixer();
         });
     }
 
@@ -458,10 +553,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let meter_timer = Rc::new(slint::Timer::default());
     {
         let ui_weak = ui.as_weak();
+        let float_slot = float_panel.clone();
         let timer = meter_timer.clone();
         ui.on_play_state_changed(move |playing| {
             if playing {
                 let ui_weak = ui_weak.clone();
+                let float_slot = float_slot.clone();
                 let timer = timer.clone();
                 timer.start(
                     slint::TimerMode::Repeated,
@@ -473,7 +570,11 @@ fn main() -> Result<(), slint::PlatformError> {
                                 let r = next_random(&mut seed);
                                 levels.push(r * r);
                             }
-                            ui.set_mixer_meters(Rc::new(slint::VecModel::from(levels)).into());
+                            let model = Rc::new(slint::VecModel::from(levels));
+                            ui.set_mixer_meters(model.clone().into());
+                            if let Some(p) = float_slot.borrow().as_ref() {
+                                p.set_mixer_meters(model.into());
+                            }
                         }
                     },
                 );

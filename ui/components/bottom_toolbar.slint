@@ -3,6 +3,8 @@ import { Theme } from "../theme.slint";
 
 export component BottomToolbar inherits Rectangle {
     in-out property <int> selected-tab: 0;
+    in-out property <bool> panel-visible: false;
+    callback panel-toggle();
 
     height: 26px;
     in-out property <length> toolbar-height:
@@ -48,6 +50,22 @@ export component BottomToolbar inherits Rectangle {
             toggled: root.selected-tab == 2;
             toggled-bg: Theme.accent;
             clicked => { root.selected-tab = 2; }
+        }
+
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+
+        // Toggle docked panel (expand/collapse)
+        Button {
+            width: 22px;
+            height: 15px;
+            icon: @image-url("../icons/arrow_up.svg");
+            icon-size: 12px;
+            borderless: true;
+            icon-color: Theme.text-dim;
+            transform-rotation: root.panel-visible ? 180deg : 0deg;
+            toggled: root.panel-visible;
+            toggled-icon-color: Theme.accent;
+            clicked => { root.panel-toggle(); }
         }
 
     }
