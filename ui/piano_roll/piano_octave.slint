@@ -1,0 +1,208 @@
+import { Theme } from "../theme.slint";
+import { PianoKey } from "piano_key.slint";
+
+export component PianoOctave inherits Rectangle {
+
+    in property <int> octave: 4;
+    in property <length> key-height: 20px;
+
+    callback note-pressed(int);
+
+    width: 58px;
+
+    // Uma oitava = 12 semitons
+    height: 12 * root.key-height;
+
+    background: Theme.base;
+
+
+    // =====================================================
+    // TECLAS BRANCAS
+    // =====================================================
+
+    PianoKey {
+        note: root.octave * 12 + 0;
+        label: "C" + root.octave;
+        black: false;
+
+        x: 0px;
+        y: 0px;
+
+        width: 58px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 2;
+        black: false;
+
+        x: 0px;
+        y: root.key-height * 2;
+
+        width: 58px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 4;
+        black: false;
+
+        x: 0px;
+        y: root.key-height * 4;
+
+        width: 58px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 5;
+        black: false;
+
+        x: 0px;
+        y: root.key-height * 5;
+
+        width: 58px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 7;
+        black: false;
+
+        x: 0px;
+        y: root.key-height * 7;
+
+        width: 58px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 9;
+        black: false;
+
+        x: 0px;
+        y: root.key-height * 9;
+
+        width: 58px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 11;
+        black: false;
+
+        x: 0px;
+        y: root.key-height * 11;
+
+        width: 58px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+
+    // =====================================================
+    // TECLAS PRETAS
+    // =====================================================
+
+    PianoKey {
+        note: root.octave * 12 + 1;
+        black: true;
+
+        x: 0px;
+        y: root.key-height;
+
+        width: 38px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 3;
+        black: true;
+
+        x: 0px;
+        y: root.key-height * 3;
+
+        width: 38px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 6;
+        black: true;
+
+        x: 0px;
+        y: root.key-height * 6;
+
+        width: 38px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 8;
+        black: true;
+
+        x: 0px;
+        y: root.key-height * 8;
+
+        width: 38px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+
+    PianoKey {
+        note: root.octave * 12 + 10;
+        black: true;
+
+        x: 0px;
+        y: root.key-height * 10;
+
+        width: 38px;
+        height: root.key-height;
+
+        pressed => {
+            root.note-pressed(self.note);
+        }
+    }
+}

@@ -605,6 +605,29 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // Hit-test da ferramenta cola: devolve o id do clip sob o cursor
+    // (linha da track + coordenadas com scroll), ou -1 se nenhum.
+    {
+        let project = project.clone();
+        ui.on_glue_clip_at(move |row, x, scroll_x, px_per_beat| -> i32 {
+            let project = project.borrow();
+            let row = row.max(0.0) as i32;
+            let x = x as f32;
+            let sx = scroll_x as f32;
+            let ppb = px_per_beat as f32;
+            for clip in &project.clips {
+                if clip.track_id as i32 == row {
+                    let cx = clip.start_beat as f32 * ppb - sx;
+                    let cw = clip.length_beats as f32 * ppb;
+                    if x >= cx && x < cx + cw {
+                        return clip.id as i32;
+                    }
+                }
+            }
+            -1
+        });
+    }
+
     // Mover clip via drag (ferramenta select).
     {
         let project = project.clone();

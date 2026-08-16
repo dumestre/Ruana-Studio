@@ -8,7 +8,7 @@ import { ClipData } from "../timeline/clip_data.slint";
 import { Explorer } from "../explorer/explorer.slint";
 import { Mixer } from "../mixer/mixer.slint";
 import { SamplerArea } from "../components/sampler_area.slint";
-import { PianoRollArea } from "../components/piano_roll_area.slint";
+import { PianoRollArea } from "../piano_roll/piano_roll.slint";
 import { SplitterVerticalGrowLeft, SplitterVerticalGrowRight, SplitterHorizontal } from "../components/splitter.slint";
 import { ZoomBarHorizontal, ZoomBarVertical } from "../components/zoom_bar.slint";
 import { ScrollBarHorizontal, ScrollBarVertical } from "../components/scrollbar.slint";
@@ -67,6 +67,7 @@ export component Workspace inherits Rectangle {
     callback add-track-requested(string);
     callback clip-slice-requested(int, float);
     callback clip-glue-requested(int);
+    callback glue-clip-at(float, length, length, length) -> int;
     callback clip-move-started(int, float);
     callback clip-move-delta(int, float);
     callback clip-move-finished(int);
@@ -192,6 +193,7 @@ export component Workspace inherits Rectangle {
                             clip-selected(index) => { root.selected-track = index; }
                             clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
                             clip-glue-requested(id) => { root.clip-glue-requested(id); }
+                            glue-clip-at(row, x, sx, ppb) => { root.glue-clip-at(row, x, sx, ppb) }
                             clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
                             clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
                             clip-move-finished(id) => { root.clip-move-finished(id); }

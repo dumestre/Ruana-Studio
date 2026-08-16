@@ -1,0 +1,43 @@
+import { Theme } from "../theme.slint";
+
+export component PianoKey inherits Rectangle {
+
+    in property <int> note: 60;
+    in property <bool> black: false;
+    in property <string> label: "";
+
+    callback pressed();
+
+    background:
+        root.black
+            ? Theme.surface-high
+            : Theme.text-primary;
+
+    border-width: 1px;
+    border-color: Theme.border;
+
+    TouchArea {
+        clicked => {
+            root.pressed();
+        }
+    }
+
+    // Nome da nota — somente nas teclas C
+    Text {
+        visible: !root.black && root.label != "";
+
+        x: 5px;
+        y: 0px;
+
+        width: parent.width - 5px;
+        height: parent.height;
+
+        text: root.label;
+
+        color: Theme.text-dim;
+        font-size: 8px;
+
+        vertical-alignment: center;
+        horizontal-alignment: left;
+    }
+}

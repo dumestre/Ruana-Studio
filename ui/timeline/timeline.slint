@@ -92,6 +92,7 @@ export component Timeline inherits Rectangle {
     callback clip-selected(int);
     callback clip-slice-requested(int, float);
     callback clip-glue-requested(int);
+    callback glue-clip-at(float, length, length, length) -> int;
     callback clip-move-started(int, float);
     callback clip-move-delta(int, float);
     callback clip-move-finished(int);
@@ -878,10 +879,6 @@ export component Timeline inherits Rectangle {
                         );
                     }
 
-                    glue-requested(id) => {
-                        root.clip-glue-requested(id);
-                    }
-
                     clip-move-started(id, beat) => {
                         root.clip-move-started(id, beat);
                     }
@@ -1039,6 +1036,9 @@ export component Timeline inherits Rectangle {
     private property <image> cursor-icon-erase:
         @image-url("../icons/erase_filled.svg");
 
+    private property <image> cursor-icon-glue:
+        @image-url("../icons/glue_filled.svg");
+
 
     // =====================================================
     // CURSOR DAS FERRAMENTAS
@@ -1056,7 +1056,8 @@ export component Timeline inherits Rectangle {
             parent.height;
 
         enabled:
-            root.active-tool == 3
+            root.active-tool == 2
+            || root.active-tool == 3
             || root.active-tool == 4
             || root.active-tool == 5;
 
@@ -1065,6 +1066,15 @@ export component Timeline inherits Rectangle {
 
         z: 200;
 
+        pointer-event(event) => {
+            if root.active-tool == 2 && event.kind == PointerEventKind.down {
+                let row = (self.mouse-y - (root.ruler-height - root.scroll-y)) / root.row-height;
+                let id = root.glue-clip-at(row, self.mouse-x, root.scroll-x, root.px-per-beat);
+                if id >= 0 {
+                    root.clip-glue-requested(id);
+                }
+            }
+        }
 
         Image {
 
@@ -1073,11 +1083,13 @@ export component Timeline inherits Rectangle {
                 && tool-cursor.has-hover;
 
             source:
-                root.active-tool == 3
-                    ? root.cursor-icon-stretch
-                    : root.active-tool == 4
-                        ? root.cursor-icon-draw
-                        : root.cursor-icon-erase;
+                root.active-tool == 2
+                    ? root.cursor-icon-glue
+                    : root.active-tool == 3
+                        ? root.cursor-icon-stretch
+                        : root.active-tool == 4
+                            ? root.cursor-icon-draw
+                            : root.cursor-icon-erase;
 
             x:
                 tool-cursor.mouse-x - 8px;

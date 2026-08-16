@@ -169,6 +169,8 @@ export component MainWindow inherits Window {
 
     callback clip-glue-requested(int);
 
+    callback glue-clip-at(float, length, length, length) -> int;
+
     callback clip-move-started(int, float);
     callback clip-move-delta(int, float);
     callback clip-move-finished(int);
@@ -439,6 +441,7 @@ export component MainWindow inherits Window {
         add-track-requested(type) => { root.add-track-requested(type); }
         clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
         clip-glue-requested(id) => { root.clip-glue-requested(id); }
+        glue-clip-at(row, x, sx, ppb) => { root.glue-clip-at(row, x, sx, ppb) }
         clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
         clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
         clip-move-finished(id) => { root.clip-move-finished(id); }

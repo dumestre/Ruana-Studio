@@ -1,0 +1,435 @@
+import { Theme } from "../theme.slint";
+
+export component PianoRuler inherits Rectangle {
+
+    // =====================================================
+    // CONFIGURAÇÃO
+    // =====================================================
+
+    in property <[int]> bar-range: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+        8, 9, 10, 11,
+        12, 13, 14, 15
+    ];
+
+    // Largura de um compasso
+    in property <length> px-per-bar: 160px;
+
+    in property <length> ruler-height: 24px;
+
+    height: root.ruler-height;
+
+    background: Theme.surface;
+
+
+    // =====================================================
+    // FUNDO ALTERNADO POR COMPASSO
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+
+        x:
+            i * root.px-per-bar;
+
+        y: 0;
+
+        width:
+            root.px-per-bar;
+
+        height:
+            parent.height;
+
+        background:
+            Math.mod(i, 2) == 1
+                ? Theme.base
+                : Theme.surface;
+    }
+
+
+    // =====================================================
+    // LINHA INFERIOR
+    // =====================================================
+
+    Rectangle {
+
+        x: 0;
+        y:
+            parent.height - 1px;
+
+        width:
+            parent.width;
+
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+
+    // =====================================================
+    // LINHAS DOS COMPASSOS
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+
+        x:
+            i * root.px-per-bar;
+
+        y: 0;
+
+        width: 1px;
+
+        height:
+            parent.height - 1px;
+
+        background:
+            Math.mod(i, 2) == 1
+                ? Theme.border
+                : Theme.border.transparentize(0.45);
+    }
+
+
+    // =====================================================
+    // NÚMERO DOS COMPASSOS
+    // =====================================================
+
+    for i in root.bar-range: Text {
+
+        x:
+            i * root.px-per-bar + 4px;
+
+        y: 0;
+
+        width:
+            root.px-per-bar - 4px;
+
+        height:
+            parent.height;
+
+        text:
+            (i + 1).to-fixed(0);
+
+        color:
+            Math.mod(i, 2) == 1
+                ? Theme.text-primary
+                : Theme.text-dim;
+
+        font-size:
+            Math.mod(i, 2) == 1
+                ? 10px
+                : 9px;
+
+        font-weight:
+            Math.mod(i, 2) == 1
+                ? 700
+                : 500;
+
+        vertical-alignment: center;
+        horizontal-alignment: left;
+
+        overflow: elide;
+    }
+
+
+    // =====================================================
+    // BEATS — 1/4 DO COMPASSO
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 40px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.25;
+
+        y: 0;
+
+        width: 1px;
+
+        height:
+            parent.height - 1px;
+
+        background:
+            Theme.border.transparentize(0.6);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 40px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.50;
+
+        y: 0;
+
+        width: 1px;
+
+        height:
+            parent.height - 1px;
+
+        background:
+            Theme.border.transparentize(0.6);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 40px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.75;
+
+        y: 0;
+
+        width: 1px;
+
+        height:
+            parent.height - 1px;
+
+        background:
+            Theme.border.transparentize(0.6);
+    }
+
+
+    // =====================================================
+    // SUBDIVISÃO 1/8
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 120px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.125;
+
+        y:
+            parent.height - 8px;
+
+        width: 1px;
+        height: 7px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 120px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.375;
+
+        y:
+            parent.height - 8px;
+
+        width: 1px;
+        height: 7px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 120px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.625;
+
+        y:
+            parent.height - 8px;
+
+        width: 1px;
+        height: 7px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 120px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.875;
+
+        y:
+            parent.height - 8px;
+
+        width: 1px;
+        height: 7px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+
+    // =====================================================
+    // SUBDIVISÃO 1/16
+    // =====================================================
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.0625;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.1875;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.3125;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.4375;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.5625;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.6875;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.8125;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+
+    for i in root.bar-range: Rectangle {
+
+        visible:
+            root.px-per-bar >= 240px;
+
+        x:
+            i * root.px-per-bar
+            + root.px-per-bar * 0.9375;
+
+        y:
+            parent.height - 6px;
+
+        width: 1px;
+        height: 5px;
+
+        background:
+            Theme.border.transparentize(0.25);
+    }
+}
