@@ -131,7 +131,7 @@ export component FloatPanel inherits Window {
         background: transparent;
 
         TouchArea {
-            mouse-cursor: MouseCursor.nwse-resize;
+            mouse-cursor: root.tool-tab == 0 ? MouseCursor.ns-resize : MouseCursor.nwse-resize;
             pointer-event(ev) => {
                 if (ev.kind == PointerEventKind.down) {
                     root.resize-cancel();

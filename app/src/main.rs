@@ -271,6 +271,13 @@ fn main() -> Result<(), slint::PlatformError> {
                 slot.set_mixer_arms(arms.clone().into());
                 slot.set_mixer_volumes(volumes.clone().into());
                 slot.set_mixer_pans(pans.clone().into());
+
+                // Mixer flutuante: a largura acompanha o nº de canais.
+                if slot.get_tool_tab() == 0 {
+                    let w = ((proj.tracks.len() + 1) as f32 * 105.0 * slot.window().scale_factor()) as u32;
+                    let h = slot.window().size().height;
+                    slot.window().set_size(slint::PhysicalSize::new(w, h));
+                }
             }
         }
     };
@@ -380,6 +387,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         };
                         let win = panel.window();
                         let sf = win.scale_factor();
+                        let is_mixer = panel.get_tool_tab() == 0;
                         let mut st = state.borrow_mut();
                         // Primeiro move do drag → ancora o tamanho inicial e o ponteiro.
                         let Some((w0, h0, x0, y0)) = *st else {
@@ -387,9 +395,15 @@ fn main() -> Result<(), slint::PlatformError> {
                             *st = Some((sz.width, sz.height, x, y));
                             return;
                         };
-                        let new_w = (w0 as f32 + (x - x0) * sf).max(360.0 * sf) as u32;
-                        let new_h = (h0 as f32 + (y - y0) * sf).max(240.0 * sf) as u32;
-                        win.set_size(slint::PhysicalSize::new(new_w, new_h));
+                        if is_mixer {
+                            // Mixer: largura é automática (segue os canais); só a altura redimensiona.
+                            let new_h = (h0 as f32 + (y - y0) * sf).max(240.0 * sf) as u32;
+                            win.set_size(slint::PhysicalSize::new(win.size().width, new_h));
+                        } else {
+                            let new_w = (w0 as f32 + (x - x0) * sf).max(360.0 * sf) as u32;
+                            let new_h = (h0 as f32 + (y - y0) * sf).max(240.0 * sf) as u32;
+                            win.set_size(slint::PhysicalSize::new(new_w, new_h));
+                        }
                     }
                 });
             }
@@ -400,6 +414,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 slots[idx] = Some(p);
             }
             sync_floated();
+            apply_mixer();
         });
     }
 
@@ -424,6 +439,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Adiciona tracks via botão "+" da timeline → core.
     {
         let project = project.clone();
+        let apply_mixer = apply_mixer_state.clone();
         ui.on_add_track_requested(move |kind| {
             let kind = match kind.as_str() {
                 "AUDIO" => TrackKind::Audio,
@@ -434,9 +450,12 @@ fn main() -> Result<(), slint::PlatformError> {
                 "MASTER" => TrackKind::Master,
                 _ => TrackKind::Midi,
             };
-            let mut proj = project.borrow_mut();
-            let count = proj.tracks.len() + 1;
-            proj.add_track(kind, format!("{} {count}", kind.base_name()));
+            {
+                let mut proj = project.borrow_mut();
+                let count = proj.tracks.len() + 1;
+                proj.add_track(kind, format!("{} {count}", kind.base_name()));
+            }
+            apply_mixer();
         });
     }
 
@@ -621,11 +640,13 @@ fn main() -> Result<(), slint::PlatformError> {
     // Meters animados (áudio falso) — só rodam enquanto "tocando".
     let meter_timer = Rc::new(slint::Timer::default());
     {
+        let project = project.clone();
         let ui_weak = ui.as_weak();
         let panels = float_panels.clone();
         let timer = meter_timer.clone();
         ui.on_play_state_changed(move |playing| {
             if playing {
+                let project = project.clone();
                 let ui_weak = ui_weak.clone();
                 let panels = panels.clone();
                 let timer = timer.clone();
@@ -634,8 +655,9 @@ fn main() -> Result<(), slint::PlatformError> {
                     Duration::from_millis(80),
                     move || {
                         if let Some(ui) = ui_weak.upgrade() {
+                            let count = project.borrow().tracks.len() + 1;
                             let mut levels: Vec<f32> = Vec::new();
-                            for _ in 0..5 {
+                            for _ in 0..count {
                                 let r = next_random(&mut seed);
                                 levels.push(r * r);
                             }
