@@ -1,0 +1,151 @@
+import { Theme } from "../theme.slint";
+import { PianoRollData, PianoRollActions } from "piano_roll_state.slint";
+
+export component PianoNoteView inherits Rectangle {
+
+    in property <int> note-id: 0;
+    in property <int> note: 60;
+    in property <float> start: 0.0;
+    in property <float> length: 1.0;
+    in property <int> velocity: 100;
+
+    in property <length> px-per-beat: 80px;
+    in property <length> key-height: 20px;
+
+    callback viewport-scroll(length, length);
+    callback viewport-zoom(float);
+
+    private property <length> edge-width: 6px;
+
+    private property <bool> hovered: touch.has-hover;
+    private property <bool> on-right-edge:
+        touch.has-hover && touch.mouse-x >= self.width - root.edge-width;
+
+    private property <bool> selected:
+        PianoRollData.selected-note == root.note-id;
+
+    // Posição no mundo (o viewport aplica o scroll via translate do wrapper).
+    x: root.start * root.px-per-beat;
+    y: (PianoRollData.last-note - root.note) * root.key-height;
+
+    width: Math.max(root.length * root.px-per-beat, 6px);
+    height: root.key-height - 2px;
+
+    background: Theme.clip-midi.brighter(self.selected ? 0.25 : 0.05);
+    opacity: 0.65 + root.velocity-to-opacity();
+
+    border-radius: 2px;
+
+    border-width:
+        self.selected
+            ? 2px
+            : 1px;
+
+    border-color:
+        self.selected
+            ? Theme.text-primary
+            : Theme.clip-midi.darker(0.25);
+
+    function velocity-to-opacity() -> float {
+        0.35 * (root.velocity / 127.0)
+    }
+
+    // Número da nota (id útil para conferir o DTO)
+    Text {
+        visible: self.width >= 22px;
+
+        x: 4px;
+        y: 0px;
+
+        width: parent.width - 8px;
+        height: parent.height;
+
+        text: root.note.to-fixed(0);
+
+        color: #1A1A1A;
+        font-size: 8px;
+        font-weight: 700;
+
+        vertical-alignment: center;
+        horizontal-alignment: left;
+
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: parent.height;
+
+        mouse-cursor:
+            root.on-right-edge
+                ? ew-resize
+                : pointer;
+
+        clicked => {
+            PianoRollActions.note-selected(root.note-id);
+        }
+
+        pointer-event(event) => {
+
+            if event.kind == PointerEventKind.down {
+
+                if event.button == PointerEventButton.right {
+
+                    PianoRollActions.note-deleted(root.note-id);
+
+                } else if root.on-right-edge {
+
+                    self.drag-resizing = true;
+                    self.drag-start-x = self.mouse-x;
+                    self.drag-start-len = root.length;
+                    PianoRollActions.note-selected(root.note-id);
+
+                } else {
+
+                    self.drag-moving = true;
+                    self.drag-start-x = self.mouse-x;
+                    self.drag-start-beat = root.start;
+                    PianoRollActions.note-selected(root.note-id);
+                }
+
+            } else if event.kind == PointerEventKind.move && self.drag-resizing {
+
+                let delta = (self.mouse-x - self.drag-start-x) / root.px-per-beat;
+                let new_len = Math.max(0.25, Math.round((self.drag-start-len + delta) * 4.0) / 4.0);
+                PianoRollActions.note-resized(root.note-id, new_len);
+
+            } else if event.kind == PointerEventKind.move && self.drag-moving {
+
+                let delta = (self.mouse-x - self.drag-start-x) / root.px-per-beat;
+                let new_start = Math.max(0.0, Math.round((self.drag-start-beat + delta) * 4.0) / 4.0);
+                PianoRollActions.note-moved(root.note-id, new_start);
+
+            } else if event.kind == PointerEventKind.up {
+
+                self.drag-moving = false;
+                self.drag-resizing = false;
+            }
+        }
+
+        // Roda sobre a nota: repassa para o viewport (scroll/zoom).
+        scroll-event(event) => {
+            if event.modifiers.control {
+                root.viewport-zoom(event.delta-y > 0 ? 0.9 : 1.1);
+            } else if event.modifiers.shift {
+                root.viewport-scroll(event.delta-x, 0px);
+            } else {
+                root.viewport-scroll(0px, event.delta-y);
+            }
+            accept
+        }
+
+        private property <bool> drag-moving: false;
+        private property <bool> drag-resizing: false;
+        private property <length> drag-start-x: 0px;
+        private property <float> drag-start-beat: 0.0;
+        private property <float> drag-start-len: 1.0;
+    }
+}

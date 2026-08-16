@@ -1,0 +1,15 @@
+// =====================================================
+// CONFIGURAÇÃO GEOMÉTRICA DO PIANO ROLL
+//
+// Fonte única das medidas. Os componentes não têm mais
+// constantes repetidas — tudo chega por binding a partir
+// do `PianoRollConfig` instanciado no `PianoRollArea`.
+// =====================================================
+
+export component PianoRollConfig {
+    in property <length> key-height: 20px;
+    in property <length> keyboard-width: 58px;
+    in property <length> beat-width: 80px;
+    in property <length> ruler-height: 26px;
+
+    out property <length> black-key-width: root.keyboard-width - 20px;}

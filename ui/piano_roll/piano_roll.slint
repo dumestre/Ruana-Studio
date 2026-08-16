@@ -3,185 +3,193 @@ import { PianoRollHeader } from "piano_roll_header.slint";
 import { PianoKeyboard } from "piano_keyboard.slint";
 import { PianoRuler } from "piano_ruler.slint";
 import { PianoGrid } from "piano_grid.slint";
+import { PianoNoteView } from "piano_note_view.slint";
+import { PianoRollConfig } from "piano_roll_config.slint";
+import { PianoRollData, PianoRollActions } from "piano_roll_state.slint";
 
 export component PianoRollArea inherits Rectangle {
-
-    // =====================================================
-    // ESTADO
-    // =====================================================
 
     in-out property <bool> floating: false;
     in property <bool> show-header: true;
 
     callback float-toggle();
 
+    config := PianoRollConfig {}
 
-    // =====================================================
-    // MIDI
-    // =====================================================
-
-    property <int> first-note: 0;
-    property <int> last-note: 127;
-
-
-    // =====================================================
-    // CONFIGURAÇÃO
-    // =====================================================
-
-    property <length> key-height: 20px;
-
-    property <length> keyboard-width: 58px;
-
-    property <length> beat-width: 80px;
-
-    property <length> ruler-height: 26px;
-
+    // Viewport: zoom e scroll são estado local desta área.
+    property <length> px-per-beat: config.beat-width;
+    property <length> note-height: config.key-height;
+    property <length> scroll-x: 0px;
+    property <length> scroll-y: 0px;
 
     background: Theme.base;
 
-
-    // =====================================================
-    // LAYOUT PRINCIPAL
-    // =====================================================
-
     VerticalLayout {
-
         spacing: 0;
-
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.stretch;
 
-
-        // =================================================
-        // HEADER
-        // =================================================
-
         if root.show-header: PianoRollHeader {
-
             title: "Piano Roll";
-
             floating <=> root.floating;
-
             float-toggle => {
                 root.float-toggle();
             }
         }
 
-
-        // =================================================
-        // EDITOR
-        // =================================================
-
         HorizontalLayout {
-
             spacing: 0;
-
+            cross-axis-alignment: CrossAxisAlignment.stretch;
             horizontal-stretch: 1;
             vertical-stretch: 1;
 
-
-            // =============================================
-            // COLUNA DO TECLADO
-            // =============================================
-
+            // Coluna do teclado
             VerticalLayout {
-
                 spacing: 0;
-
-                width: root.keyboard-width;
-
+                width: config.keyboard-width;
+                cross-axis-alignment: CrossAxisAlignment.center;
                 horizontal-stretch: 0;
                 vertical-stretch: 1;
 
-
-                // =========================================
-                // ESPAÇO CORRESPONDENTE À RÉGUA
-                // =========================================
-
                 Rectangle {
-
-                    width: root.keyboard-width;
-                    height: root.ruler-height;
-
+                    width: config.keyboard-width;
+                    height: config.ruler-height;
                     background: Theme.surface;
 
                     Rectangle {
                         y: parent.height - 1px;
-
                         width: parent.width;
                         height: 1px;
-
                         background: Theme.border;
                     }
                 }
 
-
-                // =========================================
-                // TECLADO
-                // =========================================
-
                 PianoKeyboard {
-
-                    width: root.keyboard-width;
-
-                    first-note: root.first-note;
-                    last-note: root.last-note;
-
-                    key-height: root.key-height;
-
+                    width: config.keyboard-width;
+                    key-height: root.note-height;
+                    keyboard-width: config.keyboard-width;
+                    black-key-width: config.black-key-width;
+                    scroll-y: root.scroll-y;
                     vertical-stretch: 1;
+
+                    note-pressed(note) => {
+                        PianoRollActions.note-previewed(note);
+                    }
                 }
             }
 
-
-            // =============================================
-            // ÁREA MUSICAL
-            // =============================================
-
+            // Área musical
             VerticalLayout {
-
                 spacing: 0;
-
+                cross-axis-alignment: CrossAxisAlignment.stretch;
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
 
-
-                // =========================================
-                // RÉGUA
-                // =========================================
-
                 PianoRuler {
-
-                    height: root.ruler-height;
-
-                    px-per-bar:
-                        root.beat-width * 4;
+                    height: config.ruler-height;
+                    ruler-height: config.ruler-height;
+                    px-per-bar: root.px-per-beat * 4;
+                    scroll-x: root.scroll-x;
                 }
 
-
-                // =========================================
-                // GRID
-                // =========================================
-
+                // Viewport (clip + scroll + zoom + interação)
                 Rectangle {
-
                     clip: true;
-
                     horizontal-stretch: 1;
                     vertical-stretch: 1;
+                    background: Theme.base;
 
+                    // Interação fica ABAIXO das notas: recebe os cliques
+                    // nas áreas vazias (pincel) e o scroll/zoom geral.
+                    interaction := TouchArea {
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
 
-                    PianoGrid {
+                        mouse-cursor: crosshair;
 
-                        beat-width: root.beat-width;
+                        pointer-event(event) => {
+                            if event.kind == PointerEventKind.down
+                                && event.button == PointerEventButton.left {
+                                self.painting = true;
+                                root.paint-note = -1;
+                                root.paint-start = -1.0;
+                                root.paint-add();
+                            } else if event.kind == PointerEventKind.move
+                                && self.painting {
+                                root.paint-add();
+                            } else if event.kind == PointerEventKind.up {
+                                self.painting = false;
+                            }
+                        }
 
-                        key-height: root.key-height;
+                        scroll-event(event) => {
+                            if event.modifiers.control {
+                                root.px-per-beat = Math.max(24px, Math.min(320px, root.px-per-beat * (event.delta-y > 0 ? 0.9 : 1.1)));
+                                root.note-height = Math.max(12px, Math.min(40px, root.note-height * (event.delta-y > 0 ? 0.9 : 1.1)));
+                            } else if event.modifiers.shift {
+                                root.scroll-x = Math.max(0px, root.scroll-x + event.delta-x);
+                            } else {
+                                root.scroll-y = Math.max(0px, root.scroll-y + event.delta-y);
+                            }
+                            accept
+                        }
 
-                        first-note: root.first-note;
-                        last-note: root.last-note;
+                        private property <bool> painting: false;
+                    }
+
+                    // Mundo (grid + notas) — mesma projeção de coordenadas.
+                    Rectangle {
+                        x: -root.scroll-x;
+                        y: -root.scroll-y;
+
+                        PianoGrid {
+                            beat-width: root.px-per-beat;
+                            key-height: root.note-height;
+                        }
+
+                        for note in PianoRollData.notes: PianoNoteView {
+                            note-id: note.id;
+                            note: note.note;
+                            start: note.start;
+                            length: note.length;
+                            velocity: note.velocity;
+
+                            px-per-beat: root.px-per-beat;
+                            key-height: root.note-height;
+
+                            viewport-scroll(dx, dy) => {
+                                root.scroll-x = Math.max(0px, root.scroll-x + dx);
+                                root.scroll-y = Math.max(0px, root.scroll-y + dy);
+                            }
+                            viewport-zoom(f) => {
+                                root.px-per-beat = Math.max(24px, Math.min(320px, root.px-per-beat * f));
+                                root.note-height = Math.max(12px, Math.min(40px, root.note-height * f));
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
+    // Pincel: converte a posição do mouse em nota + beat com snap
+    // de semicolcheia e dispara a criação via global (Rust resolve).
+    function paint-add() {
+        let mx = interaction.mouse-x + root.scroll-x;
+        let my = interaction.mouse-y + root.scroll-y;
+
+        let note = Math.max(PianoRollData.first-note, Math.min(PianoRollData.last-note, PianoRollData.last-note - Math.floor(my / root.note-height)));
+        let start = Math.max(0.0, Math.round((mx / root.px-per-beat) * 4.0) / 4.0);
+
+        if note != self.paint-note || start != self.paint-start {
+            self.paint-note = note;
+            self.paint-start = start;
+            PianoRollActions.note-added(note, start, 1.0, 100);
+        }
+    }
+
+    private property <int> paint-note: 0;
+    private property <float> paint-start: 0.0;
 }

@@ -8,15 +8,24 @@ export component PianoKey inherits Rectangle {
 
     callback pressed();
 
+    private property <bool> hovered: touch.has-hover;
+    private property <bool> down: touch.pressed;
+
     background:
         root.black
-            ? Theme.surface-high
-            : Theme.text-primary;
+            ? Theme.surface-high.brighter(
+                root.down ? 0.28 : root.hovered ? 0.12 : 0.0
+            )
+            : Theme.text-primary.darker(
+                root.down ? 0.40 : root.hovered ? 0.16 : 0.0
+            );
 
     border-width: 1px;
     border-color: Theme.border;
 
-    TouchArea {
+    touch := TouchArea {
+        mouse-cursor: pointer;
+
         clicked => {
             root.pressed();
         }
@@ -26,16 +35,17 @@ export component PianoKey inherits Rectangle {
     Text {
         visible: !root.black && root.label != "";
 
-        x: 5px;
+        x: 4px;
         y: 0px;
 
-        width: parent.width - 5px;
+        width: parent.width - 4px;
         height: parent.height;
 
         text: root.label;
 
         color: Theme.text-dim;
         font-size: 8px;
+        font-weight: 600;
 
         vertical-alignment: center;
         horizontal-alignment: left;

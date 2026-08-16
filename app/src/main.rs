@@ -36,6 +36,183 @@ fn to_clip_data(clip: &Clip) -> ClipData {
     }
 }
 
+/// Editor de notas do piano roll (sem suporte a clip ainda: lista global
+/// da janela). O Rust é a fonte da verdade; o modelo Slint é re-sincronizado
+/// a cada edição.
+struct PianoRollEditor {
+    notes: Vec<PianoNote>,
+    next_id: i64,
+}
+
+impl PianoRollEditor {
+    fn new() -> Self {
+        Self {
+            notes: Vec::new(),
+            next_id: 1,
+        }
+    }
+
+    fn add(&mut self, note: i32, start: f32, length: f32, velocity: i32) {
+        self.notes.push(PianoNote {
+            id: self.next_id as i32,
+            note,
+            start,
+            length,
+            velocity,
+        });
+        self.next_id += 1;
+    }
+
+    fn move_note(&mut self, id: i32, start: f32) {
+        if let Some(n) = self.notes.iter_mut().find(|n| n.id == id) {
+            n.start = start;
+        }
+    }
+
+    fn resize_note(&mut self, id: i32, length: f32) {
+        if let Some(n) = self.notes.iter_mut().find(|n| n.id == id) {
+            n.length = length;
+        }
+    }
+
+    fn delete(&mut self, id: i32) {
+        self.notes.retain(|n| n.id != id);
+    }
+}
+
+/// Modelos derivados de configuração do piano roll: grids, oitavas, réguas
+/// e ticks. Tudo calculado no Rust — nada de arrays hardcoded na UI.
+fn piano_roll_models(
+    first: i32,
+    last: i32,
+    bars: i32,
+) -> (Vec<i32>, Vec<i32>, Vec<i32>, Vec<i32>, Vec<RulerTick>) {
+    let note_lines: Vec<i32> = (0..=(last - first)).collect();
+    let beat_lines: Vec<i32> = (0..(bars * 16)).collect();
+    let octave_range: Vec<i32> = (first / 12..=last / 12).rev().collect();
+    let bar_range: Vec<i32> = (0..bars).collect();
+
+    let mut ticks = Vec::new();
+    for bar in 0..bars {
+        ticks.push(RulerTick {
+            bar,
+            pos: 0.0,
+            level: 0,
+        });
+        for (pos, level) in [
+            (0.25, 1),
+            (0.50, 1),
+            (0.75, 1),
+            (0.125, 2),
+            (0.375, 2),
+            (0.625, 2),
+            (0.875, 2),
+            (0.0625, 3),
+            (0.1875, 3),
+            (0.3125, 3),
+            (0.4375, 3),
+            (0.5625, 3),
+            (0.6875, 3),
+            (0.8125, 3),
+            (0.9375, 3),
+        ] {
+            ticks.push(RulerTick { bar, pos, level });
+        }
+    }
+    (note_lines, beat_lines, octave_range, bar_range, ticks)
+}
+
+/// Re-sincroniza o modelo de notas no global da janela.
+fn refresh_notes<C: slint::ComponentHandle>(ui: &C, editor: &RefCell<PianoRollEditor>)
+where
+    for<'a> PianoRollData<'a>: slint::Global<'a, C>,
+{
+    let notes = editor.borrow().notes.clone();
+    PianoRollData::get(ui).set_notes(Rc::new(slint::VecModel::from(notes)).into());
+}
+
+/// Semeia os globals do piano roll e assina as ações de edição de notas.
+fn wire_piano_roll<C: slint::ComponentHandle + 'static>(ui: &C, editor: Rc<RefCell<PianoRollEditor>>)
+where
+    for<'a> PianoRollData<'a>: slint::Global<'a, C>,
+    for<'a> PianoRollActions<'a>: slint::Global<'a, C>,
+{
+    let (note_lines, beat_lines, octave_range, bar_range, ticks) = piano_roll_models(0, 127, 64);
+    let data = PianoRollData::get(ui);
+    data.set_first_note(0);
+    data.set_last_note(127);
+    data.set_note_lines(Rc::new(slint::VecModel::from(note_lines)).into());
+    data.set_beat_lines(Rc::new(slint::VecModel::from(beat_lines)).into());
+    data.set_octave_range(Rc::new(slint::VecModel::from(octave_range)).into());
+    data.set_bar_range(Rc::new(slint::VecModel::from(bar_range)).into());
+    data.set_ruler_ticks(Rc::new(slint::VecModel::from(ticks)).into());
+    data.set_notes(Rc::new(slint::VecModel::from(Vec::<PianoNote>::new())).into());
+    data.set_selected_note(-1);
+
+    let actions = PianoRollActions::get(ui);
+
+    {
+        let editor = editor.clone();
+        let ui_weak = ui.as_weak();
+        actions.on_note_added(move |note, start, length, velocity| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            editor.borrow_mut().add(note, start, length, velocity);
+            refresh_notes(&ui, &editor);
+        });
+    }
+    {
+        let editor = editor.clone();
+        let ui_weak = ui.as_weak();
+        actions.on_note_moved(move |id, start| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            editor.borrow_mut().move_note(id, start);
+            refresh_notes(&ui, &editor);
+        });
+    }
+    {
+        let editor = editor.clone();
+        let ui_weak = ui.as_weak();
+        actions.on_note_resized(move |id, length| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            editor.borrow_mut().resize_note(id, length);
+            refresh_notes(&ui, &editor);
+        });
+    }
+    {
+        let editor = editor.clone();
+        let ui_weak = ui.as_weak();
+        actions.on_note_deleted(move |id| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            editor.borrow_mut().delete(id);
+            if PianoRollData::get(&ui).get_selected_note() == id {
+                PianoRollData::get(&ui).set_selected_note(-1);
+            }
+            refresh_notes(&ui, &editor);
+        });
+    }
+    {
+        let ui_weak = ui.as_weak();
+        actions.on_note_selected(move |id| {
+            if let Some(ui) = ui_weak.upgrade() {
+                PianoRollData::get(&ui).set_selected_note(id);
+            }
+        });
+    }
+    {
+        actions.on_note_previewed(move |note| {
+            println!("[piano-roll] note preview: {}", note);
+        });
+    }
+}
+
 /// Extrai o estado do mixer do projeto (trilhas + master) como arrays.
 fn mixer_state(project: &Project) -> (Vec<bool>, Vec<bool>, Vec<bool>, Vec<f32>, Vec<f32>) {
     let n = project.tracks.len() + 1; // trilhas + master
@@ -288,6 +465,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow());
     bind_document_events(&project.borrow(), tracks_model, clips_model.clone());
 
+    // Piano roll da janela principal (estado por janela; cada float tem o seu).
+    wire_piano_roll(&ui, Rc::new(RefCell::new(PianoRollEditor::new())));
+
     // Slots das janelas flutuantes, um por tool (0=Mixer, 1=Sampler, 2=Piano Roll).
     let float_panels: Rc<RefCell<[Option<FloatPanel>; 3]>> = Rc::new(RefCell::new([None, None, None]));
 
@@ -393,6 +573,9 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             p.set_tool_tab(tab);
             p.set_mixer_meters(ui.get_mixer_meters());
+
+            // Piano roll próprio da janela flutuante.
+            wire_piano_roll(&p, Rc::new(RefCell::new(PianoRollEditor::new())));
 
             // Fecha via botão da própria janela flutuante.
             {

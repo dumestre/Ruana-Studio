@@ -1,0 +1,42 @@
+// =====================================================
+// ESTADO COMPARTILHADO DO PIANO ROLL
+//
+// Dados de domínio (notas + grids) vêm do Rust via estes
+// globals. Os componentes da pasta apenas leem/escrevem
+// aqui — nada de arrays hardcoded ou DTOs locais.
+// =====================================================
+
+export struct PianoNote {
+    id: int,
+    note: int,
+    start: float,
+    length: float,
+    velocity: int
+}
+
+export struct RulerTick {
+    bar: int,
+    pos: float,
+    level: int
+}
+
+export global PianoRollData {
+    in-out property <[PianoNote]> notes: [];
+    in-out property <int> selected-note: -1;
+    in-out property <int> first-note: 0;
+    in-out property <int> last-note: 127;
+    in-out property <[int]> note-lines: [];
+    in-out property <[int]> beat-lines: [];
+    in-out property <[int]> octave-range: [];
+    in-out property <[int]> bar-range: [];
+    in-out property <[RulerTick]> ruler-ticks: [];
+}
+
+export global PianoRollActions {
+    callback note-added(int, float, float, int);
+    callback note-moved(int, float);
+    callback note-resized(int, float);
+    callback note-deleted(int);
+    callback note-selected(int);
+    callback note-previewed(int);
+}

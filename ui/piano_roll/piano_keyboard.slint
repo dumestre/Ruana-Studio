@@ -1,216 +1,47 @@
 import { Theme } from "../theme.slint";
 import { PianoOctave } from "piano_octave.slint";
+import { PianoRollData } from "piano_roll_state.slint";
 
 export component PianoKeyboard inherits Rectangle {
 
-    in property <int> first-octave: -1;
-    in property <int> last-octave: 9;
-
     in property <length> key-height: 20px;
+    in property <length> keyboard-width: 58px;
+    in property <length> black-key-width: 38px;
+    in property <length> scroll-y: 0px;
 
     callback note-pressed(int);
 
-    width: 58px;
+    width: root.keyboard-width;
 
     background: Theme.base;
 
-
-    // =====================================================
-    // OITAVA -1
-    // MIDI 0-11
-    // =====================================================
-
-    PianoOctave {
-        octave: -1;
-
-        key-height: root.key-height;
-
-        y: 0px;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 0
-    // =====================================================
-
-    PianoOctave {
-        octave: 0;
-
-        key-height: root.key-height;
-
-        y: 12 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 1
-    // =====================================================
-
-    PianoOctave {
-        octave: 1;
-
-        key-height: root.key-height;
-
-        y: 24 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 2
-    // =====================================================
-
-    PianoOctave {
-        octave: 2;
-
-        key-height: root.key-height;
-
-        y: 36 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 3
-    // =====================================================
-
-    PianoOctave {
-        octave: 3;
-
-        key-height: root.key-height;
-
-        y: 48 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 4
-    // =====================================================
-
-    PianoOctave {
-        octave: 4;
-
-        key-height: root.key-height;
-
-        y: 60 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 5
-    // =====================================================
-
-    PianoOctave {
-        octave: 5;
-
-        key-height: root.key-height;
-
-        y: 72 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 6
-    // =====================================================
-
-    PianoOctave {
-        octave: 6;
-
-        key-height: root.key-height;
-
-        y: 84 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 7
-    // =====================================================
-
-    PianoOctave {
-        octave: 7;
-
-        key-height: root.key-height;
-
-        y: 96 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 8
-    // =====================================================
-
-    PianoOctave {
-        octave: 8;
-
-        key-height: root.key-height;
-
-        y: 108 * root.key-height;
-
-        note-pressed(note) => {
-            root.note-pressed(note);
-        }
-    }
-
-
-    // =====================================================
-    // OITAVA 9
-    //
-    // MIDI só vai até G9 (127).
-    // O restante será cortado.
-    // =====================================================
-
-    PianoOctave {
-        octave: 9;
-
-        key-height: root.key-height;
-
-        y: 120 * root.key-height;
-
-        note-pressed(note) => {
-            if (note <= 127) {
+    Rectangle {
+        width: root.keyboard-width;
+        height: parent.height;
+
+        clip: true;
+
+        // As oitavas vêm do Rust em ordem decrescente (mais aguda
+        // primeiro). O topo de cada bloco é o B (semitone 11):
+        // y = (last-note - octave*12 - 11) * key-height.
+        for oct in PianoRollData.octave-range: PianoOctave {
+            octave: oct;
+
+            key-height: root.key-height;
+            keyboard-width: root.keyboard-width;
+            black-key-width: root.black-key-width;
+            last-note: PianoRollData.last-note;
+
+            y:
+                (PianoRollData.last-note - oct * 12 - 11)
+                * root.key-height
+                - root.scroll-y;
+
+            note-pressed(note) => {
                 root.note-pressed(note);
             }
         }
     }
-
-
-    // =====================================================
-    // DIVISÓRIA
-    // =====================================================
 
     Rectangle {
         x: parent.width - 1px;
