@@ -25,11 +25,12 @@ export component PianoNoteView inherits Rectangle {
         PianoRollData.selected-note == root.note-id;
 
     // Posição no mundo (o viewport aplica o scroll via translate do wrapper).
+    // Altura igual à tecla/grade (key-height) para alinhamento exato sem margens.
     x: root.start * root.px-per-beat;
     y: (PianoRollData.last-note - root.note) * root.key-height;
 
     width: Math.max(root.length * root.px-per-beat, 6px);
-    height: root.key-height - 2px;
+    height: root.key-height;
 
     background: Theme.clip-midi.brighter(self.selected ? 0.25 : 0.05);
     opacity: 0.65 + root.velocity-to-opacity();

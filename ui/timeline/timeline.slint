@@ -1027,21 +1027,8 @@ export component Timeline inherits Rectangle {
     // CURSORES
     // =====================================================
 
-    private property <image> cursor-icon-stretch:
-        @image-url("../icons/stretch.svg");
-
-    private property <image> cursor-icon-draw:
-        @image-url("../icons/draw_filled.svg");
-
-    private property <image> cursor-icon-erase:
-        @image-url("../icons/erase_filled.svg");
-
-    private property <image> cursor-icon-glue:
-        @image-url("../icons/glue_filled.svg");
-
-
     // =====================================================
-    // CURSOR DAS FERRAMENTAS
+    // CURSOR DAS FERRAMENTAS (nativos — sem latência de render)
     // =====================================================
 
     tool-cursor := TouchArea {
@@ -1062,7 +1049,15 @@ export component Timeline inherits Rectangle {
             || root.active-tool == 5;
 
         mouse-cursor:
-            none;
+            root.active-tool == 2
+                ? MouseCursor.crosshair
+                : root.active-tool == 3
+                    ? MouseCursor.ew-resize
+                    : root.active-tool == 4
+                        ? MouseCursor.crosshair
+                        : root.active-tool == 5
+                            ? MouseCursor.crosshair
+                            : MouseCursor.default;
 
         z: 200;
 
@@ -1074,31 +1069,6 @@ export component Timeline inherits Rectangle {
                     root.clip-glue-requested(id);
                 }
             }
-        }
-
-        Image {
-
-            visible:
-                tool-cursor.enabled
-                && tool-cursor.has-hover;
-
-            source:
-                root.active-tool == 2
-                    ? root.cursor-icon-glue
-                    : root.active-tool == 3
-                        ? root.cursor-icon-stretch
-                        : root.active-tool == 4
-                            ? root.cursor-icon-draw
-                            : root.cursor-icon-erase;
-
-            x:
-                tool-cursor.mouse-x - 8px;
-
-            y:
-                tool-cursor.mouse-y - 8px;
-
-            width: 16px;
-            height: 16px;
         }
     }
 }
