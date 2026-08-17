@@ -27,6 +27,9 @@ fn copy_cursors_to_target() -> Result<(), Box<dyn std::error::Error>> {
     
     for entry in std::fs::read_dir(&src_dir)? {
         let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            continue;
+        }
         let src = entry.path();
         let dst = dst_dir.join(entry.file_name());
         std::fs::copy(&src, &dst)?;
@@ -37,22 +40,22 @@ fn copy_cursors_to_target() -> Result<(), Box<dyn std::error::Error>> {
 
 fn build_cursors() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let icons_dir = manifest_dir.join("../ui/icons");
+    let svg_dir = manifest_dir.join("cursors/svgcursors");
     let out_dir = manifest_dir.join("cursors");
 
     std::fs::create_dir_all(&out_dir)?;
 
     let cursors = [
-        ("select.svg", "select.cur", (7, 7)),
-        ("slice.svg", "slice.cur", (12, 12)),
-        ("glue.svg", "glue.cur", (12, 12)),
-        ("stretch.svg", "stretch.cur", (12, 12)),
-        ("draw.svg", "draw.cur", (12, 12)),
-        ("erase.svg", "erase.cur", (12, 12)),
+        ("selectcursor.svg", "select.cur", (4, 4)),
+        ("drawcursor.svg", "draw.cur", (16, 16)),
+        ("erasecursor.svg", "erase.cur", (16, 16)),
+        ("gluecursor.svg", "glue.cur", (16, 16)),
+        ("slicecursor.svg", "slice.cur", (16, 16)),
+        ("stretchcursor.svg", "stretch.cur", (16, 16)),
     ];
 
     for (svg_name, cur_name, hotspot) in cursors {
-        let svg_path = icons_dir.join(svg_name);
+        let svg_path = svg_dir.join(svg_name);
         let cur_path = out_dir.join(cur_name);
 
         if !svg_path.exists() {
@@ -60,12 +63,14 @@ fn build_cursors() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        let png_bytes = render_svg_to_png(&svg_path, 24, 24)?;
+        let png_bytes = render_svg_to_png(&svg_path, 32, 32, 0.75)?;
         write_cur_file(&cur_path, &png_bytes, hotspot)?;
 
         println!("cargo:rerun-if-changed={}", svg_path.display());
         println!("Generated: {}", cur_path.display());
     }
+
+    println!("cargo:rerun-if-changed={}", svg_dir.display());
 
     Ok(())
 }
@@ -74,6 +79,7 @@ fn render_svg_to_png(
     svg_path: &std::path::Path,
     width: u32,
     height: u32,
+    scale: f32,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     use resvg::render;
     use resvg::tiny_skia::{Pixmap, Transform};
@@ -83,8 +89,12 @@ fn render_svg_to_png(
     let opt = Options::default();
     let tree = Tree::from_data(&svg_data, &opt)?;
 
+    let offset_x = (width as f32 * (1.0 - scale)) / 2.0;
+    let offset_y = (height as f32 * (1.0 - scale)) / 2.0;
+    let transform = Transform::from_translate(offset_x, offset_y).pre_scale(scale, scale);
+
     let mut pixmap = Pixmap::new(width, height).ok_or("Failed to create pixmap")?;
-    render(&tree, Transform::default(), &mut pixmap.as_mut());
+    render(&tree, transform, &mut pixmap.as_mut());
 
     let png_bytes = pixmap.encode_png()?;
     Ok(png_bytes)

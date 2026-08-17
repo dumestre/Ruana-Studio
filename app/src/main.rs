@@ -1065,6 +1065,10 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    ui.on_tool_changed(move |tool| {
+        let _ = set_cursor_for_tool(tool);
+    });
+
     ui.on_window_close(move || {
         std::process::exit(0);
     });
