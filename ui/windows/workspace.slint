@@ -89,6 +89,7 @@ export component Workspace inherits Rectangle {
     in-out property <int> selected-tab: -1;
 
     callback float-toggle(int);
+    callback tool-changed(int);
 
     VerticalLayout {
         alignment: LayoutAlignment.stretch;
@@ -122,6 +123,7 @@ export component Workspace inherits Rectangle {
             beat-open <=> root.beat-open;
             explorer-visible <=> root.explorer-visible;
             panel-visible <=> root.bottom-panel-visible;
+            tool-changed(tool) => { root.tool-changed(tool); }
         }
 
         // MAIN WORKSPACE AREA

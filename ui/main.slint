@@ -193,6 +193,8 @@ export component MainWindow inherits Window {
 
     callback float-toggle(int);
 
+    callback tool-changed(int);
+
 
     // =====================================================
     // DRAG & DROP (clip do ClipPool → timeline)
@@ -455,6 +457,7 @@ export component MainWindow inherits Window {
         explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
         explorer-go-up() => { root.explorer-go-up(); }
         float-toggle(tab) => { root.float-toggle(tab); }
+        tool-changed(tool) => { root.tool-changed(tool); }
         drag-begin(name, position, duration, color, is-midi) => { root.drag-begin(name, position, duration, color, is-midi); }
         drag-move(x, y) => { root.drag-move(x, y); }
         drag-end() => { root.drag-end(); }

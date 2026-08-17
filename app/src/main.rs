@@ -1,10 +1,13 @@
 slint::include_modules!();
 
+mod cursors;
+
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, reset_cursor_to_default};
 use daw_core::clip::{Clip, ClipKind};
 use daw_core::mixer::MixerParam;
 use daw_core::project::{ChangeKind, DocumentEvent, Project};
@@ -12,6 +15,7 @@ use daw_core::track::TrackKind;
 use daw_core::transport::Transport;
 use daw_media::{filesystem::default_samples_dir, filesystem::list_directory};
 use slint::Model;
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 fn next_random(seed: &mut u64) -> f32 {
     *seed = seed
@@ -457,6 +461,31 @@ fn bind_document_events(
 
 fn main() -> Result<(), slint::PlatformError> {
     let ui = MainWindow::new()?;
+
+    init_cursor_manager().expect("Failed to initialize cursor manager");
+
+    let window = ui.window();
+    window.on_close_requested(move || {
+        let _ = reset_cursor_to_default();
+        slint::CloseRequestResponse::HideWindow
+    });
+
+// Set up cursor window handle after window is created
+    let ui_weak = ui.as_weak();
+    slint::Timer::single_shot(std::time::Duration::from_millis(100), move || {
+        #[cfg(windows)]
+        {
+            if let Some(ui) = ui_weak.upgrade() {
+                let window = ui.window();
+                let handle = window.window_handle();
+                if let Ok(raw_handle) = handle.window_handle() {
+                    if let RawWindowHandle::Win32(h) = raw_handle.as_raw() {
+                        set_cursor_window_handle(h.hwnd.get() as *mut std::ffi::c_void);
+                    }
+                }
+            }
+        }
+    });
 
     // Estado autoritativo da DAW: vive no core, nunca na UI.
     let project = Rc::new(RefCell::new(Project::demo()));
