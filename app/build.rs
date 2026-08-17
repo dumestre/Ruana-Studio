@@ -46,7 +46,7 @@ fn build_cursors() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&out_dir)?;
 
     let cursors = [
-        ("selectcursor.svg", "select.cur", (4, 4)),
+        ("selectcursor.svg", "select.cur", (7, 8)),
         ("drawcursor.svg", "draw.cur", (16, 16)),
         ("erasecursor.svg", "erase.cur", (16, 16)),
         ("gluecursor.svg", "glue.cur", (16, 16)),
@@ -63,7 +63,7 @@ fn build_cursors() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        let png_bytes = render_svg_to_png(&svg_path, 32, 32, 0.75)?;
+        let png_bytes = render_svg_to_png(&svg_path, 32, 32, 0.55)?;
         write_cur_file(&cur_path, &png_bytes, hotspot)?;
 
         println!("cargo:rerun-if-changed={}", svg_path.display());

@@ -50,7 +50,7 @@ impl ToolCursor {
 
     pub fn hotspot(&self) -> (i32, i32) {
         match self {
-            ToolCursor::Select => (4, 4),
+            ToolCursor::Select => (7, 8),
             ToolCursor::Slice => (16, 16),
             ToolCursor::Glue => (16, 16),
             ToolCursor::Stretch => (16, 16),
