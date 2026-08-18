@@ -21,6 +21,8 @@ pub struct Clip {
     pub start_beat: u32,
     /// Duração em beats.
     pub length_beats: u32,
+    /// Índice de cor (paleta na UI). 0 = padrão MIDI/Audio.
+    pub color: u8,
 }
 
 impl Clip {
@@ -40,6 +42,7 @@ impl Clip {
             kind,
             start_beat,
             length_beats,
+            color: 0,
         }
     }
 

@@ -56,6 +56,21 @@ pub enum DocumentEvent {
         /// Clip da direita que foi fundido e removido.
         right: Clip,
     },
+    /// Redimensionamento (alargar/encurtar) de clip via handles das bordas.
+    ClipResized {
+        old: Clip,
+        new: Clip,
+    },
+    /// Mudança de nome do clip (double-click renomear).
+    ClipRenamed {
+        old: Clip,
+        new: Clip,
+    },
+    /// Mudança de cor (paleta) do clip.
+    ClipColorChanged {
+        old: Clip,
+        new: Clip,
+    },
 }
 
 /// Um projeto da DAW.
@@ -223,6 +238,21 @@ impl Project {
                 }
                 self.clips.retain(|c| c.id != right.id);
             }
+            DocumentEvent::ClipResized { new, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == new.id) {
+                    *existing = new.clone();
+                }
+            }
+            DocumentEvent::ClipRenamed { new, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == new.id) {
+                    *existing = new.clone();
+                }
+            }
+            DocumentEvent::ClipColorChanged { new, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == new.id) {
+                    *existing = new.clone();
+                }
+            }
         }
         self.emit(event, ChangeKind::Apply);
     }
@@ -261,6 +291,21 @@ impl Project {
                     *existing = left_before.clone();
                 }
                 self.clips.push(right.clone());
+            }
+            DocumentEvent::ClipResized { old, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
+                    *existing = old.clone();
+                }
+            }
+            DocumentEvent::ClipRenamed { old, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
+                    *existing = old.clone();
+                }
+            }
+            DocumentEvent::ClipColorChanged { old, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
+                    *existing = old.clone();
+                }
             }
         }
         self.emit(event, ChangeKind::Undo);
@@ -467,6 +512,58 @@ impl Project {
         let clip = self.clips.remove(index);
 
         let event = DocumentEvent::ClipDeleted(clip);
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// Redimensiona (alarga/encurta) um clip.
+    ///
+    /// Muda o `start_beat` e/ou `length_beats`. Impede valores inválidos
+    /// (comprimento 0 ou start negativo). Retorna `false` se clip não existe.
+    pub fn resize_clip(&mut self, clip_id: u64, new_start: u32, new_length: u32) -> bool {
+        if new_length == 0 {
+            return false;
+        }
+        let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
+            return false;
+        };
+        let old = self.clips[index].clone();
+        self.clips[index].start_beat = new_start;
+        self.clips[index].length_beats = new_length;
+        let new = self.clips[index].clone();
+
+        let event = DocumentEvent::ClipResized { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// Renomeia um clip. Retorna `false` se não existe.
+    pub fn rename_clip(&mut self, clip_id: u64, new_name: impl Into<String>) -> bool {
+        let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
+            return false;
+        };
+        let old = self.clips[index].clone();
+        self.clips[index].name = new_name.into();
+        let new = self.clips[index].clone();
+
+        let event = DocumentEvent::ClipRenamed { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// Atualiza o índice de cor (paleta) de um clip. Retorna `false` se não existe.
+    pub fn set_clip_color(&mut self, clip_id: u64, color: u8) -> bool {
+        let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
+            return false;
+        };
+        let old = self.clips[index].clone();
+        self.clips[index].color = color;
+        let new = self.clips[index].clone();
+
+        let event = DocumentEvent::ClipColorChanged { old, new };
         self.emit(&event, ChangeKind::Apply);
         self.history.record(event);
         true

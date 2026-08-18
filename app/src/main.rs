@@ -37,6 +37,7 @@ fn to_clip_data(clip: &Clip) -> ClipData {
         beat: clip.start_beat as f32,
         len: clip.length_beats as f32,
         is_midi: clip.is_midi(),
+        color: clip.color as i32,
     }
 }
 
@@ -581,6 +582,24 @@ fn apply_change(
                 }
             }
         }
+        DocumentEvent::ClipResized { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data));
+            }
+        }
+        DocumentEvent::ClipRenamed { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data));
+            }
+        }
+        DocumentEvent::ClipColorChanged { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data));
+            }
+        }
     }
 }
 
@@ -1019,6 +1038,93 @@ fn main() -> Result<(), slint::PlatformError> {
                     proj.move_clip(id as u64, track_id, new_beat);
                 }
             }
+        });
+    }
+
+    // Resize de clip (handles das bordas) → core.
+    {
+        // resize-started: apenas memoriza o estado inicial (já feito no Slint),
+        // mas o Rust precisa de um handler registrado.
+        let project = project.clone();
+        let clips_model_rs = clips_model.clone();
+        ui.on_clip_resize_started(move |_id, _side| {
+            // state is tracked in Slint; nothing to do here yet
+            let _ = &project;
+            let _ = &clips_model_rs;
+        });
+    }
+    {
+        // resize-delta: feedback visual imediato (atualiza beat + len no modelo).
+        let clips_model = clips_model.clone();
+        let project_snap = project.clone();
+        ui.on_clip_resize_delta(move |id, side, delta| {
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(mut clip) = clips_model.row_data(i) {
+                    let core_clip = project_snap
+                        .borrow()
+                        .clips
+                        .iter()
+                        .find(|c| c.id as i32 == id)
+                        .cloned();
+                    if let Some(core) = core_clip {
+                        if side < 0 {
+                            // borda esquerda: move start e reduz comprimento
+                            let new_beat = (core.start_beat as f32 + delta).max(0.0);
+                            let new_len = (core.length_beats as f32 - delta).max(0.5);
+                            clip.beat = new_beat;
+                            clip.len = new_len;
+                        } else {
+                            // borda direita: estende/encolhe comprimento
+                            let new_len = (core.length_beats as f32 + delta).max(0.5);
+                            clip.len = new_len;
+                        }
+                        clips_model.set_row_data(i, clip);
+                    }
+                }
+            }
+        });
+    }
+    {
+        // resize-finished: persiste no core com valores do modelo.
+        let project = project.clone();
+        let clips_model = clips_model.clone();
+        ui.on_clip_resize_finished(move |id| {
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(clip) = clips_model.row_data(i) {
+                    let new_start = clip.beat.round().max(0.0) as u32;
+                    let new_len = clip.len.round().max(1.0) as u32;
+                    project.borrow_mut().resize_clip(id as u64, new_start, new_len);
+                }
+            }
+        });
+    }
+
+    // Delete de clip → core.
+    {
+        let project = project.clone();
+        ui.on_clip_delete_requested(move |id| {
+            project.borrow_mut().delete_clip(id as u64);
+        });
+    }
+
+    // Rename de clip (double-click + edição inline) → core.
+    {
+        let project = project.clone();
+        ui.on_clip_rename_requested(move |id, new_name| {
+            project.borrow_mut().rename_clip(id as u64, new_name.as_str());
+        });
+    }
+
+    // Ciclo de cor do clip (swatch click) → core (incrementa paleta mod 8).
+    {
+        let project = project.clone();
+        ui.on_clip_color_cycle_requested(move |id| {
+            let new_color = {
+                let proj = project.borrow();
+                let current = proj.clips.iter().find(|c| c.id as i32 == id).map(|c| c.color).unwrap_or(0);
+                (current + 1) % 8
+            };
+            project.borrow_mut().set_clip_color(id as u64, new_color);
         });
     }
 

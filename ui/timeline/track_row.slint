@@ -64,6 +64,14 @@ export component TrackRow inherits Rectangle {
     callback clip-move-delta(int, float);
     callback clip-move-finished(int);
 
+    callback clip-resize-started(int, int);
+    callback clip-resize-delta(int, int, float);
+    callback clip-resize-finished(int);
+
+    callback clip-delete-requested(int);
+    callback clip-rename-requested(int, string);
+    callback clip-color-cycle-requested(int);
+
 
     // =====================================================
     // DIMENSÃO
@@ -177,13 +185,11 @@ export component TrackRow inherits Rectangle {
         // TIPO / COR
         // =================================================
 
-        clip-color:
-            clip.is-midi
-                ? Theme.clip-midi
-                : Theme.clip-audio;
-
         is-midi:
             clip.is-midi;
+
+        color-index:
+            clip.color;
 
 
         // =================================================
@@ -250,6 +256,30 @@ export component TrackRow inherits Rectangle {
 
         clip-move-finished(id) => {
             root.clip-move-finished(id);
+        }
+
+        clip-resize-started(id, side) => {
+            root.clip-resize-started(id, side);
+        }
+
+        clip-resize-delta(id, side, delta) => {
+            root.clip-resize-delta(id, side, delta);
+        }
+
+        clip-resize-finished(id) => {
+            root.clip-resize-finished(id);
+        }
+
+        clip-delete-requested(id) => {
+            root.clip-delete-requested(id);
+        }
+
+        clip-rename-requested(id, new_name) => {
+            root.clip-rename-requested(id, new_name);
+        }
+
+        clip-color-cycle-requested(id) => {
+            root.clip-color-cycle-requested(id);
         }
     }
 }

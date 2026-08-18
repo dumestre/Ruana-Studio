@@ -10,13 +10,13 @@ export component TrackClip inherits Rectangle {
 
     in property <int> clip-id: 0;
 
-    in property <int> beat: 0;
+    in property <float> beat: 0.0;
 
-    in property <int> len: 4;
+    in property <float> len: 4.0;
 
     in property <bool> is-midi: true;
 
-    in property <color> clip-color: Theme.clip-midi;
+    in property <int> color-index: 0;
 
     in property <length> px-per-beat: 40px;
 
@@ -30,29 +30,65 @@ export component TrackClip inherits Rectangle {
 
 
     // =====================================================
-    // CALLBACKS
+    // PALETA DE CORES (8 opções, index 0 = padrão by-kind)
+    // =====================================================
+
+    private property <[color]> palette: [
+        #6FA86B, // 0: padrão MIDI (verde original)
+        #4F8AE0, // 1: azul
+        #E0A94F, // 2: âmbar
+        #E05E5E, // 3: vermelho
+        #A060D8, // 4: roxo
+        #E05EAA, // 5: rosa
+        #3EC7B0, // 6: turquesa
+        #C0C050, // 7: limão
+    ];
+
+    private property <color> audio-default: #00C853;
+
+    private property <color> base-color:
+        root.color-index == 0
+            ? (root.is-midi ? Theme.clip-midi : root.audio-default)
+            : root.palette[Math.mod(root.color-index, root.palette.length)];
+
+    in property <color> clip-color: root.base-color;
+
+
+    // =====================================================
+    // CALLBACKS (PÚBLICOS)
     // =====================================================
 
     callback clicked(int);
 
     callback slice-requested(int, float);
 
+    callback clip-move-started(int, float);       // id, start-beat
+    callback clip-move-delta(int, float);          // id, delta-beats (acumulado desde start)
+    callback clip-move-finished(int);              // id
+
+    callback clip-resize-started(int, int);        // id, side (-1 left, 1 right)
+    callback clip-resize-delta(int, int, float);   // id, side, delta-beats acumulado
+    callback clip-resize-finished(int);            // id
+
+    callback clip-delete-requested(int);           // id
+    callback clip-rename-requested(int, string);   // id, new-name
+    callback clip-color-cycle-requested(int);      // id → incrementa paleta
+
 
     // =====================================================
     // DIMENSÕES
     // =====================================================
 
-    private property <length> edge-width: 6px;
+    private property <length> edge-width: 7px;
 
     private property <length> header-height: 18px;
 
 
     // =====================================================
-    // ESTADO DO MOUSE
+    // ESTADO DO MOUSE (hover + edges)
     // =====================================================
 
-    private property <bool> hovered:
-        touch.has-hover;
+    private property <bool> hovered: touch.has-hover;
 
     private property <bool> on-left-edge:
         touch.has-hover
@@ -73,16 +109,14 @@ export component TrackClip inherits Rectangle {
 
     property <length> slice-preview-x: -100px;
 
-    private property <bool> slice-hover:
-        touch.has-hover;
+    private property <bool> slice-hover: touch.has-hover;
 
 
     // =====================================================
-    // POSIÇÃO
+    // POSIÇÃO (usa FLOAT agora — NÃO trunca durante drag)
     // =====================================================
 
-    x:
-        root.beat * root.px-per-beat;
+    x: root.beat * root.px-per-beat;
 
     y: 2px;
 
@@ -91,19 +125,25 @@ export component TrackClip inherits Rectangle {
     // TAMANHO
     // =====================================================
 
-    width:
-        root.len * root.px-per-beat;
+    width: root.len * root.px-per-beat;
 
-    height:
-        root.row-height - 4px;
+    height: root.row-height - 4px;
+
+
+    // =====================================================
+    // RENAME MODE
+    // =====================================================
+
+    private property <bool> renaming: false;
+
+    private property <string> rename-buffer: "";
 
 
     // =====================================================
     // COR BASE
     // =====================================================
 
-    background:
-        root.clip-color;
+    background: root.clip-color;
 
 
     // =====================================================
@@ -133,8 +173,7 @@ export component TrackClip inherits Rectangle {
         x: 1px;
         y: root.header-height;
 
-        width:
-            parent.width - 2px;
+        width: parent.width - 2px;
 
         height:
             parent.height
@@ -165,11 +204,9 @@ export component TrackClip inherits Rectangle {
         x: 1px;
         y: 1px;
 
-        width:
-            parent.width - 2px;
+        width: parent.width - 2px;
 
-        height:
-            root.header-height;
+        height: root.header-height;
 
         background:
             root.clip-color.brighter(
@@ -205,18 +242,85 @@ export component TrackClip inherits Rectangle {
 
 
         // =================================================
-        // NOME
+        // BOTÃO DELETAR (×) — aparece quando clip selecionado
         // =================================================
 
-        Text {
-            x: 6px;
+        if root.selected: Rectangle {
+            x: parent.width - 22px;
+            y: 2px;
+            width: 14px;
+            height: 14px;
+            background: #101010aa;
+            border-radius: 7px;
+            z: 6;
+
+            Text {
+                x: 0; y: 0;
+                width: parent.width;
+                height: parent.height;
+                text: "×";
+                color: white;
+                font-size: 14px;
+                font-weight: 800;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+            }
+
+            TouchArea {
+                x: 0; y: 0;
+                width: parent.width;
+                height: parent.height;
+                mouse-cursor: pointer;
+
+                clicked => {
+                    root.clip-delete-requested(root.clip-id);
+                }
+            }
+        }
+
+
+        // =================================================
+        // SWATCH DE COR (canto superior esquerdo do header)
+        // =================================================
+
+        if root.selected: Rectangle {
+            x: 4px;
+            y: 3px;
+            width: 12px;
+            height: 12px;
+
+            background: root.clip-color;
+            border-radius: 3px;
+            border-width: 1px;
+            border-color: #ffffff99;
+            z: 6;
+
+            TouchArea {
+                x: 0; y: 0;
+                width: parent.width;
+                height: parent.height;
+                mouse-cursor: pointer;
+
+                clicked => {
+                    root.clip-color-cycle-requested(root.clip-id);
+                }
+            }
+        }
+
+
+        // =================================================
+        // NOME (ou TextInput no modo rename)
+        // =================================================
+
+        if !root.renaming: Text {
+            x: root.selected ? 20px : 6px;
             y: 2px;
 
             width:
-                parent.width - 12px;
+                parent.width
+                - (root.selected ? 46px : 12px);
 
-            height:
-                parent.height - 2px;
+            height: parent.height - 2px;
 
             text: root.name;
 
@@ -229,6 +333,62 @@ export component TrackClip inherits Rectangle {
 
             overflow: elide;
         }
+
+        if root.renaming: Rectangle {
+            x: root.selected ? 20px : 6px;
+            y: 2px;
+
+            width:
+                parent.width
+                - (root.selected ? 46px : 12px);
+
+            height: parent.height - 2px;
+
+            background: #ffffff;
+            border-radius: 2px;
+
+            TextInput {
+                x: 2px;
+                y: 0;
+                width: parent.width - 4px;
+                height: parent.height;
+
+                text <=> root.rename-buffer;
+
+                color: #101010;
+
+                font-size: 9px;
+                font-weight: 700;
+
+                vertical-alignment: center;
+                horizontal-alignment: TextHorizontalAlignment.left;
+
+                edited => {
+                    if root.rename-buffer != "" {
+                        root.clip-rename-requested(root.clip-id, root.rename-buffer);
+                    }
+                    root.renaming = false;
+                }
+            }
+        }
+
+
+        // =================================================
+        // DOUBLE-CLICK NO HEADER → ENTRA NO MODO RENAME
+        // =================================================
+
+        TouchArea {
+            x: 0; y: 0;
+            width: parent.width;
+            height: parent.height;
+
+            mouse-cursor: root.renaming ? text : pointer;
+
+            double-clicked => {
+                root.rename-buffer = root.name;
+                root.renaming = true;
+            }
+        }
     }
 
 
@@ -238,16 +398,11 @@ export component TrackClip inherits Rectangle {
 
     Rectangle {
         x: 1px;
-
         y: root.header-height;
-
-        width:
-            parent.width - 2px;
-
+        width: parent.width - 2px;
         height: 1px;
 
-        background:
-            root.clip-color.brighter(0.30);
+        background: root.clip-color.brighter(0.30);
 
         opacity:
             root.hovered
@@ -257,22 +412,16 @@ export component TrackClip inherits Rectangle {
 
 
     // =====================================================
-    // INDICADOR DE TIPO
+    // INDICADOR DE TIPO (águlha direita)
     // =====================================================
 
     Rectangle {
-        x:
-            parent.width - 8px;
-
+        x: parent.width - 8px;
         y: 5px;
-
         width: 3px;
         height: 8px;
-
         border-radius: 1px;
-
         background: Theme.text-primary;
-
         opacity: 0.45;
     }
 
@@ -286,19 +435,12 @@ export component TrackClip inherits Rectangle {
 
         x: 2px;
         y: 3px;
-
         width: 2px;
+        height: parent.height - 6px;
 
-        height:
-            parent.height - 6px;
-
-        background:
-            Theme.text-primary;
-
+        background: Theme.text-primary;
         opacity: 0.85;
-
         border-radius: 1px;
-
         z: 5;
     }
 
@@ -310,23 +452,14 @@ export component TrackClip inherits Rectangle {
     if root.active-tool == 0
         && root.on-right-edge: Rectangle {
 
-        x:
-            parent.width - 4px;
-
+        x: parent.width - 4px;
         y: 3px;
-
         width: 2px;
+        height: parent.height - 6px;
 
-        height:
-            parent.height - 6px;
-
-        background:
-            Theme.text-primary;
-
+        background: Theme.text-primary;
         opacity: 0.85;
-
         border-radius: 1px;
-
         z: 5;
     }
 
@@ -339,24 +472,16 @@ export component TrackClip inherits Rectangle {
 
         x: 2px;
         y: 2px;
-
-        width:
-            parent.width - 4px;
-
-        height:
-            parent.height - 4px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
 
         background: transparent;
 
         border-width: 1px;
-
-        border-color:
-            Theme.text-primary;
-
+        border-color: Theme.text-primary;
         border-radius: 2px;
 
         opacity: 0.55;
-
         z: 4;
     }
 
@@ -368,44 +493,28 @@ export component TrackClip inherits Rectangle {
     if root.active-tool == 1
         && root.slice-hover: Rectangle {
 
-        x:
-            root.slice-preview-x - 1px;
-
+        x: root.slice-preview-x - 1px;
         y: 0px;
-
         width: 2px;
-
         height: parent.height;
 
-        background:
-            Theme.playhead;
-
+        background: Theme.playhead;
         opacity: 0.95;
-
         z: 10;
-
 
         Rectangle {
             x: -2px;
             y: 0;
-
             width: 6px;
             height: 100%;
-
-            background:
-                Theme.playhead;
-
+            background: Theme.playhead;
             opacity: 0.12;
         }
     }
 
 
-    callback clip-move-started(int, float); // clip-id, start-beat
-    callback clip-move-delta(int, float); // clip-id, delta-beats
-    callback clip-move-finished(int); // clip-id
-
     // =====================================================
-    // TOUCH
+    // TOUCH AREA PRINCIPAL — tudo é tratado aqui
     // =====================================================
 
     touch := TouchArea {
@@ -428,7 +537,7 @@ export component TrackClip inherits Rectangle {
 
 
         // =================================================
-        // CLICK
+        // CLICK SIMPLES (seleciona o clip)
         // =================================================
 
         clicked => {
@@ -439,45 +548,76 @@ export component TrackClip inherits Rectangle {
 
 
         // =================================================
-        // POINTER
+        // POINTER EVENT — unifica slice, move, resize
         // =================================================
 
         pointer-event(event) => {
 
+            // ----- FERRAMENTA SLICE (1) -----
             if root.active-tool == 1 {
 
                 if event.kind == PointerEventKind.down {
-
                     root.slice-requested(
                         root.clip-id,
-                        root.slice-preview-x
-                            / root.px-per-beat
+                        root.slice-preview-x / root.px-per-beat
                     );
-
                 } else if event.kind == PointerEventKind.move {
-
-                    root.slice-preview-x =
-                        self.mouse-x;
+                    root.slice-preview-x = self.mouse-x;
                 }
             }
 
-            // =================================================
-            // DRAG PARA MOVER CLIP (tool 0, não nas bordas)
-            // =================================================
+            // ----- FERRAMENTA SELECT (0) RESIZE NA BORDA -----
+            if root.active-tool == 0 && root.on-edge {
 
-            if root.active-tool == 0 && !root.on-edge {
+                if event.kind == PointerEventKind.down {
+
+                    let side =
+                        root.on-left-edge
+                            ? -1
+                            : 1;
+
+                    self.resize-side = side;
+                    self.resize-start-x = self.mouse-x;
+                    self.resize-start-beat = root.beat;
+                    self.resize-start-len = root.len;
+                    self.resizing = true;
+
+                    root.clip-resize-started(root.clip-id, side);
+
+                } else if event.kind == PointerEventKind.move && self.resizing {
+
+                    let dx = self.mouse-x - self.resize-start-x;
+                    let delta_beats = dx / root.px-per-beat;
+
+                    root.clip-resize-delta(
+                        root.clip-id,
+                        self.resize-side,
+                        delta_beats
+                    );
+
+                } else if event.kind == PointerEventKind.up && self.resizing {
+
+                    self.resizing = false;
+                    root.clip-resize-finished(root.clip-id);
+                }
+            }
+
+            // ----- FERRAMENTA SELECT (0) MOVER (não edge) -----
+            if root.active-tool == 0 && !root.on-edge && !root.renaming {
 
                 if event.kind == PointerEventKind.down {
 
                     self.drag-start-x = self.mouse-x;
                     self.drag-start-beat = root.beat;
                     self.dragging = true;
+
                     root.clip-move-started(root.clip-id, root.beat);
 
                 } else if event.kind == PointerEventKind.move && self.dragging {
 
                     let dx = self.mouse-x - self.drag-start-x;
                     let delta_beats = dx / root.px-per-beat;
+
                     root.clip-move-delta(root.clip-id, delta_beats);
 
                 } else if event.kind == PointerEventKind.up && self.dragging {
@@ -488,9 +628,19 @@ export component TrackClip inherits Rectangle {
             }
         }
 
-        // Estado do drag
+
+        // ==================== ESTADOS PRIVADOS ====================
+
+        // Move
         private property <length> drag-start-x: 0px;
         private property <float> drag-start-beat: 0.0;
         private property <bool> dragging: false;
+
+        // Resize
+        private property <int> resize-side: 0;      // -1 left, 1 right
+        private property <length> resize-start-x: 0px;
+        private property <float> resize-start-beat: 0.0;
+        private property <float> resize-start-len: 0.0;
+        private property <bool> resizing: false;
     }
 }
