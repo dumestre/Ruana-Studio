@@ -21,6 +21,11 @@ export component PianoRollArea inherits Rectangle {
     property <length> scroll-x: 0px;
     property <length> scroll-y: 0px;
 
+    property <length> world-width:
+        root.px-per-beat * 4 * PianoRollData.bar-range.length;
+    property <length> world-height:
+        root.note-height * (PianoRollData.last-note - PianoRollData.first-note + 1);
+
     background: Theme.base;
 
     VerticalLayout {
@@ -47,20 +52,37 @@ export component PianoRollArea inherits Rectangle {
                 width: config.keyboard-width;
                 spacing: 0;
 
-                // Espaço acima das teclas.
+                // Espaço acima das teclas (alinhado com a régua)
                 Rectangle {
                     width: config.keyboard-width;
                     height: config.ruler-height;
 
                     background: Theme.surface;
 
+                    // Borda inferior — alinhada com a borda inferior da régua
                     Rectangle {
+                        x: 0;
                         y: parent.height - 1px;
 
                         width: parent.width;
                         height: 1px;
 
                         background: Theme.border;
+
+                        z: 10;
+                    }
+
+                    // Borda direita — alinhada com a borda vertical da régua e do grid
+                    Rectangle {
+                        x: parent.width - 1px;
+                        y: 0;
+
+                        width: 1px;
+                        height: parent.height;
+
+                        background: Theme.border;
+
+                        z: 10;
                     }
                 }
 
@@ -115,6 +137,19 @@ export component PianoRollArea inherits Rectangle {
                     vertical-stretch: 1;
 
                     background: Theme.base;
+
+                    // Borda superior (entre régua e viewport)
+                    Rectangle {
+                        x: 0;
+                        y: 0;
+
+                        width: parent.width;
+                        height: 1px;
+
+                        background: Theme.border;
+
+                        z: 50;
+                    }
 
                     // =================================================
                     // INTERAÇÃO
@@ -200,12 +235,15 @@ export component PianoRollArea inherits Rectangle {
                     }
 
                     // =================================================
-                    // MUNDO
+                    // MUNDO (grid + notas) com dimensões explícitas
                     // =================================================
 
                     Rectangle {
                         x: -root.scroll-x;
                         y: -root.scroll-y;
+
+                        width: root.world-width;
+                        height: root.world-height;
 
                         PianoGrid {
                             beat-width: root.px-per-beat;

@@ -13,11 +13,11 @@ export component PianoKey inherits Rectangle {
 
     background:
         root.black
-            ? Theme.surface-high.brighter(
+            ? Theme.base.darker(
                 root.down ? 0.28 : root.hovered ? 0.12 : 0.0
             )
-            : Theme.text-primary.darker(
-                root.down ? 0.40 : root.hovered ? 0.16 : 0.0
+            : Theme.text-primary.brighter(
+                root.down ? 0.15 : root.hovered ? 0.06 : 0.0
             );
 
     touch := TouchArea {

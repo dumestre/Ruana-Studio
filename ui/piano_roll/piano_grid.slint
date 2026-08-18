@@ -7,17 +7,8 @@ export component PianoGrid inherits Rectangle {
     // MÉTRICAS
     // ============================================================
 
-    // Largura de um beat.
     in property <length> beat-width: 80px;
 
-    // ALTURA ÚNICA DE CADA NOTA.
-    //
-    // Deve ser exatamente a mesma propriedade usada por:
-    //
-    // PianoKeyboard
-    // PianoOctave
-    // PianoNoteView
-    //
     in property <length> key-height: 20px;
 
     // ============================================================
@@ -36,22 +27,12 @@ export component PianoGrid inherits Rectangle {
     width: root.content-width;
     height: root.content-height;
 
-    horizontal-stretch: 1;
-
     background: Theme.base;
 
     // ============================================================
-    // LINHAS HORIZONTAIS
+    // LINHAS HORIZONTAIS — UMA POR NOTA (topo da célula)
     // ============================================================
 
-    // Cada linha corresponde exatamente a uma nota MIDI.
-    //
-    // A posição é baseada na mesma orientação usada pelo
-    // PianoNoteView:
-    //
-    // top    = last-note
-    // bottom = notas mais graves
-    //
     for note in PianoRollData.note-lines: Rectangle {
 
         y:
@@ -61,13 +42,10 @@ export component PianoGrid inherits Rectangle {
             )
             * root.key-height;
 
-        width:
-            parent.width;
+        width: parent.width;
 
         height: 1px;
 
-        // C continua tendo uma referência visual mais forte,
-        // mas a linha continua com EXATAMENTE 1px.
         background:
             Math.mod(
                 PianoRollData.last-note - note,
@@ -80,26 +58,31 @@ export component PianoGrid inherits Rectangle {
     }
 
     // ============================================================
+    // LINHA HORIZONTAL FINAL (base da última nota = mais grave)
+    // ============================================================
+
+    Rectangle {
+        y: root.content-height - 1px;
+
+        width: parent.width;
+        height: 1px;
+
+        background: Theme.border;
+
+        z: 0;
+    }
+
+    // ============================================================
     // LINHAS VERTICAIS
     // ============================================================
 
-    // Uma linha por semicolcheia.
-    //
-    // beat-lines:
-    // 0  = início do compasso
-    // 4  = próximo tempo
-    // 8  = próximo tempo
-    // 12 = próximo tempo
-    // 16 = próximo compasso
     for beat in PianoRollData.beat-lines: Rectangle {
 
-        x:
-            beat * root.beat-width / 4;
+        x: beat * root.beat-width / 4;
 
         width: 1px;
 
-        height:
-            parent.height;
+        height: parent.height;
 
         background:
             Math.mod(beat, 16) == 0
@@ -107,6 +90,21 @@ export component PianoGrid inherits Rectangle {
                 : Math.mod(beat, 4) == 0
                     ? Theme.grid-line
                     : Theme.grid-sub;
+
+        z: 1;
+    }
+
+    // ============================================================
+    // LINHA VERTICAL FINAL (extrema direita do grid)
+    // ============================================================
+
+    Rectangle {
+        x: root.content-width - 1px;
+
+        width: 1px;
+        height: parent.height;
+
+        background: Theme.border;
 
         z: 1;
     }

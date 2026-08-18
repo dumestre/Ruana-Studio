@@ -470,7 +470,7 @@ export component Workspace inherits Rectangle {
 
         // Emit timeline bounds for Win32 cursor restriction
         Timer {
-            interval: 100ms;
+            interval: 50ms;
             running: true;
             triggered() => {
                 root.timeline-bounds-changed(

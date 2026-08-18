@@ -47,16 +47,4 @@ export component PianoKeyboard inherits Rectangle {
             }
         }
     }
-
-    // Divisória vertical entre teclado e Piano Roll
-    Rectangle {
-        x: parent.width - 1px;
-
-        width: 1px;
-        height: parent.height;
-
-        background: Theme.border;
-
-        z: 100;
-    }
 }
