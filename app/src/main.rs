@@ -3,7 +3,7 @@ slint::include_modules!();
 mod cursors;
 
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -461,27 +461,6 @@ fn initial_bind(
     (tracks_model, clips_model)
 }
 
-/// Carrega o diretório e atualiza o FileBrowser na UI.
-fn load_directory(ui: &MainWindow, path: &Path) {
-    match list_directory(path) {
-        Ok(entries) => {
-            let file_entries: Vec<slint::SharedString> = entries
-                .iter()
-                .map(|e| {
-                    let entry_type = if e.is_directory { "Folder" } else { "File" };
-                    format!("{}\t{}\t{}\t{}", e.name, entry_type, e.path.display(), e.is_directory)
-                })
-                .map(|s| s.into())
-                .collect();
-            // TODO: Atualizar o FileBrowser com entries
-            // Por enquanto logamos
-            println!("Loaded directory: {} ({} entries)", path.display(), entries.len());
-        }
-        Err(e) => {
-            eprintln!("Failed to load directory {}: {}", path.display(), e);
-        }
-    }
-}
 
 /// Índice da linha do modelo cujo clip tem o id informado.
 fn clip_row(model: &slint::VecModel<ClipData>, id: i32) -> Option<usize> {
@@ -765,7 +744,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
             // Fecha via botão da própria janela flutuante.
             {
-                let ui_weak = ui_weak.clone();
                 let panels = panels.clone();
                 let sync = sync_floated.clone();
                 p.on_close_panel(move || {
@@ -778,7 +756,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
             // Fecha via botão X do sistema.
             {
-                let ui_weak = ui_weak.clone();
                 let panels = panels.clone();
                 let sync = sync_floated.clone();
                 p.window().on_close_requested(move || {
@@ -999,15 +976,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Mover clip via drag (ferramenta select).
     {
-        let project = project.clone();
-        let clips_model = clips_model.clone();
-        ui.on_clip_move_started(move |id, _beat| {
-            // Armazena o beat original para referência visual
-            let mut proj = project.borrow_mut();
-            if let Some(clip) = proj.clip(id as u64) {
-                // Armazena o beat original no campo `beat` do modelo para referência
-                // O delta será aplicado visualmente no modelo
-            }
+        ui.on_clip_move_started(move |_id, _beat| {
+            // state is tracked in Slint and on_clip_move_delta; nothing to do here yet
         });
     }
 
