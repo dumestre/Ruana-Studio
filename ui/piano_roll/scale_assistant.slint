@@ -1,0 +1,248 @@
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+import { ComboBox, CheckBox } from "std-widgets.slint";
+
+export component ScaleAssistant inherits Rectangle {
+
+    callback close();
+    callback apply();
+
+    // ============================================================
+    // ESTADO E DADOS
+    // ============================================================
+
+    in-out property <string> root-note: "C";
+    in-out property <string> scale: "Maior (Jônio)";
+    
+    // Opções de visualização e comportamento de DAW
+    in-out property <bool> snap-to-scale: false;
+    in-out property <bool> highlight-notes: true;
+    in-out property <bool> fold-piano-roll: false;
+
+    // Opções de seleção avançadas
+    in property <[string]> root-notes: [
+        "C", "C# / Db", "D", "D# / Eb", "E", "F", 
+        "F# / Gb", "G", "G# / Ab", "A", "A# / Bb", "B"
+    ];
+    
+    in property <[string]> scales: [
+        "Maior (Jônio)", 
+        "Menor Natural (Eólio)", 
+        "Dórico", 
+        "Frígio", 
+        "Lídio", 
+        "Mixolídio", 
+        "Lócrio",
+        "Menor Harmônica", 
+        "Menor Melódica", 
+        "Pentatônica Maior", 
+        "Pentatônica Menor", 
+        "Escala de Blues",
+        "Tons Inteiros",
+        "Diminuta",
+        "Cromática"
+    ];
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
+
+    width: 400px;
+    height: 380px;
+
+    background: Theme.surface;
+
+    border-width: 1px;
+    border-color: Theme.border;
+
+    border-radius: 4px;
+
+    // ============================================================
+    // CABEÇALHO
+    // ============================================================
+
+    HorizontalLayout {
+        spacing: 8px;
+        cross-axis-alignment: CrossAxisAlignment.center; 
+    Rectangle {
+            width: 4px;
+            height: 24px;
+
+            background: Theme.accent;
+            border-radius: 2px;
+        }
+
+        Text {
+            
+
+            width: parent.width - 40px;
+            height: parent.height;
+
+            text: "Assistente de Escala MIDI";
+
+            color: Theme.text-primary;
+
+            font-size: 10px;
+            font-weight: 600;
+
+            vertical-alignment: center;
+        }
+
+        // Botão Fechar Customizado
+        Button {
+            width: 24px;
+            height: 24px;
+
+            border-radius: 12px;
+
+            icon: @image-url("../icons/close.svg");
+            icon-size: 14px;
+            icon-color: Theme.text-primary;
+
+            close-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.close();
+                }
+            }
+        }
+    
+}
+
+    // ============================================================
+    // CONTEÚDO
+    // ============================================================
+
+    VerticalLayout {
+        x: 12px;
+        y: 40px;
+
+        width: parent.width - 24px;
+
+        spacing: 16px;
+
+        // --- BLOCO 1: TÔNICA E ESCALA ---
+        VerticalLayout {
+            spacing: 12px;
+            
+            VerticalLayout {
+                spacing: 4px;
+
+                Text {
+                    text: "Tônica";
+                    color: Theme.text-dim;
+                    font-size: 9px;
+                    font-weight: 600;
+                }
+
+                ComboBox {
+                    height: 28px;
+                    width: parent.width;
+                    model: root.root-notes;
+                    current-value: root.root-note;
+                    selected(value) => {
+                        root.root-note = value;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                spacing: 4px;
+
+                Text {
+                    text: "Escala / Modo";
+                    color: Theme.text-dim;
+                    font-size: 9px;
+                    font-weight: 600;
+                }
+
+                ComboBox {
+                    height: 28px;
+                    width: parent.width;
+                    model: root.scales;
+                    current-value: root.scale;
+                    selected(value) => {
+                        root.scale = value;
+                    }
+                }
+            }
+        }
+
+        // --- BLOCO 2: OPÇÕES DE PIANO ROLL ---
+        VerticalLayout {
+            spacing: 8px;
+
+            Text {
+                text: "Comportamento da Grade";
+                color: Theme.text-dim;
+                font-size: 9px;
+                font-weight: 600;
+            }
+
+            CheckBox {
+                text: "Destacar notas na escala";
+                checked: root.highlight-notes;
+                toggled => {
+                    root.highlight-notes = self.checked;
+                }
+            }
+
+            CheckBox {
+                text: "Snap to Scale (Ajustar notas)";
+                checked: root.snap-to-scale;
+                toggled => {
+                    root.snap-to-scale = self.checked;
+                }
+            }
+
+            CheckBox {
+                text: "Fold (Ocultar teclas fora da escala)";
+                checked: root.fold-piano-roll;
+                toggled => {
+                    root.fold-piano-roll = self.checked;
+                }
+            }
+        }
+    }
+
+    // ============================================================
+    // BOTÕES
+    // ============================================================
+
+    HorizontalLayout {
+        x: 12px;
+        y: parent.height - 36px;
+
+        width: parent.width - 24px;
+
+        spacing: 6px;
+
+        alignment: LayoutAlignment.end;
+
+        Button {
+            width: 70px;
+            height: 24px;
+
+            text: "Cancelar";
+
+            borderless: true;
+
+            clicked => {
+                root.close();
+            }
+        }
+
+        Button {
+            width: 70px;
+            height: 24px;
+
+            text: "Aplicar";
+
+            toggled: true;
+
+            clicked => {
+                root.apply();
+            }
+        }
+    }
+}

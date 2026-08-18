@@ -9,41 +9,100 @@ export component PianoNoteView inherits Rectangle {
     in property <float> length: 1.0;
     in property <int> velocity: 100;
 
-    in property <length> px-per-beat: 80px;
+    // ============================================================
+    // MÉTRICAS DO PIANO ROLL
+    // ============================================================
+
+    // Deve ser exatamente o mesmo valor usado pelo:
+    // PianoKeyboard
+    // PianoOctave
+    // Grid horizontal
     in property <length> key-height: 20px;
+
+    in property <length> px-per-beat: 80px;
+
+    // ============================================================
+    // VIEWPORT
+    // ============================================================
 
     callback viewport-scroll(length, length);
     callback viewport-zoom(float);
 
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
     private property <length> edge-width: 6px;
 
-    private property <bool> hovered: touch.has-hover;
+    private property <bool> hovered:
+        touch.has-hover;
+
     private property <bool> on-right-edge:
-        touch.has-hover && touch.mouse-x >= self.width - root.edge-width;
+        touch.has-hover
+        && touch.mouse-x >= self.width - root.edge-width;
 
     private property <bool> selected:
         PianoRollData.selected-note == root.note-id;
 
-    // Posição no mundo (o viewport aplica o scroll via translate do wrapper).
-    // Altura igual à tecla/grade (key-height) para alinhamento exato sem margens.
-    x: root.start * root.px-per-beat;
-    y: (PianoRollData.last-note - root.note) * root.key-height;
+    // ============================================================
+    // POSIÇÃO NO PIANO ROLL
+    // ============================================================
 
-    width: Math.max(root.length * root.px-per-beat, 6px);
-    height: root.key-height;
+    // Cada semitom ocupa exatamente uma key-height.
+    //
+    // last-note fica no topo.
+    //
+    // Exemplo:
+    // last-note = 127
+    // note      = 127 -> y = 0
+    // note      = 126 -> y = 20
+    // note      = 125 -> y = 40
+    //
+    // Isso precisa ser idêntico ao cálculo usado pelo teclado
+    // e pelas linhas horizontais do grid.
 
-    background: Theme.clip-midi.brighter(self.selected ? 0.25 : 0.05);
-    opacity: 0.65 + root.velocity-to-opacity();
+    x:
+        root.start * root.px-per-beat;
+
+    y:
+        (PianoRollData.last-note - root.note)
+        * root.key-height;
+
+    width:
+        Math.max(
+            root.length * root.px-per-beat,
+            6px
+        );
+
+    height:
+        root.key-height;
+
+    // ============================================================
+    // APARÊNCIA
+    // ============================================================
+
+    background:
+        Theme.clip-midi.brighter(
+            root.selected ? 0.25 : 0.05
+        );
+
+    opacity:
+        0.65 + root.velocity-to-opacity();
 
     border-radius: 2px;
 
-    border-width:
-        self.selected
-            ? 2px
-            : 1px;
+    // IMPORTANTE:
+    // A espessura não muda quando selecionado.
+    //
+    // Antes:
+    // selecionada = 2px
+    // normal      = 1px
+    //
+    // Isso podia criar uma linha visual mais grossa entre notas.
+    border-width: 1px;
 
     border-color:
-        self.selected
+        root.selected
             ? Theme.text-primary
             : Theme.clip-midi.darker(0.25);
 
@@ -51,19 +110,28 @@ export component PianoNoteView inherits Rectangle {
         0.35 * (root.velocity / 127.0)
     }
 
-    // Número da nota (id útil para conferir o DTO)
+    // ============================================================
+    // NÚMERO DA NOTA
+    // ============================================================
+
     Text {
-        visible: self.width >= 22px;
+        visible:
+            self.width >= 22px;
 
         x: 4px;
         y: 0px;
 
-        width: parent.width - 8px;
-        height: parent.height;
+        width:
+            parent.width - 8px;
 
-        text: root.note.to-fixed(0);
+        height:
+            parent.height;
+
+        text:
+            root.note.to-fixed(0);
 
         color: #1A1A1A;
+
         font-size: 8px;
         font-weight: 700;
 
@@ -73,80 +141,199 @@ export component PianoNoteView inherits Rectangle {
         overflow: elide;
     }
 
+    // ============================================================
+    // INTERAÇÃO
+    // ============================================================
+
     touch := TouchArea {
+
         x: 0;
         y: 0;
 
         width: parent.width;
         height: parent.height;
 
+        // Cursor de resize somente na extremidade direita
+        // da nota.
         mouse-cursor:
             root.on-right-edge
                 ? ew-resize
                 : pointer;
 
         clicked => {
-            PianoRollActions.note-selected(root.note-id);
+            PianoRollActions.note-selected(
+                root.note-id
+            );
         }
 
         pointer-event(event) => {
 
+            // ====================================================
+            // DOWN
+            // ====================================================
+
             if event.kind == PointerEventKind.down {
 
+                // Botão direito = apagar
                 if event.button == PointerEventButton.right {
 
-                    PianoRollActions.note-deleted(root.note-id);
+                    PianoRollActions.note-deleted(
+                        root.note-id
+                    );
 
-                } else if root.on-right-edge {
-
-                    self.drag-resizing = true;
-                    self.drag-start-x = self.mouse-x;
-                    self.drag-start-len = root.length;
-                    PianoRollActions.note-selected(root.note-id);
-
-                } else {
-
-                    self.drag-moving = true;
-                    self.drag-start-x = self.mouse-x;
-                    self.drag-start-beat = root.start;
-                    PianoRollActions.note-selected(root.note-id);
                 }
 
-            } else if event.kind == PointerEventKind.move && self.drag-resizing {
+                // Arrastar pela extremidade direita = resize
+                else if root.on-right-edge {
 
-                let delta = (self.mouse-x - self.drag-start-x) / root.px-per-beat;
-                let new_len = Math.max(0.25, Math.round((self.drag-start-len + delta) * 4.0) / 4.0);
-                PianoRollActions.note-resized(root.note-id, new_len);
+                    self.drag-resizing = true;
 
-            } else if event.kind == PointerEventKind.move && self.drag-moving {
+                    self.drag-start-x =
+                        self.mouse-x;
 
-                let delta = (self.mouse-x - self.drag-start-x) / root.px-per-beat;
-                let new_start = Math.max(0.0, Math.round((self.drag-start-beat + delta) * 4.0) / 4.0);
-                PianoRollActions.note-moved(root.note-id, new_start);
+                    self.drag-start-len =
+                        root.length;
 
-            } else if event.kind == PointerEventKind.up {
+                    PianoRollActions.note-selected(
+                        root.note-id
+                    );
+
+                }
+
+                // Arrastar pelo corpo = mover
+                else {
+
+                    self.drag-moving = true;
+
+                    self.drag-start-x =
+                        self.mouse-x;
+
+                    self.drag-start-beat =
+                        root.start;
+
+                    PianoRollActions.note-selected(
+                        root.note-id
+                    );
+                }
+            }
+
+            // ====================================================
+            // MOVE — RESIZE
+            // ====================================================
+
+            else if event.kind == PointerEventKind.move
+                && self.drag-resizing {
+
+                let delta =
+                    (
+                        self.mouse-x
+                        - self.drag-start-x
+                    )
+                    / root.px-per-beat;
+
+                let new_len =
+                    Math.max(
+                        0.25,
+                        Math.round(
+                            (
+                                self.drag-start-len
+                                + delta
+                            ) * 4.0
+                        ) / 4.0
+                    );
+
+                PianoRollActions.note-resized(
+                    root.note-id,
+                    new_len
+                );
+            }
+
+            // ====================================================
+            // MOVE — MOVER
+            // ====================================================
+
+            else if event.kind == PointerEventKind.move
+                && self.drag-moving {
+
+                let delta =
+                    (
+                        self.mouse-x
+                        - self.drag-start-x
+                    )
+                    / root.px-per-beat;
+
+                let new_start =
+                    Math.max(
+                        0.0,
+                        Math.round(
+                            (
+                                self.drag-start-beat
+                                + delta
+                            ) * 4.0
+                        ) / 4.0
+                    );
+
+                PianoRollActions.note-moved(
+                    root.note-id,
+                    new_start
+                );
+            }
+
+            // ====================================================
+            // UP
+            // ====================================================
+
+            else if event.kind == PointerEventKind.up {
 
                 self.drag-moving = false;
                 self.drag-resizing = false;
             }
         }
 
-        // Roda sobre a nota: repassa para o viewport (scroll/zoom).
+        // ========================================================
+        // SCROLL / ZOOM
+        // ========================================================
+
         scroll-event(event) => {
+
             if event.modifiers.control {
-                root.viewport-zoom(event.delta-y > 0 ? 0.9 : 1.1);
+
+                root.viewport-zoom(
+                    event.delta-y > 0
+                        ? 0.9
+                        : 1.1
+                );
+
             } else if event.modifiers.shift {
-                root.viewport-scroll(event.delta-x, 0px);
+
+                root.viewport-scroll(
+                    event.delta-x,
+                    0px
+                );
+
             } else {
-                root.viewport-scroll(0px, event.delta-y);
+
+                root.viewport-scroll(
+                    0px,
+                    event.delta-y
+                );
             }
+
             accept
         }
 
+        // ========================================================
+        // DRAG STATE
+        // ========================================================
+
         private property <bool> drag-moving: false;
+
         private property <bool> drag-resizing: false;
+
         private property <length> drag-start-x: 0px;
+
         private property <float> drag-start-beat: 0.0;
+
         private property <float> drag-start-len: 1.0;
     }
 }

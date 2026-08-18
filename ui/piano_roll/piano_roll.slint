@@ -16,7 +16,6 @@ export component PianoRollArea inherits Rectangle {
 
     config := PianoRollConfig {}
 
-    // Viewport: zoom e scroll são estado local desta área.
     property <length> px-per-beat: config.beat-width;
     property <length> note-height: config.key-height;
     property <length> scroll-x: 0px;
@@ -26,12 +25,12 @@ export component PianoRollArea inherits Rectangle {
 
     VerticalLayout {
         spacing: 0;
-        alignment: LayoutAlignment.stretch;
-        cross-axis-alignment: CrossAxisAlignment.stretch;
 
         if root.show-header: PianoRollHeader {
             title: "Piano Roll";
+
             floating <=> root.floating;
+
             float-toggle => {
                 root.float-toggle();
             }
@@ -39,37 +38,41 @@ export component PianoRollArea inherits Rectangle {
 
         HorizontalLayout {
             spacing: 0;
-            cross-axis-alignment: CrossAxisAlignment.stretch;
-            horizontal-stretch: 1;
-            vertical-stretch: 1;
 
-            // Coluna do teclado
+            // ========================================================
+            // TECLADO
+            // ========================================================
+
             VerticalLayout {
-                spacing: 0;
                 width: config.keyboard-width;
-                cross-axis-alignment: CrossAxisAlignment.stretch;
-                horizontal-stretch: 0;
-                vertical-stretch: 1;
+                spacing: 0;
 
+                // Espaço acima das teclas.
                 Rectangle {
                     width: config.keyboard-width;
                     height: config.ruler-height;
+
                     background: Theme.surface;
 
                     Rectangle {
                         y: parent.height - 1px;
+
                         width: parent.width;
                         height: 1px;
+
                         background: Theme.border;
                     }
                 }
 
                 PianoKeyboard {
                     width: config.keyboard-width;
+
                     key-height: root.note-height;
                     keyboard-width: config.keyboard-width;
                     black-key-width: config.black-key-width;
+
                     scroll-y: root.scroll-y;
+
                     vertical-stretch: 1;
 
                     note-pressed(note) => {
@@ -78,71 +81,128 @@ export component PianoRollArea inherits Rectangle {
                 }
             }
 
-            // Área musical
+            // ========================================================
+            // ÁREA MUSICAL
+            // ========================================================
 
-            HorizontalLayout {
-                cross-axis-alignment: CrossAxisAlignment.stretch;
             VerticalLayout {
                 spacing: 0;
-                cross-axis-alignment: CrossAxisAlignment.stretch;
-                horizontal-stretch: 0;
+                horizontal-stretch: 1;
                 vertical-stretch: 1;
+
+                // ----------------------------------------------------
+                // RÉGUA
+                // ----------------------------------------------------
 
                 PianoRuler {
                     height: config.ruler-height;
+
                     ruler-height: config.ruler-height;
+
                     px-per-bar: root.px-per-beat * 4;
+
                     scroll-x: root.scroll-x;
                 }
 
-                // Viewport (clip + scroll + zoom + interação)
+                // ----------------------------------------------------
+                // VIEWPORT
+                // ----------------------------------------------------
+
                 Rectangle {
                     clip: true;
+
                     horizontal-stretch: 1;
                     vertical-stretch: 1;
+
                     background: Theme.base;
 
-                    // Interação fica ABAIXO das notas: recebe os cliques
-                    // nas áreas vazias (pincel) e o scroll/zoom geral.
+                    // =================================================
+                    // INTERAÇÃO
+                    // =================================================
+
                     interaction := TouchArea {
                         x: 0;
                         y: 0;
+
                         width: parent.width;
                         height: parent.height;
 
                         mouse-cursor: crosshair;
 
                         pointer-event(event) => {
+
                             if event.kind == PointerEventKind.down
                                 && event.button == PointerEventButton.left {
+
                                 self.painting = true;
+
                                 root.paint-note = -1;
                                 root.paint-start = -1.0;
+
                                 root.paint-add();
+
                             } else if event.kind == PointerEventKind.move
                                 && self.painting {
+
                                 root.paint-add();
+
                             } else if event.kind == PointerEventKind.up {
+
                                 self.painting = false;
                             }
                         }
 
                         scroll-event(event) => {
+
                             if event.modifiers.control {
-                                root.px-per-beat = Math.max(24px, Math.min(320px, root.px-per-beat * (event.delta-y > 0 ? 0.9 : 1.1)));
-                                root.note-height = Math.max(12px, Math.min(40px, root.note-height * (event.delta-y > 0 ? 0.9 : 1.1)));
+
+                                root.px-per-beat =
+                                    Math.max(
+                                        24px,
+                                        Math.min(
+                                            320px,
+                                            root.px-per-beat *
+                                            (event.delta-y > 0 ? 0.9 : 1.1)
+                                        )
+                                    );
+
+                                root.note-height =
+                                    Math.max(
+                                        12px,
+                                        Math.min(
+                                            40px,
+                                            root.note-height *
+                                            (event.delta-y > 0 ? 0.9 : 1.1)
+                                        )
+                                    );
+
                             } else if event.modifiers.shift {
-                                root.scroll-x = Math.max(0px, root.scroll-x + event.delta-x);
+
+                                root.scroll-x =
+                                    Math.max(
+                                        0px,
+                                        root.scroll-x + event.delta-x
+                                    );
+
                             } else {
-                                root.scroll-y = Math.max(0px, root.scroll-y + event.delta-y);
+
+                                root.scroll-y =
+                                    Math.max(
+                                        0px,
+                                        root.scroll-y + event.delta-y
+                                    );
                             }
+
                             accept
                         }
 
                         private property <bool> painting: false;
                     }
 
-                    // Mundo (grid + notas) — mesma projeção de coordenadas.
+                    // =================================================
+                    // MUNDO
+                    // =================================================
+
                     Rectangle {
                         x: -root.scroll-x;
                         y: -root.scroll-y;
@@ -153,6 +213,7 @@ export component PianoRollArea inherits Rectangle {
                         }
 
                         for note in PianoRollData.notes: PianoNoteView {
+
                             note-id: note.id;
                             note: note.note;
                             start: note.start;
@@ -163,34 +224,92 @@ export component PianoRollArea inherits Rectangle {
                             key-height: root.note-height;
 
                             viewport-scroll(dx, dy) => {
-                                root.scroll-x = Math.max(0px, root.scroll-x + dx);
-                                root.scroll-y = Math.max(0px, root.scroll-y + dy);
+                                root.scroll-x =
+                                    Math.max(
+                                        0px,
+                                        root.scroll-x + dx
+                                    );
+
+                                root.scroll-y =
+                                    Math.max(
+                                        0px,
+                                        root.scroll-y + dy
+                                    );
                             }
+
                             viewport-zoom(f) => {
-                                root.px-per-beat = Math.max(24px, Math.min(320px, root.px-per-beat * f));
-                                root.note-height = Math.max(12px, Math.min(40px, root.note-height * f));
+
+                                root.px-per-beat =
+                                    Math.max(
+                                        24px,
+                                        Math.min(
+                                            320px,
+                                            root.px-per-beat * f
+                                        )
+                                    );
+
+                                root.note-height =
+                                    Math.max(
+                                        12px,
+                                        Math.min(
+                                            40px,
+                                            root.note-height * f
+                                        )
+                                    );
                             }
                         }
                     }
                 }
             }
         }
-        }
     }
 
-    // Pincel: converte a posição do mouse em nota + beat com snap
-    // de semicolcheia e dispara a criação via global (Rust resolve).
+    // ================================================================
+    // CRIAÇÃO DE NOTAS
+    // ================================================================
+
     function paint-add() {
-        let mx = interaction.mouse-x + root.scroll-x;
-        let my = interaction.mouse-y + root.scroll-y;
 
-        let note = Math.max(PianoRollData.first-note, Math.min(PianoRollData.last-note, PianoRollData.last-note - Math.floor(my / root.note-height)));
-        let start = Math.max(0.0, Math.round((mx / root.px-per-beat) * 4.0) / 4.0);
+        let mx =
+            interaction.mouse-x
+            + root.scroll-x;
 
-        if note != self.paint-note || start != self.paint-start {
+        let my =
+            interaction.mouse-y
+            + root.scroll-y;
+
+        let note =
+            Math.max(
+                PianoRollData.first-note,
+                Math.min(
+                    PianoRollData.last-note,
+                    PianoRollData.last-note
+                        - Math.floor(
+                            my / root.note-height
+                        )
+                )
+            );
+
+        let start =
+            Math.max(
+                0.0,
+                Math.round(
+                    (mx / root.px-per-beat) * 4.0
+                ) / 4.0
+            );
+
+        if note != self.paint-note
+            || start != self.paint-start {
+
             self.paint-note = note;
             self.paint-start = start;
-            PianoRollActions.note-added(note, start, 1.0, 100);
+
+            PianoRollActions.note-added(
+                note,
+                start,
+                1.0,
+                100
+            );
         }
     }
 

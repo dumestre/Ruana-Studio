@@ -481,6 +481,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 if let Ok(raw_handle) = handle.window_handle() {
                     if let RawWindowHandle::Win32(h) = raw_handle.as_raw() {
                         set_cursor_window_handle(h.hwnd.get() as *mut std::ffi::c_void);
+                        let _ = set_cursor_for_tool(0);
                     }
                 }
             }

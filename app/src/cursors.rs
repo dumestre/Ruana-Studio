@@ -6,7 +6,7 @@ use std::sync::{Mutex, OnceLock};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LRESULT};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    LoadImageW, LoadCursorW, SetClassLongPtrW, SetCursor, GCLP_HCURSOR, IMAGE_CURSOR, LR_DEFAULTSIZE,
+    LoadImageW, LoadCursorW, SetCursor, IMAGE_CURSOR, LR_DEFAULTSIZE,
     LR_LOADFROMFILE, IDC_ARROW, HCURSOR, WM_SETCURSOR,
 };
 #[cfg(windows)]
@@ -19,7 +19,6 @@ pub enum ToolCursor {
     Select = 0,
     Slice = 1,
     Glue = 2,
-    Stretch = 3,
     Draw = 4,
     Erase = 5,
 }
@@ -30,7 +29,6 @@ impl ToolCursor {
             0 => Some(ToolCursor::Select),
             1 => Some(ToolCursor::Slice),
             2 => Some(ToolCursor::Glue),
-            3 => Some(ToolCursor::Stretch),
             4 => Some(ToolCursor::Draw),
             5 => Some(ToolCursor::Erase),
             _ => None,
@@ -42,20 +40,8 @@ impl ToolCursor {
             ToolCursor::Select => "select.cur",
             ToolCursor::Slice => "slice.cur",
             ToolCursor::Glue => "glue.cur",
-            ToolCursor::Stretch => "stretch.cur",
             ToolCursor::Draw => "draw.cur",
             ToolCursor::Erase => "erase.cur",
-        }
-    }
-
-    pub fn hotspot(&self) -> (i32, i32) {
-        match self {
-            ToolCursor::Select => (7, 8),
-            ToolCursor::Slice => (16, 16),
-            ToolCursor::Glue => (16, 16),
-            ToolCursor::Stretch => (16, 16),
-            ToolCursor::Draw => (16, 16),
-            ToolCursor::Erase => (16, 16),
         }
     }
 }
@@ -84,8 +70,6 @@ pub struct CursorManager {
     #[cfg(windows)]
     cursors: HashMap<ToolCursor, CursorHandle>,
     #[cfg(windows)]
-    default_cursor: CursorHandle,
-    #[cfg(windows)]
     window_hwnd: Option<WindowHandle>,
     current_tool: Option<ToolCursor>,
 }
@@ -97,22 +81,10 @@ impl CursorManager {
             let mut cursors = HashMap::new();
             let cursor_dir = Self::cursor_directory()?;
 
-            let default_hcursor = unsafe {
-                LoadCursorW(HINSTANCE::default(), IDC_ARROW)
-            };
-
-            let default_cursor = match default_hcursor {
-                Ok(h) => CursorHandle { hcursor: HCURSOR(h.0) },
-                Err(e) => {
-                    return Err(format!("Failed to load default cursor: {:?}", e).into());
-                }
-            };
-
             for tool in [
                 ToolCursor::Select,
                 ToolCursor::Slice,
                 ToolCursor::Glue,
-                ToolCursor::Stretch,
                 ToolCursor::Draw,
                 ToolCursor::Erase,
             ] {
@@ -120,7 +92,7 @@ impl CursorManager {
                 if !cur_path.exists() {
                     continue;
                 }
-                
+
                 let path_wide: Vec<u16> = cur_path
                     .to_string_lossy()
                     .encode_utf16()
@@ -145,7 +117,6 @@ impl CursorManager {
 
             Ok(Self {
                 cursors,
-                default_cursor,
                 window_hwnd: None,
                 current_tool: None,
             })
@@ -175,10 +146,6 @@ impl CursorManager {
     }
 
     pub fn set_tool(&mut self, tool: ToolCursor) -> Result<(), Box<dyn std::error::Error>> {
-        if self.current_tool == Some(tool) {
-            return Ok(());
-        }
-
         #[cfg(windows)]
         {
             if let Some(cursor_handle) = self.cursors.get(&tool) {
@@ -186,24 +153,9 @@ impl CursorManager {
                     *active = Some(cursor_handle.hcursor.0 as isize);
                 }
                 unsafe { SetCursor(cursor_handle.hcursor); }
-                if let Some(hwnd) = self.window_hwnd {
-                    unsafe {
-                        SetClassLongPtrW(
-                            HWND(hwnd.0 as *mut _),
-                            GCLP_HCURSOR,
-                            cursor_handle.hcursor.0 as isize,
-                        );
-                    }
-                }
-                self.current_tool = Some(tool);
             }
         }
-
-        #[cfg(not(windows))]
-        {
-            self.current_tool = Some(tool);
-        }
-
+        self.current_tool = Some(tool);
         Ok(())
     }
 
@@ -211,17 +163,10 @@ impl CursorManager {
         #[cfg(windows)]
         {
             if let Some(mut active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()) {
-                *active = Some(self.default_cursor.hcursor.0 as isize);
+                *active = None;
             }
-            unsafe { SetCursor(self.default_cursor.hcursor); }
-            if let Some(hwnd) = self.window_hwnd {
-                unsafe {
-                    SetClassLongPtrW(
-                        HWND(hwnd.0 as *mut _),
-                        GCLP_HCURSOR,
-                        self.default_cursor.hcursor.0 as isize,
-                    );
-                }
+            if let Ok(default) = unsafe { LoadCursorW(HINSTANCE::default(), IDC_ARROW) } {
+                unsafe { SetCursor(HCURSOR(default.0)); }
             }
             self.current_tool = None;
         }
@@ -232,10 +177,6 @@ impl CursorManager {
         }
 
         Ok(())
-    }
-
-    pub fn current_tool(&self) -> Option<ToolCursor> {
-        self.current_tool
     }
 }
 
