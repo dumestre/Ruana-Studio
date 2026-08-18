@@ -1,0 +1,325 @@
+import { Theme } from "../theme.slint";
+import { PianoRollData, PianoRollActions } from "piano_roll_state.slint";
+
+export component PianoVelocity inherits Rectangle {
+
+    in property <length> px-per-beat: 80px;
+    in property <length> scroll-x: 0px;
+    in property <int> area-height: 90;
+
+    callback velocity-edited(int, int);
+
+    height: root.area-height * 1px;
+    background: Theme.surface;
+
+    // Largura total da área de velocidade (mesma do grid)
+    property <length> world-width:
+        root.px-per-beat * 4 * PianoRollData.bar-range.length;
+
+    // Escala: velocidade 0 = topo, 127 = base
+    property <length> velocity-area-top: 16px;
+    property <length> velocity-area-bottom: 14px;
+    property <length> velocity-usable-height:
+        root.height - root.velocity-area-top - root.velocity-area-bottom;
+
+    // ============================================================
+    // ÁREA CLIPÁVEL COM SCROLL-X
+    // ============================================================
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+
+        clip: true;
+
+        // --------------------------------------------------------
+        // FUNDO: linhas horizontais de referência da velocidade
+        // --------------------------------------------------------
+
+        // Linha base (vel 0)
+        Rectangle {
+            x: 0;
+            y: root.height - root.velocity-area-bottom;
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.border;
+
+            z: 5;
+        }
+
+        // Linha de referência: 50% (vel 64)
+        Rectangle {
+            x: 0;
+            y:
+                root.velocity-area-top
+                + root.velocity-usable-height
+                - (64.0 / 127.0) * root.velocity-usable-height;
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.grid-sub;
+
+            z: 4;
+        }
+
+        // Linha de referência: 75% (vel 96)
+        Rectangle {
+            x: 0;
+            y:
+                root.velocity-area-top
+                + root.velocity-usable-height
+                - (96.0 / 127.0) * root.velocity-usable-height;
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.grid-sub;
+
+            z: 4;
+        }
+
+        // --------------------------------------------------------
+        // MUNDO (notas) com scroll-x
+        // --------------------------------------------------------
+
+        Rectangle {
+            x: -root.scroll-x;
+            y: 0;
+
+            width: root.world-width;
+            height: parent.height;
+
+            // Barras de velocidade de CADA nota
+            for note in PianoRollData.notes: Rectangle {
+
+                // Posição X — igual ao PianoNoteView
+                x: note.start * root.px-per-beat;
+
+                // Posição Y: cresce de BAIXO para CIMA conforme velocidade
+                y:
+                    root.velocity-area-top
+                    + root.velocity-usable-height
+                    - (note.velocity / 127.0) * root.velocity-usable-height;
+
+                // Largura — igual ao PianoNoteView
+                width:
+                    Math.max(
+                        note.length * root.px-per-beat,
+                        3px
+                    );
+
+                // Altura — proporcional à velocidade
+                height:
+                    Math.max(
+                        (note.velocity / 127.0) * root.velocity-usable-height,
+                        2px
+                    );
+
+                // Cor: verde mais forte em velocity alta
+                background:
+                    note.id == PianoRollData.selected-note
+                        ? Theme.accent
+                        : note.velocity >= 96
+                            ? Theme.ok.brighter(0.1)
+                            : note.velocity >= 64
+                                ? Theme.ok
+                                : Theme.ok.darker(0.25);
+
+                // Borda superior (cabeça da barra)
+                Rectangle {
+                    x: 0;
+                    y: 0;
+
+                    width: parent.width;
+                    height: 2px;
+
+                    background:
+                        note.id == PianoRollData.selected-note
+                            ? Theme.text-primary
+                            : Theme.text-primary.transparentize(0.35);
+                }
+
+                // Área de interação (clicar/arrastar para mudar velocidade)
+                TouchArea {
+                    x: 0;
+                    y: -10px;
+
+                    width: parent.width;
+                    height: parent.height + 10px;
+
+                    mouse-cursor: ns-resize;
+
+                    pointer-event(event) => {
+
+                        if event.kind == PointerEventKind.down
+                            && event.button == PointerEventButton.left {
+
+                            self.editing = true;
+                            PianoRollActions.note-selected(note.id);
+                            root.apply-velocity-at-pointer(
+                                note.id,
+                                self.mouse-y + 10px
+                            );
+
+                        } else if event.kind == PointerEventKind.move
+                            && self.editing {
+
+                            root.apply-velocity-at-pointer(
+                                note.id,
+                                self.mouse-y + 10px
+                            );
+
+                        } else if event.kind == PointerEventKind.up {
+                            self.editing = false;
+                        }
+                    }
+
+                    private property <bool> editing: false;
+                }
+            }
+        }
+    }
+
+    // ============================================================
+    // BARRA LATERAL ESQUERDA (escala)
+    // ============================================================
+
+    // Título da área
+    Rectangle {
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+        height: 16px;
+
+        background: Theme.surface-high;
+
+        Text {
+            x: 8px;
+            y: 0;
+
+            width: parent.width - 16px;
+            height: parent.height;
+
+            text: "Velocidade";
+
+            color: Theme.text-dim;
+            font-size: 9px;
+            font-weight: 700;
+
+            vertical-alignment: center;
+            horizontal-alignment: left;
+        }
+
+        Rectangle {
+            x: 0;
+            y: parent.height - 1px;
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.border;
+        }
+    }
+
+    // Marcador 127 (máximo)
+    Text {
+        x: 4px;
+        y: root.velocity-area-top - 6px;
+
+        width: 32px;
+        height: 12px;
+
+        text: "127";
+
+        color: Theme.text-dim;
+        font-size: 8px;
+        font-weight: 500;
+
+        vertical-alignment: center;
+    }
+
+    // Marcador 64 (meio)
+    Text {
+        x: 4px;
+        y:
+            root.velocity-area-top
+            + root.velocity-usable-height
+            - (64.0 / 127.0) * root.velocity-usable-height
+            - 6px;
+
+        width: 32px;
+        height: 12px;
+
+        text: "64";
+
+        color: Theme.text-dim;
+        font-size: 8px;
+        font-weight: 500;
+
+        vertical-alignment: center;
+    }
+
+    // Marcador 0 (mínimo)
+    Text {
+        x: 4px;
+        y: root.height - root.velocity-area-bottom - 6px;
+
+        width: 32px;
+        height: 12px;
+
+        text: "0";
+
+        color: Theme.text-dim;
+        font-size: 8px;
+        font-weight: 500;
+
+        vertical-alignment: center;
+    }
+
+    // Borda inferior do painel inteiro
+    Rectangle {
+        x: 0;
+        y: parent.height - 1px;
+
+        width: parent.width;
+        height: 1px;
+
+        background: Theme.border;
+
+        z: 50;
+    }
+
+    // ============================================================
+    // FUNÇÕES
+    // ============================================================
+
+    function apply-velocity-at-pointer(note-id: int, pointer-y: length) {
+
+        // Converte posição Y do mouse em valor de velocidade 0..127
+        //
+        // topo    (velocity-area-top)        = 127
+        // base    (height - velocity-bottom) = 0
+
+        let rel-y =
+            pointer-y
+            - root.velocity-area-top;
+
+        let frac =
+            1.0
+            - Math.max(
+                0.0,
+                Math.min(
+                    1.0,
+                    rel-y / root.velocity-usable-height
+                )
+            );
+
+        let vel = Math.round(frac * 127.0);
+
+        root.velocity-edited(note-id, vel);
+    }
+}

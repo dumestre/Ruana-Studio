@@ -1,11 +1,3 @@
-// =====================================================
-// ESTADO COMPARTILHADO DO PIANO ROLL
-//
-// Dados de domínio (notas + grids) vêm do Rust via estes
-// globals. Os componentes da pasta apenas leem/escrevem
-// aqui — nada de arrays hardcoded ou DTOs locais.
-// =====================================================
-
 export struct PianoNote {
     id: int,
     note: int,
@@ -23,6 +15,7 @@ export struct RulerTick {
 export global PianoRollData {
     in-out property <[PianoNote]> notes: [];
     in-out property <int> selected-note: -1;
+    in-out property <[int]> selected-notes: [];
     in-out property <int> first-note: 0;
     in-out property <int> last-note: 127;
     in-out property <[int]> note-lines: [];
@@ -30,6 +23,14 @@ export global PianoRollData {
     in-out property <[int]> octave-range: [];
     in-out property <[int]> bar-range: [];
     in-out property <[RulerTick]> ruler-ticks: [];
+
+    // PPQ (pulses per quarter note) para cálculo do playhead.
+    // 960 ppq = padrão da maioria das DAWs modernas.
+    in-out property <int> ppq: 960;
+
+    // Posição atual do playhead em pulses (PPQ).
+    // 960 = 1 beat. 960 * 4 = 1 compasso (4/4).
+    in-out property <int> position: 0;
 }
 
 export global PianoRollActions {
@@ -39,4 +40,9 @@ export global PianoRollActions {
     callback note-deleted(int);
     callback note-selected(int);
     callback note-previewed(int);
+    callback note-velocity-changed(int, int);
+    callback notes-selection-changed([int]);
+    callback quantize-requested(int);
+    callback delete-selection-requested();
+    callback lasso-selection-requested(float, float, float, float, float, float, int);
 }

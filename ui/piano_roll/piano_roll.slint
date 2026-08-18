@@ -1,11 +1,15 @@
 import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
 import { PianoRollHeader } from "piano_roll_header.slint";
 import { PianoKeyboard } from "piano_keyboard.slint";
 import { PianoRuler } from "piano_ruler.slint";
 import { PianoGrid } from "piano_grid.slint";
 import { PianoNoteView } from "piano_note_view.slint";
+import { PianoVelocity } from "piano_velocity.slint";
+import { PianoNoteProperties } from "piano_note_properties.slint";
 import { PianoRollConfig } from "piano_roll_config.slint";
 import { PianoRollData, PianoRollActions } from "piano_roll_state.slint";
+import { ComboBox } from "std-widgets.slint";
 
 export component PianoRollArea inherits Rectangle {
 
@@ -21,12 +25,136 @@ export component PianoRollArea inherits Rectangle {
     property <length> scroll-x: 0px;
     property <length> scroll-y: 0px;
 
+    // Snap
+    in-out property <bool> snap-enabled: config.snap-enabled;
+    in-out property <int> snap-denominator: config.snap-denominator;
+
     property <length> world-width:
         root.px-per-beat * 4 * PianoRollData.bar-range.length;
     property <length> world-height:
         root.note-height * (PianoRollData.last-note - PianoRollData.first-note + 1);
 
+    // Altura do viewport (para cálculo de max-scroll-y)
+    property <length> vp-h: viewport_rect.actual-height;
+    property <length> viewport-height:
+        root.vp-h > 0px ? root.vp-h : 10000px;
+
+    // Max scroll (sem espaço vazio no fim)
+    property <length> max-scroll-y:
+        Math.max(
+            0px,
+            root.world-height - root.viewport-height
+        );
+    property <length> max-scroll-x:
+        Math.max(
+            0px,
+            root.world-width - viewport_rect.actual-width
+        );
+
+    // ============================================================
+    // PLAYHEAD — MESMO PADRÃO DA TIMELINE (Colors.crimson)
+    // ============================================================
+
+    property <length> playhead-x:
+        (PianoRollData.position * 1.0 / PianoRollData.ppq) * root.px-per-beat;
+
+    // Opções de snap (label + denomidator)
+    private property <[string]> snap-labels: [
+        "1/1 (Compasso)",
+        "1/2 (½ Tempo)",
+        "1/4 (Tempo)",
+        "1/8 (Colcheia)",
+        "1/16 (Semicolcheia)",
+        "1/32 (Fusa)",
+        "1/6 (Terc. Semínima)",
+        "1/12 (Terc. Colcheia)",
+        "1/24 (Terc. Semic.)"
+    ];
+    private property <[int]> snap-values: [1, 2, 4, 8, 16, 32, 6, 12, 24];
+    private property <int> snap-index: 4;
+
     background: Theme.base;
+
+    // ============================================================
+    // FUNÇÕES INTERNAS
+    // ============================================================
+
+    function update-snap-from-label(label: string) {
+        if label == root.snap-labels[0] { root.snap-index = 0 }
+        else if label == root.snap-labels[1] { root.snap-index = 1 }
+        else if label == root.snap-labels[2] { root.snap-index = 2 }
+        else if label == root.snap-labels[3] { root.snap-index = 3 }
+        else if label == root.snap-labels[4] { root.snap-index = 4 }
+        else if label == root.snap-labels[5] { root.snap-index = 5 }
+        else if label == root.snap-labels[6] { root.snap-index = 6 }
+        else if label == root.snap-labels[7] { root.snap-index = 7 }
+        else { root.snap-index = 8 }
+        root.snap-denominator = root.snap-values[root.snap-index];
+    }
+
+    function snap-beat(beat: float) -> float {
+        if !root.snap-enabled {
+            Math.round(beat * 256.0) / 256.0
+        } else {
+            let step = 4.0 / root.snap-denominator;
+            Math.round(beat / step) * step
+        }
+    }
+
+    function paint-add() {
+
+        let mx = interaction.mouse-x + root.scroll-x;
+        let my = interaction.mouse-y + root.scroll-y;
+
+        let note =
+            Math.max(
+                PianoRollData.first-note,
+                Math.min(
+                    PianoRollData.last-note,
+                    PianoRollData.last-note
+                        - Math.floor(my / root.note-height)
+                )
+            );
+
+        let start = Math.max(0.0, root.snap-beat(mx / root.px-per-beat));
+
+        if note != root.paint-note || start != root.paint-start {
+            root.paint-note = note;
+            root.paint-start = start;
+            PianoRollActions.note-added(
+                note, start, root.snap-beat(1.0), 100
+            );
+        }
+    }
+
+    function apply-lasso-selection() {
+
+        let x1 =
+            Math.min(interaction.lasso-start-x, interaction.lasso-x)
+            + root.scroll-x;
+        let x2 =
+            Math.max(interaction.lasso-start-x, interaction.lasso-x)
+            + root.scroll-x;
+        let y1 =
+            Math.min(interaction.lasso-start-y, interaction.lasso-y)
+            + root.scroll-y;
+        let y2 =
+            Math.max(interaction.lasso-start-y, interaction.lasso-y)
+            + root.scroll-y;
+
+        PianoRollActions.lasso-selection-requested(
+            x1 / 1px,
+            y1 / 1px,
+            x2 / 1px,
+            y2 / 1px,
+            root.px-per-beat / 1px,
+            root.note-height / 1px,
+            PianoRollData.last-note
+        );
+    }
+
+    private property <int> paint-note: 0;
+    private property <float> paint-start: 0.0;
 
     VerticalLayout {
         spacing: 0;
@@ -41,47 +169,141 @@ export component PianoRollArea inherits Rectangle {
             }
         }
 
+        // ============================================================
+        // TOOLBAR INTERNA (Snap + Quantize)
+        // ============================================================
+
+        Rectangle {
+            height: 30px;
+            background: Theme.surface;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                // Snap ON/OFF
+                Button {
+                    width: 28px;
+                    height: 24px;
+                    icon: @image-url("../icons/snap.svg");
+                    filled-icon: @image-url("../icons/snap_filled.svg");
+                    icon-size: 16px;
+                    text: "";
+                    borderless: true;
+                    toggled: root.snap-enabled;
+                    toggled-icon-color: Theme.accent;
+
+                    clicked => {
+                        root.snap-enabled = !root.snap-enabled;
+                    }
+                }
+
+                // Dropdown: granularidade do snap
+                Rectangle {
+                    width: 170px;
+                    height: 24px;
+
+                    ComboBox {
+                        width: parent.width;
+                        height: parent.height;
+                        model: root.snap-labels;
+                        current-value: root.snap-labels[root.snap-index];
+
+                        selected(value) => {
+                            root.update-snap-from-label(value);
+                        }
+                    }
+                }
+
+                // Separador
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    background: Theme.border;
+                }
+
+                // Botão QUANTIZE
+                Button {
+                    width: 90px;
+                    height: 24px;
+                    text: "Quantize";
+                    icon-size: 14px;
+
+                    clicked => {
+                        PianoRollActions.quantize-requested(root.snap-denominator);
+                    }
+                }
+
+                // Espaço flexível
+                Rectangle { horizontal-stretch: 1; }
+
+                // Status: Snap
+                Text {
+                    text:
+                        root.snap-enabled
+                            ? "Snap: " + root.snap-labels[root.snap-index]
+                            : "Snap: OFF";
+
+                    color:
+                        root.snap-enabled
+                            ? Theme.accent
+                            : Theme.text-dim;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    vertical-alignment: center;
+                }
+            }
+
+            // Borda inferior
+            Rectangle {
+                x: 0;
+                y: parent.height - 1px;
+                width: 100%;
+                height: 1px;
+                background: Theme.border;
+            }
+        }
+
         HorizontalLayout {
             spacing: 0;
 
             // ========================================================
-            // TECLADO
+            // COLUNA ESQUERDA: RÉGUA-ESPACO + TECLADO + LABEL VELOCIDADE
             // ========================================================
 
             VerticalLayout {
                 width: config.keyboard-width;
                 spacing: 0;
 
-                // Espaço acima das teclas (alinhado com a régua)
+                // Header espaço (alinhado com régua + toolbar)
+                // ---------------------------------------------------------
+                // Ajuste: esse Rectangle alinha EXATAMENTE com a régua
+                // (não com a toolbar). A toolbar está acima de ambos.
                 Rectangle {
                     width: config.keyboard-width;
                     height: config.ruler-height;
 
                     background: Theme.surface;
 
-                    // Borda inferior — alinhada com a borda inferior da régua
                     Rectangle {
                         x: 0;
                         y: parent.height - 1px;
-
                         width: parent.width;
                         height: 1px;
-
                         background: Theme.border;
-
                         z: 10;
                     }
 
-                    // Borda direita — alinhada com a borda vertical da régua e do grid
                     Rectangle {
                         x: parent.width - 1px;
                         y: 0;
-
                         width: 1px;
                         height: parent.height;
-
                         background: Theme.border;
-
                         z: 10;
                     }
                 }
@@ -101,10 +323,45 @@ export component PianoRollArea inherits Rectangle {
                         PianoRollActions.note-previewed(note);
                     }
                 }
+
+                // Label velocidade alinhado (continuação da coluna esquerda)
+                Rectangle {
+                    width: config.keyboard-width;
+                    height: config.velocity-height;
+
+                    background: Theme.surface-high;
+
+                    Rectangle {
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: 16px;
+                        background: Theme.surface-high;
+                        Rectangle {
+                            x: 0; y: parent.height - 1px;
+                            width: parent.width; height: 1px;
+                            background: Theme.border;
+                        }
+                    }
+
+                    Rectangle {
+                        x: parent.width - 1px; y: 0;
+                        width: 1px; height: parent.height;
+                        background: Theme.border;
+                        z: 10;
+                    }
+
+                    Rectangle {
+                        x: 0; y: parent.height - 1px;
+                        width: parent.width; height: 1px;
+                        background: Theme.border;
+                        z: 50;
+                    }
+                }
             }
 
             // ========================================================
-            // ÁREA MUSICAL
+            // COLUNA DIREITA: RÉGUA + VIEWPORT + VELOCIDADE
             // ========================================================
 
             VerticalLayout {
@@ -113,24 +370,49 @@ export component PianoRollArea inherits Rectangle {
                 vertical-stretch: 1;
 
                 // ----------------------------------------------------
-                // RÉGUA
-                // ----------------------------------------------------
-
-                PianoRuler {
-                    height: config.ruler-height;
-
-                    ruler-height: config.ruler-height;
-
-                    px-per-bar: root.px-per-beat * 4;
-
-                    scroll-x: root.scroll-x;
-                }
-
-                // ----------------------------------------------------
-                // VIEWPORT
+                // RÉGUA + PLAYHEAD NA RÉGUA
                 // ----------------------------------------------------
 
                 Rectangle {
+                    height: config.ruler-height;
+
+                    clip: true;
+
+                    PianoRuler {
+                        height: config.ruler-height;
+                        ruler-height: config.ruler-height;
+                        px-per-bar: root.px-per-beat * 4;
+                        scroll-x: root.scroll-x;
+                    }
+
+                    // ----- Playhead: bolinha (topo régua) -----
+                    Rectangle {
+                        x: root.playhead-x - 6px - root.scroll-x;
+                        y: 1px;
+                        width: 12px;
+                        height: 12px;
+                        border-radius: 6px;
+                        background: Colors.crimson;
+                        z: 120;
+                    }
+
+                    // ----- Playhead: linha dentro da régua -----
+                    Rectangle {
+                        x: root.playhead-x - 1px - root.scroll-x;
+                        y: 7px;
+                        width: 2px;
+                        height: config.ruler-height - 7px - 1px;
+                        background: Colors.crimson;
+                        opacity: 0.9;
+                        z: 115;
+                    }
+                }
+
+                // ----------------------------------------------------
+                // VIEWPORT (GRID + NOTAS + PLAYHEAD + LASSO)
+                // ----------------------------------------------------
+
+                viewport_rect := Rectangle {
                     clip: true;
 
                     horizontal-stretch: 1;
@@ -138,27 +420,20 @@ export component PianoRollArea inherits Rectangle {
 
                     background: Theme.base;
 
-                    // Borda superior (entre régua e viewport)
+                    out property <length> actual-width: self.width;
+                    out property <length> actual-height: self.height;
+
+                    // Borda superior
                     Rectangle {
-                        x: 0;
-                        y: 0;
-
-                        width: parent.width;
-                        height: 1px;
-
+                        x: 0; y: 0;
+                        width: parent.width; height: 1px;
                         background: Theme.border;
-
                         z: 50;
                     }
 
-                    // =================================================
-                    // INTERAÇÃO
-                    // =================================================
-
+                    // ====== INTERAÇÃO: TOQUE / LASSO / PAINT ======
                     interaction := TouchArea {
-                        x: 0;
-                        y: 0;
-
+                        x: 0; y: 0;
                         width: parent.width;
                         height: parent.height;
 
@@ -169,21 +444,38 @@ export component PianoRollArea inherits Rectangle {
                             if event.kind == PointerEventKind.down
                                 && event.button == PointerEventButton.left {
 
-                                self.painting = true;
+                                // Shift = iniciar seleção múltipla (lasso)
+                                if event.modifiers.shift {
+                                    self.lasso-active = true;
+                                    self.lasso-start-x = self.mouse-x;
+                                    self.lasso-start-y = self.mouse-y;
+                                    self.lasso-x = self.mouse-x;
+                                    self.lasso-y = self.mouse-y;
+                                } else {
+                                    // Paint normal (criar nota)
+                                    self.painting = true;
+                                    root.paint-note = -1;
+                                    root.paint-start = -1.0;
+                                    root.paint-add();
+                                }
 
-                                root.paint-note = -1;
-                                root.paint-start = -1.0;
+                            } else if event.kind == PointerEventKind.move {
 
-                                root.paint-add();
-
-                            } else if event.kind == PointerEventKind.move
-                                && self.painting {
-
-                                root.paint-add();
+                                if self.lasso-active {
+                                    self.lasso-x = self.mouse-x;
+                                    self.lasso-y = self.mouse-y;
+                                } else if self.painting {
+                                    root.paint-add();
+                                }
 
                             } else if event.kind == PointerEventKind.up {
 
+                                if self.lasso-active {
+                                    // Finaliza lasso -> seleciona notas dentro
+                                    root.apply-lasso-selection();
+                                }
                                 self.painting = false;
+                                self.lasso-active = false;
                             }
                         }
 
@@ -192,62 +484,59 @@ export component PianoRollArea inherits Rectangle {
                             if event.modifiers.control {
 
                                 root.px-per-beat =
-                                    Math.max(
-                                        24px,
-                                        Math.min(
-                                            320px,
-                                            root.px-per-beat *
-                                            (event.delta-y > 0 ? 0.9 : 1.1)
-                                        )
-                                    );
-
+                                    Math.max(24px, Math.min(320px,
+                                        root.px-per-beat * (event.delta-y > 0 ? 0.9 : 1.1)
+                                    ));
                                 root.note-height =
-                                    Math.max(
-                                        12px,
-                                        Math.min(
-                                            40px,
-                                            root.note-height *
-                                            (event.delta-y > 0 ? 0.9 : 1.1)
-                                        )
-                                    );
+                                    Math.max(12px, Math.min(40px,
+                                        root.note-height * (event.delta-y > 0 ? 0.9 : 1.1)
+                                    ));
 
                             } else if event.modifiers.shift {
 
                                 root.scroll-x =
-                                    Math.max(
-                                        0px,
+                                    Math.max(0px, Math.min(root.max-scroll-x,
                                         root.scroll-x + event.delta-x
-                                    );
+                                    ));
 
                             } else {
 
                                 root.scroll-y =
-                                    Math.max(
-                                        0px,
+                                    Math.max(0px, Math.min(root.max-scroll-y,
                                         root.scroll-y + event.delta-y
-                                    );
+                                    ));
                             }
-
                             accept
                         }
 
                         private property <bool> painting: false;
+                        private property <bool> lasso-active: false;
+                        private property <length> lasso-start-x: 0px;
+                        private property <length> lasso-start-y: 0px;
+                        private property <length> lasso-x: 0px;
+                        private property <length> lasso-y: 0px;
                     }
 
-                    // =================================================
-                    // MUNDO (grid + notas) com dimensões explícitas
-                    // =================================================
-
+                    // ====== MUNDO (grid + notas + playhead) ======
                     Rectangle {
                         x: -root.scroll-x;
                         y: -root.scroll-y;
-
                         width: root.world-width;
                         height: root.world-height;
 
                         PianoGrid {
                             beat-width: root.px-per-beat;
                             key-height: root.note-height;
+                        }
+
+                        // ----- Playhead: linha vertical pelo grid -----
+                        Rectangle {
+                            x: root.playhead-x - 1px;
+                            y: 0;
+                            width: 2px;
+                            height: parent.height;
+                            background: Colors.crimson;
+                            z: 100;
                         }
 
                         for note in PianoRollData.notes: PianoNoteView {
@@ -263,94 +552,95 @@ export component PianoRollArea inherits Rectangle {
 
                             viewport-scroll(dx, dy) => {
                                 root.scroll-x =
-                                    Math.max(
-                                        0px,
-                                        root.scroll-x + dx
-                                    );
-
+                                    Math.max(0px, Math.min(root.max-scroll-x,
+                                        root.scroll-x + dx));
                                 root.scroll-y =
-                                    Math.max(
-                                        0px,
-                                        root.scroll-y + dy
-                                    );
+                                    Math.max(0px, Math.min(root.max-scroll-y,
+                                        root.scroll-y + dy));
                             }
 
                             viewport-zoom(f) => {
-
                                 root.px-per-beat =
-                                    Math.max(
-                                        24px,
-                                        Math.min(
-                                            320px,
-                                            root.px-per-beat * f
-                                        )
-                                    );
-
+                                    Math.max(24px, Math.min(320px,
+                                        root.px-per-beat * f));
                                 root.note-height =
-                                    Math.max(
-                                        12px,
-                                        Math.min(
-                                            40px,
-                                            root.note-height * f
-                                        )
-                                    );
+                                    Math.max(12px, Math.min(40px,
+                                        root.note-height * f));
                             }
                         }
                     }
+
+                    // ====== LASSO (retângulo de seleção) ======
+                    Rectangle {
+                        visible: interaction.lasso-active;
+
+                        x:
+                            Math.min(
+                                interaction.lasso-start-x,
+                                interaction.lasso-x
+                            );
+                        y:
+                            Math.min(
+                                interaction.lasso-start-y,
+                                interaction.lasso-y
+                            );
+
+                        width:
+                            Math.abs(
+                                interaction.lasso-x
+                                - interaction.lasso-start-x
+                            );
+                        height:
+                            Math.abs(
+                                interaction.lasso-y
+                                - interaction.lasso-start-y
+                            );
+
+                        background:
+                            Theme.accent.transparentize(0.85);
+                        border-width: 1px;
+                        border-color: Theme.accent;
+
+                        z: 80;
+                    }
+                }
+
+                // ----------------------------------------------------
+                // VELOCIDADE (+ PLAYHEAD LINHA)
+                // ----------------------------------------------------
+
+                Rectangle {
+                    height: config.velocity-height;
+                    clip: true;
+
+                    PianoVelocity {
+                        height: config.velocity-height;
+                        px-per-beat: root.px-per-beat;
+                        scroll-x: root.scroll-x;
+                        area-height: Math.round(
+                            config.velocity-height / 1px
+                        );
+
+                        velocity-edited(note-id, vel) => {
+                            PianoRollActions.note-velocity-changed(
+                                note-id, vel
+                            );
+                        }
+                    }
+
+                    // ----- Playhead: linha pela área de velocidade -----
+                    Rectangle {
+                        x: root.playhead-x - 1px - root.scroll-x;
+                        y: 0;
+                        width: 2px;
+                        height: parent.height - 1px;
+                        background: Colors.crimson;
+                        z: 100;
+                    }
                 }
             }
+            // ============ COLUNA 3: PAINEL DE PROPRIEDADES (nota selecionada) ============
+            PianoNoteProperties {}
         }
     }
-
-    // ================================================================
-    // CRIAÇÃO DE NOTAS
-    // ================================================================
-
-    function paint-add() {
-
-        let mx =
-            interaction.mouse-x
-            + root.scroll-x;
-
-        let my =
-            interaction.mouse-y
-            + root.scroll-y;
-
-        let note =
-            Math.max(
-                PianoRollData.first-note,
-                Math.min(
-                    PianoRollData.last-note,
-                    PianoRollData.last-note
-                        - Math.floor(
-                            my / root.note-height
-                        )
-                )
-            );
-
-        let start =
-            Math.max(
-                0.0,
-                Math.round(
-                    (mx / root.px-per-beat) * 4.0
-                ) / 4.0
-            );
-
-        if note != self.paint-note
-            || start != self.paint-start {
-
-            self.paint-note = note;
-            self.paint-start = start;
-
-            PianoRollActions.note-added(
-                note,
-                start,
-                1.0,
-                100
-            );
-        }
-    }
-
-    private property <int> paint-note: 0;
-    private property <float> paint-start: 0.0;
 }

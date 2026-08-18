@@ -79,8 +79,46 @@ impl PianoRollEditor {
         }
     }
 
+    fn change_note_velocity(&mut self, id: i32, velocity: i32) {
+        if let Some(n) = self.notes.iter_mut().find(|n| n.id == id) {
+            n.velocity = velocity.clamp(0, 127);
+        }
+    }
+
     fn delete(&mut self, id: i32) {
         self.notes.retain(|n| n.id != id);
+    }
+
+    /// Alinha start e length de TODAS as notas (ou selecionadas) ao grid
+    /// de acordo com o denominador do snap (1/denom beats).
+    fn quantize(&mut self, denom: i32, selected_only: bool, selected_ids: &[i32]) {
+        if denom <= 0 {
+            return;
+        }
+        let step: f32 = 4.0 / denom as f32;
+
+        for n in self.notes.iter_mut() {
+            if selected_only && !selected_ids.contains(&n.id) {
+                continue;
+            }
+            n.start = (n.start / step).round() * step;
+            if n.start < 0.0 {
+                n.start = 0.0;
+            }
+            if n.length <= 0.0 {
+                n.length = step;
+            } else {
+                n.length = (n.length / step).round() * step;
+                if n.length < step * 0.25 {
+                    n.length = step;
+                }
+            }
+        }
+    }
+
+    /// Exclui todas as notas cujo id está na lista.
+    fn delete_many(&mut self, ids: &[i32]) {
+        self.notes.retain(|n| !ids.contains(&n.id));
     }
 }
 
@@ -152,6 +190,11 @@ where
     data.set_ruler_ticks(Rc::new(slint::VecModel::from(ticks)).into());
     data.set_notes(Rc::new(slint::VecModel::from(Vec::<PianoNote>::new())).into());
     data.set_selected_note(-1);
+    data.set_selected_notes(Rc::new(slint::VecModel::from(Vec::<i32>::new())).into());
+    data.set_ppq(960);
+    // Playhead começa em 0 pulses. Para animar, modifique `position` de acordo com
+    // o transporte global do sequenciador (PPQ avançando no tempo).
+    data.set_position(0);
 
     let actions = PianoRollActions::get(ui);
 
@@ -213,6 +256,100 @@ where
     {
         actions.on_note_previewed(move |note| {
             println!("[piano-roll] note preview: {}", note);
+        });
+    }
+    {
+        let editor = editor.clone();
+        let ui_weak = ui.as_weak();
+        actions.on_note_velocity_changed(move |id, velocity| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            editor.borrow_mut().change_note_velocity(id, velocity);
+            refresh_notes(&ui, &editor);
+        });
+    }
+    {
+        let ui_weak = ui.as_weak();
+        actions.on_notes_selection_changed(move |ids| {
+            if let Some(ui) = ui_weak.upgrade() {
+                PianoRollData::get(&ui).set_selected_notes(ids);
+            }
+        });
+    }
+    {
+        let editor = editor.clone();
+        let ui_weak = ui.as_weak();
+        actions.on_quantize_requested(move |denom| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            let sel = PianoRollData::get(&ui).get_selected_notes();
+            let ids: Vec<i32> = sel.iter().collect::<Vec<_>>();
+            let sel_only = !ids.is_empty();
+            editor.borrow_mut().quantize(denom, sel_only, &ids);
+            refresh_notes(&ui, &editor);
+        });
+    }
+    {
+        let editor = editor.clone();
+        let ui_weak = ui.as_weak();
+        actions.on_delete_selection_requested(move || {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            let sel = PianoRollData::get(&ui).get_selected_notes();
+            let ids: Vec<i32> = sel.iter().collect::<Vec<_>>();
+            if !ids.is_empty() {
+                editor.borrow_mut().delete_many(&ids);
+                PianoRollData::get(&ui).set_selected_note(-1);
+                PianoRollData::get(&ui)
+                    .set_selected_notes(Rc::new(slint::VecModel::from(Vec::<i32>::new())).into());
+                refresh_notes(&ui, &editor);
+            } else {
+                let single = PianoRollData::get(&ui).get_selected_note();
+                if single >= 0 {
+                    editor.borrow_mut().delete(single);
+                    PianoRollData::get(&ui).set_selected_note(-1);
+                    PianoRollData::get(&ui)
+                        .set_selected_notes(Rc::new(slint::VecModel::from(Vec::<i32>::new())).into());
+                    refresh_notes(&ui, &editor);
+                }
+            }
+        });
+    }
+    {
+        let editor = editor.clone();
+        let ui_weak = ui.as_weak();
+        actions.on_lasso_selection_requested(move |x1, y1, x2, y2, px_per_beat, note_height, last_note| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+
+            let editor = editor.borrow();
+            let mut new_selection: Vec<i32> = Vec::new();
+            let mut first: i32 = -1;
+
+            for n in &editor.notes {
+                let nx1 = n.start * px_per_beat;
+                let nx2 = (n.start + n.length) * px_per_beat;
+                let ny1 = (last_note as f32 - n.note as f32) * note_height;
+                let ny2 = ny1 + note_height;
+
+                let overlaps = !(x2 < nx1 || x1 > nx2 || y2 < ny1 || y1 > ny2);
+                if overlaps {
+                    new_selection.push(n.id);
+                    if first < 0 {
+                        first = n.id;
+                    }
+                }
+            }
+
+            drop(editor);
+
+            PianoRollData::get(&ui)
+                .set_selected_notes(Rc::new(slint::VecModel::from(new_selection.clone())).into());
+            PianoRollData::get(&ui).set_selected_note(first);
         });
     }
 }
