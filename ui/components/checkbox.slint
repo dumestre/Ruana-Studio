@@ -1,0 +1,79 @@
+import { Theme } from "../theme.slint";
+
+export component ScaleCheckBox inherits Rectangle {
+
+    in property <string> text: "";
+    in-out property <bool> checked: false;
+
+    callback toggled(bool);
+
+    height: 22px;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        Rectangle {
+            width: 14px;
+            height: 14px;
+
+            border-width: 1px;
+            border-radius: 3px;
+
+            background:
+                root.checked
+                    ? Theme.accent
+                    : Theme.surface-high;
+
+            animate background {
+                duration: 150ms;
+            }
+
+            border-color:
+                root.checked
+                    ? Theme.accent
+                    : (touch.has-hover
+                        ? Theme.text-dim
+                        : Theme.border);
+
+            animate border-color {
+                duration: 150ms;
+            }
+
+            Image {
+                source: @image-url("../icons/check.svg");
+
+                width: 10px;
+                height: 10px;
+
+                visible: root.checked;
+            }
+        }
+
+        Text {
+            text: root.text;
+
+            color: Theme.text-primary;
+
+            font-size: 10px;
+
+            vertical-alignment: center;
+
+            horizontal-stretch: 1;
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+
+        mouse-cursor: pointer;
+
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}

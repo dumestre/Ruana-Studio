@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, reset_cursor_to_default};
+use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, set_timeline_bounds, reset_cursor_to_default};
 use daw_core::clip::{Clip, ClipKind};
 use daw_core::mixer::MixerParam;
 use daw_core::project::{ChangeKind, DocumentEvent, Project};
@@ -1068,6 +1068,10 @@ fn main() -> Result<(), slint::PlatformError> {
 
     ui.on_tool_changed(move |tool| {
         let _ = set_cursor_for_tool(tool);
+    });
+
+    ui.on_timeline_bounds_changed(move |x, y, w, h| {
+        set_timeline_bounds(x, y, w, h);
     });
 
     ui.on_window_close(move || {

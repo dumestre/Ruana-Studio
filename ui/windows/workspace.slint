@@ -90,6 +90,7 @@ export component Workspace inherits Rectangle {
 
     callback float-toggle(int);
     callback tool-changed(int);
+    callback timeline-bounds-changed(float, float, float, float);
 
     VerticalLayout {
         alignment: LayoutAlignment.stretch;
@@ -464,6 +465,20 @@ export component Workspace inherits Rectangle {
                     && root.drag-y >= timeline.absolute-position.y + timeline.ruler-height;
                 root.drag-snap-beat = max(0.0, round(((root.drag-x - timeline.absolute-position.x + timeline.scroll-x) / timeline.px-per-beat) * 2.0) / 2.0);
                 root.drag-drop-track = max(0, min(floor((root.drag-y - timeline.absolute-position.y + timeline.scroll-y - timeline.ruler-height) / timeline.row-height), max(0, root.track-names.length - 1)));
+            }
+        }
+
+        // Emit timeline bounds for Win32 cursor restriction
+        Timer {
+            interval: 100ms;
+            running: true;
+            triggered() => {
+                root.timeline-bounds-changed(
+                    timeline.absolute-position.x / 1px,
+                    (timeline.absolute-position.y + timeline.ruler-height) / 1px,
+                    timeline.width / 1px,
+                    (timeline.height - timeline.ruler-height) / 1px
+                );
             }
         }
     }

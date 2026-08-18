@@ -3,11 +3,13 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(windows)]
-use windows::Win32::Foundation::{HINSTANCE, HWND, LRESULT};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LRESULT, POINT};
+#[cfg(windows)]
+use windows::Win32::Graphics::Gdi::ScreenToClient;
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    LoadImageW, LoadCursorW, SetCursor, IMAGE_CURSOR, LR_DEFAULTSIZE,
-    LR_LOADFROMFILE, IDC_ARROW, HCURSOR, WM_SETCURSOR,
+    LoadImageW, LoadCursorW, SetCursor, GetCursorPos,
+    IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, IDC_ARROW, HCURSOR, WM_SETCURSOR,
 };
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{SetWindowSubclass, DefSubclassProc};
@@ -57,20 +59,9 @@ unsafe impl Send for CursorHandle {}
 #[cfg(windows)]
 unsafe impl Sync for CursorHandle {}
 
-#[cfg(windows)]
-#[derive(Copy, Clone)]
-struct WindowHandle(isize);
-
-#[cfg(windows)]
-unsafe impl Send for WindowHandle {}
-#[cfg(windows)]
-unsafe impl Sync for WindowHandle {}
-
 pub struct CursorManager {
     #[cfg(windows)]
     cursors: HashMap<ToolCursor, CursorHandle>,
-    #[cfg(windows)]
-    window_hwnd: Option<WindowHandle>,
     current_tool: Option<ToolCursor>,
 }
 
@@ -117,7 +108,6 @@ impl CursorManager {
 
             Ok(Self {
                 cursors,
-                window_hwnd: None,
                 current_tool: None,
             })
         }
@@ -140,9 +130,9 @@ impl CursorManager {
     pub fn set_window_handle(&mut self, hwnd: HWND) {
         unsafe {
             let _ = ACTIVE_CURSOR.get_or_init(|| Mutex::new(None));
+            let _ = TIMELINE_BOUNDS.get_or_init(|| Mutex::new(TimelineBounds::default()));
             let _ = SetWindowSubclass(hwnd, Some(cursor_subclass_proc), SUBCLASS_ID, 0);
         }
-        self.window_hwnd = Some(WindowHandle(hwnd.0 as isize));
     }
 
     pub fn set_tool(&mut self, tool: ToolCursor) -> Result<(), Box<dyn std::error::Error>> {
@@ -157,6 +147,19 @@ impl CursorManager {
         }
         self.current_tool = Some(tool);
         Ok(())
+    }
+
+    pub fn set_timeline_bounds(x: f32, y: f32, w: f32, h: f32) {
+        #[cfg(windows)]
+        {
+            if let Some(mut bounds) = TIMELINE_BOUNDS.get().and_then(|m| m.lock().ok()) {
+                bounds.x = x;
+                bounds.y = y;
+                bounds.w = w;
+                bounds.h = h;
+                bounds.valid = true;
+            }
+        }
     }
 
     pub fn reset_to_default(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -186,7 +189,50 @@ static CURSOR_MANAGER: OnceLock<Mutex<CursorManager>> = OnceLock::new();
 static ACTIVE_CURSOR: OnceLock<Mutex<Option<isize>>> = OnceLock::new();
 
 #[cfg(windows)]
+static TIMELINE_BOUNDS: OnceLock<Mutex<TimelineBounds>> = OnceLock::new();
+
+#[cfg(windows)]
+#[derive(Clone, Copy)]
+struct TimelineBounds {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    valid: bool,
+}
+
+#[cfg(windows)]
+impl Default for TimelineBounds {
+    fn default() -> Self {
+        Self { x: 0.0, y: 0.0, w: 0.0, h: 0.0, valid: false }
+    }
+}
+
+#[cfg(windows)]
 const SUBCLASS_ID: usize = 1;
+
+#[cfg(windows)]
+unsafe fn is_cursor_over_timeline(hwnd: HWND) -> bool {
+    let bounds = match TIMELINE_BOUNDS.get().and_then(|m| m.lock().ok()) {
+        Some(b) => *b,
+        None => return false,
+    };
+    if !bounds.valid {
+        return false;
+    }
+
+    let mut pt = POINT::default();
+    if unsafe { GetCursorPos(&mut pt) }.is_err() {
+        return false;
+    }
+    if !unsafe { ScreenToClient(hwnd, &mut pt) }.as_bool() {
+        return false;
+    }
+
+    let cx = pt.x as f32;
+    let cy = pt.y as f32;
+    cx >= bounds.x && cx <= bounds.x + bounds.w && cy >= bounds.y && cy <= bounds.y + bounds.h
+}
 
 #[cfg(windows)]
 unsafe extern "system" fn cursor_subclass_proc(
@@ -198,9 +244,11 @@ unsafe extern "system" fn cursor_subclass_proc(
     _ref_data: usize,
 ) -> LRESULT {
     if msg == WM_SETCURSOR && (lparam.0 & 0xFFFF) as u32 == 1 {
-        if let Some(active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()).and_then(|c| *c) {
-            unsafe { SetCursor(HCURSOR(active as *mut core::ffi::c_void)) };
-            return LRESULT(1);
+        if unsafe { is_cursor_over_timeline(hwnd) } {
+            if let Some(active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()).and_then(|c| *c) {
+                unsafe { SetCursor(HCURSOR(active as *mut core::ffi::c_void)) };
+                return LRESULT(1);
+            }
         }
     }
     unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
@@ -222,6 +270,10 @@ pub fn set_cursor_for_tool(tool_index: i32) -> Result<(), Box<dyn std::error::Er
         }
     }
     Ok(())
+}
+
+pub fn set_timeline_bounds(x: f32, y: f32, w: f32, h: f32) {
+    CursorManager::set_timeline_bounds(x, y, w, h);
 }
 
 pub fn reset_cursor_to_default() -> Result<(), Box<dyn std::error::Error>> {

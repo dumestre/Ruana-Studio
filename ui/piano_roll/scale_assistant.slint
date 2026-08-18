@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Button } from "../components/button.slint";
-import { ComboBox, CheckBox } from "std-widgets.slint";
+import { ComboBox } from "std-widgets.slint";
+import { ScaleCheckBox } from "../components/checkbox.slint";
 
 export component ScaleAssistant inherits Rectangle {
 
@@ -13,30 +14,28 @@ export component ScaleAssistant inherits Rectangle {
 
     in-out property <string> root-note: "C";
     in-out property <string> scale: "Maior (Jônio)";
-    
-    // Opções de visualização e comportamento de DAW
+
     in-out property <bool> snap-to-scale: false;
     in-out property <bool> highlight-notes: true;
     in-out property <bool> fold-piano-roll: false;
 
-    // Opções de seleção avançadas
     in property <[string]> root-notes: [
-        "C", "C# / Db", "D", "D# / Eb", "E", "F", 
+        "C", "C# / Db", "D", "D# / Eb", "E", "F",
         "F# / Gb", "G", "G# / Ab", "A", "A# / Bb", "B"
     ];
-    
+
     in property <[string]> scales: [
-        "Maior (Jônio)", 
-        "Menor Natural (Eólio)", 
-        "Dórico", 
-        "Frígio", 
-        "Lídio", 
-        "Mixolídio", 
+        "Maior (Jônio)",
+        "Menor Natural (Eólio)",
+        "Dórico",
+        "Frígio",
+        "Lídio",
+        "Mixolídio",
         "Lócrio",
-        "Menor Harmônica", 
-        "Menor Melódica", 
-        "Pentatônica Maior", 
-        "Pentatônica Menor", 
+        "Menor Harmônica",
+        "Menor Melódica",
+        "Pentatônica Maior",
+        "Pentatônica Menor",
         "Escala de Blues",
         "Tons Inteiros",
         "Diminuta",
@@ -47,8 +46,8 @@ export component ScaleAssistant inherits Rectangle {
     // DIMENSÕES
     // ============================================================
 
-    width: 400px;
-    height: 380px;
+    width: 260px;
+    height: 400px;
 
     background: Theme.surface;
 
@@ -61,53 +60,67 @@ export component ScaleAssistant inherits Rectangle {
     // CABEÇALHO
     // ============================================================
 
-    HorizontalLayout {
-        spacing: 8px;
-        cross-axis-alignment: CrossAxisAlignment.center; 
     Rectangle {
-            width: 4px;
-            height: 24px;
+        x: 0px;
+        y: 0px;
 
-            background: Theme.accent;
-            border-radius: 2px;
-        }
+        width: parent.width;
+        height: 34px;
 
-        Text {
-            
+        background: Theme.surface-high;
 
-            width: parent.width - 40px;
-            height: parent.height;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
 
-            text: "Assistente de Escala MIDI";
+            spacing: 8px;
 
-            color: Theme.text-primary;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
-            font-size: 10px;
-            font-weight: 600;
+            // Barrinha verde
+            Rectangle {
+                width: 4px;
+                height: 24px;
 
-            vertical-alignment: center;
-        }
+                background: Theme.accent;
 
-        // Botão Fechar Customizado
-        Button {
-            width: 24px;
-            height: 24px;
+                border-radius: 2px;
+            }
 
-            border-radius: 12px;
+            // Título
+            Text {
+                text: "ASSISTENTE DE ESCALA";
 
-            icon: @image-url("../icons/close.svg");
-            icon-size: 14px;
-            icon-color: Theme.text-primary;
+                color: Theme.text-primary;
 
-            close-touch := TouchArea {
-                mouse-cursor: pointer;
+                font-size: 14px;
+                font-weight: 700;
+
+                vertical-alignment: center;
+            }
+
+            // Espaçador
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            // Fechar
+            Button {
+                width: 24px;
+                height: 24px;
+
+                border-radius: 12px;
+
+                icon: @image-url("../icons/close.svg");
+                icon-size: 14px;
+                icon-color: Theme.text-primary;
+
                 clicked => {
                     root.close();
                 }
             }
         }
-    
-}
+    }
 
     // ============================================================
     // CONTEÚDO
@@ -115,22 +128,33 @@ export component ScaleAssistant inherits Rectangle {
 
     VerticalLayout {
         x: 12px;
-        y: 40px;
+        y: 46px;
 
         width: parent.width - 24px;
 
+        alignment: LayoutAlignment.start;
+
         spacing: 16px;
 
-        // --- BLOCO 1: TÔNICA E ESCALA ---
+        // ========================================================
+        // TÔNICA + ESCALA
+        // ========================================================
+
         VerticalLayout {
             spacing: 12px;
-            
+
+            // ----------------------------------------------------
+            // TÔNICA
+            // ----------------------------------------------------
+
             VerticalLayout {
                 spacing: 4px;
 
                 Text {
                     text: "Tônica";
+
                     color: Theme.text-dim;
+
                     font-size: 9px;
                     font-weight: 600;
                 }
@@ -138,20 +162,29 @@ export component ScaleAssistant inherits Rectangle {
                 ComboBox {
                     height: 28px;
                     width: parent.width;
+
                     model: root.root-notes;
+
                     current-value: root.root-note;
+
                     selected(value) => {
                         root.root-note = value;
                     }
                 }
             }
 
+            // ----------------------------------------------------
+            // ESCALA
+            // ----------------------------------------------------
+
             VerticalLayout {
                 spacing: 4px;
 
                 Text {
                     text: "Escala / Modo";
+
                     color: Theme.text-dim;
+
                     font-size: 9px;
                     font-weight: 600;
                 }
@@ -159,8 +192,11 @@ export component ScaleAssistant inherits Rectangle {
                 ComboBox {
                     height: 28px;
                     width: parent.width;
+
                     model: root.scales;
+
                     current-value: root.scale;
+
                     selected(value) => {
                         root.scale = value;
                     }
@@ -168,38 +204,61 @@ export component ScaleAssistant inherits Rectangle {
             }
         }
 
-        // --- BLOCO 2: OPÇÕES DE PIANO ROLL ---
+        // ========================================================
+        // OPÇÕES DO PIANO ROLL
+        // ========================================================
+
         VerticalLayout {
             spacing: 8px;
 
             Text {
                 text: "Comportamento da Grade";
+
                 color: Theme.text-dim;
+
                 font-size: 9px;
                 font-weight: 600;
             }
 
-            CheckBox {
+            // ----------------------------------------------------
+            // DESTACAR ESCALA
+            // ----------------------------------------------------
+
+            ScaleCheckBox {
                 text: "Destacar notas na escala";
+
                 checked: root.highlight-notes;
-                toggled => {
-                    root.highlight-notes = self.checked;
+
+                toggled(value) => {
+                    root.highlight-notes = value;
                 }
             }
 
-            CheckBox {
+            // ----------------------------------------------------
+            // SNAP TO SCALE
+            // ----------------------------------------------------
+
+            ScaleCheckBox {
                 text: "Snap to Scale (Ajustar notas)";
+
                 checked: root.snap-to-scale;
-                toggled => {
-                    root.snap-to-scale = self.checked;
+
+                toggled(value) => {
+                    root.snap-to-scale = value;
                 }
             }
 
-            CheckBox {
+            // ----------------------------------------------------
+            // FOLD
+            // ----------------------------------------------------
+
+            ScaleCheckBox {
                 text: "Fold (Ocultar teclas fora da escala)";
+
                 checked: root.fold-piano-roll;
-                toggled => {
-                    root.fold-piano-roll = self.checked;
+
+                toggled(value) => {
+                    root.fold-piano-roll = value;
                 }
             }
         }
@@ -219,6 +278,12 @@ export component ScaleAssistant inherits Rectangle {
 
         alignment: LayoutAlignment.end;
 
+        cross-axis-alignment: CrossAxisAlignment.stretch;
+
+        // --------------------------------------------------------
+        // CANCELAR
+        // --------------------------------------------------------
+
         Button {
             width: 70px;
             height: 24px;
@@ -231,6 +296,10 @@ export component ScaleAssistant inherits Rectangle {
                 root.close();
             }
         }
+
+        // --------------------------------------------------------
+        // APLICAR
+        // --------------------------------------------------------
 
         Button {
             width: 70px;
