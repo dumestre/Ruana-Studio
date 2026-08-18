@@ -69,8 +69,14 @@ export component Workspace inherits Rectangle {
     callback clip-glue-requested(int);
     callback glue-clip-at(float, length, length, length) -> int;
     callback clip-move-started(int, float);
-    callback clip-move-delta(int, float);
+    callback clip-move-delta(int, float, int);
     callback clip-move-finished(int);
+    callback clip-resize-started(int, int);
+    callback clip-resize-delta(int, int, float);
+    callback clip-resize-finished(int);
+    callback clip-delete-requested(int);
+    callback clip-rename-requested(int, string);
+    callback clip-color-cycle-requested(int);
     callback mixer-param-changed(int, string, float);
     callback mixer-insert-added(int);
     callback mixer-insert-removed(int, int);
@@ -87,6 +93,7 @@ export component Workspace inherits Rectangle {
     property <bool> bottom-panel-visible: false;
     in-out property <[bool]> floated: [false, false, false];
     in-out property <int> selected-tab: -1;
+    in-out property <int> selected-clip: -1;
 
     callback float-toggle(int);
     callback tool-changed(int);
@@ -193,13 +200,19 @@ export component Workspace inherits Rectangle {
                             drop-track: root.drag-drop-track;
                             drop-len-beats: 4.0;
                             select-track(index) => { root.selected-track = index; }
-                            clip-selected(index) => { root.selected-track = index; }
+                            clip-selected(index) => { root.selected-track = index; root.selected-clip = index; }
                             clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
                             clip-glue-requested(id) => { root.clip-glue-requested(id); }
                             glue-clip-at(row, x, sx, ppb) => { root.glue-clip-at(row, x, sx, ppb) }
                             clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
-                            clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
+                            clip-move-delta(id, delta_beats, delta_tracks) => { root.clip-move-delta(id, delta_beats, delta_tracks); }
                             clip-move-finished(id) => { root.clip-move-finished(id); }
+                            clip-resize-started(id, side) => { root.clip-resize-started(id, side); }
+                            clip-resize-delta(id, side, delta) => { root.clip-resize-delta(id, side, delta); }
+                            clip-resize-finished(id) => { root.clip-resize-finished(id); }
+                            clip-delete-requested(id) => { root.clip-delete-requested(id); }
+                            clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
+                            clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
                             Rectangle { min-width: 16px; min-height: 16px; }
                         }
                     }

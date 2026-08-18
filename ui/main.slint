@@ -136,6 +136,8 @@ export component MainWindow inherits Window {
         [];
     in-out property <int> mixer-max-inserts:
         8;
+        
+    in-out property <int> selected-clip <=> workspace.selected-clip;
 
     in-out property <[ClipData]> clips:
         [
@@ -174,8 +176,15 @@ export component MainWindow inherits Window {
     callback glue-clip-at(float, length, length, length) -> int;
 
     callback clip-move-started(int, float);
-    callback clip-move-delta(int, float);
+    callback clip-move-delta(int, float, int);
     callback clip-move-finished(int);
+
+    callback clip-resize-started(int, int);
+    callback clip-resize-delta(int, int, float);
+    callback clip-resize-finished(int);
+    callback clip-delete-requested(int);
+    callback clip-rename-requested(int, string);
+    callback clip-color-cycle-requested(int);
 
     callback undo-requested;
 
@@ -384,6 +393,14 @@ export component MainWindow inherits Window {
                 root.redo-requested();
                 accept
 
+            } else if event.text == Key.Delete || event.text == Key.Backspace {
+                
+                if root.selected-clip != -1 {
+                    root.clip-delete-requested(root.selected-clip);
+                    accept
+                } else {
+                    reject
+                }
             } else {
 
                 reject;
@@ -395,7 +412,7 @@ export component MainWindow inherits Window {
         undo-scope.focus();
     }
 
-    Workspace {
+    workspace := Workspace {
         full-screen <=> root.full-screen;
         zoom-level <=> root.zoom-level;
         playing <=> root.playing;
@@ -448,8 +465,14 @@ export component MainWindow inherits Window {
         clip-glue-requested(id) => { root.clip-glue-requested(id); }
         glue-clip-at(row, x, sx, ppb) => { root.glue-clip-at(row, x, sx, ppb) }
         clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
-        clip-move-delta(id, delta) => { root.clip-move-delta(id, delta); }
+        clip-move-delta(id, delta_beats, delta_tracks) => { root.clip-move-delta(id, delta_beats, delta_tracks); }
         clip-move-finished(id) => { root.clip-move-finished(id); }
+        clip-resize-started(id, side) => { root.clip-resize-started(id, side); }
+        clip-resize-delta(id, side, delta) => { root.clip-resize-delta(id, side, delta); }
+        clip-resize-finished(id) => { root.clip-resize-finished(id); }
+        clip-delete-requested(id) => { root.clip-delete-requested(id); }
+        clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
+        clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
         mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
         mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
         mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }

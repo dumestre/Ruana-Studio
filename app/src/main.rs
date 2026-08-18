@@ -1014,11 +1014,16 @@ fn main() -> Result<(), slint::PlatformError> {
     // Mover clip: delta durante o drag (feedback visual imediato)
     {
         let clips_model = clips_model.clone();
-        ui.on_clip_move_delta(move |id, delta| {
+        let project = project.clone();
+        ui.on_clip_move_delta(move |id, delta_beats, delta_tracks| {
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(mut clip) = clips_model.row_data(i) {
-                    let new_beat = (clip.beat + delta).max(0.0);
+                    let num_tracks = project.borrow().tracks.len() as i32;
+                    let new_beat = (clip.beat + delta_beats).max(0.0);
+                    let new_track = (clip.track_index + delta_tracks).max(0).min(num_tracks - 1);
+                    
                     clip.beat = new_beat;
+                    clip.track_index = new_track;
                     clips_model.set_row_data(i, clip);
                 }
             }

@@ -63,7 +63,7 @@ export component TrackClip inherits Rectangle {
     callback slice-requested(int, float);
 
     callback clip-move-started(int, float);       // id, start-beat
-    callback clip-move-delta(int, float);          // id, delta-beats (acumulado desde start)
+    callback clip-move-delta(int, float, int);     // id, delta-beats, delta-tracks
     callback clip-move-finished(int);              // id
 
     callback clip-resize-started(int, int);        // id, side (-1 left, 1 right)
@@ -242,84 +242,14 @@ export component TrackClip inherits Rectangle {
 
 
         // =================================================
-        // BOTÃO DELETAR (×) — aparece quando clip selecionado
-        // =================================================
-
-        if root.selected: Rectangle {
-            x: parent.width - 22px;
-            y: 2px;
-            width: 14px;
-            height: 14px;
-            background: #101010aa;
-            border-radius: 7px;
-            z: 6;
-
-            Text {
-                x: 0; y: 0;
-                width: parent.width;
-                height: parent.height;
-                text: "×";
-                color: white;
-                font-size: 14px;
-                font-weight: 800;
-                vertical-alignment: center;
-                horizontal-alignment: center;
-            }
-
-            TouchArea {
-                x: 0; y: 0;
-                width: parent.width;
-                height: parent.height;
-                mouse-cursor: pointer;
-
-                clicked => {
-                    root.clip-delete-requested(root.clip-id);
-                }
-            }
-        }
-
-
-        // =================================================
-        // SWATCH DE COR (canto superior esquerdo do header)
-        // =================================================
-
-        if root.selected: Rectangle {
-            x: 4px;
-            y: 3px;
-            width: 12px;
-            height: 12px;
-
-            background: root.clip-color;
-            border-radius: 3px;
-            border-width: 1px;
-            border-color: #ffffff99;
-            z: 6;
-
-            TouchArea {
-                x: 0; y: 0;
-                width: parent.width;
-                height: parent.height;
-                mouse-cursor: pointer;
-
-                clicked => {
-                    root.clip-color-cycle-requested(root.clip-id);
-                }
-            }
-        }
-
-
-        // =================================================
         // NOME (ou TextInput no modo rename)
         // =================================================
 
         if !root.renaming: Text {
-            x: root.selected ? 20px : 6px;
+            x: 6px;
             y: 2px;
 
-            width:
-                parent.width
-                - (root.selected ? 46px : 12px);
-
+            width: parent.width - 12px;
             height: parent.height - 2px;
 
             text: root.name;
@@ -335,13 +265,10 @@ export component TrackClip inherits Rectangle {
         }
 
         if root.renaming: Rectangle {
-            x: root.selected ? 20px : 6px;
+            x: 6px;
             y: 2px;
 
-            width:
-                parent.width
-                - (root.selected ? 46px : 12px);
-
+            width: parent.width - 12px;
             height: parent.height - 2px;
 
             background: #ffffff;
@@ -548,15 +475,26 @@ export component TrackClip inherits Rectangle {
 
 
         // =================================================
-        // POINTER EVENT — unifica slice, move, resize
+        // POINTER EVENT — unifica slice, move, resize, eraser, color
         // =================================================
 
         pointer-event(event) => {
 
+            // ----- RIGHT CLICK: COLOR CYCLE -----
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                root.clip-color-cycle-requested(root.clip-id);
+            }
+
+            // ----- FERRAMENTA ERASER (2) -----
+            if root.active-tool == 2 {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    root.clip-delete-requested(root.clip-id);
+                }
+            }
+
             // ----- FERRAMENTA SLICE (1) -----
             if root.active-tool == 1 {
-
-                if event.kind == PointerEventKind.down {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                     root.slice-requested(
                         root.clip-id,
                         root.slice-preview-x / root.px-per-beat
@@ -569,7 +507,7 @@ export component TrackClip inherits Rectangle {
             // ----- FERRAMENTA SELECT (0) RESIZE NA BORDA -----
             if root.active-tool == 0 && root.on-edge {
 
-                if event.kind == PointerEventKind.down {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
 
                     let side =
                         root.on-left-edge
@@ -605,9 +543,10 @@ export component TrackClip inherits Rectangle {
             // ----- FERRAMENTA SELECT (0) MOVER (não edge) -----
             if root.active-tool == 0 && !root.on-edge && !root.renaming {
 
-                if event.kind == PointerEventKind.down {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
 
                     self.drag-start-x = self.mouse-x;
+                    self.drag-start-y = self.mouse-y;
                     self.drag-start-beat = root.beat;
                     self.dragging = true;
 
@@ -616,9 +555,11 @@ export component TrackClip inherits Rectangle {
                 } else if event.kind == PointerEventKind.move && self.dragging {
 
                     let dx = self.mouse-x - self.drag-start-x;
+                    let dy = self.mouse-y - self.drag-start-y;
                     let delta_beats = dx / root.px-per-beat;
+                    let delta_tracks = Math.round(dy / root.row-height);
 
-                    root.clip-move-delta(root.clip-id, delta_beats);
+                    root.clip-move-delta(root.clip-id, delta_beats, delta_tracks);
 
                 } else if event.kind == PointerEventKind.up && self.dragging {
 
@@ -633,6 +574,7 @@ export component TrackClip inherits Rectangle {
 
         // Move
         private property <length> drag-start-x: 0px;
+        private property <length> drag-start-y: 0px;
         private property <float> drag-start-beat: 0.0;
         private property <bool> dragging: false;
 

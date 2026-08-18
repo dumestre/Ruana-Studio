@@ -94,7 +94,7 @@ export component Timeline inherits Rectangle {
     callback clip-glue-requested(int);
     callback glue-clip-at(float, length, length, length) -> int;
     callback clip-move-started(int, float);
-    callback clip-move-delta(int, float);
+    callback clip-move-delta(int, float, int);
     callback clip-move-finished(int);
 
     callback clip-resize-started(int, int);
@@ -890,8 +890,8 @@ export component Timeline inherits Rectangle {
                         root.clip-move-started(id, beat);
                     }
 
-                    clip-move-delta(id, delta) => {
-                        root.clip-move-delta(id, delta);
+                    clip-move-delta(id, delta_beats, delta_tracks) => {
+                        root.clip-move-delta(id, delta_beats, delta_tracks);
                     }
 
                     clip-move-finished(id) => {
