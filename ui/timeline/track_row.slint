@@ -67,6 +67,8 @@ export component TrackRow inherits Rectangle {
     callback clip-move-delta(int, float, int);
     callback clip-move-finished(int);
 
+    callback clip-drag-overlay-started(int, float, float);
+
     callback clip-resize-started(int, int);
     callback clip-resize-delta(int, int, float);
     callback clip-resize-finished(int);
@@ -268,6 +270,10 @@ export component TrackRow inherits Rectangle {
 
         clip-move-finished(id) => {
             root.clip-move-finished(id);
+        }
+
+        clip-drag-overlay-started(id, abs-x, abs-y) => {
+            root.clip-drag-overlay-started(id, abs-x, abs-y);
         }
 
         clip-resize-started(id, side) => {

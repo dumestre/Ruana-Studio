@@ -69,6 +69,14 @@ export component Timeline inherits Rectangle {
     in property <int> drag-clip-id: -1;
     in property <int> drag-track-offset: 0;
 
+    // Overlay drag state (captures pointer during fast clip drag)
+    out property <bool> overlay-drag-active: false;
+    out property <int> overlay-drag-id: -1;
+    out property <length> overlay-anchor-x: 0px;
+    out property <length> overlay-anchor-y: 0px;
+
+    callback clip-drag-overlay-started(int, float, float);
+
 
     // =====================================================
     // PREVIEW DE DROP (arrasto do ClipPool)
@@ -926,6 +934,13 @@ export component Timeline inherits Rectangle {
                         root.clip-move-finished(id);
                     }
 
+                    clip-drag-overlay-started(id, abs-x, abs-y) => {
+                        root.overlay-drag-active = true;
+                        root.overlay-drag-id = id;
+                        root.overlay-anchor-x = abs-x * 1px;
+                        root.overlay-anchor-y = abs-y * 1px;
+                    }
+
                     clip-resize-started(id, side) => {
                         root.clip-resize-started(id, side);
                     }
@@ -1127,6 +1142,66 @@ export component Timeline inherits Rectangle {
                 if id >= 0 {
                     root.clip-glue-requested(id);
                 }
+            }
+        }
+    }
+
+
+    // =====================================================
+    // OVERLAY: captura pointer durante drag rápido de clip
+    // =====================================================
+
+    clip-drag-overlay := TouchArea {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        enabled: root.overlay-drag-active;
+        z: 300;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.move && root.overlay-drag-active {
+                let abs-x = self.mouse-x + self.absolute-position.x;
+                let abs-y = self.mouse-y + self.absolute-position.y;
+                let delta-beats = (abs-x - root.overlay-anchor-x) / root.px-per-beat;
+                let delta-tracks = Math.round((abs-y - root.overlay-anchor-y) / root.row-height);
+                root.clip-move-delta(root.overlay-drag-id, delta-beats, delta-tracks);
+            } else if event.kind == PointerEventKind.up && root.overlay-drag-active {
+                root.overlay-drag-active = false;
+                root.clip-move-finished(root.overlay-drag-id);
+                root.overlay-drag-id = -1;
+            }
+        }
+    }
+
+
+    // =====================================================
+    // AUTO-SCROLL: rola a view quando arrasta clip perto da borda
+    // =====================================================
+
+    property <length> auto-scroll-edge: 50px;
+    property <length> auto-scroll-speed: 6px;
+
+    Timer {
+        interval: 16ms;
+        running: root.overlay-drag-active;
+
+        triggered() => {
+            let mx = clip-drag-overlay.mouse-x;
+            let my = clip-drag-overlay.mouse-y;
+
+            // Horizontal
+            if mx > root.width - root.auto-scroll-edge && mx <= root.width {
+                root.scroll-x = min(root.max-scroll-x, root.scroll-x + root.auto-scroll-speed);
+            } else if mx >= 0px && mx < root.auto-scroll-edge {
+                root.scroll-x = max(0px, root.scroll-x - root.auto-scroll-speed);
+            }
+
+            // Vertical
+            if my > root.height - root.auto-scroll-edge && my <= root.height {
+                root.scroll-y = min(root.max-scroll-y, root.scroll-y + root.auto-scroll-speed);
+            } else if my >= 0px && my < root.auto-scroll-edge {
+                root.scroll-y = max(0px, root.scroll-y - root.auto-scroll-speed);
             }
         }
     }

@@ -17,10 +17,13 @@ fn decode_wav_file(path: &Path) -> Result<WaveformData, Box<dyn std::error::Erro
     let spec = reader.spec();
 
     let samples: Vec<f32> = match spec.sample_format {
-        hound::SampleFormat::Int => reader
-            .samples::<i32>()
-            .map(|s| s.map(|v| v as f32 / i32::MAX as f32))
-            .collect::<Result<Vec<_>, _>>()?,
+        hound::SampleFormat::Int => {
+            let max_val = (1i32 << (spec.bits_per_sample - 1)) as f32;
+            reader
+                .samples::<i32>()
+                .map(|s| s.map(|v| v as f32 / max_val))
+                .collect::<Result<Vec<_>, _>>()?
+        }
         hound::SampleFormat::Float => reader.samples::<f32>().collect::<Result<Vec<_>, _>>()?,
     };
 

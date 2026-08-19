@@ -1309,64 +1309,42 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Playback: o playhead vive no Transport do core; o timer só
     // avança o core e projeta a posição na UI.
+    // Mixer meters animados também rodam enquanto tocando.
     {
         let ui_weak = ui.as_weak();
-        let timer = Rc::new(RefCell::new(slint::Timer::default()));
-        let timer_ref = timer.clone();
+        let transport_timer = Rc::new(RefCell::new(slint::Timer::default()));
+        let transport_timer_ref = transport_timer.clone();
         let transport = transport.clone();
+        let project = project.clone();
+        let panels = float_panels.clone();
+        let meter_timer = Rc::new(RefCell::new(slint::Timer::default()));
+        let meter_timer_ref = meter_timer.clone();
         ui.on_play_state_changed(move |playing| {
             transport.borrow_mut().toggle();
             if playing {
-                let ui_weak = ui_weak.clone();
+                // Transport timer: avança playhead
+                let ui_weak_t = ui_weak.clone();
                 let transport = transport.clone();
-                timer_ref.borrow().start(
+                transport_timer_ref.borrow().start(
                     slint::TimerMode::Repeated,
                     Duration::from_millis(50),
                     move || {
-                        if let Some(ui) = ui_weak.upgrade() {
+                        if let Some(ui) = ui_weak_t.upgrade() {
                             let mut t = transport.borrow_mut();
                             t.advance(48);
                             ui.set_transport_position(t.position_ticks as i32);
                         }
                     },
                 );
-            } else {
-                timer_ref.borrow().stop();
-            }
-        });
-    }
-
-    // Seek-to: régua da timeline clica para posicionar playhead.
-    {
-        let transport = transport.clone();
-        let ui_weak = ui.as_weak();
-        ui.on_seek_to(move |beat| {
-            let ticks = (beat * 960.0) as u64;
-            transport.borrow_mut().seek(ticks);
-            if let Some(ui) = ui_weak.upgrade() {
-                ui.set_transport_position(transport.borrow().position_ticks as i32);
-            }
-        });
-    }
-
-    // Meters animados (áudio falso) — só rodam enquanto "tocando".
-    let meter_timer = Rc::new(slint::Timer::default());
-    {
-        let project = project.clone();
-        let ui_weak = ui.as_weak();
-        let panels = float_panels.clone();
-        let timer = meter_timer.clone();
-        ui.on_play_state_changed(move |playing| {
-            if playing {
+                // Meter timer: anima meters
+                let ui_weak_m = ui_weak.clone();
                 let project = project.clone();
-                let ui_weak = ui_weak.clone();
                 let panels = panels.clone();
-                let timer = timer.clone();
-                timer.start(
+                meter_timer_ref.borrow().start(
                     slint::TimerMode::Repeated,
                     Duration::from_millis(80),
                     move || {
-                        if let Some(ui) = ui_weak.upgrade() {
+                        if let Some(ui) = ui_weak_m.upgrade() {
                             let count = project.borrow().tracks.len() + 1;
                             let mut levels: Vec<f32> = Vec::new();
                             for _ in 0..count {
@@ -1383,7 +1361,21 @@ fn main() -> Result<(), slint::PlatformError> {
                     },
                 );
             } else {
-                timer.stop();
+                transport_timer_ref.borrow().stop();
+                meter_timer_ref.borrow().stop();
+            }
+        });
+    }
+
+    // Seek-to: régua da timeline clica para posicionar playhead.
+    {
+        let transport = transport.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_seek_to(move |beat| {
+            let ticks = (beat * 960.0) as u64;
+            transport.borrow_mut().seek(ticks);
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_transport_position(transport.borrow().position_ticks as i32);
             }
         });
     }

@@ -72,6 +72,9 @@ export component TrackClip inherits Rectangle {
     callback clip-move-delta(int, float, int);     // id, delta-beats, delta-tracks
     callback clip-move-finished(int);              // id
 
+    // Overlay drag: sinaliza início com âncora absoluta para o overlay global capturar
+    callback clip-drag-overlay-started(int, float, float);  // id, anchor-abs-x, anchor-abs-y
+
     callback clip-resize-started(int, int);        // id, side (-1 left, 1 right)
     callback clip-resize-delta(int, int, float);   // id, side, delta-beats acumulado
     callback clip-resize-finished(int);            // id
@@ -568,6 +571,11 @@ export component TrackClip inherits Rectangle {
                     self.dragging = true;
 
                     root.clip-move-started(root.clip-id, root.beat);
+                    root.clip-drag-overlay-started(
+                        root.clip-id,
+                        self.drag-start-abs-x / 1px,
+                        self.drag-start-abs-y / 1px
+                    );
 
                 } else if event.kind == PointerEventKind.move && self.dragging {
 
