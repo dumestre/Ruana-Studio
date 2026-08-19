@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { SearchBar } from "../components/search_bar.slint";
-import { FileBrowser } from "file_browser.slint";
+import { BrowserFileEntry, FileBrowser } from "file_browser.slint";
 import { MediaBrowser } from "media_browser.slint";
 import { PluginBrowser } from "plugin_browser.slint";
 import { Preview } from "preview.slint";
@@ -18,7 +18,7 @@ export component Explorer inherits Rectangle {
     in-out property <string> current-path: "";
     in-out property <[string]> path-history: [];
     in-out property <int> history-index: -1;
-    in-out property <[string]> entries: [];
+    in-out property <[BrowserFileEntry]> entries: [];
 
     callback audio-drag-started(string, string, color, bool);
     callback audio-drag-moved(length, length);
@@ -105,10 +105,10 @@ export component Explorer inherits Rectangle {
             background: transparent;
 
             if root.browser-mode == 0 : FileBrowser {
-                entries: [];
-                current-path: "";
-                path-history: [];
-                history-index: -1;
+                entries: root.entries;
+                current-path: root.current-path;
+                path-history: root.path-history;
+                history-index: root.history-index;
                 selected-index: -1;
 
                 path-changed(path) => {
@@ -123,6 +123,15 @@ export component Explorer inherits Rectangle {
                 }
                 explorer-go-up() => {
                     root.explorer-go-up();
+                }
+                audio-drag-started(name, type, color, is-midi) => {
+                    root.audio-drag-started(name, type, color, is-midi);
+                }
+                audio-drag-moved(x, y) => {
+                    root.audio-drag-moved(x, y);
+                }
+                audio-drag-finished() => {
+                    root.audio-drag-finished();
                 }
             }
 

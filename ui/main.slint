@@ -2,11 +2,18 @@ import { Theme } from "theme.slint";
 import { ClipData } from "timeline/clip_data.slint";
 import { BeatPopup } from "beat/beat.slint";
 import { Workspace } from "windows/workspace.slint";
+import { BrowserFileEntry } from "explorer/file_browser.slint";
 import { FloatPanel } from "windows/float_panel.slint";
 import { PianoRollData, PianoRollActions } from "piano_roll/piano_roll_state.slint";
 
 export { FloatPanel }
 export { PianoRollData, PianoRollActions }
+export { BrowserFileEntry }
+
+export struct TimelineCoords {
+    track: int,
+    beat: float,
+}
 
 
 export component MainWindow inherits Window {
@@ -81,7 +88,7 @@ export component MainWindow inherits Window {
         [];
     in-out property <int> explorer-history-index:
         -1;
-    in-out property <[string]> explorer-entries:
+    in-out property <[BrowserFileEntry]> explorer-entries:
         [];
 
     // =====================================================
@@ -198,6 +205,8 @@ export component MainWindow inherits Window {
 
     callback explorer-path-changed(string);
     callback explorer-directory-entered(string);
+
+    callback map-window-coords-to-timeline(length, length) -> TimelineCoords;
     callback explorer-go-up();
 
     callback float-toggle(int);
@@ -410,6 +419,19 @@ export component MainWindow inherits Window {
 
     init => {
         undo-scope.focus();
+    }
+
+    map-window-coords-to-timeline(wx, wy) => {
+        let rx = wx - workspace.timeline-abs-x + workspace.timeline-scroll-x;
+        let ry = wy - workspace.timeline-abs-y + workspace.timeline-scroll-y;
+        
+        let beat = rx / workspace.timeline-px-per-beat;
+        let track = Math.floor(ry / workspace.timeline-row-height);
+        
+        return {
+            track: Math.max(0, Math.min(root.track-names.length - 1, track)),
+            beat: Math.max(0.0, beat)
+        };
     }
 
     workspace := Workspace {

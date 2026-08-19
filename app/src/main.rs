@@ -41,6 +41,37 @@ fn to_clip_data(clip: &Clip) -> ClipData {
     }
 }
 
+fn load_directory_entries(path: &std::path::Path) -> Vec<BrowserFileEntry> {
+    if let Ok(entries) = list_directory(path) {
+        entries
+            .iter()
+            .map(|e| {
+                let entry_type = if e.is_directory {
+                    "Folder".to_string()
+                } else {
+                    let ext = e.path.extension()
+                        .and_then(|ext| ext.to_str())
+                        .unwrap_or("")
+                        .to_uppercase();
+                    if ext == "WAV" || ext == "MP3" {
+                        ext
+                    } else {
+                        "File".to_string()
+                    }
+                };
+                BrowserFileEntry {
+                    name: e.name.clone().into(),
+                    entry_type: entry_type.into(),
+                    path: e.path.to_string_lossy().to_string().into(),
+                    is_directory: e.is_directory,
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
 /// Editor de notas do piano roll (sem suporte a clip ainda: lista global
 /// da janela). O Rust é a fonte da verdade; o modelo Slint é re-sincronizado
 /// a cada edição.
@@ -457,6 +488,8 @@ fn initial_bind(
     ui.set_explorer_current_path(initial_path.clone().into());
     ui.set_explorer_path_history(Rc::new(slint::VecModel::from(vec![initial_path.into()])).into());
     ui.set_explorer_history_index(0);
+    let initial_entries = load_directory_entries(&samples_dir);
+    ui.set_explorer_entries(Rc::new(slint::VecModel::from(initial_entries)).into());
 
     (tracks_model, clips_model)
 }
@@ -1167,19 +1200,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     ui.set_explorer_current_path(slint::SharedString::from(path.to_string_lossy().as_ref()));
 
                     // Carrega entradas
-                    if let Ok(entries) = list_directory(&path) {
-                        let file_entries: Vec<slint::SharedString> = entries
-                            .iter()
-                            .map(|e| {
-                                let entry_type = if e.is_directory { "Folder" } else { "File" };
-                                format!("{}\t{}\t{}\t{}", e.name, entry_type, e.path.display(), e.is_directory)
-                            })
-                            .map(|s| s.into())
-                            .collect();
-                        ui.set_explorer_entries(Rc::new(slint::VecModel::from(file_entries)).into());
-}
+                    // Carrega entradas
+                    let file_entries = load_directory_entries(&path);
+                    ui.set_explorer_entries(Rc::new(slint::VecModel::from(file_entries)).into());
+                }
             }
-        }
         });
     }
 
@@ -1198,17 +1223,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     ui.set_explorer_history_index(idx + 1);
                     ui.set_explorer_current_path(slint::SharedString::from(path_buf.to_string_lossy().as_ref()));
 
-                    if let Ok(entries) = list_directory(&path_buf) {
-                        let file_entries: Vec<slint::SharedString> = entries
-                            .iter()
-                            .map(|e| {
-                                let entry_type = if e.is_directory { "Folder" } else { "File" };
-                                format!("{}\t{}\t{}\t{}", e.name, entry_type, e.path.display(), e.is_directory)
-                            })
-                            .map(|s| slint::SharedString::from(s.as_str()))
-                            .collect();
-                        ui.set_explorer_entries(Rc::new(slint::VecModel::from(file_entries)).into());
-                    }
+                    let file_entries = load_directory_entries(&path_buf);
+                    ui.set_explorer_entries(Rc::new(slint::VecModel::from(file_entries)).into());
                 }
             }
         });
@@ -1303,6 +1319,56 @@ fn main() -> Result<(), slint::PlatformError> {
             window.set_minimized(true);
         }
     });
+
+    // Suporte a arrastar e soltar arquivos do Sistema Operacional (OS Drag & Drop)
+    {
+        use i_slint_backend_winit::WinitWindowAccessor;
+        let ui_weak = ui.as_weak();
+        let project = project.clone();
+        
+        // Rastreia a última posição física do cursor
+        let last_phys_pos = Rc::new(RefCell::new((0.0, 0.0)));
+        let pos_tracker = last_phys_pos.clone();
+        
+        ui.window().on_winit_window_event(move |_win, event| {
+            use i_slint_backend_winit::winit::event::WindowEvent;
+            match event {
+                WindowEvent::CursorMoved { position, .. } => {
+                    *pos_tracker.borrow_mut() = (position.x, position.y);
+                }
+                WindowEvent::DroppedFile(path) => {
+                    if let Some(ui) = ui_weak.upgrade() {
+                        let ext = path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .unwrap_or("")
+                            .to_uppercase();
+                        if ext == "WAV" || ext == "MP3" {
+                            let (phys_x, phys_y) = *last_phys_pos.borrow();
+                            let scale_factor = ui.window().scale_factor();
+                            let logical_x = phys_x as f32 / scale_factor;
+                            let logical_y = phys_y as f32 / scale_factor;
+                            
+                            // Mapeia coordenadas lógicas do cursor na janela para a Timeline (track/beat)
+                            let coords = ui.invoke_map_window_coords_to_timeline(logical_x, logical_y);
+                            
+                            let track_id = coords.track.max(0) as u64;
+                            let start = coords.beat.round().max(0.0) as u32;
+                            let name = path.file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("Audio Clip");
+                                
+                            let mut proj = project.borrow_mut();
+                            if proj.track(track_id).is_some() {
+                                proj.add_clip(track_id, ClipKind::Audio, name, start, 4);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+            i_slint_backend_winit::EventResult::Propagate
+        });
+    }
 
     ui.run()
 }

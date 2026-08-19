@@ -1,15 +1,15 @@
 import { Theme } from "../theme.slint";
 import { BrowserItem } from "../components/browser_item.slint";
 
-export struct FileEntry {
+export struct BrowserFileEntry {
     name: string,
-    type: string,
+    entry-type: string,
     path: string,
     is-directory: bool,
 }
 
 export component FileBrowser inherits Rectangle {
-    in property <[FileEntry]> entries: [];
+    in property <[BrowserFileEntry]> entries: [];
     in property <string> current-path: "";
     in property <[string]> path-history: [];
     in property <int> history-index: -1;
@@ -20,6 +20,10 @@ export component FileBrowser inherits Rectangle {
     callback file-selected(string, string, string); // name, type, path
     callback directory-entered(string); // path
     callback explorer-go-up();
+
+    callback audio-drag-started(string, string, color, bool);
+    callback audio-drag-moved(length, length);
+    callback audio-drag-finished();
 
     background: transparent;
 
@@ -140,30 +144,37 @@ export component FileBrowser inherits Rectangle {
 
                 for entry[index] in root.entries : BrowserItem {
                     name: entry.name;
-                    type: entry.type;
+                    type: entry.entry-type;
                     selected: root.selected-index == index;
                     icon: "";
                     icon-image:
                         entry.is-directory
                             ? @image-url("../icons/folder.svg")
                             : @image-url("../icons/audio.svg");
-                    drag-enabled: !entry.is-directory && entry.type == "WAV";
+                    drag-enabled: !entry.is-directory && (entry.entry-type == "WAV" || entry.entry-type == "MP3");
 
                     clicked => {
                         root.selected-index = index;
                         if entry.is-directory {
                             root.directory-entered(entry.path);
                         } else {
-                            root.file-selected(entry.name, entry.type, entry.path);
+                            root.file-selected(entry.name, entry.entry-type, entry.path);
                         }
                     }
 
                     drag-started() => {
-                        // forward para o parent
+                        root.audio-drag-started(
+                            entry.name,
+                            entry.entry-type,
+                            Theme.clip-audio,
+                            false
+                        );
                     }
                     drag-moved(x, y) => {
+                        root.audio-drag-moved(x, y);
                     }
                     drag-finished() => {
+                        root.audio-drag-finished();
                     }
                 }
             }

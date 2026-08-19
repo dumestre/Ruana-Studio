@@ -6,6 +6,7 @@ import { ClipPool, ClipItemVisual } from "../clip_pool.slint";
 import { Timeline } from "../timeline/timeline.slint";
 import { ClipData } from "../timeline/clip_data.slint";
 import { Explorer } from "../explorer/explorer.slint";
+import { BrowserFileEntry } from "../explorer/file_browser.slint";
 import { Mixer } from "../mixer/mixer.slint";
 import { SamplerArea } from "../components/sampler_area.slint";
 import { PianoRollArea } from "../piano_roll/piano_roll.slint";
@@ -59,7 +60,14 @@ export component Workspace inherits Rectangle {
     in-out property <string> explorer-current-path: "";
     in-out property <[string]> explorer-path-history: [];
     in-out property <int> explorer-history-index: -1;
-    in-out property <[string]> explorer-entries: [];
+    in-out property <[BrowserFileEntry]> explorer-entries: [];
+
+    out property <length> timeline-abs-x: timeline.absolute-position.x;
+    out property <length> timeline-abs-y: timeline.absolute-position.y;
+    out property <length> timeline-scroll-x: timeline.scroll-x;
+    out property <length> timeline-scroll-y: timeline.scroll-y;
+    out property <length> timeline-px-per-beat: timeline.px-per-beat;
+    out property <length> timeline-row-height: timeline.row-height;
 
     callback close();
     callback minimize();
