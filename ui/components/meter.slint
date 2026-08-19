@@ -20,13 +20,14 @@ export component Meter {
 
     // ==========================================
     // SMOOTH LEVEL
+    //
+    // SEM animação Slint: o smoothing (attack instantâneo,
+    // decay lento) é feito no Rust a cada tick do timer.
+    // Animações aqui mantêm o renderer sob carga contínua
+    // e travam o playhead durante o playback.
     // ==========================================
 
     property <float> smooth-level: root.level;
-
-    animate smooth-level {
-        duration: 70ms;
-    }
 
     // ==========================================
     // BACKGROUND

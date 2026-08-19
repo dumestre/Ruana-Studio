@@ -364,6 +364,53 @@ fn mixer_inserts_state(
     (counts, names, enabled, max_count)
 }
 
+/// VecModel do mixer COMPARTILHADOS entre a janela principal e as
+/// flutuantes. Como todas as janelas apontam para os mesmos `Rc`,
+/// um `set_row_data` por canal propaga para todas de uma vez — sem
+/// recriar modelos a cada movimento de fader/knob (zero garbage).
+struct MixerModels {
+    mutes: Rc<slint::VecModel<bool>>,
+    soloes: Rc<slint::VecModel<bool>>,
+    arms: Rc<slint::VecModel<bool>>,
+    volumes: Rc<slint::VecModel<f32>>,
+    pans: Rc<slint::VecModel<f32>>,
+}
+
+impl MixerModels {
+    fn from_project(project: &Project) -> Self {
+        let (mutes, soloes, arms, volumes, pans) = mixer_state(project);
+        Self {
+            mutes: Rc::new(slint::VecModel::from(mutes)),
+            soloes: Rc::new(slint::VecModel::from(soloes)),
+            arms: Rc::new(slint::VecModel::from(arms)),
+            volumes: Rc::new(slint::VecModel::from(volumes)),
+            pans: Rc::new(slint::VecModel::from(pans)),
+        }
+    }
+
+    /// Atualiza apenas o canal informado (propaga para todas as janelas).
+    fn update_channel(&self, channel: usize, param: MixerParam, value: f32) {
+        match param {
+            MixerParam::Volume => self.volumes.set_row_data(channel, value.clamp(0.0, 1.0)),
+            MixerParam::Pan => self.pans.set_row_data(channel, value.clamp(0.0, 1.0)),
+            MixerParam::Muted => self.mutes.set_row_data(channel, value >= 0.5),
+            MixerParam::Soloed => self.soloes.set_row_data(channel, value >= 0.5),
+            MixerParam::Armed => self.arms.set_row_data(channel, value >= 0.5),
+        }
+    }
+}
+
+/// Aplica os modelos do mixer numa janela (principal ou flutuante).
+macro_rules! apply_mixer_models {
+    ($ui:expr, $m:expr) => {{
+        $ui.set_mixer_mutes($m.mutes.clone().into());
+        $ui.set_mixer_soloes($m.soloes.clone().into());
+        $ui.set_mixer_arms($m.arms.clone().into());
+        $ui.set_mixer_volumes($m.volumes.clone().into());
+        $ui.set_mixer_pans($m.pans.clone().into());
+    }};
+}
+
 /// Preenche os modelos da UI a partir do estado inicial do core.
 ///
 /// Retorna os `VecModel` compartilhados para que o assinante de
@@ -388,15 +435,8 @@ fn initial_bind(
     let clips_model = Rc::new(slint::VecModel::from(clips));
     ui.set_clips(clips_model.clone().into());
 
-    // Mixer inicial
-    let (mutes, soloes, arms, volumes, pans) = mixer_state(project);
-    ui.set_mixer_mutes(Rc::new(slint::VecModel::from(mutes)).into());
-    ui.set_mixer_soloes(Rc::new(slint::VecModel::from(soloes)).into());
-    ui.set_mixer_arms(Rc::new(slint::VecModel::from(arms)).into());
-    ui.set_mixer_volumes(Rc::new(slint::VecModel::from(volumes)).into());
-    ui.set_mixer_pans(Rc::new(slint::VecModel::from(pans)).into());
-
-    // Inserts iniciais
+    // Inserts iniciais (o estado de volume/pan/mute/etc. é aplicado
+    // pelos MixerModels compartilhados em `main`).
     let (insert_counts, insert_names, insert_enabled, max_inserts) = mixer_inserts_state(project);
     ui.set_mixer_insert_counts(Rc::new(slint::VecModel::from(insert_counts)).into());
     ui.set_mixer_insert_names(Rc::new(slint::VecModel::from(insert_names)).into());
@@ -591,6 +631,19 @@ fn main() -> Result<(), slint::PlatformError> {
     let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow(), &waveforms.borrow());
     bind_document_events(&project.borrow(), tracks_model, clips_model.clone(), waveforms.clone());
 
+    // Mixer: modelos compartilhados — atualização por canal (set_row_data)
+    // propaga para a janela principal e todas as flutuantes de uma vez.
+    let mixer_models: Rc<RefCell<MixerModels>> =
+        Rc::new(RefCell::new(MixerModels::from_project(&project.borrow())));
+    apply_mixer_models!(&ui, &mixer_models.borrow());
+
+    // Meters: modelo compartilhado + estado de decay (smoothing no Rust).
+    let meter_model: Rc<slint::VecModel<f32>> =
+        Rc::new(slint::VecModel::from(vec![0.0; project.borrow().tracks.len() + 1]));
+    ui.set_mixer_meters(meter_model.clone().into());
+    let meter_state: Rc<RefCell<Vec<f32>>> =
+        Rc::new(RefCell::new(vec![0.0; project.borrow().tracks.len() + 1]));
+
     // Piano roll da janela principal (estado por janela; cada float tem o seu).
     wire_piano_roll(&ui, Rc::new(RefCell::new(NoteEditor::new())));
 
@@ -610,29 +663,24 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     };
 
-    // Reaplica o estado do mixer nas janelas (principal + todas as flutuantes) a partir do core.
+    // Reaplica o estado do mixer nas janelas (principal + todas as flutuantes)
+    // a partir do core. USADO só em mudanças estruturais (tracks/inserts);
+    // fader/knob usam atualização por canal (update_channel), sem rebuild.
     let apply_mixer_state = {
         let project = project.clone();
         let ui_weak = ui.as_weak();
         let panels = float_panels.clone();
+        let holder = mixer_models.clone();
         move || {
             let proj = project.borrow();
-            let (mutes, soloes, arms, volumes, pans) = mixer_state(&proj);
-            let mutes = Rc::new(slint::VecModel::from(mutes));
-            let soloes = Rc::new(slint::VecModel::from(soloes));
-            let arms = Rc::new(slint::VecModel::from(arms));
-            let volumes = Rc::new(slint::VecModel::from(volumes));
-            let pans = Rc::new(slint::VecModel::from(pans));
+            *holder.borrow_mut() = MixerModels::from_project(&proj);
+            let models = holder.borrow();
             let (insert_counts, insert_names, insert_enabled, max_inserts) = mixer_inserts_state(&proj);
             let insert_counts = Rc::new(slint::VecModel::from(insert_counts));
             let insert_names = Rc::new(slint::VecModel::from(insert_names));
             let insert_enabled = Rc::new(slint::VecModel::from(insert_enabled));
             if let Some(ui) = ui_weak.upgrade() {
-                ui.set_mixer_mutes(mutes.clone().into());
-                ui.set_mixer_soloes(soloes.clone().into());
-                ui.set_mixer_arms(arms.clone().into());
-                ui.set_mixer_volumes(volumes.clone().into());
-                ui.set_mixer_pans(pans.clone().into());
+                apply_mixer_models!(&ui, &models);
                 ui.set_mixer_insert_counts(insert_counts.clone().into());
                 ui.set_mixer_insert_names(insert_names.clone().into());
                 ui.set_mixer_insert_enabled(insert_enabled.clone().into());
@@ -640,18 +688,25 @@ fn main() -> Result<(), slint::PlatformError> {
             }
             let slots = panels.borrow();
             for slot in slots.iter().flatten() {
-                slot.set_mixer_mutes(mutes.clone().into());
-                slot.set_mixer_soloes(soloes.clone().into());
-                slot.set_mixer_arms(arms.clone().into());
-                slot.set_mixer_volumes(volumes.clone().into());
-                slot.set_mixer_pans(pans.clone().into());
+                apply_mixer_models!(slot, &models);
                 slot.set_mixer_insert_counts(insert_counts.clone().into());
                 slot.set_mixer_insert_names(insert_names.clone().into());
                 slot.set_mixer_insert_enabled(insert_enabled.clone().into());
                 slot.set_mixer_max_inserts(max_inserts);
+            }
+        }
+    };
 
-                // Mixer flutuante: a largura acompanha o nº de canais.
+    // Mixer flutuante: a largura acompanha o nº de canais (só quando
+    // o nº de canais muda — nunca durante drag de fader).
+    let fit_float_mixer_windows = {
+        let project = project.clone();
+        let panels = float_panels.clone();
+        move || {
+            let slots = panels.borrow();
+            for slot in slots.iter().flatten() {
                 if slot.get_tool_tab() == 0 {
+                    let proj = project.borrow();
                     let w = ((proj.tracks.len() + 1) as f32 * 105.0 * slot.window().scale_factor()) as u32;
                     let h = slot.window().size().height;
                     slot.window().set_size(slint::PhysicalSize::new(w, h));
@@ -667,8 +722,11 @@ fn main() -> Result<(), slint::PlatformError> {
         let panels = float_panels.clone();
         let apply_mixer = apply_mixer_state.clone();
         let sync_floated = sync_floated.clone();
+        // Clone para o float toggle sem consumir os originais
+        let mixer_models_for_float = mixer_models.clone();
+        let meter_model_for_float = meter_model.clone();
         ui.on_float_toggle(move |tab| {
-            let ui = match ui_weak.upgrade() {
+            let _ui = match ui_weak.upgrade() {
                 Some(u) => u,
                 None => return,
             };
@@ -698,7 +756,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 Err(_) => return,
             };
             p.set_tool_tab(tab);
-            p.set_mixer_meters(ui.get_mixer_meters());
+            // Meters compartilhados: o timer atualiza um único modelo
+            // e todas as janelas recebem o mesmo sinal.
+            p.set_mixer_meters(meter_model_for_float.clone().into());
 
             // Piano roll próprio da janela flutuante.
             wire_piano_roll(&p, Rc::new(RefCell::new(NoteEditor::new())));
@@ -728,16 +788,17 @@ fn main() -> Result<(), slint::PlatformError> {
                 });
             }
 
-            // Ajustes feitos dentro da janela flutuante → core (reprojeta tudo).
+            // Ajustes feitos dentro da janela flutuante → core (atualiza só o canal).
             {
                 let project = project.clone();
-                let apply_mixer = apply_mixer.clone();
+                let mixer_models = mixer_models_for_float.clone();
                 p.on_mixer_param_changed(move |channel, param, value| {
                     let Some(param) = MixerParam::from_str(param.as_str()) else {
                         return;
                     };
-                    project.borrow_mut().set_mixer_param(channel as usize, param, value);
-                    apply_mixer();
+                    let channel = channel as usize;
+                    project.borrow_mut().set_mixer_param(channel, param, value);
+                    mixer_models.borrow().update_channel(channel, param, value);
                 });
             }
 
@@ -871,6 +932,7 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let project = project.clone();
         let apply_mixer = apply_mixer_state.clone();
+        let fit_float_mixers = fit_float_mixer_windows.clone();
         ui.on_add_track_requested(move |kind| {
             let kind = match kind.as_str() {
                 "AUDIO" => TrackKind::Audio,
@@ -887,6 +949,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 proj.add_track(kind, format!("{} {count}", kind.base_name()));
             }
             apply_mixer();
+            fit_float_mixers();
         });
     }
 
@@ -1114,16 +1177,17 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Parâmetros do mixer → core.
+    // Parâmetros do mixer → core (atualização por canal, sem rebuild).
     {
         let project = project.clone();
-        let apply_mixer = apply_mixer_state.clone();
+        let mixer_models = mixer_models.clone();
         ui.on_mixer_param_changed(move |channel, param, value| {
             let Some(param) = MixerParam::from_str(param.as_str()) else {
                 return;
             };
-            project.borrow_mut().set_mixer_param(channel as usize, param, value);
-            apply_mixer();
+            let channel = channel as usize;
+            project.borrow_mut().set_mixer_param(channel, param, value);
+            mixer_models.borrow().update_channel(channel, param, value);
         });
     }
 
@@ -1207,7 +1271,6 @@ fn main() -> Result<(), slint::PlatformError> {
         let transport_timer_ref = transport_timer.clone();
         let transport = transport.clone();
         let project = project.clone();
-        let panels = float_panels.clone();
         let meter_timer = Rc::new(RefCell::new(slint::Timer::default()));
         let meter_timer_ref = meter_timer.clone();
         ui.on_play_state_changed(move |playing| {
@@ -1227,27 +1290,28 @@ fn main() -> Result<(), slint::PlatformError> {
                         }
                     },
                 );
-                // Meter timer: anima meters
-                let ui_weak_m = ui_weak.clone();
+                // Meter timer: VU fake com smoothing no Rust (attack
+                // instantâneo, decay lento). SEM animação Slint — a
+                // animação contínua satura o renderer e trava o playhead.
                 let project = project.clone();
-                let panels = panels.clone();
+                let meter_model = meter_model.clone();
+                let meter_state = meter_state.clone();
                 meter_timer_ref.borrow().start(
                     slint::TimerMode::Repeated,
                     Duration::from_millis(80),
                     move || {
-                        if let Some(ui) = ui_weak_m.upgrade() {
-                            let count = project.borrow().tracks.len() + 1;
-                            let mut levels: Vec<f32> = Vec::new();
-                            for _ in 0..count {
-                                let r = next_random(&mut seed);
-                                levels.push(r * r);
-                            }
-                            let model = Rc::new(slint::VecModel::from(levels));
-                            ui.set_mixer_meters(model.clone().into());
-                            let slots = panels.borrow();
-                            for slot in slots.iter().flatten() {
-                                slot.set_mixer_meters(model.clone().into());
-                            }
+                        let count = project.borrow().tracks.len() + 1;
+                        let mut levels = meter_state.borrow_mut();
+                        if levels.len() != count {
+                            levels.resize(count, 0.0);
+                        }
+                        for level in levels.iter_mut() {
+                            let r = next_random(&mut seed);
+                            let new = r * r;
+                            *level = if new > *level { new } else { *level * 0.82 };
+                        }
+                        for (i, &v) in levels.iter().enumerate() {
+                            meter_model.set_row_data(i, v);
                         }
                     },
                 );

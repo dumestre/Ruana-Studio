@@ -2,7 +2,7 @@ import { Theme } from "../theme.slint";
 import { Button } from "../components/button.slint";
 import { PianoRollHeader } from "piano_roll_header.slint";
 import { PianoKeyboard } from "piano_keyboard.slint";
-import { PianoRuler } from "piano_ruler.slint";
+import { TimelineRuler } from "../components/ruler.slint";
 import { PianoGrid } from "piano_grid.slint";
 import { PianoNoteView } from "piano_note_view.slint";
 import { PianoVelocity } from "piano_velocity.slint";
@@ -378,7 +378,8 @@ export component PianoRollArea inherits Rectangle {
 
                     clip: true;
 
-                    PianoRuler {
+                    TimelineRuler {
+                        bar-range: PianoRollData.bar-range;
                         height: config.ruler-height;
                         ruler-height: config.ruler-height;
                         px-per-bar: root.px-per-beat * 4;
