@@ -15,7 +15,7 @@ use daw_core::project::{ChangeKind, DocumentEvent, Project};
 use daw_core::track::TrackKind;
 use daw_core::transport::Transport;
 use daw_media::{filesystem::default_samples_dir, filesystem::list_directory};
-use daw_media::waveform::{decode_wav, waveform_points};
+use daw_media::waveform::{decode_audio, waveform_points};
 use slint::Model;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -48,6 +48,22 @@ fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
             let peaks = waveforms.get(&clip.id).unwrap_or(&empty);
             Rc::new(slint::VecModel::from(peaks.clone())).into()
         },
+    }
+}
+
+/// Atualiza apenas os waveform_points de um ClipData existente a partir do cache.
+fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache) -> ClipData {
+    let empty: Vec<f32> = Vec::new();
+    let peaks = waveforms.get(&id).unwrap_or(&empty);
+    ClipData {
+        id: base.id,
+        name: base.name.clone(),
+        track_index: base.track_index,
+        beat: base.beat,
+        len: base.len,
+        is_midi: base.is_midi,
+        color: base.color,
+        waveform_points: Rc::new(slint::VecModel::from(peaks.clone())).into(),
     }
 }
 
@@ -1360,6 +1376,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let ui_weak = ui.as_weak();
         let project = project.clone();
         let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
         
         // Rastreia a última posição física do cursor
         let last_phys_pos = Rc::new(RefCell::new((0.0, 0.0)));
@@ -1377,37 +1394,57 @@ fn main() -> Result<(), slint::PlatformError> {
                             .and_then(|ext| ext.to_str())
                             .unwrap_or("")
                             .to_uppercase();
-                        if ext == "WAV" || ext == "MP3" {
+                        let supported = matches!(ext.as_str(), "WAV" | "MP3" | "FLAC" | "OGG" | "OGA");
+                        if supported {
                             let (phys_x, phys_y) = *last_phys_pos.borrow();
                             let scale_factor = ui.window().scale_factor();
                             let logical_x = phys_x as f32 / scale_factor;
                             let logical_y = phys_y as f32 / scale_factor;
-                            
-                            // Mapeia coordenadas lógicas do cursor na janela para a Timeline (track/beat)
+
                             let coords = ui.invoke_map_window_coords_to_timeline(logical_x, logical_y);
-                            
+
                             let track_id = coords.track.max(0) as u64;
                             let start = coords.beat.round().max(0.0) as u32;
                             let name = path.file_name()
                                 .and_then(|n| n.to_str())
                                 .unwrap_or("Audio Clip");
-                                
+
+                            // Decodifica ANTES de adicionar o clip.
+                            let file_path = path.to_string_lossy().to_string();
+                            let peaks: Vec<f32> = match decode_audio(&path) {
+                                Ok(wav_data) => {
+                                    waveform_points(&wav_data, 200)
+                                }
+                                Err(e) => {
+                                    eprintln!("[waveform] failed to decode {}: {}", name, e);
+                                    Vec::new()
+                                }
+                            };
+
                             let mut proj = project.borrow_mut();
                             if proj.track(track_id).is_some() {
-                                let file_path = path.to_string_lossy().to_string();
                                 let clip_id = proj.add_clip_with_path(
                                     track_id, ClipKind::Audio, name, start, 4,
-                                    Some(file_path.clone()),
+                                    Some(file_path),
                                 );
                                 drop(proj);
 
-                                // Decodifica waveform e armazena no cache.
+                                // Após add_clip_with_path, o ClipAdded já disparou
+                                // e to_clip_data leu o cache (ainda vazio).
+                                // Agora inserimos no cache E atualizamos o modelo diretamente.
                                 if let Some(id) = clip_id {
-                                    if ext == "WAV" {
-                                        if let Ok(wav_data) = decode_wav(&file_path) {
-                                            let num_points = 200;
-                                            let peaks = waveform_points(&wav_data, num_points);
-                                            waveforms.borrow_mut().insert(id, peaks);
+                                    if !peaks.is_empty() {
+                                        waveforms.borrow_mut().insert(id, peaks.clone());
+
+                                        // Atualiza o ClipData no modelo da UI com os picos.
+                                        let wf = waveforms.borrow();
+                                        for i in 0..clips_model.row_count() {
+                                            if let Some(data) = clips_model.row_data(i) {
+                                                if data.id == id as i32 {
+                                                    clips_model.set_row_data(i, to_clip_data_from_id(id, &data, &wf));
+                                                    break;
+                                                }
+                                            }
                                         }
                                     }
                                 }
