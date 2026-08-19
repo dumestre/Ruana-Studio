@@ -392,11 +392,25 @@ impl Project {
         start_beat: u32,
         length_beats: u32,
     ) -> Option<u64> {
+        self.add_clip_with_path(track_id, kind, name, start_beat, length_beats, None)
+    }
+
+    /// Adiciona um clip na trilha informada, com caminho de arquivo opcional.
+    pub fn add_clip_with_path(
+        &mut self,
+        track_id: u64,
+        kind: ClipKind,
+        name: impl Into<String>,
+        start_beat: u32,
+        length_beats: u32,
+        file_path: Option<String>,
+    ) -> Option<u64> {
         if self.track(track_id).is_none() || length_beats == 0 {
             return None;
         }
         let id = self.next_clip_id();
-        let clip = Clip::new(id, track_id, name, kind, start_beat, length_beats);
+        let mut clip = Clip::new(id, track_id, name, kind, start_beat, length_beats);
+        clip.file_path = file_path;
         self.clips.push(clip.clone());
 
         let event = DocumentEvent::ClipAdded(clip);
@@ -425,7 +439,7 @@ impl Project {
             left
         };
         let right_id = self.next_clip_id();
-        let right = Clip::new(
+        let mut right = Clip::new(
             right_id,
             original.track_id,
             original.name.clone(),
@@ -433,6 +447,7 @@ impl Project {
             at_beat,
             original.start_beat + original.length_beats - at_beat,
         );
+        right.file_path = original.file_path.clone();
 
         self.clips[index] = left.clone();
         self.clips.push(right.clone());

@@ -155,6 +155,7 @@ export component Workspace inherits Rectangle {
                 height: 100%;
                 selected-track <=> root.selected-track;
                 track-names: root.track-names;
+                clips: root.clips;
 
                 clip-drag-started(name, position, duration, color, is-midi) => {
                     root.drag-begin(name, position, duration, color, is-midi);
@@ -413,9 +414,9 @@ export component Workspace inherits Rectangle {
             Rectangle {
                 visible: root.drag-active && root.drag-inited;
                 x: root.drag-over-timeline
-                    ? timeline.absolute-position.x - root.absolute-position.x - timeline.scroll-x + root.drag-snap-beat * timeline.px-per-beat
-                    : root.drag-x - root.absolute-position.x - (root.left-panel-width - 16px) / 2;
-                y: root.drag-y - root.absolute-position.y - 19px;
+                    ? timeline.absolute-position.x - workspace.absolute-position.x - timeline.scroll-x + root.drag-snap-beat * timeline.px-per-beat
+                    : root.drag-x - workspace.absolute-position.x - (root.left-panel-width - 16px) / 2;
+                y: root.drag-y - workspace.absolute-position.y - 19px;
                 width: root.left-panel-width - 16px;
                 height: 38px;
                 transform-rotation: root.drag-tilt-display;

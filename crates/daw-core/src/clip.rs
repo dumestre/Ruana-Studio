@@ -23,6 +23,8 @@ pub struct Clip {
     pub length_beats: u32,
     /// Índice de cor (paleta na UI). 0 = padrão MIDI/Audio.
     pub color: u8,
+    /// Caminho do arquivo de áudio (apenas clips de áudio).
+    pub file_path: Option<String>,
 }
 
 impl Clip {
@@ -43,6 +45,7 @@ impl Clip {
             start_beat,
             length_beats,
             color: 0,
+            file_path: None,
         }
     }
 
@@ -85,5 +88,11 @@ impl Clip {
     /// True se o clip é MIDI.
     pub fn is_midi(&self) -> bool {
         self.kind == ClipKind::Midi
+    }
+
+    /// Define o caminho do arquivo de áudio (builder pattern).
+    pub fn with_file_path(mut self, path: impl Into<String>) -> Self {
+        self.file_path = Some(path.into());
+        self
     }
 }

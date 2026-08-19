@@ -1,4 +1,5 @@
 import { Theme } from "theme.slint";
+import { ClipData } from "timeline/clip_data.slint";
 
 export component ClipItemVisual inherits Rectangle {
     in property <string> name: "";
@@ -119,7 +120,21 @@ component ClipItem inherits ClipItemVisual {
 export component ClipPool inherits Rectangle {
     in-out property <int> selected-track: 0;
     in property <[string]> track-names: ["Drums", "Bass", "Vocal", "Synth"];
+    in property <[ClipData]> clips: [];
     callback track-selected(int);
+
+    // Paleta idêntica ao TrackClip
+    private property <[color]> palette: [
+        #6FA86B, // 0: padrão MIDI (verde)
+        #4F8AE0, // 1: azul
+        #E0A94F, // 2: âmbar
+        #E05E5E, // 3: vermelho
+        #A060D8, // 4: roxo
+        #E05EAA, // 5: rosa
+        #3EC7B0, // 6: turquesa
+        #C0C050, // 7: limão
+    ];
+    private property <color> audio-default: #00C853;
 
     // =====================================================
     // DRAG & DROP (coordenadas relativas à janela)
@@ -160,53 +175,20 @@ export component ClipPool inherits Rectangle {
             }
         }
 
-        if root.selected-track == 0: list0 := VerticalLayout {
+        clips-list := VerticalLayout {
             spacing: 4px;
-            ClipItem { name: "Drums A"; position: "1.1"; duration: "2 bars"; clip-color: Theme.clip-midi; is-midi: true;
-                drag-started(n, p, d, c, m) => { root.clip-drag-started(n, p, d, c, m); }
-                drag-moved(x, y) => { root.clip-drag-moved(x, y); }
-                drag-finished() => { root.clip-drag-finished(); }
-            }
-            ClipItem { name: "Drums B"; position: "3.1"; duration: "1 bar"; clip-color: Theme.clip-midi; is-midi: true;
-                drag-started(n, p, d, c, m) => { root.clip-drag-started(n, p, d, c, m); }
-                drag-moved(x, y) => { root.clip-drag-moved(x, y); }
-                drag-finished() => { root.clip-drag-finished(); }
-            }
-            ClipItem { name: "Drums Fill"; position: "4.3"; duration: "2 beats"; clip-color: Theme.clip-midi; is-midi: true;
-                drag-started(n, p, d, c, m) => { root.clip-drag-started(n, p, d, c, m); }
-                drag-moved(x, y) => { root.clip-drag-moved(x, y); }
-                drag-finished() => { root.clip-drag-finished(); }
-            }
-        }
-        if root.selected-track == 1: list1 := VerticalLayout {
-            spacing: 4px;
-            ClipItem { name: "Bass A"; position: "1.1"; duration: "4 bars"; clip-color: Theme.clip-midi; is-midi: true;
-                drag-started(n, p, d, c, m) => { root.clip-drag-started(n, p, d, c, m); }
-                drag-moved(x, y) => { root.clip-drag-moved(x, y); }
-                drag-finished() => { root.clip-drag-finished(); }
-            }
-            ClipItem { name: "Bass B"; position: "5.2"; duration: "2 bars"; clip-color: Theme.clip-midi; is-midi: true;
-                drag-started(n, p, d, c, m) => { root.clip-drag-started(n, p, d, c, m); }
-                drag-moved(x, y) => { root.clip-drag-moved(x, y); }
-                drag-finished() => { root.clip-drag-finished(); }
-            }
-        }
-        if root.selected-track == 2: list2 := VerticalLayout {
-            spacing: 4px;
-            ClipItem { name: "Vocal Verse"; position: "1.1"; duration: "4 bars"; clip-color: Theme.clip-audio; is-midi: false;
-                drag-started(n, p, d, c, m) => { root.clip-drag-started(n, p, d, c, m); }
-                drag-moved(x, y) => { root.clip-drag-moved(x, y); }
-                drag-finished() => { root.clip-drag-finished(); }
-            }
-            ClipItem { name: "Vocal Chorus"; position: "5.1"; duration: "2 bars"; clip-color: Theme.clip-audio; is-midi: false;
-                drag-started(n, p, d, c, m) => { root.clip-drag-started(n, p, d, c, m); }
-                drag-moved(x, y) => { root.clip-drag-moved(x, y); }
-                drag-finished() => { root.clip-drag-finished(); }
-            }
-        }
-        if root.selected-track == 3: list3 := VerticalLayout {
-            spacing: 4px;
-            ClipItem { name: "Synth Pad"; position: "1.1"; duration: "8 bars"; clip-color: Theme.clip-midi; is-midi: true;
+
+            for clip[i] in root.clips: ClipItem {
+                visible: clip.track-index == root.selected-track;
+                name: clip.name;
+                position: Math.round(clip.beat * 10) / 10;
+                duration: Math.round(clip.len * 10) / 10;
+                clip-color:
+                    clip.color == 0
+                        ? (clip.is-midi ? Theme.clip-midi : root.audio-default)
+                        : root.palette[Math.mod(clip.color, root.palette.length)];
+                is-midi: clip.is-midi;
+
                 drag-started(n, p, d, c, m) => { root.clip-drag-started(n, p, d, c, m); }
                 drag-moved(x, y) => { root.clip-drag-moved(x, y); }
                 drag-finished() => { root.clip-drag-finished(); }

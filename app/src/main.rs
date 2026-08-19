@@ -3,6 +3,7 @@ slint::include_modules!();
 mod cursors;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
@@ -14,6 +15,7 @@ use daw_core::project::{ChangeKind, DocumentEvent, Project};
 use daw_core::track::TrackKind;
 use daw_core::transport::Transport;
 use daw_media::{filesystem::default_samples_dir, filesystem::list_directory};
+use daw_media::waveform::{decode_wav, waveform_points};
 use slint::Model;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -28,8 +30,11 @@ fn next_random(seed: &mut u64) -> f32 {
 /// Máximo de slots de insert renderizados por canal no mixer.
 const MAX_INSERTS: usize = 8;
 
+/// Cache de waveform: clip_id → picos normalizados.
+type WaveformCache = std::collections::HashMap<u64, Vec<f32>>;
+
 /// Mapeia um clip do core para o DTO da camada Slint.
-fn to_clip_data(clip: &Clip) -> ClipData {
+fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
     ClipData {
         id: clip.id as i32,
         name: clip.name.clone().into(),
@@ -38,6 +43,11 @@ fn to_clip_data(clip: &Clip) -> ClipData {
         len: clip.length_beats as f32,
         is_midi: clip.is_midi(),
         color: clip.color as i32,
+        waveform_points: {
+            let empty: Vec<f32> = Vec::new();
+            let peaks = waveforms.get(&clip.id).unwrap_or(&empty);
+            Rc::new(slint::VecModel::from(peaks.clone())).into()
+        },
     }
 }
 
@@ -450,6 +460,7 @@ fn mixer_inserts_state(
 fn initial_bind(
     ui: &MainWindow,
     project: &Project,
+    waveforms: &WaveformCache,
 ) -> (
     Rc<slint::VecModel<slint::SharedString>>,
     Rc<slint::VecModel<ClipData>>,
@@ -462,7 +473,7 @@ fn initial_bind(
     let tracks_model = Rc::new(slint::VecModel::from(track_names));
     ui.set_track_names(tracks_model.clone().into());
 
-    let clips: Vec<ClipData> = project.clips.iter().map(to_clip_data).collect();
+    let clips: Vec<ClipData> = project.clips.iter().map(|c| to_clip_data(c, waveforms)).collect();
     let clips_model = Rc::new(slint::VecModel::from(clips));
     ui.set_clips(clips_model.clone().into());
 
@@ -510,6 +521,7 @@ fn apply_change(
     clips_model: &slint::VecModel<ClipData>,
     event: &DocumentEvent,
     undo: bool,
+    waveforms: &WaveformCache,
 ) {
     match event {
         DocumentEvent::TrackAdded(track) => {
@@ -540,7 +552,7 @@ fn apply_change(
                     clips_model.remove(i);
                 }
             } else {
-                clips_model.push(to_clip_data(clip));
+                clips_model.push(to_clip_data(clip, waveforms));
             }
         }
         DocumentEvent::ClipSliced {
@@ -553,24 +565,24 @@ fn apply_change(
                     clips_model.remove(i);
                 }
                 if let Some(i) = clip_row(clips_model, original.id as i32) {
-                    clips_model.set_row_data(i, to_clip_data(original));
+                    clips_model.set_row_data(i, to_clip_data(original, waveforms));
                 }
             } else {
                 if let Some(i) = clip_row(clips_model, left.id as i32) {
-                    clips_model.set_row_data(i, to_clip_data(left));
+                    clips_model.set_row_data(i, to_clip_data(left, waveforms));
                 }
-                clips_model.push(to_clip_data(right));
+                clips_model.push(to_clip_data(right, waveforms));
             }
         }
         DocumentEvent::ClipMoved { old, new } => {
             let data = if undo { old } else { new };
             if let Some(i) = clip_row(clips_model, data.id as i32) {
-                clips_model.set_row_data(i, to_clip_data(data));
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
             }
         }
         DocumentEvent::ClipDeleted(clip) => {
             if undo {
-                clips_model.push(to_clip_data(clip));
+                clips_model.push(to_clip_data(clip, waveforms));
             } else if let Some(i) = clip_row(clips_model, clip.id as i32) {
                 clips_model.remove(i);
             }
@@ -582,12 +594,12 @@ fn apply_change(
         } => {
             if undo {
                 if let Some(i) = clip_row(clips_model, left_before.id as i32) {
-                    clips_model.set_row_data(i, to_clip_data(left_before));
+                    clips_model.set_row_data(i, to_clip_data(left_before, waveforms));
                 }
-                clips_model.push(to_clip_data(right));
+                clips_model.push(to_clip_data(right, waveforms));
             } else {
                 if let Some(i) = clip_row(clips_model, left.id as i32) {
-                    clips_model.set_row_data(i, to_clip_data(left));
+                    clips_model.set_row_data(i, to_clip_data(left, waveforms));
                 }
                 if let Some(i) = clip_row(clips_model, right.id as i32) {
                     clips_model.remove(i);
@@ -597,19 +609,19 @@ fn apply_change(
         DocumentEvent::ClipResized { old, new } => {
             let data = if undo { old } else { new };
             if let Some(i) = clip_row(clips_model, data.id as i32) {
-                clips_model.set_row_data(i, to_clip_data(data));
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
             }
         }
         DocumentEvent::ClipRenamed { old, new } => {
             let data = if undo { old } else { new };
             if let Some(i) = clip_row(clips_model, data.id as i32) {
-                clips_model.set_row_data(i, to_clip_data(data));
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
             }
         }
         DocumentEvent::ClipColorChanged { old, new } => {
             let data = if undo { old } else { new };
             if let Some(i) = clip_row(clips_model, data.id as i32) {
-                clips_model.set_row_data(i, to_clip_data(data));
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
             }
         }
     }
@@ -621,9 +633,11 @@ fn bind_document_events(
     project: &Project,
     tracks_model: Rc<slint::VecModel<slint::SharedString>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
+    waveforms: Rc<RefCell<WaveformCache>>,
 ) {
     project.subscribe(move |event, kind| {
-        apply_change(&tracks_model, &clips_model, event, kind == ChangeKind::Undo);
+        let wf = waveforms.borrow();
+        apply_change(&tracks_model, &clips_model, event, kind == ChangeKind::Undo, &wf);
     });
 }
 
@@ -660,8 +674,11 @@ fn main() -> Result<(), slint::PlatformError> {
     let project = Rc::new(RefCell::new(Project::demo()));
     let transport = Rc::new(RefCell::new(Transport::default()));
 
-    let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow());
-    bind_document_events(&project.borrow(), tracks_model, clips_model.clone());
+    // Cache de waveforms: clip_id → picos normalizados.
+    let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(HashMap::new()));
+
+    let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow(), &waveforms.borrow());
+    bind_document_events(&project.borrow(), tracks_model, clips_model.clone(), waveforms.clone());
 
     // Piano roll da janela principal (estado por janela; cada float tem o seu).
     wire_piano_roll(&ui, Rc::new(RefCell::new(PianoRollEditor::new())));
@@ -1007,37 +1024,52 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Mover clip via drag (ferramenta select).
-    {
-        ui.on_clip_move_started(move |_id, _beat| {
-            // state is tracked in Slint and on_clip_move_delta; nothing to do here yet
-        });
-    }
+    // Estado para armazenar posição original de clips durante move/resize.
+    let move_originals: Rc<RefCell<HashMap<i32, (f32, i32)>>> =
+        Rc::new(RefCell::new(HashMap::new()));
+    let resize_originals: Rc<RefCell<HashMap<i32, (f32, f32)>>> =
+        Rc::new(RefCell::new(HashMap::new()));
 
-    // Mover clip: delta durante o drag (feedback visual imediato)
+    // Mover clip via drag (ferramenta select) — armazena posição original.
     {
         let clips_model = clips_model.clone();
-        let project = project.clone();
-        ui.on_clip_move_delta(move |id, delta_beats, delta_tracks| {
+        let move_originals = move_originals.clone();
+        ui.on_clip_move_started(move |id, _beat| {
             if let Some(i) = clip_row(&clips_model, id) {
-                if let Some(mut clip) = clips_model.row_data(i) {
-                    let num_tracks = project.borrow().tracks.len() as i32;
-                    let new_beat = (clip.beat + delta_beats).max(0.0);
-                    let new_track = (clip.track_index + delta_tracks).max(0).min(num_tracks - 1);
-                    
-                    clip.beat = new_beat;
-                    clip.track_index = new_track;
-                    clips_model.set_row_data(i, clip);
+                if let Some(clip) = clips_model.row_data(i) {
+                    move_originals.borrow_mut().insert(id, (clip.beat, clip.track_index));
                 }
             }
         });
     }
 
-    // Mover clip: finalizado → persiste no core
+    // Mover clip: delta acumulado do início do drag → aplica sobre a posição original.
+    {
+        let clips_model = clips_model.clone();
+        let project = project.clone();
+        let move_originals = move_originals.clone();
+        ui.on_clip_move_delta(move |id, delta_beats, delta_tracks| {
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(mut clip) = clips_model.row_data(i) {
+                    let num_tracks = project.borrow().tracks.len() as i32;
+                    let originals = move_originals.borrow();
+                    if let Some(&(orig_beat, orig_track)) = originals.get(&id) {
+                        clip.beat = (orig_beat + delta_beats).max(0.0);
+                        clip.track_index = (orig_track + delta_tracks).max(0).min(num_tracks - 1);
+                        clips_model.set_row_data(i, clip);
+                    }
+                }
+            }
+        });
+    }
+
+    // Mover clip: finalizado → persiste no core e limpa estado.
     {
         let project = project.clone();
         let clips_model = clips_model.clone();
+        let move_originals = move_originals.clone();
         ui.on_clip_move_finished(move |id| {
+            move_originals.borrow_mut().remove(&id);
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(clip) = clips_model.row_data(i) {
                     let new_beat = clip.beat.round().max(0.0) as u32;
@@ -1051,14 +1083,14 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Resize de clip (handles das bordas) → core.
     {
-        // resize-started: apenas memoriza o estado inicial (já feito no Slint),
-        // mas o Rust precisa de um handler registrado.
-        let project = project.clone();
-        let clips_model_rs = clips_model.clone();
-        ui.on_clip_resize_started(move |_id, _side| {
-            // state is tracked in Slint; nothing to do here yet
-            let _ = &project;
-            let _ = &clips_model_rs;
+        let clips_model = clips_model.clone();
+        let resize_originals = resize_originals.clone();
+        ui.on_clip_resize_started(move |id, _side| {
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(clip) = clips_model.row_data(i) {
+                    resize_originals.borrow_mut().insert(id, (clip.beat, clip.len));
+                }
+            }
         });
     }
     {
@@ -1093,10 +1125,12 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
     {
-        // resize-finished: persiste no core com valores do modelo.
+        // resize-finished: persiste no core com valores do modelo e limpa estado.
         let project = project.clone();
         let clips_model = clips_model.clone();
+        let resize_originals = resize_originals.clone();
         ui.on_clip_resize_finished(move |id| {
+            resize_originals.borrow_mut().remove(&id);
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(clip) = clips_model.row_data(i) {
                     let new_start = clip.beat.round().max(0.0) as u32;
@@ -1325,6 +1359,7 @@ fn main() -> Result<(), slint::PlatformError> {
         use i_slint_backend_winit::WinitWindowAccessor;
         let ui_weak = ui.as_weak();
         let project = project.clone();
+        let waveforms = waveforms.clone();
         
         // Rastreia a última posição física do cursor
         let last_phys_pos = Rc::new(RefCell::new((0.0, 0.0)));
@@ -1359,7 +1394,23 @@ fn main() -> Result<(), slint::PlatformError> {
                                 
                             let mut proj = project.borrow_mut();
                             if proj.track(track_id).is_some() {
-                                proj.add_clip(track_id, ClipKind::Audio, name, start, 4);
+                                let file_path = path.to_string_lossy().to_string();
+                                let clip_id = proj.add_clip_with_path(
+                                    track_id, ClipKind::Audio, name, start, 4,
+                                    Some(file_path.clone()),
+                                );
+                                drop(proj);
+
+                                // Decodifica waveform e armazena no cache.
+                                if let Some(id) = clip_id {
+                                    if ext == "WAV" {
+                                        if let Ok(wav_data) = decode_wav(&file_path) {
+                                            let num_points = 200;
+                                            let peaks = waveform_points(&wav_data, num_points);
+                                            waveforms.borrow_mut().insert(id, peaks);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

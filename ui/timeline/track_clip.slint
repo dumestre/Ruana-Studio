@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { AudioWaveform } from "audio_waveform.slint";
 
 export component TrackClip inherits Rectangle {
 
@@ -27,6 +28,8 @@ export component TrackClip inherits Rectangle {
     in property <bool> selected: false;
 
     in property <int> active-tool: 0;
+
+    in property <[float]> waveform-peaks: [];
 
 
     // =====================================================
@@ -193,6 +196,17 @@ export component TrackClip inherits Rectangle {
                 : 0.94;
 
         clip: true;
+
+        // WAVEFORM para clips de áudio
+        if !root.is-midi && root.waveform-peaks.length > 0: AudioWaveform {
+            x: 2px;
+            y: 0;
+            width: parent.width - 4px;
+            height: parent.height;
+            waveform-color: root.clip-color.brighter(0.6);
+            hovered: root.hovered;
+            peaks: root.waveform-peaks;
+        }
     }
 
 
@@ -515,7 +529,7 @@ export component TrackClip inherits Rectangle {
                             : 1;
 
                     self.resize-side = side;
-                    self.resize-start-x = self.mouse-x;
+                    self.resize-start-abs-x = self.mouse-x + self.absolute-position.x;
                     self.resize-start-beat = root.beat;
                     self.resize-start-len = root.len;
                     self.resizing = true;
@@ -524,7 +538,7 @@ export component TrackClip inherits Rectangle {
 
                 } else if event.kind == PointerEventKind.move && self.resizing {
 
-                    let dx = self.mouse-x - self.resize-start-x;
+                    let dx = (self.mouse-x + self.absolute-position.x) - self.resize-start-abs-x;
                     let delta_beats = dx / root.px-per-beat;
 
                     root.clip-resize-delta(
@@ -545,8 +559,8 @@ export component TrackClip inherits Rectangle {
 
                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
 
-                    self.drag-start-x = self.mouse-x;
-                    self.drag-start-y = self.mouse-y;
+                    self.drag-start-abs-x = self.mouse-x + self.absolute-position.x;
+                    self.drag-start-abs-y = self.mouse-y + self.absolute-position.y;
                     self.drag-start-beat = root.beat;
                     self.dragging = true;
 
@@ -554,8 +568,8 @@ export component TrackClip inherits Rectangle {
 
                 } else if event.kind == PointerEventKind.move && self.dragging {
 
-                    let dx = self.mouse-x - self.drag-start-x;
-                    let dy = self.mouse-y - self.drag-start-y;
+                    let dx = (self.mouse-x + self.absolute-position.x) - self.drag-start-abs-x;
+                    let dy = (self.mouse-y + self.absolute-position.y) - self.drag-start-abs-y;
                     let delta_beats = dx / root.px-per-beat;
                     let delta_tracks = Math.round(dy / root.row-height);
 
@@ -572,15 +586,15 @@ export component TrackClip inherits Rectangle {
 
         // ==================== ESTADOS PRIVADOS ====================
 
-        // Move
-        private property <length> drag-start-x: 0px;
-        private property <length> drag-start-y: 0px;
+        // Move (absolute window coordinates to survive clip repositioning)
+        private property <length> drag-start-abs-x: 0px;
+        private property <length> drag-start-abs-y: 0px;
         private property <float> drag-start-beat: 0.0;
         private property <bool> dragging: false;
 
         // Resize
         private property <int> resize-side: 0;      // -1 left, 1 right
-        private property <length> resize-start-x: 0px;
+        private property <length> resize-start-abs-x: 0px;
         private property <float> resize-start-beat: 0.0;
         private property <float> resize-start-len: 0.0;
         private property <bool> resizing: false;
