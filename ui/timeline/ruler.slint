@@ -14,6 +14,9 @@ export component TimelineRuler inherits Rectangle {
 
     in property <length> ruler-height: 30px;
 
+    in property <length> scroll-x: 0px;
+
+    callback seek-to-beat(float);
 
     height:
         root.ruler-height;
@@ -453,5 +456,28 @@ export component TimelineRuler inherits Rectangle {
 
         background:
             Theme.border.transparentize(0.25);
+    }
+
+    // =====================================================
+    // CLICK-TO-SEEK
+    // =====================================================
+
+    TouchArea {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+
+        clicked => {
+            let beat = (self.mouse-x + root.scroll-x) / root.px-per-bar * 4.0;
+            root.seek-to-beat(max(0.0, beat));
+        }
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                let beat = (self.mouse-x + root.scroll-x) / root.px-per-bar * 4.0;
+                root.seek-to-beat(max(0.0, beat));
+            }
+        }
     }
 }

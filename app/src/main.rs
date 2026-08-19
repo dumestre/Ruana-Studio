@@ -1043,6 +1043,8 @@ fn main() -> Result<(), slint::PlatformError> {
     // Estado para armazenar posição original de clips durante move/resize.
     let move_originals: Rc<RefCell<HashMap<i32, (f32, i32)>>> =
         Rc::new(RefCell::new(HashMap::new()));
+    let move_track_deltas: Rc<RefCell<HashMap<i32, i32>>> =
+        Rc::new(RefCell::new(HashMap::new()));
     let resize_originals: Rc<RefCell<HashMap<i32, (f32, f32)>>> =
         Rc::new(RefCell::new(HashMap::new()));
 
@@ -1060,21 +1062,29 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     // Mover clip: delta acumulado do início do drag → aplica sobre a posição original.
+    // NOTA: track_index NÃO é alterado durante o drag (só beat).
+    // O delta de track é guardado e aplicado apenas no finish.
     {
         let clips_model = clips_model.clone();
-        let project = project.clone();
         let move_originals = move_originals.clone();
+        let move_track_deltas = move_track_deltas.clone();
+        let ui_weak = ui.as_weak();
         ui.on_clip_move_delta(move |id, delta_beats, delta_tracks| {
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(mut clip) = clips_model.row_data(i) {
-                    let num_tracks = project.borrow().tracks.len() as i32;
                     let originals = move_originals.borrow();
-                    if let Some(&(orig_beat, orig_track)) = originals.get(&id) {
+                    if let Some(&(orig_beat, _orig_track)) = originals.get(&id) {
                         clip.beat = (orig_beat + delta_beats).max(0.0);
-                        clip.track_index = (orig_track + delta_tracks).max(0).min(num_tracks - 1);
                         clips_model.set_row_data(i, clip);
                     }
+                    drop(originals);
+                    move_track_deltas.borrow_mut().insert(id, delta_tracks);
                 }
+            }
+            // Visual feedback: move clip vertically via translate-y
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_drag_clip_id(id);
+                ui.set_drag_track_offset(delta_tracks);
             }
         });
     }
@@ -1084,14 +1094,29 @@ fn main() -> Result<(), slint::PlatformError> {
         let project = project.clone();
         let clips_model = clips_model.clone();
         let move_originals = move_originals.clone();
+        let move_track_deltas = move_track_deltas.clone();
+        let ui_weak = ui.as_weak();
         ui.on_clip_move_finished(move |id| {
-            move_originals.borrow_mut().remove(&id);
-            if let Some(i) = clip_row(&clips_model, id) {
-                if let Some(clip) = clips_model.row_data(i) {
-                    let new_beat = clip.beat.round().max(0.0) as u32;
-                    let track_id = clip.track_index as u64;
-                    let mut proj = project.borrow_mut();
-                    proj.move_clip(id as u64, track_id, new_beat);
+            let orig = move_originals.borrow_mut().remove(&id);
+            let delta_tracks = move_track_deltas.borrow_mut().remove(&id).unwrap_or(0);
+
+            // Clear visual drag offset
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_drag_clip_id(-1);
+                ui.set_drag_track_offset(0);
+            }
+
+            if let Some((_, orig_track)) = orig {
+                if let Some(i) = clip_row(&clips_model, id) {
+                    if let Some(mut clip) = clips_model.row_data(i) {
+                        let num_tracks = project.borrow().tracks.len() as i32;
+                        clip.track_index = (orig_track + delta_tracks).max(0).min(num_tracks - 1);
+                        let new_beat = clip.beat.round().max(0.0) as u32;
+                        let track_id = clip.track_index as u64;
+                        clips_model.set_row_data(i, clip);
+                        let mut proj = project.borrow_mut();
+                        proj.move_clip(id as u64, track_id, new_beat);
+                    }
                 }
             }
         });
@@ -1307,6 +1332,19 @@ fn main() -> Result<(), slint::PlatformError> {
                 );
             } else {
                 timer_ref.borrow().stop();
+            }
+        });
+    }
+
+    // Seek-to: régua da timeline clica para posicionar playhead.
+    {
+        let transport = transport.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_seek_to(move |beat| {
+            let ticks = (beat * 960.0) as u64;
+            transport.borrow_mut().seek(ticks);
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_transport_position(transport.borrow().position_ticks as i32);
             }
         });
     }

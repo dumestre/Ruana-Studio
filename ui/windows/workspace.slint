@@ -31,6 +31,8 @@ export component Workspace inherits Rectangle {
     in-out property <length> bottom-panel-height: 215px;
     in-out property <[string]> track-names: ["Drums", "Bass", "Vocal", "Synth"];
     in-out property <[ClipData]> clips: [];
+    in-out property <int> drag-clip-id: -1;
+    in-out property <int> drag-track-offset: 0;
     in-out property <float> zoom-y-level: 1.0;
     in-out property <bool> drag-active: false;
     in-out property <bool> drag-inited: false;
@@ -72,6 +74,7 @@ export component Workspace inherits Rectangle {
     callback close();
     callback minimize();
     callback play-state-changed(bool);
+    callback seek-to(float);
     callback add-track-requested(string);
     callback clip-slice-requested(int, float);
     callback clip-glue-requested(int);
@@ -204,11 +207,14 @@ export component Workspace inherits Rectangle {
                             track-names: root.track-names;
                             active-tool: root.active-tool;
                             clips: root.clips;
+                            drag-clip-id: root.drag-clip-id;
+                            drag-track-offset: root.drag-track-offset;
                             drop-visible: root.drag-active && root.drag-inited && root.drag-over-timeline;
                             drop-x: root.drag-snap-beat * timeline.px-per-beat;
                             drop-track: root.drag-drop-track;
                             drop-len-beats: 4.0;
                             select-track(index) => { root.selected-track = index; }
+            seek-to(beat) => { root.seek-to(beat); }
                             clip-selected(index) => { root.selected-track = index; root.selected-clip = index; }
                             clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
                             clip-glue-requested(id) => { root.clip-glue-requested(id); }

@@ -31,6 +31,9 @@ export component TrackClip inherits Rectangle {
 
     in property <[float]> waveform-peaks: [];
 
+    in property <int> drag-clip-id: -1;
+    in property <int> drag-track-offset: 0;
+
 
     // =====================================================
     // PALETA DE CORES (8 opções, index 0 = padrão by-kind)
@@ -121,7 +124,7 @@ export component TrackClip inherits Rectangle {
 
     x: root.beat * root.px-per-beat;
 
-    y: 2px;
+    y: 2px + (root.clip-id == root.drag-clip-id ? root.drag-track-offset * root.row-height : 0px);
 
 
     // =====================================================

@@ -51,6 +51,9 @@ export component TrackRow inherits Rectangle {
 
     in property <int> active-tool: 0;
 
+    in property <int> drag-clip-id: -1;
+    in property <int> drag-track-offset: 0;
+
 
     // =====================================================
     // CALLBACKS
@@ -220,6 +223,12 @@ export component TrackRow inherits Rectangle {
 
         active-tool:
             root.active-tool;
+
+        drag-clip-id:
+            root.drag-clip-id;
+
+        drag-track-offset:
+            root.drag-track-offset;
 
 
         // =================================================

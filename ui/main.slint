@@ -146,6 +146,9 @@ export component MainWindow inherits Window {
         
     in-out property <int> selected-clip <=> workspace.selected-clip;
 
+    in property <int> drag-clip-id: -1;
+    in property <int> drag-track-offset: 0;
+
     in-out property <[ClipData]> clips:
         [
             { id: 0, track-index: 0, name: "Drums A", beat: 0.0, len: 4.0, is-midi: true },
@@ -167,6 +170,8 @@ export component MainWindow inherits Window {
     // =====================================================
 
     callback play-state-changed(bool);
+
+    callback seek-to(float);
 
     callback window-close;
 
@@ -403,13 +408,20 @@ export component MainWindow inherits Window {
                 accept
 
             } else if event.text == Key.Delete || event.text == Key.Backspace {
-                
+
                 if root.selected-clip != -1 {
                     root.clip-delete-requested(root.selected-clip);
                     accept
                 } else {
                     reject
                 }
+
+            } else if event.text == " " {
+
+                root.playing = !root.playing;
+                root.play-state-changed(root.playing);
+                accept
+
             } else {
 
                 reject;
@@ -482,6 +494,7 @@ export component MainWindow inherits Window {
         close => { root.window-close(); }
         minimize => { root.minimize(); }
         play-state-changed(state) => { root.play-state-changed(state); }
+        seek-to(beat) => { root.seek-to(beat); }
         add-track-requested(type) => { root.add-track-requested(type); }
         clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
         clip-glue-requested(id) => { root.clip-glue-requested(id); }
