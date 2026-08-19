@@ -203,7 +203,10 @@ mod tests {
         };
         let pts = waveform_points(&data, 4);
         assert_eq!(pts.len(), 4);
-        assert!(pts[1] > 0.0);
-        assert_eq!(pts[3], 1.0);
+        // Chunks de 2: [0,0.5]→0.5, [-0.5,1]→1.0, [-1,0]→1.0, [0,0]→0.0
+        assert_eq!(pts[0], 0.5);
+        assert_eq!(pts[1], 1.0);
+        assert_eq!(pts[2], 1.0);
+        assert_eq!(pts[3], 0.0);
     }
 }

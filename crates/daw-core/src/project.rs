@@ -342,6 +342,13 @@ impl Project {
             .collect()
     }
 
+    /// Clip de uma trilha que contém o beat informado (inclusive), se houver.
+    pub fn clip_at_beat(&self, track_id: u64, beat: u32) -> Option<&Clip> {
+        self.clips.iter().find(|c| {
+            c.track_id == track_id && beat >= c.start_beat && beat < c.start_beat + c.length_beats
+        })
+    }
+
     /// Próximo ID de trilha (único no documento).
     pub fn next_track_id(&self) -> u64 {
         self.tracks.iter().map(|t| t.id).max().unwrap_or(0) + 1
@@ -781,6 +788,21 @@ mod tests {
         assert_eq!(drums.len(), 2);
         assert_eq!(drums[0].start_beat, 0);
         assert_eq!(drums[1].start_beat, 8);
+    }
+
+    #[test]
+    fn clip_at_beat_finds_containing_clip() {
+        let project = demo();
+        // Clip 1 (Bass) ocupa beats 4..10 na trilha 1.
+        assert_eq!(project.clip_at_beat(1, 4).map(|c| c.id), Some(1));
+        assert_eq!(project.clip_at_beat(1, 9).map(|c| c.id), Some(1));
+        // Limites: início incluso, fim exclusivo.
+        assert!(project.clip_at_beat(1, 3).is_none());
+        assert!(project.clip_at_beat(1, 10).is_none());
+        // Trilha errada → None.
+        assert!(project.clip_at_beat(0, 4).is_none());
+        // Overlap entre trilhas não vaza.
+        assert_eq!(project.clip_at_beat(2, 8).map(|c| c.id), Some(2));
     }
 
     #[test]

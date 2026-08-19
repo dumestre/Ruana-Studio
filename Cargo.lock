@@ -4240,6 +4240,7 @@ version = "0.1.0"
 dependencies = [
  "daw-core",
  "daw-media",
+ "daw-midi",
  "i-slint-backend-winit",
  "png 0.17.16",
  "raw-window-handle",
