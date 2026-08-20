@@ -32,8 +32,10 @@ export component Timeline inherits Rectangle {
     // =====================================================
 
     in-out property <length> scroll-x: 0px;
+    animate scroll-x { duration: 80ms; easing: ease-out; }
 
     in-out property <length> scroll-y: 0px;
+    animate scroll-y { duration: 80ms; easing: ease-out; }
 
     out property <length> max-scroll-x:
         max(
@@ -939,8 +941,8 @@ export component Timeline inherits Rectangle {
                     clip-drag-overlay-started(id, abs-x, abs-y) => {
                         root.overlay-drag-active = true;
                         root.overlay-drag-id = id;
-                        root.overlay-anchor-x = abs-x * 1px;
-                        root.overlay-anchor-y = abs-y * 1px;
+                        root.overlay-anchor-x = abs-x * 1px + root.scroll-x;
+                        root.overlay-anchor-y = abs-y * 1px + root.scroll-y;
                     }
 
                     clip-resize-started(id, side) => {
@@ -1044,6 +1046,8 @@ export component Timeline inherits Rectangle {
                     Colors.crimson;
 
                 z: 100;
+
+                animate x { duration: 50ms; easing: ease-out; }
             }
 
 
@@ -1070,6 +1074,8 @@ export component Timeline inherits Rectangle {
                     Colors.crimson;
 
                 z: 120;
+
+                animate x { duration: 50ms; easing: ease-out; }
             }
 
 
@@ -1095,6 +1101,8 @@ export component Timeline inherits Rectangle {
                 opacity: 0.9;
 
                 z: 115;
+
+                animate x { duration: 50ms; easing: ease-out; }
             }
         }
     
@@ -1163,8 +1171,10 @@ export component Timeline inherits Rectangle {
             if event.kind == PointerEventKind.move && root.overlay-drag-active {
                 let abs-x = self.mouse-x + self.absolute-position.x;
                 let abs-y = self.mouse-y + self.absolute-position.y;
-                let delta-beats = (abs-x - root.overlay-anchor-x) / root.px-per-beat;
-                let delta-tracks = Math.round((abs-y - root.overlay-anchor-y) / root.row-height);
+                let content-x = abs-x + root.scroll-x;
+                let content-y = abs-y + root.scroll-y;
+                let delta-beats = (content-x - root.overlay-anchor-x) / root.px-per-beat;
+                let delta-tracks = Math.round((content-y - root.overlay-anchor-y) / root.row-height);
                 root.clip-move-delta(root.overlay-drag-id, delta-beats, delta-tracks);
             } else if event.kind == PointerEventKind.up && root.overlay-drag-active {
                 root.overlay-drag-active = false;

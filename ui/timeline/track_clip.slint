@@ -472,6 +472,8 @@ export component TrackClip inherits Rectangle {
         width: parent.width;
         height: parent.height;
 
+        enabled: root.clip-id != root.drag-clip-id;
+
         mouse-cursor:
             root.active-tool == 1
                 ? crosshair
