@@ -132,6 +132,11 @@ impl AudioEngine {
             buffer_cache: buffer_cache.clone(),
         };
 
+        eprintln!("[ENGINE] started: sr={} buf={} ch={}",
+            engine.output_config.sample_rate,
+            engine.output_config.buffer_size,
+            engine.output_config.channels);
+
         Ok((engine, snapshot, buffer_cache))
     }
 
@@ -177,7 +182,10 @@ impl AudioEngine {
         {
             let mut t = match transport.lock() {
                 Ok(guard) => guard,
-                Err(_) => return,
+                Err(_) => {
+                    eprintln!("[AUDIO] transport lock poisoned!");
+                    return;
+                }
             };
             if !t.playing {
                 output.fill(0.0);
@@ -191,6 +199,15 @@ impl AudioEngine {
             let ticks_per_sample = (bpm as f64 / 60.0) * ppq as f64 / sample_rate as f64;
             let delta = (frames as f64 * ticks_per_sample).round() as u64;
             t.advance(delta);
+
+            // Log a cada ~2 beats (1920 ticks em 960 PPQ)
+            static AUDIO_CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let count = AUDIO_CALL_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if count % 200 == 0 {
+                eprintln!("[AUDIO CB] frames={} start_ticks={} new_ticks={} bpm={} ppq={} hold_ms={:.1}",
+                    frames, position_at_start, t.position_ticks, bpm, ppq,
+                    frames as f64 / sample_rate as f64 * 1000.0);
+            }
         }
 
         let ticks_per_sample = (bpm as f64 / 60.0) * ppq as f64 / sample_rate as f64;

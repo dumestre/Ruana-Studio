@@ -1302,6 +1302,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
                 transport.lock().unwrap().playing = true;
+                eprintln!("[PLAY] transport.playing=true, starting UI timer");
 
                 // Transport timer: só LÊ a posição do transport (nunca avança).
                 // O audio callback é quem avança.
@@ -1313,8 +1314,18 @@ fn main() -> Result<(), slint::PlatformError> {
                         Duration::from_millis(16),
                         move || {
                             if let Some(ui) = ui_weak_t.upgrade() {
-                                if let Ok(t) = transport.try_lock() {
-                                    ui.set_transport_position(t.position_ticks as i32);
+                                match transport.try_lock() {
+                                    Ok(t) => {
+                                        let pos = t.position_ticks;
+                                        let playing = t.playing;
+                                        ui.set_transport_position(pos as i32);
+                                        if pos % 1920 == 0 {
+                                            eprintln!("[UI TIMER] ticks={} beat={:.2} playing={}", pos, pos as f64 / 960.0, playing);
+                                        }
+                                    }
+                                    Err(_) => {
+                                        eprintln!("[UI TIMER] LOCK CONTESTED — audio thread segura o mutex!");
+                                    }
                                 }
                             }
                         },
@@ -1346,6 +1357,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     },
                 );
             } else {
+                eprintln!("[STOP] stopping transport + timers");
                 transport.lock().unwrap().playing = false;
                 transport_timer_ref.borrow().stop();
                 meter_timer_ref.borrow().stop();
