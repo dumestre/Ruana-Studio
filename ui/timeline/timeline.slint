@@ -19,6 +19,8 @@ export component Timeline inherits Rectangle {
 
     in property <int> position: 0;
 
+    in property <bool> playing: false;
+
     in-out property <float> zoom: 1.0;
 
     in-out property <float> zoom-y: 1.0;
@@ -1200,6 +1202,37 @@ export component Timeline inherits Rectangle {
                 root.scroll-y = min(root.max-scroll-y, root.scroll-y + root.auto-scroll-speed);
             } else if my >= 0px && my < root.auto-scroll-edge {
                 root.scroll-y = max(0px, root.scroll-y - root.auto-scroll-speed);
+            }
+        }
+    }
+
+
+    // =====================================================
+    // FOLLOW PLAYHEAD: mantém o playhead visível durante
+    // playback. Quando ele sai da área visível, rola a
+    // viewport para acompanhar (estilo DAW padrão).
+    // =====================================================
+
+    Timer {
+        interval: 16ms;
+        running: root.playing;
+
+        triggered() => {
+            let px = root.playhead-x;
+            let visible-left = root.scroll-x;
+            let visible-right = root.scroll-x + root.width;
+            let margin = root.width * 0.1;
+
+            // Saiu pela direita → centraliza um pouco à direita
+            if px > visible-right - margin {
+                root.scroll-x = min(
+                    root.max-scroll-x,
+                    px - root.width * 0.3
+                );
+            }
+            // Saiu pela esquerda → volta a ver
+            else if px < visible-left + margin {
+                root.scroll-x = max(0px, px - root.width * 0.3);
             }
         }
     }

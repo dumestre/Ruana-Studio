@@ -1276,20 +1276,32 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.on_play_state_changed(move |playing| {
             transport.borrow_mut().toggle();
             if playing {
-                // Transport timer: avança playhead
-                let ui_weak_t = ui_weak.clone();
-                let transport = transport.clone();
-                transport_timer_ref.borrow().start(
-                    slint::TimerMode::Repeated,
-                    Duration::from_millis(50),
-                    move || {
-                        if let Some(ui) = ui_weak_t.upgrade() {
-                            let mut t = transport.borrow_mut();
-                            t.advance(48);
-                            ui.set_transport_position(t.position_ticks as i32);
-                        }
-                    },
-                );
+                // Transport timer: avança playhead a 60 fps (16 ms).
+                // delta_ticks é calculado dinamicamente a partir do BPM
+                // e do PPQ para manter tempo musical preciso.
+                {
+                    let ui_weak_t = ui_weak.clone();
+                    let transport = transport.clone();
+                    let tick_acc = Rc::new(RefCell::new(0.0_f64));
+                    let tick_acc_c = tick_acc.clone();
+                    transport_timer_ref.borrow().start(
+                        slint::TimerMode::Repeated,
+                        Duration::from_millis(16),
+                        move || {
+                            if let Some(ui) = ui_weak_t.upgrade() {
+                                let mut t = transport.borrow_mut();
+                                let ticks_per_sec = t.bpm as f64 / 60.0 * t.ppq as f64;
+                                let raw = ticks_per_sec * 0.016;
+                                let mut acc = tick_acc_c.borrow_mut();
+                                *acc += raw;
+                                let whole = *acc as u64;
+                                *acc -= whole as f64;
+                                t.advance(whole);
+                                ui.set_transport_position(t.position_ticks as i32);
+                            }
+                        },
+                    );
+                }
                 // Meter timer: VU fake com smoothing no Rust (attack
                 // instantâneo, decay lento). SEM animação Slint — a
                 // animação contínua satura o renderer e trava o playhead.
