@@ -218,6 +218,8 @@ export component MainWindow inherits Window {
 
     callback tool-changed(int);
     callback timeline-bounds-changed(float, float, float, float);
+    callback beat-bounds-changed(float, float, float, float);
+    callback drumstick-changed(bool);
 
 
     // =====================================================
@@ -518,6 +520,8 @@ export component MainWindow inherits Window {
         float-toggle(tab) => { root.float-toggle(tab); }
         tool-changed(tool) => { root.tool-changed(tool); }
         timeline-bounds-changed(x, y, w, h) => { root.timeline-bounds-changed(x, y, w, h); }
+        beat-bounds-changed(x, y, w, h) => { root.beat-bounds-changed(x, y, w, h); }
+        drumstick-changed(active) => { root.drumstick-changed(active); }
         drag-begin(name, position, duration, color, is-midi) => { root.drag-begin(name, position, duration, color, is-midi); }
         drag-move(x, y) => { root.drag-move(x, y); }
         drag-end() => { root.drag-end(); }
@@ -530,6 +534,30 @@ export component MainWindow inherits Window {
 
         open <=>
             root.beat-open;
+    }
+
+    // Emit beat bounds for Win32 drumstick cursor
+    Timer {
+        interval: 50ms;
+        running: root.beat-open;
+        triggered() => {
+            root.beat-bounds-changed(
+                beat_popup.content-x / 1px,
+                beat_popup.content-y / 1px,
+                beat_popup.content-w / 1px,
+                beat_popup.content-h / 1px
+            );
+            root.drumstick-changed(true);
+        }
+    }
+
+    // Disable drumstick cursor when beat is closed
+    Timer {
+        interval: 100ms;
+        running: !root.beat-open;
+        triggered() => {
+            root.drumstick-changed(false);
+        }
     }
 
 

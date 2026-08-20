@@ -136,10 +136,6 @@ export component BeatContent inherits Rectangle {
     property <length> menu-y: beat-header.y + beat-header.height + 2px;
     property <length> track-menu-height: 4px + 9 * 24px + 2 * 1px + 26px + 11 * 1px;
 
-    // Ícone pré-carregado no init para evitar decodificação
-    // (e lag) na primeira vez que o cursor aparece na grade.
-    private property <image> cursor-drumstick: @image-url("../icons/drumstick.svg");
-
     width: 800px;
     height: 480px;
 
@@ -154,7 +150,7 @@ export component BeatContent inherits Rectangle {
     hover-zone := TouchArea {
         width: 100%;
         height: 100%;
-        mouse-cursor: none;
+        mouse-cursor: default;
     }
 
     VerticalLayout {
@@ -303,7 +299,7 @@ export component BeatContent inherits Rectangle {
                     y: 0;
                     width: 100%;
                     height: 100%;
-                    mouse-cursor: none;
+                    mouse-cursor: default;
 
                     property <int> paint-row: -1;
                     property <int> paint-col: -1;
@@ -354,24 +350,6 @@ export component BeatContent inherits Rectangle {
                 }
             }
         }
-    }
-
-
-    // =====================================================
-    // DRUMSTICK CURSOR (root level, follows hover-zone)
-    // =====================================================
-
-    drumstick := Image {
-        x: hover-zone.mouse-x - 15.7px;
-        y: hover-zone.mouse-y - 1.2px;
-        width: 32px;
-        height: 32px;
-        source: root.cursor-drumstick;
-        visible: hover-zone.has-hover;
-        transform-origin: { x: 15.7px, y: 1.2px };
-        transform-rotation: root.stick-hit ? -60deg : -45deg;
-        animate transform-rotation { duration: 90ms; easing: ease-out; }
-        z: 50;
     }
 
 

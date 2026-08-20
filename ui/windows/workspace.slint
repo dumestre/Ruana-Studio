@@ -109,6 +109,8 @@ export component Workspace inherits Rectangle {
     callback float-toggle(int);
     callback tool-changed(int);
     callback timeline-bounds-changed(float, float, float, float);
+    callback beat-bounds-changed(float, float, float, float);
+    callback drumstick-changed(bool);
 
     VerticalLayout {
         alignment: LayoutAlignment.stretch;

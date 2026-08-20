@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, set_timeline_bounds, reset_cursor_to_default};
+use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, set_timeline_bounds, set_beat_bounds, set_drumstick_active, reset_cursor_to_default};
 use daw_core::clip::{Clip, ClipKind};
 use daw_core::mixer::MixerParam;
 use daw_core::project::{ChangeKind, DocumentEvent, Project};
@@ -1375,6 +1375,14 @@ fn main() -> Result<(), slint::PlatformError> {
 
     ui.on_timeline_bounds_changed(move |x, y, w, h| {
         set_timeline_bounds(x, y, w, h);
+    });
+
+    ui.on_beat_bounds_changed(move |x, y, w, h| {
+        set_beat_bounds(x, y, w, h);
+    });
+
+    ui.on_drumstick_changed(move |active| {
+        set_drumstick_active(active);
     });
 
     ui.on_window_close(move || {

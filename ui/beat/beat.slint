@@ -191,6 +191,10 @@ export component BeatPopup inherits Rectangle {
     in-out property <length> popup-y: 80px;
     in-out property <bool> open: false;
     out property <bool> is-open: root.open;
+    out property <length> content-x: content.absolute-position.x;
+    out property <length> content-y: content.absolute-position.y;
+    out property <length> content-w: content.width;
+    out property <length> content-h: content.height;
 
     callback open-requested;
     callback close-requested;
