@@ -1309,22 +1309,25 @@ fn main() -> Result<(), slint::PlatformError> {
                 {
                     let ui_weak_t = ui_weak.clone();
                     let transport = transport.clone();
+                    let tick_count = std::sync::atomic::AtomicU64::new(0);
+                    let play_instant = std::time::Instant::now();
                     transport_timer_ref.borrow().start(
                         slint::TimerMode::Repeated,
                         Duration::from_millis(16),
                         move || {
                             if let Some(ui) = ui_weak_t.upgrade() {
+                                let elapsed_ms = play_instant.elapsed().as_millis();
                                 match transport.try_lock() {
                                     Ok(t) => {
                                         let pos = t.position_ticks;
-                                        let playing = t.playing;
                                         ui.set_transport_position(pos as i32);
-                                        if pos % 1920 == 0 {
-                                            eprintln!("[UI TIMER] ticks={} beat={:.2} playing={}", pos, pos as f64 / 960.0, playing);
+                                        let n = tick_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                        if n < 5 || n % 60 == 0 {
+                                            eprintln!("[UI] #{} t={}ms ticks={} beat={:.2}", n, elapsed_ms, pos, pos as f64 / 960.0);
                                         }
                                     }
                                     Err(_) => {
-                                        eprintln!("[UI TIMER] LOCK CONTESTED — audio thread segura o mutex!");
+                                        eprintln!("[UI] #{} t={}ms LOCK CONTESTED", tick_count.load(std::sync::atomic::Ordering::Relaxed), elapsed_ms);
                                     }
                                 }
                             }

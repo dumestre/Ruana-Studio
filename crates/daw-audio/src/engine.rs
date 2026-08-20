@@ -202,11 +202,12 @@ impl AudioEngine {
 
             // Log a cada ~2 beats (1920 ticks em 960 PPQ)
             static AUDIO_CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            static AUDIO_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+            let start = AUDIO_START.get_or_init(|| std::time::Instant::now());
             let count = AUDIO_CALL_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            if count % 200 == 0 {
-                eprintln!("[AUDIO CB] frames={} start_ticks={} new_ticks={} bpm={} ppq={} hold_ms={:.1}",
-                    frames, position_at_start, t.position_ticks, bpm, ppq,
-                    frames as f64 / sample_rate as f64 * 1000.0);
+            if count % 100 == 0 {
+                eprintln!("[AUDIO] #{} t={}ms frames={} ticks={} (delta={})",
+                    count, start.elapsed().as_millis(), frames, t.position_ticks, delta);
             }
         }
 
