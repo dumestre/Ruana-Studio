@@ -1313,8 +1313,9 @@ fn main() -> Result<(), slint::PlatformError> {
                         Duration::from_millis(16),
                         move || {
                             if let Some(ui) = ui_weak_t.upgrade() {
-                                let t = transport.lock().unwrap();
-                                ui.set_transport_position(t.position_ticks as i32);
+                                if let Ok(t) = transport.try_lock() {
+                                    ui.set_transport_position(t.position_ticks as i32);
+                                }
                             }
                         },
                     );

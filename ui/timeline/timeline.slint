@@ -32,10 +32,8 @@ export component Timeline inherits Rectangle {
     // =====================================================
 
     in-out property <length> scroll-x: 0px;
-    animate scroll-x { duration: 80ms; easing: ease-out; }
 
     in-out property <length> scroll-y: 0px;
-    animate scroll-y { duration: 80ms; easing: ease-out; }
 
     out property <length> max-scroll-x:
         max(
@@ -78,6 +76,8 @@ export component Timeline inherits Rectangle {
     out property <int> overlay-drag-id: -1;
     out property <length> overlay-anchor-x: 0px;
     out property <length> overlay-anchor-y: 0px;
+    out property <length> overlay-anchor-scroll-x: 0px;
+    out property <length> overlay-anchor-scroll-y: 0px;
 
     callback clip-drag-overlay-started(int, float, float);
 
@@ -943,6 +943,8 @@ export component Timeline inherits Rectangle {
                         root.overlay-drag-id = id;
                         root.overlay-anchor-x = abs-x * 1px + root.scroll-x;
                         root.overlay-anchor-y = abs-y * 1px + root.scroll-y;
+                        root.overlay-anchor-scroll-x = root.scroll-x;
+                        root.overlay-anchor-scroll-y = root.scroll-y;
                     }
 
                     clip-resize-started(id, side) => {
@@ -1046,8 +1048,6 @@ export component Timeline inherits Rectangle {
                     Colors.crimson;
 
                 z: 100;
-
-                animate x { duration: 50ms; easing: ease-out; }
             }
 
 
@@ -1074,8 +1074,6 @@ export component Timeline inherits Rectangle {
                     Colors.crimson;
 
                 z: 120;
-
-                animate x { duration: 50ms; easing: ease-out; }
             }
 
 
@@ -1101,8 +1099,6 @@ export component Timeline inherits Rectangle {
                 opacity: 0.9;
 
                 z: 115;
-
-                animate x { duration: 50ms; easing: ease-out; }
             }
         }
     
@@ -1173,8 +1169,11 @@ export component Timeline inherits Rectangle {
                 let abs-y = self.mouse-y + self.absolute-position.y;
                 let content-x = abs-x + root.scroll-x;
                 let content-y = abs-y + root.scroll-y;
-                let delta-beats = (content-x - root.overlay-anchor-x) / root.px-per-beat;
-                let delta-tracks = Math.round((content-y - root.overlay-anchor-y) / root.row-height);
+                // Compensate for scroll changes since drag started
+                let effective-anchor-x = root.overlay-anchor-x + (root.scroll-x - root.overlay-anchor-scroll-x);
+                let effective-anchor-y = root.overlay-anchor-y + (root.scroll-y - root.overlay-anchor-scroll-y);
+                let delta-beats = (content-x - effective-anchor-x) / root.px-per-beat;
+                let delta-tracks = Math.round((content-y - effective-anchor-y) / root.row-height);
                 root.clip-move-delta(root.overlay-drag-id, delta-beats, delta-tracks);
             } else if event.kind == PointerEventKind.up && root.overlay-drag-active {
                 root.overlay-drag-active = false;
