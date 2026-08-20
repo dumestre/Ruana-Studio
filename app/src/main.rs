@@ -1279,18 +1279,22 @@ fn main() -> Result<(), slint::PlatformError> {
             Rc::new(RefCell::new(None));
         let audio_snapshot: Rc<RefCell<Option<Arc<Mutex<daw_audio::ProjectSnapshot>>>>> =
             Rc::new(RefCell::new(None));
+        let audio_buffers: Rc<RefCell<Option<Arc<Mutex<daw_audio::BufferCache>>>>> =
+            Rc::new(RefCell::new(None));
         ui.on_play_state_changed(move |playing| {
             if playing {
                 // Inicia o audio engine (abre stream CPAL)
-                match daw_audio::AudioEngine::start(transport.clone()) {
-                    Ok((engine, snapshot)) => {
-                        // Atualiza o snapshot com o estado atual do projeto
+                match daw_audio::AudioEngine::start(transport.clone(), 48000) {
+                    Ok((engine, snapshot, buffers)) => {
+                        // Atualiza o snapshot e pré-carrega clips
                         {
                             let proj = project.borrow();
                             let mut snap = snapshot.lock().unwrap();
                             snap.update_from(&proj);
                         }
+                        engine.preload_clips(&project.borrow());
                         *audio_snapshot.borrow_mut() = Some(snapshot);
+                        *audio_buffers.borrow_mut() = Some(buffers);
                         *audio_engine.borrow_mut() = Some(engine);
                     }
                     Err(e) => {
@@ -1347,6 +1351,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 // Para o audio engine
                 *audio_engine.borrow_mut() = None;
                 *audio_snapshot.borrow_mut() = None;
+                *audio_buffers.borrow_mut() = None;
             }
         });
     }

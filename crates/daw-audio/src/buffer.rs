@@ -70,6 +70,12 @@ impl BufferCache {
         })
     }
 
+    /// Retorna referência a um buffer já cacheado pelo clip ID.
+    /// Não decodifica — retorna None se não estiver em cache.
+    pub fn get_by_id(&self, clip_id: u64) -> Option<&SampleBuffer> {
+        self.cache.get(&clip_id)
+    }
+
     /// Remove o buffer de um clip (quando deletado do projeto).
     pub fn evict(&mut self, clip_id: u64) {
         self.cache.remove(&clip_id);
