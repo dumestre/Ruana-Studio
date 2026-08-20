@@ -1268,8 +1268,6 @@ fn main() -> Result<(), slint::PlatformError> {
     // Mixer meters animados também rodam enquanto tocando.
     {
         let ui_weak = ui.as_weak();
-        let transport_timer = Rc::new(RefCell::new(slint::Timer::default()));
-        let transport_timer_ref = transport_timer.clone();
         let transport = transport.clone();
         let project = project.clone();
         let meter_timer = Rc::new(RefCell::new(slint::Timer::default()));
@@ -1281,6 +1279,8 @@ fn main() -> Result<(), slint::PlatformError> {
             Rc::new(RefCell::new(None));
         let audio_buffers: Rc<RefCell<Option<Arc<Mutex<daw_audio::BufferCache>>>>> =
             Rc::new(RefCell::new(None));
+        // Transport thread flag — shared between play/stop
+        let transport_thread_active = Arc::new(std::sync::atomic::AtomicBool::new(false));
         ui.on_play_state_changed(move |playing| {
             if playing {
                 // Inicia o audio engine (abre stream CPAL)
@@ -1302,37 +1302,40 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
                 transport.lock().unwrap().playing = true;
-                eprintln!("[PLAY] transport.playing=true, starting UI timer");
+                eprintln!("[PLAY] transport.playing=true, starting transport thread");
 
-                // Transport timer: só LÊ a posição do transport (nunca avança).
-                // O audio callback é quem avança.
+                // Transport thread: lê position a cada 8ms via OS thread
+                // (independente do Slint event loop)
+                transport_thread_active.store(true, std::sync::atomic::Ordering::SeqCst);
                 {
                     let ui_weak_t = ui_weak.clone();
                     let transport = transport.clone();
-                    let tick_count = std::sync::atomic::AtomicU64::new(0);
-                    let play_instant = std::time::Instant::now();
-                    transport_timer_ref.borrow().start(
-                        slint::TimerMode::Repeated,
-                        Duration::from_millis(16),
-                        move || {
-                            if let Some(ui) = ui_weak_t.upgrade() {
-                                let elapsed_ms = play_instant.elapsed().as_millis();
-                                match transport.try_lock() {
-                                    Ok(t) => {
-                                        let pos = t.position_ticks;
-                                        ui.set_transport_position(pos as i32);
-                                        let n = tick_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                        if n < 5 || n % 60 == 0 {
-                                            eprintln!("[UI] #{} t={}ms ticks={} beat={:.2}", n, elapsed_ms, pos, pos as f64 / 960.0);
-                                        }
+                    let active = transport_thread_active.clone();
+                    std::thread::Builder::new()
+                        .name("transport-reader".into())
+                        .spawn(move || {
+                            let mut count: u64 = 0;
+                            while active.load(std::sync::atomic::Ordering::SeqCst) {
+                                std::thread::sleep(Duration::from_millis(8));
+                                let pos = match transport.try_lock() {
+                                    Ok(t) => t.position_ticks,
+                                    Err(_) => continue,
+                                };
+                                let pos_i32 = pos as i32;
+                                let ui = ui_weak_t.clone();
+                                let _ = slint::invoke_from_event_loop(move || {
+                                    if let Some(ui) = ui.upgrade() {
+                                        ui.set_transport_position(pos_i32);
                                     }
-                                    Err(_) => {
-                                        eprintln!("[UI] #{} t={}ms LOCK CONTESTED", tick_count.load(std::sync::atomic::Ordering::Relaxed), elapsed_ms);
-                                    }
+                                });
+                                if count < 10 || count % 500 == 0 {
+                                    eprintln!("[THREAD] #{} ticks={} beat={:.2}", count, pos, pos as f64 / 960.0);
                                 }
+                                count += 1;
                             }
-                        },
-                    );
+                            eprintln!("[THREAD] stopped after {} reads", count);
+                        })
+                        .expect("failed to spawn transport thread");
                 }
                 // Meter timer: VU fake com smoothing no Rust (attack
                 // instantâneo, decay lento). SEM animação Slint — a
@@ -1361,8 +1364,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 );
             } else {
                 eprintln!("[STOP] stopping transport + timers");
+                transport_thread_active.store(false, std::sync::atomic::Ordering::SeqCst);
                 transport.lock().unwrap().playing = false;
-                transport_timer_ref.borrow().stop();
                 meter_timer_ref.borrow().stop();
                 // Para o audio engine
                 *audio_engine.borrow_mut() = None;
