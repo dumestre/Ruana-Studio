@@ -1016,90 +1016,79 @@ export component Timeline inherits Rectangle {
                     z: 1;
                 }
             }
-
-
-            // =============================================
-            // PLAYHEAD
-            //
-            // LINHA PRINCIPAL
-            // =============================================
-
-            Rectangle {
-
-                x:
-                    root.playhead-x - 1px;
-
-                y:
-                    root.ruler-height;
-
-                width: 2px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Colors.crimson;
-
-                z: 100;
-            }
-
-
-            // =============================================
-            // BOLINHA DO PLAYHEAD
-            //
-            // ESTA É A ÚNICA CABEÇA DO PLAYHEAD.
-            // =============================================
-
-            Rectangle {
-
-                x:
-                    root.playhead-x - 6px;
-
-                y: 1px;
-
-                width: 12px;
-
-                height: 12px;
-
-                border-radius: 6px;
-
-                background:
-                    Colors.crimson;
-
-                z: 120;
-            }
-
-
-            // =============================================
-            // LINHA DENTRO DA RÉGUA
-            // =============================================
-
-            Rectangle {
-
-                x:
-                    root.playhead-x - 1px;
-
-                y: 7px;
-
-                width: 2px;
-
-                height:
-                    root.ruler-height - 7px;
-
-                background:
-                    Colors.crimson;
-
-                opacity: 0.9;
-
-                z: 115;
-            }
+ 
+ 
         }
+    }
+ 
+ 
+    // =====================================================
+    // PLAYHEAD (fora do conteúdo rolável para não forçar
+    // redraws de toda a timeline a cada movimento).
+    // =====================================================
+
+    Rectangle {
+
+        x:
+            root.playhead-x - 1px
+            - root.scroll-x;
+
+        y:
+            root.ruler-height;
+
+        width: 2px;
+
+        height:
+            parent.height - root.ruler-height;
+
+        background:
+            Theme.playhead;
+
+        z: 100;
     }
 
 
-    // =====================================================
-    // CURSORES
-    // =====================================================
+    Rectangle {
+
+        x:
+            root.playhead-x - 6px
+            - root.scroll-x;
+
+        y: 1px;
+
+        width: 12px;
+
+        height: 12px;
+
+        border-radius: 6px;
+
+        background:
+            Theme.playhead;
+
+        z: 120;
+    }
+
+
+    Rectangle {
+
+        x:
+            root.playhead-x - 1px
+            - root.scroll-x;
+
+        y: 7px;
+
+        width: 2px;
+
+        height:
+            root.ruler-height - 7px;
+
+        background:
+            Theme.playhead;
+
+        opacity: 0.9;
+
+        z: 115;
+    }
 
     // =====================================================
     // CURSOR DAS FERRAMENTAS (nativos — sem latência de render)
