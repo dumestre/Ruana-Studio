@@ -1,12 +1,12 @@
 import { Button } from "components/button.slint";
 import { Theme } from "theme.slint";
+import { ProjectKey } from "components/project_key.slint";
+
 export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
     in-out property <bool> grid-enabled: true;
     in-out property <bool> full-screen: false;
     in-out property <bool> jump-to-pattern: false;
-    
-    
 
     callback zoom-in;
     callback zoom-out;
@@ -19,6 +19,7 @@ export component Toolbar inherits Rectangle {
     height: 34px;
     background: Theme.surface;
 
+    // Borda inferior
     Rectangle {
         y: parent.height - 1px;
         width: 100%;
@@ -26,210 +27,141 @@ export component Toolbar inherits Rectangle {
         background: Theme.border;
     }
 
+    // Layout Principal da Toolbar
     HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        spacing: 4px;
+        // Espaço geral entre os grandes blocos (Logo, Menus, Ferramentas)
+        spacing: 12px; 
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
 
-        Image {
-            source: @image-url("../app/assets/RuanaStudio.svg");
-            width: 26px;
-            height: 26px;
+        // ==========================================
+        // 1. LOGO & TÍTULO
+        // ==========================================
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+            Image {
+                source: @image-url("../app/assets/RuanaStudio.svg");
+                width: 26px;
+                height: 26px;
+            }
+
+            Text {
+                font-family: "poppins";
+                font-size: 12px;
+                horizontal-alignment: TextHorizontalAlignment.center;
+                letter-spacing: 1px;
+                text: "Ruana Studio";
+            }
         }
 
-
-        Text {
-            font-family: "poppins";
-            font-size: 12px;
-            horizontal-alignment: TextHorizontalAlignment.center;
-            letter-spacing: 1px;
-            text: "Ruana Studio";
-        }
-        Rectangle {
-            width: 8px;
-            background: transparent;
-        }
-
+        // ==========================================
+        // 2. MENUS (FILE)
+        // ==========================================
         HorizontalLayout {
             spacing: 2px;
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
             Button {
-                text: "New"; borderless: true;
-                text-color: Theme.text-primary;
-                letter-spacing: 2px;
-                clicked => {} }
+                text: "New"; borderless: true; text-color: Theme.text-primary; letter-spacing: 2px; clicked => {} 
+            }
             Button {
-                text: "Open"; borderless: true;
-                text-color: Theme.text-primary;
-                letter-spacing: 2px;
-                clicked => {} }
+                text: "Open"; borderless: true; text-color: Theme.text-primary; letter-spacing: 2px; clicked => {} 
+            }
             Button {
-                text: "Save"; borderless: true;
-                text-color: Theme.text-primary;
-                letter-spacing: 2px;
-                clicked => {} }
+                text: "Save"; borderless: true; text-color: Theme.text-primary; letter-spacing: 2px; clicked => {} 
+            }
             Button {
-                text: "Save As"; borderless: true;
-                text-color: Theme.text-primary;
-                letter-spacing: 2px;
-                clicked => {} }
+                text: "Save As"; borderless: true; text-color: Theme.text-primary; letter-spacing: 2px; clicked => {} 
+            }
         }
 
+        // Divisor visual vertical
         Rectangle {
             width: 1px;
+            height: 20px;
             background: Theme.border;
         }
 
-        HorizontalLayout{
+        // ==========================================
+        // 3. FERRAMENTAS DA DAW
+        // ==========================================
+        HorizontalLayout {
+            spacing: 8px; // Substitui os Rectangles de 8px
             alignment: LayoutAlignment.center;
             cross-axis-alignment: CrossAxisAlignment.center;
 
-        Button {
-            height: 20px;
-            width: 20px; 
-            icon: @image-url("icons/undo.svg");
-            icon-size: 16px;
-            icon-color: #9a9a9a;
-            borderless: true;
-            clicked => {} 
-        }
-        Button { 
-            height: 20px;
-            width: 20px;
-            icon: @image-url("icons/redo.svg");
-            icon-size: 16px;
-            icon-color: #9a9a9a;
-            borderless: true;
-            clicked => {} 
-        }
-
-        Rectangle {
-            width: 8px;
-        }
-
-        Button {
-    text: "";
-    borderless: true;
-    height: 22px;
-    width: 22px;
-    icon: @image-url("icons/pagejump.svg");
-    icon-size: 22px;
-    icon-color: Theme.text-dim;
-
-    toggled: root.jump-to-pattern;
-    toggled-bg: Theme.accent;
-    toggled-fg: Theme.on-accent;
-
-    clicked => {
-        root.jump-to-pattern = !root.jump-to-pattern;
-        root.page-toggled(root.jump-to-pattern);
-    }
-}
-
-         Rectangle {
-            width: 8px;
-        }
-
-        
-       
-Button {
-            icon: @image-url("icons/snap.svg");
-            filled-icon: @image-url("icons/snap_filled.svg");
-            icon-size: 16px;
-            icon-color: Theme.text-dim;
-            height: 22px;
-            width: 22px;
-            toggled: root.snap-enabled;
-            toggled-bg: Theme.accent;
-            toggled-fg: Theme.on-accent;
-            borderless: true;
-            clicked => {
-                root.snap-enabled = !root.snap-enabled;
-                root.snap-toggled(root.snap-enabled);
+            Button {
+                height: 20px; width: 20px; 
+                icon: @image-url("icons/undo.svg"); icon-size: 16px; icon-color: #9a9a9a; borderless: true; clicked => {} 
             }
-        }
-        
-        Button {
-            text: "GRID";
-            borderless: false;
-            enabled: true;
-            height: 14px;
-            icon-size: 12px;
-            toggled: true;
-            toggled-bg: Theme.accent;
-            toggled-fg: Theme.base;
-            width: 32px;
-            preferred-width: 0px;
-            subtle-toggled: true;
-            clicked => {
-                root.grid-enabled = !root.grid-enabled;
-                root.grid-toggled(root.grid-enabled);
-                root.page-toggled(root.jump-to-pattern);
+            Button { 
+                height: 20px; width: 20px;
+                icon: @image-url("icons/redo.svg"); icon-size: 16px; icon-color: #9a9a9a; borderless: true; clicked => {} 
             }
+            Button {
+                text: ""; borderless: true; height: 22px; width: 22px;
+                icon: @image-url("icons/pagejump.svg"); icon-size: 22px; icon-color: Theme.text-dim;
+                toggled: root.jump-to-pattern; toggled-bg: Theme.accent; toggled-fg: Theme.on-accent;
+                clicked => {
+                    root.jump-to-pattern = !root.jump-to-pattern;
+                    root.page-toggled(root.jump-to-pattern);
+                }
+            }
+            Button {
+                icon: @image-url("icons/snap.svg"); filled-icon: @image-url("icons/snap_filled.svg");
+                icon-size: 16px; icon-color: Theme.text-dim; height: 22px; width: 22px;
+                toggled: root.snap-enabled; toggled-bg: Theme.accent; toggled-fg: Theme.on-accent; borderless: true;
+                clicked => {
+                    root.snap-enabled = !root.snap-enabled;
+                    root.snap-toggled(root.snap-enabled);
+                }
+            }
+            Button {
+                text: "GRID"; borderless: false; enabled: true; height: 14px; icon-size: 12px; width: 32px; preferred-width: 0px;
+                toggled: true; toggled-bg: Theme.accent; toggled-fg: Theme.base; subtle-toggled: true;
+                clicked => {
+                    root.grid-enabled = !root.grid-enabled;
+                    root.grid-toggled(root.grid-enabled);
+                    root.page-toggled(root.jump-to-pattern);
+                }
+            }
+            ProjectKey { }
         }
-    }
 
+        // ==========================================
+        // A MOLA (Empurra o resto para a direita)
+        // ==========================================
         Rectangle {
             horizontal-stretch: 1;
             background: transparent;
         }
 
+        // ==========================================
+        // 4. CONTROLES DA JANELA
+        // ==========================================
         HorizontalLayout {
+            spacing: 4px; // Substitui os Rectangles de 4px
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
-        Button {
-            
-            height: 20px;
-            icon: @image-url("icons/minimize.svg");
-            icon-size: 14px;
-            preferred-height: 0px;
-            preferred-width: 0px;
-            text: "";
-            width: 20px;
-            corner-radius: 13px;
-            clicked => {
-                root.minimize();
+            Button {
+                height: 20px; icon: @image-url("icons/minimize.svg"); icon-size: 14px; preferred-height: 0px; preferred-width: 0px; text: ""; width: 20px; corner-radius: 13px;
+                clicked => { root.minimize(); }
+            }
+            Button {
+                height: 20px; icon: root.full-screen ? @image-url("icons/restore.svg") : @image-url("icons/maximize.svg"); icon-size: 10px; text: ""; width: 20px; corner-radius: 13px;
+                clicked => { root.full-screen = !root.full-screen; }
+            }
+            Button {
+                height: 20px; icon: @image-url("icons/close.svg"); icon-color: Colors.crimson; icon-size: 14px; text: ""; width: 20px; corner-radius: 13px;
+                clicked => { root.close(); }
             }
         }
-        Rectangle {
-            width: 4px;
-            background: transparent;
-        }
-        Button {
-            height: 20px;
-            icon: root.full-screen
-                ? @image-url("icons/restore.svg")
-                : @image-url("icons/maximize.svg");
-            icon-size: 10px;
-            text: "";
-            width: 20px;
-            corner-radius: 13px;
-            clicked => {
-                root.full-screen = !root.full-screen;
-            }
-        }
-        Rectangle {
-            width: 4px;
-            background: transparent;
-        }
-        Button {
-            height: 20px;
-            icon: @image-url("icons/close.svg");
-            icon-color: Colors.crimson;
-            icon-size: 14px;
-            text: "";
-            width: 20px;
-            corner-radius: 13px;
-            clicked => {
-                root.close();
-            }
-        }
-    }
     }
 }
-
