@@ -4,3 +4,11 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+daw-core = { path = "../daw-core" }
+daw-media = { path = "../daw-media" }
+cpal = { version = "0.15", optional = true }
+
+[features]
+default = ["cpal-out"]
+cpal-out = ["dep:cpal"]
+jack = ["cpal-out", "cpal/jack"]
