@@ -154,7 +154,7 @@ export component BeatContent inherits Rectangle {
     hover-zone := TouchArea {
         width: 100%;
         height: 100%;
-        mouse-cursor: default;
+        mouse-cursor: none;
     }
 
     VerticalLayout {
@@ -352,26 +352,28 @@ export component BeatContent inherits Rectangle {
                         root.stick-hit = false;
                     }
                 }
-
-                drumstick := Image {
-                    x: grid-touch.mouse-x - 15.7px;
-                    y: grid-touch.mouse-y - 1.2px;
-                    width: 32px;
-                    height: 32px;
-                    source: root.cursor-drumstick;
-                    visible: grid-touch.has-hover;
-                    transform-origin: { x: 15.7px, y: 1.2px };
-                    transform-rotation: root.stick-hit ? -60deg : -45deg;
-                    animate transform-rotation { duration: 90ms; easing: ease-out; }
-                }
             }
         }
     }
 
 
     // =====================================================
-    // FLOATING MENUS (root level so they paint above the grid)
+    // DRUMSTICK CURSOR (root level, follows hover-zone)
     // =====================================================
+
+    drumstick := Image {
+        x: hover-zone.mouse-x - 15.7px;
+        y: hover-zone.mouse-y - 1.2px;
+        width: 32px;
+        height: 32px;
+        source: root.cursor-drumstick;
+        visible: hover-zone.has-hover;
+        transform-origin: { x: 15.7px, y: 1.2px };
+        transform-rotation: root.stick-hit ? -60deg : -45deg;
+        animate transform-rotation { duration: 90ms; easing: ease-out; }
+        z: 50;
+    }
+
 
     if root.grid-dropdown-open : Rectangle {
         x: beat-header.x + beat-header.steps-anchor-x;
