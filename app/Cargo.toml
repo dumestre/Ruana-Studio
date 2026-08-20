@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 daw-core = { path = "../crates/daw-core" }
 daw-media = { path = "../crates/daw-media" }
+daw-audio = { path = "../crates/daw-audio" }
 daw-midi = { path = "../crates/daw-midi" }
 slint = { workspace = true, features = ["renderer-skia", "raw-window-handle-06"] }
 i-slint-backend-winit = "1.17.1"

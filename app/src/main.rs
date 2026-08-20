@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, set_timeline_bounds, reset_cursor_to_default};
@@ -623,7 +624,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Estado autoritativo da DAW: vive no core, nunca na UI.
     let project = Rc::new(RefCell::new(Project::demo()));
-    let transport = Rc::new(RefCell::new(Transport::default()));
+    let transport = Arc::new(Mutex::new(Transport::default()));
 
     // Cache de waveforms: clip_id → picos normalizados.
     let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(HashMap::new()));
@@ -1262,8 +1263,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let mut seed = 0x1234_5678_9abc_def0u64;
 
-    // Playback: o playhead vive no Transport do core; o timer só
-    // avança o core e projeta a posição na UI.
+    // Playback: o AudioEngine avança o Transport na thread de áudio.
+    // O timer UI (16ms) apenas lê position_ticks e projeta na UI.
     // Mixer meters animados também rodam enquanto tocando.
     {
         let ui_weak = ui.as_weak();
@@ -1273,30 +1274,42 @@ fn main() -> Result<(), slint::PlatformError> {
         let project = project.clone();
         let meter_timer = Rc::new(RefCell::new(slint::Timer::default()));
         let meter_timer_ref = meter_timer.clone();
+        // AudioEngine: fica vivo enquanto estiver tocando
+        let audio_engine: Rc<RefCell<Option<daw_audio::AudioEngine>>> =
+            Rc::new(RefCell::new(None));
+        let audio_snapshot: Rc<RefCell<Option<Arc<Mutex<daw_audio::ProjectSnapshot>>>>> =
+            Rc::new(RefCell::new(None));
         ui.on_play_state_changed(move |playing| {
-            transport.borrow_mut().toggle();
             if playing {
-                // Transport timer: avança playhead a 60 fps (16 ms).
-                // delta_ticks é calculado dinamicamente a partir do BPM
-                // e do PPQ para manter tempo musical preciso.
+                // Inicia o audio engine (abre stream CPAL)
+                match daw_audio::AudioEngine::start(transport.clone()) {
+                    Ok((engine, snapshot)) => {
+                        // Atualiza o snapshot com o estado atual do projeto
+                        {
+                            let proj = project.borrow();
+                            let mut snap = snapshot.lock().unwrap();
+                            snap.update_from(&proj);
+                        }
+                        *audio_snapshot.borrow_mut() = Some(snapshot);
+                        *audio_engine.borrow_mut() = Some(engine);
+                    }
+                    Err(e) => {
+                        eprintln!("audio engine: {}", e);
+                    }
+                }
+                transport.lock().unwrap().playing = true;
+
+                // Transport timer: só LÊ a posição do transport (nunca avança).
+                // O audio callback é quem avança.
                 {
                     let ui_weak_t = ui_weak.clone();
                     let transport = transport.clone();
-                    let tick_acc = Rc::new(RefCell::new(0.0_f64));
-                    let tick_acc_c = tick_acc.clone();
                     transport_timer_ref.borrow().start(
                         slint::TimerMode::Repeated,
                         Duration::from_millis(16),
                         move || {
                             if let Some(ui) = ui_weak_t.upgrade() {
-                                let mut t = transport.borrow_mut();
-                                let ticks_per_sec = t.bpm as f64 / 60.0 * t.ppq as f64;
-                                let raw = ticks_per_sec * 0.016;
-                                let mut acc = tick_acc_c.borrow_mut();
-                                *acc += raw;
-                                let whole = *acc as u64;
-                                *acc -= whole as f64;
-                                t.advance(whole);
+                                let t = transport.lock().unwrap();
                                 ui.set_transport_position(t.position_ticks as i32);
                             }
                         },
@@ -1328,8 +1341,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     },
                 );
             } else {
+                transport.lock().unwrap().playing = false;
                 transport_timer_ref.borrow().stop();
                 meter_timer_ref.borrow().stop();
+                // Para o audio engine
+                *audio_engine.borrow_mut() = None;
+                *audio_snapshot.borrow_mut() = None;
             }
         });
     }
@@ -1340,9 +1357,9 @@ fn main() -> Result<(), slint::PlatformError> {
         let ui_weak = ui.as_weak();
         ui.on_seek_to(move |beat| {
             let ticks = (beat * 960.0) as u64;
-            transport.borrow_mut().seek(ticks);
+            transport.lock().unwrap().seek(ticks);
             if let Some(ui) = ui_weak.upgrade() {
-                ui.set_transport_position(transport.borrow().position_ticks as i32);
+                ui.set_transport_position(transport.lock().unwrap().position_ticks as i32);
             }
         });
     }
