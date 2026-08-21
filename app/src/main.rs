@@ -28,6 +28,30 @@ const MAX_INSERTS: usize = 8;
 /// Cache de waveform: clip_id → picos normalizados.
 type WaveformCache = std::collections::HashMap<u64, Vec<f32>>;
 
+/// Compassos necessários para caber até `end_beat`: teto em
+/// compassos + 8 de folga, mínimo 32. Cresce monotonicamente
+/// (undo não encolhe a timeline — comportamento padrão de DAW).
+fn bars_for_end_beat(end_beat: f64, beats_per_bar: i32) -> i32 {
+    ((end_beat / beats_per_bar as f64).ceil() as i32 + 8).max(32)
+}
+
+/// Fim (em batidas) relevante do evento, para crescer total-bars.
+/// Considera old E new — cobrir undo/redo sem ramificar.
+fn event_max_end_beat(event: &DocumentEvent) -> Option<f64> {
+    let end = |c: &Clip| (c.start_beat + c.length_beats) as f64;
+    let both = |a: &Clip, b: &Clip| end(a).max(end(b));
+    match event {
+        DocumentEvent::ClipAdded(c) => Some(end(c)),
+        DocumentEvent::ClipSliced { left, right, .. } => Some(both(left, right)),
+        DocumentEvent::ClipMoved { old, new } => Some(both(old, new)),
+        DocumentEvent::ClipsGlued { left_before, right, .. } => {
+            Some(both(left_before, right))
+        }
+        DocumentEvent::ClipResized { old, new } => Some(both(old, new)),
+        _ => None,
+    }
+}
+
 /// Mapeia um clip do core para o DTO da camada Slint.
 fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
     ClipData {
@@ -572,16 +596,28 @@ fn apply_change(
 }
 
 /// Assina os eventos do documento e mantém os modelos da UI
-/// sincronizados de forma granular.
+/// sincronizados de forma granular. `ui` é usado para crescer
+/// `total-bars` quando um clip passa do fim atual da timeline.
 fn bind_document_events(
     project: &Project,
     tracks_model: Rc<slint::VecModel<slint::SharedString>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
     waveforms: Rc<RefCell<WaveformCache>>,
+    ui: slint::Weak<MainWindow>,
 ) {
     project.subscribe(move |event, kind| {
         let wf = waveforms.borrow();
         apply_change(&tracks_model, &clips_model, event, kind == ChangeKind::Undo, &wf);
+        drop(wf);
+        // Cresce a timeline se o clip passou do fim atual.
+        if let Some(end) = event_max_end_beat(event) {
+            if let Some(ui) = ui.upgrade() {
+                let needed = bars_for_end_beat(end, ui.get_beats_per_bar());
+                if needed > ui.get_total_bars() {
+                    ui.set_total_bars(needed);
+                }
+            }
+        }
     });
 }
 
@@ -622,7 +658,33 @@ fn main() -> Result<(), slint::PlatformError> {
     let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(HashMap::new()));
 
     let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow(), &waveforms.borrow());
-    bind_document_events(&project.borrow(), tracks_model, clips_model.clone(), waveforms.clone());
+    bind_document_events(
+        &project.borrow(),
+        tracks_model,
+        clips_model.clone(),
+        waveforms.clone(),
+        ui.as_weak(),
+    );
+
+    // Métrica musical: espelha o core na UI (fonte única — sem
+    // hardcodes nas telas) e dimensiona a timeline pelo projeto.
+    {
+        let proj = project.borrow();
+        let (bpm, ppq, bpb) = {
+            let t = transport.lock().unwrap();
+            (t.bpm as i32, t.ppq as i32, t.beats_per_bar as i32)
+        };
+        ui.set_ppq(ppq);
+        ui.set_beats_per_bar(bpb);
+        ui.set_bpm(bpm);
+        let end = proj
+            .clips
+            .iter()
+            .map(|c| c.start_beat + c.length_beats)
+            .max()
+            .unwrap_or(0);
+        ui.set_total_bars(bars_for_end_beat(end as f64, bpb));
+    }
 
     // Mixer: modelos compartilhados — atualização por canal (set_row_data)
     // propaga para a janela principal e todas as flutuantes de uma vez.

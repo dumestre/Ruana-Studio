@@ -54,6 +54,27 @@ export component MainWindow inherits Window {
     in-out property <int> transport-position:
         0;
 
+    // =====================================================
+    // MÉTRICA MUSICAL (fonte única: Rust projeta do core)
+    //
+    // ppq e beats-per-bar espelham Transport; total-bars é
+    // calculado do projeto (fim do último clip + folga).
+    // Timeline, régua, tracks e LCD consomem daqui — sem
+    // hardcodes duplicados.
+    // =====================================================
+
+    in-out property <int> ppq:
+        960;
+
+    in-out property <int> beats-per-bar:
+        4;
+
+    in-out property <int> total-bars:
+        32;
+
+    in-out property <int> bpm:
+        120;
+
     in-out property <bool> playing:
         false;
 
@@ -172,6 +193,10 @@ export component MainWindow inherits Window {
     callback play-state-changed(bool);
 
     callback seek-to(float);
+
+    // BPM novo (inteiro). O backend atualiza o Transport e
+    // re-ancora o clock visual do playhead com a nova taxa.
+    callback set-bpm(float);
 
     callback window-close;
 
@@ -453,6 +478,10 @@ export component MainWindow inherits Window {
         zoom-level <=> root.zoom-level;
         playing <=> root.playing;
         transport-position <=> root.transport-position;
+        ppq <=> root.ppq;
+        beats-per-bar <=> root.beats-per-bar;
+        total-bars <=> root.total-bars;
+        bpm <=> root.bpm;
         selected-track <=> root.selected-track;
         active-tool <=> root.active-tool;
         beat-open <=> root.beat-open;
@@ -497,6 +526,7 @@ export component MainWindow inherits Window {
         minimize => { root.minimize(); }
         play-state-changed(state) => { root.play-state-changed(state); }
         seek-to(beat) => { root.seek-to(beat); }
+        set-bpm(bpm) => { root.set-bpm(bpm); }
         add-track-requested(type) => { root.add-track-requested(type); }
         clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
         clip-glue-requested(id) => { root.clip-glue-requested(id); }

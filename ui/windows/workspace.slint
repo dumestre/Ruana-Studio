@@ -21,6 +21,11 @@ export component Workspace inherits Rectangle {
     in-out property <float> zoom-level: 1.0;
     in-out property <bool> playing: false;
     in-out property <int> transport-position: 0;
+    // Métrica musical (projetada do core pelo Rust)
+    in-out property <int> bpm: 120;
+    in-out property <int> ppq: 960;
+    in-out property <int> beats-per-bar: 4;
+    in-out property <int> total-bars: 32;
     in-out property <int> selected-track: 0;
     in-out property <int> active-tool: 0;
     in-out property <bool> beat-open: false;
@@ -75,6 +80,7 @@ export component Workspace inherits Rectangle {
     callback minimize();
     callback play-state-changed(bool);
     callback seek-to(float);
+    callback set-bpm(float);
     callback add-track-requested(string);
     callback clip-slice-requested(int, float);
     callback clip-glue-requested(int);
@@ -135,7 +141,11 @@ export component Workspace inherits Rectangle {
         Transport {
             playing <=> root.playing;
             position <=> root.transport-position;
+            bpm <=> root.bpm;
+            ppq: root.ppq;
+            beats-per-bar: root.beats-per-bar;
             play-state-changed(state) => { root.play-state-changed(state); }
+            set-bpm(b) => { root.set-bpm(b); }
         }
 
         // EDIT TOOLBAR
@@ -205,6 +215,9 @@ export component Workspace inherits Rectangle {
                             selected-track <=> root.selected-track;
                             position: root.transport-position;
                             playing: root.playing;
+                            ppq: root.ppq;
+                            beats-per-bar: root.beats-per-bar;
+                            total-bars: root.total-bars;
                             zoom <=> root.zoom-level;
                             zoom-y <=> root.zoom-y-level;
                             track-names: root.track-names;

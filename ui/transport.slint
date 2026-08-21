@@ -16,6 +16,10 @@ export component Transport inherits Rectangle {
     callback loop-state-changed(bool);
     callback metronome-state-changed(bool);
 
+    // BPM novo (inteiro). O backend atualiza o Transport e
+    // re-ancora o clock visual do playhead com a nova taxa.
+    callback set-bpm(float);
+
     property <int> ticks-per-bar: self.ppq * self.beats-per-bar;
     property <int> bars: self.position / self.ticks-per-bar + 1;
     property <int> beat: Math.mod(self.position, self.ticks-per-bar) / self.ppq + 1;
@@ -148,12 +152,51 @@ export component Transport inherits Rectangle {
                 vertical-alignment: center;
             }
 
-            Text {
-                text: " BPM";
-                color: Theme.text-primary;
-                font-size: 12px;
-                horizontal-alignment: TextHorizontalAlignment.center;
-                vertical-alignment: center;
+            // BPM interativo: arrastar vertical (3px = ±1 BPM)
+            // ou scroll do mouse. Limites 20–300.
+            Rectangle {
+                width: 34px;
+                height: 20px;
+                background: transparent;
+
+                property <length> anchor-y: 0px;
+                property <int> anchor-value: 120;
+
+                Text {
+                    text: "BPM";
+                    color: Theme.text-primary;
+                    font-size: 12px;
+                    horizontal-alignment: TextHorizontalAlignment.center;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    mouse-cursor: MouseCursor.ns_resize;
+
+                    pointer-event(ev) => {
+                        if ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left {
+                            parent.anchor-y = self.mouse-y;
+                            parent.anchor-value = root.bpm;
+                        }
+                    }
+
+                    moved => {
+                        let steps = Math.floor((parent.anchor-y - self.mouse-y) / 3px);
+                        let target = max(20, min(300, parent.anchor-value + steps));
+                        if (target != root.bpm) {
+                            root.set-bpm(target);
+                        }
+                    }
+
+                    scroll-event(e) => {
+                        if (e.delta-y > 0) {
+                            root.set-bpm(min(300, root.bpm + 1));
+                        } else {
+                            root.set-bpm(max(20, root.bpm - 1));
+                        }
+                        accept;
+                    }
+                }
             }
         }
 

@@ -379,7 +379,7 @@ export component PianoRollArea inherits Rectangle {
                     clip: true;
 
                     TimelineRuler {
-                        bar-range: PianoRollData.bar-range;
+                        total-bars: PianoRollData.bar-range.length;
                         height: config.ruler-height;
                         ruler-height: config.ruler-height;
                         px-per-bar: root.px-per-beat * 4;

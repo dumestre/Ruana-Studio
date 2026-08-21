@@ -130,11 +130,15 @@ export component Timeline inherits Rectangle {
         40px * self.zoom;
 
     property <length> px-per-bar:
-        self.px-per-beat * 4;
+        self.px-per-beat * self.beats-per-bar;
 
-    property <int> ppq: 960;
+    // Métrica musical — projetada do core pelo Rust (fonte única,
+    // sem hardcodes). Os loops de grid/régua iteram total-bars.
+    in property <int> ppq: 960;
 
-    property <int> total-bars: 16;
+    in property <int> total-bars: 32;
+
+    in property <int> beats-per-bar: 4;
 
 
     // =====================================================
@@ -186,14 +190,10 @@ export component Timeline inherits Rectangle {
 
     // =====================================================
     // BARRAS
+    //
+    // Os loops de grid/régua iteram `total-bars` direto
+    // (for i in root.total-bars) — sem array hardcoded.
     // =====================================================
-
-    property <[int]> bar-range: [
-        0, 1, 2, 3,
-        4, 5, 6, 7,
-        8, 9, 10, 11,
-        12, 13, 14, 15
-    ];
 
 
     // =====================================================
@@ -419,8 +419,8 @@ export component Timeline inherits Rectangle {
                 ruler-height:
                     root.ruler-height;
 
-                bar-range:
-                    root.bar-range;
+                total-bars: root.total-bars;
+                beats-per-bar: root.beats-per-bar;
 
                 px-per-bar:
                     root.px-per-bar;
@@ -440,7 +440,7 @@ export component Timeline inherits Rectangle {
             // FUNDO ALTERNADO POR COMPASSO (igual ao beat sequencer)
             // =============================================
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 x:
                     i * root.px-per-bar;
@@ -470,7 +470,7 @@ export component Timeline inherits Rectangle {
             // BATEDAS / 1/8 / 1/16: aparecem conforme o zoom.
             // =============================================
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 x:
                     i * root.px-per-bar;
@@ -491,7 +491,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 40px;
@@ -514,7 +514,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 40px;
@@ -537,7 +537,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 40px;
@@ -560,7 +560,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 120px;
@@ -583,7 +583,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 120px;
@@ -606,7 +606,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 120px;
@@ -629,7 +629,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 120px;
@@ -652,7 +652,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 240px;
@@ -675,7 +675,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 240px;
@@ -698,7 +698,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 240px;
@@ -721,7 +721,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 240px;
@@ -744,7 +744,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 240px;
@@ -767,7 +767,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 240px;
@@ -790,7 +790,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 240px;
@@ -813,7 +813,7 @@ export component Timeline inherits Rectangle {
                 z: 0;
             }
 
-            for i in root.bar-range: Rectangle {
+            for i in root.total-bars: Rectangle {
 
                 visible:
                     root.px-per-bar >= 240px;
@@ -889,8 +889,8 @@ export component Timeline inherits Rectangle {
                     row-height:
                         root.row-height;
 
-                    bar-range:
-                        root.bar-range;
+                    total-bars: root.total-bars;
+                    beats-per-bar: root.beats-per-bar;
 
                     active-tool:
                         root.active-tool;

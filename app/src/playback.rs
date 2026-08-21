@@ -230,6 +230,37 @@ pub fn install(
         });
     }
 
+    // ---- BPM --------------------------------------------------------
+    {
+        let transport = transport.clone();
+        let visual_clock = visual_clock.clone();
+        let ui_weak_b = ui_weak.clone();
+        ui.on_set_bpm(move |bpm| {
+            let bpm = bpm.round().clamp(20.0, 300.0) as u32;
+            let tps;
+            {
+                let mut t = transport.lock().unwrap();
+                if t.bpm == bpm {
+                    return;
+                }
+                t.bpm = bpm;
+                tps = bpm as f64 / 60.0 * t.ppq as f64;
+            }
+            // Reflete no LCD (property two-way até o Transport).
+            if let Some(ui) = ui_weak_b.upgrade() {
+                ui.set_bpm(bpm as i32);
+            }
+            // Re-ancora o clock visual com a NOVA taxa, mantendo a
+            // posição projetada contínua — a agulha não salta; o
+            // servo absorve a diferença do clock de áudio.
+            if let Some(c) = visual_clock.borrow_mut().as_mut() {
+                let projected = c.projected();
+                c.ticks_per_sec = tps;
+                c.resync(projected);
+            }
+        });
+    }
+
     // ---- SEEK -------------------------------------------------------
     {
         let transport = transport.clone();

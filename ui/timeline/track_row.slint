@@ -29,20 +29,16 @@ export component TrackRow inherits Rectangle {
 
 
     // =====================================================
-    // BARRAS
+    // MÉTRICA MUSICAL
     //
-    // Mantido porque TrackRow ainda recebe essa propriedade
-    // pela Timeline.
-    //
-    // O GRID VERTICAL NÃO É MAIS DESENHADO AQUI.
+    // Recebidas da Timeline (projetadas do core). O grid
+    // vertical não é mais desenhado aqui, mas ficam
+    // disponíveis para os clips e uso futuro.
     // =====================================================
 
-    in property <[int]> bar-range: [
-        0, 1, 2, 3,
-        4, 5, 6, 7,
-        8, 9, 10, 11,
-        12, 13, 14, 15
-    ];
+    in property <int> total-bars: 32;
+
+    in property <int> beats-per-bar: 4;
 
 
     // =====================================================
