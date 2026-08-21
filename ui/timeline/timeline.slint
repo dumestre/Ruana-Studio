@@ -2,6 +2,7 @@ import { Theme } from "../theme.slint";
 import { TimelineRuler } from "../components/ruler.slint";
 import { TrackRow } from "track_row.slint";
 import { ClipData } from "clip_data.slint";
+import { PlayheadOverlay } from "playhead.slint";
 
 export component Timeline inherits Rectangle {
 
@@ -1028,77 +1029,15 @@ export component Timeline inherits Rectangle {
             // PLAYHEAD
             //
             // DENTRO do content rectangle para scrollar
-            // junto com o conteúdo.
+            // junto com o conteúdo. Os 3 elementos (linha,
+            // régua e cabeça) vivem em playhead.slint.
             // =============================================
 
-            Rectangle {
-
-                x:
-                    root.playhead-x - 1px;
-
-                y:
-                    root.ruler-height;
-
-                width: 2px;
-
-                height:
-                    root.tracks-height;
-
-                background:
-                    Colors.crimson;
-
-                z: 100;
-            }
-
-
-            // =============================================
-            // BOLINHA DO PLAYHEAD
-            //
-            // ESTA É A ÚNICA CABEÇA DO PLAYHEAD.
-            // =============================================
-
-            Rectangle {
-
-                x:
-                    root.playhead-x - 6px;
-
-                y: 1px;
-
-                width: 12px;
-
-                height: 12px;
-
-                border-radius: 6px;
-
-                background:
-                    Colors.crimson;
-
+            PlayheadOverlay {
+                head-x: root.playhead-x;
+                ruler-h: root.ruler-height;
+                tracks-h: root.tracks-height;
                 z: 120;
-            }
-
-
-            // =============================================
-            // LINHA DENTRO DA RÉGUA
-            // =============================================
-
-            Rectangle {
-
-                x:
-                    root.playhead-x - 1px;
-
-                y: 7px;
-
-                width: 2px;
-
-                height:
-                    root.ruler-height - 7px;
-
-                background:
-                    Colors.crimson;
-
-                opacity: 0.9;
-
-                z: 115;
             }
         }
     }

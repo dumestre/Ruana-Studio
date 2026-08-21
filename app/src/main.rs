@@ -1,13 +1,13 @@
 slint::include_modules!();
 
 mod cursors;
+mod playback;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, set_timeline_bounds, set_beat_bounds, set_drumstick_active, reset_cursor_to_default};
 use daw_core::clip::{Clip, ClipKind};
@@ -21,14 +21,6 @@ use daw_media::waveform::{decode_audio, waveform_points};
 use daw_midi::{Note, NoteEditor};
 use slint::Model;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-fn next_random(seed: &mut u64) -> f32 {
-    *seed = seed
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
-    let r = (*seed >> 33) as f32 / u32::MAX as f32;
-    r
-}
 
 /// Máximo de slots de insert renderizados por canal no mixer.
 const MAX_INSERTS: usize = 8;
@@ -1261,132 +1253,16 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    let mut seed = 0x1234_5678_9abc_def0u64;
 
-    // Playback: o AudioEngine avança o Transport na thread de áudio.
-    // O timer UI (16ms) apenas lê position_ticks e projeta na UI.
-    // Mixer meters animados também rodam enquanto tocando.
-    {
-        let ui_weak = ui.as_weak();
-        let transport = transport.clone();
-        let project = project.clone();
-        let meter_timer = Rc::new(RefCell::new(slint::Timer::default()));
-        let meter_timer_ref = meter_timer.clone();
-        // AudioEngine: fica vivo enquanto estiver tocando
-        let audio_engine: Rc<RefCell<Option<daw_audio::AudioEngine>>> =
-            Rc::new(RefCell::new(None));
-        let audio_snapshot: Rc<RefCell<Option<Arc<Mutex<daw_audio::ProjectSnapshot>>>>> =
-            Rc::new(RefCell::new(None));
-        let audio_buffers: Rc<RefCell<Option<Arc<Mutex<daw_audio::BufferCache>>>>> =
-            Rc::new(RefCell::new(None));
-        // Transport thread flag — shared between play/stop
-        let transport_thread_active = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        ui.on_play_state_changed(move |playing| {
-            if playing {
-                // Inicia o audio engine (abre stream CPAL)
-                match daw_audio::AudioEngine::start(transport.clone(), 48000) {
-                    Ok((engine, snapshot, buffers)) => {
-                        // Atualiza o snapshot e pré-carrega clips
-                        {
-                            let proj = project.borrow();
-                            let mut snap = snapshot.lock().unwrap();
-                            snap.update_from(&proj);
-                        }
-                        engine.preload_clips(&project.borrow());
-                        *audio_snapshot.borrow_mut() = Some(snapshot);
-                        *audio_buffers.borrow_mut() = Some(buffers);
-                        *audio_engine.borrow_mut() = Some(engine);
-                    }
-                    Err(e) => {
-                        eprintln!("audio engine: {}", e);
-                    }
-                }
-                transport.lock().unwrap().playing = true;
-                eprintln!("[PLAY] transport.playing=true, starting transport thread");
+    // Playback/seek/meters: módulo dedicado (app/src/playback.rs).
+    playback::install(
+        &ui.as_weak(),
+        transport.clone(),
+        project.clone(),
+        meter_model.clone(),
+        meter_state.clone(),
+    );
 
-                // Transport thread: lê position a cada 8ms via OS thread
-                // (independente do Slint event loop)
-                transport_thread_active.store(true, std::sync::atomic::Ordering::SeqCst);
-                {
-                    let ui_weak_t = ui_weak.clone();
-                    let transport = transport.clone();
-                    let active = transport_thread_active.clone();
-                    std::thread::Builder::new()
-                        .name("transport-reader".into())
-                        .spawn(move || {
-                            let mut count: u64 = 0;
-                            while active.load(std::sync::atomic::Ordering::SeqCst) {
-                                std::thread::sleep(Duration::from_millis(8));
-                                let pos = match transport.try_lock() {
-                                    Ok(t) => t.position_ticks,
-                                    Err(_) => continue,
-                                };
-                                let pos_i32 = pos as i32;
-                                let ui = ui_weak_t.clone();
-                                let _ = slint::invoke_from_event_loop(move || {
-                                    if let Some(ui) = ui.upgrade() {
-                                        ui.set_transport_position(pos_i32);
-                                    }
-                                });
-                                if count < 10 || count % 500 == 0 {
-                                    eprintln!("[THREAD] #{} ticks={} beat={:.2}", count, pos, pos as f64 / 960.0);
-                                }
-                                count += 1;
-                            }
-                            eprintln!("[THREAD] stopped after {} reads", count);
-                        })
-                        .expect("failed to spawn transport thread");
-                }
-                // Meter timer: VU fake com smoothing no Rust (attack
-                // instantâneo, decay lento). SEM animação Slint — a
-                // animação contínua satura o renderer e trava o playhead.
-                let project = project.clone();
-                let meter_model = meter_model.clone();
-                let meter_state = meter_state.clone();
-                meter_timer_ref.borrow().start(
-                    slint::TimerMode::Repeated,
-                    Duration::from_millis(80),
-                    move || {
-                        let count = project.borrow().tracks.len() + 1;
-                        let mut levels = meter_state.borrow_mut();
-                        if levels.len() != count {
-                            levels.resize(count, 0.0);
-                        }
-                        for level in levels.iter_mut() {
-                            let r = next_random(&mut seed);
-                            let new = r * r;
-                            *level = if new > *level { new } else { *level * 0.82 };
-                        }
-                        for (i, &v) in levels.iter().enumerate() {
-                            meter_model.set_row_data(i, v);
-                        }
-                    },
-                );
-            } else {
-                eprintln!("[STOP] stopping transport + timers");
-                transport_thread_active.store(false, std::sync::atomic::Ordering::SeqCst);
-                transport.lock().unwrap().playing = false;
-                meter_timer_ref.borrow().stop();
-                // Para o audio engine
-                *audio_engine.borrow_mut() = None;
-                *audio_snapshot.borrow_mut() = None;
-                *audio_buffers.borrow_mut() = None;
-            }
-        });
-    }
-
-    // Seek-to: régua da timeline clica para posicionar playhead.
-    {
-        let transport = transport.clone();
-        let ui_weak = ui.as_weak();
-        ui.on_seek_to(move |beat| {
-            let ticks = (beat * 960.0) as u64;
-            transport.lock().unwrap().seek(ticks);
-            if let Some(ui) = ui_weak.upgrade() {
-                ui.set_transport_position(transport.lock().unwrap().position_ticks as i32);
-            }
-        });
-    }
 
     ui.on_tool_changed(move |tool| {
         let _ = set_cursor_for_tool(tool);

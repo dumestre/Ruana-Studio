@@ -6,6 +6,13 @@ use crate::backend::{AudioConfig, AudioError, CpalBackend};
 use crate::buffer::BufferCache;
 use crate::mixer::{clamp_stereo, mix_stereo_frame, track_is_active};
 
+/// Logs de diagnóstico do engine — só com `RUANA_LOG` definido.
+/// eprintln na thread de áudio custa tempo real; fica atrás de flag.
+fn verbose_log() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("RUANA_LOG").is_ok())
+}
+
 /// Snapshot do estado de um clip para o audio thread.
 /// Não referencia o Project diretamente (que não é Send).
 #[derive(Clone)]
@@ -72,6 +79,10 @@ pub struct AudioEngine {
     output_config: AudioConfig,
     snapshot: Arc<Mutex<ProjectSnapshot>>,
     buffer_cache: Arc<Mutex<BufferCache>>,
+    /// Resto fracionário de ticks (bits de f64). O delta por callback
+    /// raramente é inteiro (ex.: 19.2 ticks); arredondar acumulava
+    /// ~1% de erro — o relógio musical atrasava em relação ao áudio.
+    _tick_accum: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl AudioEngine {
@@ -99,6 +110,8 @@ impl AudioEngine {
         let buffer_cb = buffer_cache.clone();
         let transport_cb = transport.clone();
         let rate_for_cb = output_sample_rate;
+        let tick_accum = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let tick_accum_cb = tick_accum.clone();
 
         let backend = CpalBackend::new(move |output: &mut [f32]| {
             Self::audio_callback(
@@ -106,6 +119,7 @@ impl AudioEngine {
                 &transport_cb,
                 &snapshot_cb,
                 &buffer_cb,
+                &tick_accum_cb,
                 rate_for_cb,
             );
         })?;
@@ -130,12 +144,15 @@ impl AudioEngine {
             output_config,
             snapshot: snapshot.clone(),
             buffer_cache: buffer_cache.clone(),
+            _tick_accum: tick_accum,
         };
 
-        eprintln!("[ENGINE] started: sr={} buf={} ch={}",
-            engine.output_config.sample_rate,
-            engine.output_config.buffer_size,
-            engine.output_config.channels);
+        if verbose_log() {
+            eprintln!("[ENGINE] started: sr={} buf={} ch={}",
+                engine.output_config.sample_rate,
+                engine.output_config.buffer_size,
+                engine.output_config.channels);
+        }
 
         Ok((engine, snapshot, buffer_cache))
     }
@@ -171,6 +188,7 @@ impl AudioEngine {
         transport: &Arc<Mutex<Transport>>,
         snapshot: &Arc<Mutex<ProjectSnapshot>>,
         buffer_cache: &Arc<Mutex<BufferCache>>,
+        tick_accum: &std::sync::atomic::AtomicU64,
         sample_rate: u32,
     ) {
         let frames = output.len() / 2;
@@ -178,12 +196,15 @@ impl AudioEngine {
 
         let sample_rate = sample_rate as u64;
 
-        // 1. Lê transport e avança
+        // 1. Lê transport e avança — try_lock: se o lock estiver
+        // conteso, NUNCA bloquear a thread de áudio (RT). Pula este
+        // callback com silêncio; o próximo resync pela UI corrige.
+        // O guard é dropado no fim do bloco, ANTES do mix.
         {
-            let mut t = match transport.lock() {
+            let mut t = match transport.try_lock() {
                 Ok(guard) => guard,
                 Err(_) => {
-                    eprintln!("[AUDIO] transport lock poisoned!");
+                    output.fill(0.0);
                     return;
                 }
             };
@@ -197,17 +218,28 @@ impl AudioEngine {
             position_at_start = t.position_ticks;
 
             let ticks_per_sample = (bpm as f64 / 60.0) * ppq as f64 / sample_rate as f64;
-            let delta = (frames as f64 * ticks_per_sample).round() as u64;
+            // Acumulador fracionário: soma o delta exato e transfere
+            // só a parte inteira para o transport. O relógio musical
+            // fica exato em relação aos samples consumidos (sem a
+            // deriva de ~1% do arredondamento por callback).
+            use std::sync::atomic::Ordering::Relaxed;
+            let accum =
+                f64::from_bits(tick_accum.load(Relaxed)) + frames as f64 * ticks_per_sample;
+            let whole = accum.floor();
+            tick_accum.store((accum - whole).to_bits(), Relaxed);
+            let delta = whole as u64;
             t.advance(delta);
 
-            // Log a cada ~2 beats (1920 ticks em 960 PPQ)
-            static AUDIO_CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static AUDIO_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-            let start = AUDIO_START.get_or_init(|| std::time::Instant::now());
-            let count = AUDIO_CALL_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            if count % 100 == 0 {
-                eprintln!("[AUDIO] #{} t={}ms frames={} ticks={} (delta={})",
-                    count, start.elapsed().as_millis(), frames, t.position_ticks, delta);
+            // Log a cada ~2 beats (1920 ticks em 960 PPQ) — só com RUANA_LOG
+            if verbose_log() {
+                static AUDIO_CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                static AUDIO_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+                let start = AUDIO_START.get_or_init(|| std::time::Instant::now());
+                let count = AUDIO_CALL_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if count % 100 == 0 {
+                    eprintln!("[AUDIO] #{} t={}ms frames={} ticks={} (delta={})",
+                        count, start.elapsed().as_millis(), frames, t.position_ticks, delta);
+                }
             }
         }
 
