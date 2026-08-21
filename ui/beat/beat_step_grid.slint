@@ -1,0 +1,198 @@
+import { Theme } from "../theme.slint";
+import { BeatStep } from "beat_step.slint";
+
+export component BeatStepGrid inherits Rectangle {
+
+    in-out property <[bool]> steps: [];
+
+    in property <[int]> instrument-indexes: [];
+    in property <[int]> step-indexes: [];
+
+    in property <int> playhead: -1;
+    in property <int> grid-resolution: 16;
+
+    in property <[bool]> track-active: [];
+    in property <[color]> track-colors: [];
+
+    callback step-toggled(int, bool);
+
+    property <bool> stick-hit: false;
+
+    property <length> row-pitch: 30px;
+    property <length> rows-top: 33px;
+
+
+    background: Theme.base;
+
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+
+    // ============================================================
+    // STEPS
+    // ============================================================
+
+    for inst in root.instrument-indexes: BeatStep {
+
+        track-index: inst;
+
+        y:
+            33px + inst * 30px;
+
+        width:
+            root.grid-resolution * 28px
+            + max(0, root.grid-resolution - 1) * 2px;
+
+        height: 30px;
+
+        x:
+            (parent.width - self.width) / 2;
+
+        steps <=> root.steps;
+
+        playhead:
+            root.playhead;
+
+        grid-resolution:
+            root.grid-resolution;
+
+        step-indexes:
+            root.step-indexes;
+
+        track-active:
+            root.track-active[inst];
+
+        accent-color:
+            root.track-colors[inst];
+    }
+
+
+    // ============================================================
+    // INTERAÇÃO
+    // ============================================================
+
+    grid-touch := TouchArea {
+
+        width: 100%;
+        height: 100%;
+
+        mouse-cursor: default;
+
+        property <int> paint-row: -1;
+        property <int> paint-col: -1;
+
+
+        pointer-event(event) => {
+
+            if event.kind
+                == PointerEventKind.down
+                && event.button
+                == PointerEventButton.left {
+
+                root.stick-hit = false;
+
+                hit-timer.running = false;
+                hit-timer.running = true;
+
+
+                let row =
+                    Math.floor(
+                        (self.mouse-y - root.rows-top)
+                        / root.row-pitch
+                    );
+
+
+                let col =
+                    Math.floor(
+                        (self.mouse-x - 8px)
+                        / 30px
+                    );
+
+
+                if row >= 0
+                    && row < root.instrument-indexes.length
+                    && col >= 0
+                    && col < root.grid-resolution {
+
+                    root.steps[
+                        row * 16 + col
+                    ] =
+                        !root.steps[row * 16 + col];
+
+
+                    root.step-toggled(
+                        row * 16 + col,
+                        root.steps[row * 16 + col]
+                    );
+
+
+                    self.paint-row = row;
+                    self.paint-col = col;
+                }
+
+
+            } else if event.kind
+                == PointerEventKind.move
+                && self.pressed {
+
+
+                let row =
+                    Math.floor(
+                        (self.mouse-y - root.rows-top)
+                        / root.row-pitch
+                    );
+
+
+                let col =
+                    Math.floor(
+                        (self.mouse-x - 8px)
+                        / 30px
+                    );
+
+
+                if row >= 0
+                    && row < root.instrument-indexes.length
+                    && col >= 0
+                    && col < root.grid-resolution
+                    && !(row == self.paint-row
+                        && col == self.paint-col) {
+
+
+                    root.steps[
+                        row * 16 + col
+                    ] = true;
+
+
+                    root.step-toggled(
+                        row * 16 + col,
+                        true
+                    );
+
+
+                    self.paint-row = row;
+                    self.paint-col = col;
+                }
+
+
+            } else if event.kind
+                == PointerEventKind.up {
+
+                self.paint-row = -1;
+                self.paint-col = -1;
+            }
+        }
+    }
+
+
+    hit-timer := Timer {
+
+        interval: 90ms;
+        running: false;
+
+        triggered => {
+            self.running = false;
+            root.stick-hit = false;
+        }
+    }
+}

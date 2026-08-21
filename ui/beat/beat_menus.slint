@@ -1,0 +1,990 @@
+import { Theme } from "../theme.slint";
+
+export component BeatMenus inherits Rectangle {
+
+    // ============================================================
+    // ESTADO DOS MENUS
+    // ============================================================
+
+    in-out property <bool> grid-dropdown-open: false;
+    in-out property <bool> beat-menu-open: false;
+    in-out property <int> track-menu-open-index: -1;
+
+
+    // ============================================================
+    // GRID
+    // ============================================================
+
+    in property <[int]> resolution-options:
+        [8, 16, 32, 64];
+
+    in-out property <int> grid-resolution: 16;
+
+
+    // ============================================================
+    // PATTERNS
+    // ============================================================
+
+    in property <[int]> pattern-indexes:
+        [0];
+
+    in property <int> current-pattern: 0;
+
+
+    // ============================================================
+    // TRACKS
+    // ============================================================
+
+    in property <[string]> instrument-names: [];
+
+    in-out property <[color]> track-colors: [];
+
+
+    // ============================================================
+    // POSICIONAMENTO
+    // ============================================================
+
+    in property <length> menu-y: 0px;
+    in property <length> steps-anchor-x: 0px;
+    in property <length> beat-anchor-x: 0px;
+
+    in property <length> tracks-left: 0px;
+    in property <length> tracks-top: 0px;
+
+    in property <length> track-menu-height:
+        280px;
+
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
+
+    callback grid-resolution-changed(int);
+    callback pattern-changed(int);
+
+    callback duplicate-beat;
+    callback copy-beat;
+    callback clear-beat;
+    callback delete-beat;
+
+    callback copy-track(int);
+    callback duplicate-track(int);
+    callback clear-track(int);
+    callback delete-track(int);
+
+    callback insert-pattern(int, int);
+
+
+    // ============================================================
+    // VISIBILIDADE
+    // ============================================================
+
+    visible:
+        root.grid-dropdown-open
+        || root.beat-menu-open
+        || root.track-menu-open-index >= 0;
+
+    clip: false;
+
+
+    // ============================================================
+    // GRID DROPDOWN
+    // ============================================================
+
+    if root.grid-dropdown-open : Rectangle {
+
+        x: root.steps-anchor-x;
+        y: root.menu-y;
+
+        width: 62px;
+
+        height:
+            root.resolution-options.length * 26px
+            + 4px;
+
+        background: Theme.surface-high;
+
+        border-radius: 4px;
+
+        border-width: 1px;
+        border-color: Theme.border;
+
+        z: 30;
+
+
+        VerticalLayout {
+
+            padding: 2px;
+            spacing: 1px;
+
+            alignment: LayoutAlignment.stretch;
+
+
+            for option in root.resolution-options: Rectangle {
+
+                width: 58px;
+                height: 24px;
+
+                background:
+                    option == root.grid-resolution
+                    ? Theme.accent
+                    : transparent;
+
+                border-radius: 3px;
+
+
+                Text {
+                    text: "" + option;
+
+                    width: 100%;
+                    height: 100%;
+
+                    color:
+                        option == root.grid-resolution
+                        ? Theme.text-primary
+                        : Theme.text-dim;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.grid-resolution =
+                            option;
+
+                        root.grid-resolution-changed(
+                            option
+                        );
+
+                        root.grid-dropdown-open =
+                            false;
+                    }
+                }
+            }
+        }
+    }
+
+
+    // ============================================================
+    // BEAT MENU
+    // ============================================================
+
+    if root.beat-menu-open : Rectangle {
+
+        x:
+            root.beat-anchor-x - 160px;
+
+        y: root.menu-y;
+
+        width: 160px;
+
+        height:
+            (root.pattern-indexes.length + 6) * 25px;
+
+        background: Theme.surface-high;
+
+        border-radius: 4px;
+
+        border-width: 1px;
+        border-color: Theme.border;
+
+        z: 30;
+
+
+        VerticalLayout {
+
+            padding: 2px;
+            spacing: 1px;
+
+
+            // ====================================================
+            // TITLE
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "PATTERNS";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-dim;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+            }
+
+
+            // ====================================================
+            // PATTERNS
+            // ====================================================
+
+            for idx in root.pattern-indexes: Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                background:
+                    idx == root.current-pattern
+                    ? Theme.accent
+                    : transparent;
+
+                border-radius: 3px;
+
+
+                Text {
+
+                    text:
+                        "Pattern "
+                        + (idx + 1);
+
+                    width: 100%;
+                    height: 100%;
+
+                    color:
+                        idx == root.current-pattern
+                        ? Theme.text-primary
+                        : Theme.text-dim;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.pattern-changed(
+                            idx
+                        );
+
+                        root.beat-menu-open =
+                            false;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // SEPARADOR
+            // ====================================================
+
+            Rectangle {
+                width: 156px;
+                height: 1px;
+
+                background: Theme.border;
+            }
+
+
+            // ====================================================
+            // DUPLICATE BEAT
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Duplicate Beat";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.duplicate-beat();
+
+                        root.beat-menu-open =
+                            false;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // COPY BEAT
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Copy Beat";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.copy-beat();
+
+                        root.beat-menu-open =
+                            false;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // CLEAR BEAT
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Clear Beat";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.clear-beat();
+
+                        root.beat-menu-open =
+                            false;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // DELETE BEAT
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Delete Beat";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.warn;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.delete-beat();
+
+                        root.beat-menu-open =
+                            false;
+                    }
+                }
+            }
+        }
+    }
+
+
+    // ============================================================
+    // TRACK MENU
+    // ============================================================
+
+    if root.track-menu-open-index >= 0 : Rectangle {
+
+        x:
+            root.tracks-left + 8px;
+
+
+        y:
+            root.tracks-top
+            + 33px
+            + root.track-menu-open-index * 30px
+            + root.track-menu-height > self.height
+
+            ? root.tracks-top
+                + 33px
+                + root.track-menu-open-index * 30px
+                - root.track-menu-height
+
+            : root.tracks-top
+                + 33px
+                + root.track-menu-open-index * 30px;
+
+
+        width: 160px;
+        height: root.track-menu-height;
+
+        background: Theme.surface-high;
+
+        border-radius: 4px;
+
+        border-width: 1px;
+        border-color: Theme.border;
+
+        z: 30;
+
+
+        VerticalLayout {
+
+            padding: 2px;
+            spacing: 1px;
+
+
+            // ====================================================
+            // TRACK NAME
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text:
+                        root.instrument-names[
+                            root.track-menu-open-index
+                        ];
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+            }
+
+
+            // ====================================================
+            // SEPARADOR
+            // ====================================================
+
+            Rectangle {
+                width: 156px;
+                height: 1px;
+
+                background: Theme.border;
+            }
+
+
+            // ====================================================
+            // COPY
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Copy";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.copy-track(
+                            root.track-menu-open-index
+                        );
+
+                        root.track-menu-open-index =
+                            -1;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // DUPLICATE
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Duplicate";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.duplicate-track(
+                            root.track-menu-open-index
+                        );
+
+                        root.track-menu-open-index =
+                            -1;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // CLEAR
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Clear";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.clear-track(
+                            root.track-menu-open-index
+                        );
+
+                        root.track-menu-open-index =
+                            -1;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // DELETE
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Delete Track";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.warn;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.delete-track(
+                            root.track-menu-open-index
+                        );
+
+                        root.track-menu-open-index =
+                            -1;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // SEPARADOR
+            // ====================================================
+
+            Rectangle {
+                width: 156px;
+                height: 1px;
+
+                background: Theme.border;
+            }
+
+
+            // ====================================================
+            // INSERT 2
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Insert Pattern: 2 Steps";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.insert-pattern(
+                            root.track-menu-open-index,
+                            2
+                        );
+
+                        root.track-menu-open-index =
+                            -1;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // INSERT 4
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Insert Pattern: 4 Steps";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.insert-pattern(
+                            root.track-menu-open-index,
+                            4
+                        );
+
+                        root.track-menu-open-index =
+                            -1;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // INSERT 8
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Insert Pattern: 8 Steps";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.insert-pattern(
+                            root.track-menu-open-index,
+                            8
+                        );
+
+                        root.track-menu-open-index =
+                            -1;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // INSERT 16
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 24px;
+
+                Text {
+
+                    text: "Insert Pattern: 16 Steps";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+
+
+                TouchArea {
+
+                    clicked => {
+
+                        root.insert-pattern(
+                            root.track-menu-open-index,
+                            16
+                        );
+
+                        root.track-menu-open-index =
+                            -1;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // COR
+            // ====================================================
+
+            Rectangle {
+
+                width: 156px;
+                height: 26px;
+
+
+                HorizontalLayout {
+
+                    padding: 3px;
+                    spacing: 1px;
+
+                    cross-axis-alignment:
+                        CrossAxisAlignment.center;
+
+
+                    Text {
+
+                        text: "Color";
+
+                        width: 32px;
+
+                        color: Theme.text-dim;
+
+                        font-size: 9px;
+                        font-weight: 700;
+
+                        vertical-alignment: center;
+                    }
+
+
+                    for c in root.track-colors: Rectangle {
+
+                        width: 12px;
+                        height: 12px;
+
+                        background: c;
+
+                        border-radius: 2px;
+
+                        border-width: 1px;
+
+                        border-color:
+                            root.track-colors[
+                                root.track-menu-open-index
+                            ] == c
+
+                            ? Theme.text-primary
+                            : Theme.border;
+
+
+                        TouchArea {
+
+                            clicked => {
+
+                                root.track-colors[
+                                    root.track-menu-open-index
+                                ] = c;
+
+                                root.track-menu-open-index =
+                                    -1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

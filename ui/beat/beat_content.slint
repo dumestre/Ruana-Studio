@@ -1,52 +1,19 @@
 import { Theme } from "../theme.slint";
 import { BeatHeader } from "beat_header.slint";
-import { BeatStep } from "beat_step.slint";
-import { BeatTrack } from "beat_track.slint";
+import { BeatTrackPanel } from "beat_track_panel.slint";
+import { BeatStepGrid } from "beat_step_grid.slint";
+import { BeatMenus } from "beat_menus.slint";
 
 export component BeatContent inherits Rectangle {
+
+    // ============================================================
+    // DADOS
+    // ============================================================
+
     in-out property <[[bool]]> patterns: [[]];
     in-out property <int> current-pattern: 0;
-    in-out property <[bool]> steps: [
-        true, false, false, false,
-        false, false, false, false,
-        true, false, false, false,
-        false, false, false, false,
 
-        false, false, false, false,
-        true, false, false, false,
-        false, false, false, false,
-        true, false, false, false,
-
-        false, false, false, false,
-        false, false, true, false,
-        false, false, false, false,
-        false, false, true, false,
-
-        true, false, true, false,
-        true, false, true, false,
-        true, false, true, false,
-        true, false, true, false,
-
-        false, false, false, false,
-        false, false, false, false,
-        false, false, false, false,
-        false, false, true, false,
-
-        false, false, false, false,
-        false, true, false, false,
-        false, false, false, false,
-        false, false, false, false,
-
-        true, false, false, false,
-        false, false, false, false,
-        false, false, false, false,
-        false, false, false, false,
-
-        false, false, false, true,
-        false, false, false, true,
-        false, false, false, true,
-        false, false, false, true
-    ];
+    in-out property <[bool]> steps: [];
 
     in-out property <int> playhead: -1;
 
@@ -62,28 +29,39 @@ export component BeatContent inherits Rectangle {
          "Open Hat", "Tom", "Cymbal", "Perc"];
 
     in-out property <[bool]> track-active:
-        [true, true, true, true, true, true, true, true];
+        [true, true, true, true,
+         true, true, true, true];
 
     in-out property <[bool]> track-solo:
-        [false, false, false, false, false, false, false, false];
+        [false, false, false, false,
+         false, false, false, false];
 
     in-out property <[float]> track-pan:
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        [0.0, 0.0, 0.0, 0.0,
+         0.0, 0.0, 0.0, 0.0];
 
     in-out property <[float]> track-volume:
-        [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+        [1.0, 1.0, 1.0, 1.0,
+         1.0, 1.0, 1.0, 1.0];
 
     in-out property <[int]> track-mixer-channel:
         [0, 1, 2, 3, 4, 5, 6, 7];
 
     in-out property <[color]> track-colors:
-        [Theme.accent, Theme.ok, Theme.warn, Theme.danger,
-         Theme.activ, #4895EF, #E76F51, #B08D57];
+        [
+            Theme.accent,
+            Theme.ok,
+            Theme.warn,
+            Theme.danger,
+            Theme.activ,
+            #4895EF,
+            #E76F51,
+            #B08D57
+        ];
 
     in-out property <int> selected-track: 0;
 
     in-out property <int> grid-resolution: 16;
-
     in-out property <bool> playing: false;
 
     in-out property <float> humanize: 0.0;
@@ -95,1014 +73,542 @@ export component BeatContent inherits Rectangle {
     in-out property <string> beat-name:
         "BEAT SEQUENCER";
 
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
+
     callback close-requested;
     callback add-track-requested;
+
     callback grid-resolution-changed(int);
     callback track-selected(int);
     callback step-toggled(int, bool);
+
     callback duplicate-beat;
     callback copy-beat;
     callback clear-beat;
     callback delete-beat;
+
     callback copy-track(int);
     callback duplicate-track(int);
     callback delete-track(int);
     callback clear-track(int);
+
     callback insert-pattern(int, int);
     callback pattern-changed(int);
 
-    property <bool> grid-dropdown-open: false;
-    property <bool> beat-menu-open: false;
-    property <int> track-menu-open-index: -1;
 
-    property <[bool]> beat-clipboard: [];
-    property <[bool]> track-clipboard: [];
+    // ============================================================
+    // MENUS
+    // ============================================================
 
-    property <int> pattern-length: root.grid-resolution * root.instrument-names.length;
+    in-out property <bool> grid-dropdown-open: false;
+    in-out property <bool> beat-menu-open: false;
+    in-out property <int> track-menu-open-index: -1;
 
-    property <[int]> pattern-indexes: [0];
 
-    property <int> clear-step: 0;
-    property <int> copy-track-idx: -1;
-    property <int> dup-track-idx: -1;
-    property <int> insert-track-idx: -1;
-    property <int> insert-interval: 1;
+    // ============================================================
+    // GEOMETRIA
+    // ============================================================
 
-    property <bool> stick-hit: false;
+    property <length> header-x: 12px;
+    property <length> header-y: 12px;
 
-    // Layout anchors for the floating menus (rendered at root so they paint on top)
+    property <length> header-height: 34px;
+
+    property <length> divider-gap: 6px;
+
+    property <length> content-gap: 10px;
+
+    property <length> content-top:
+        root.header-y
+        + root.header-height
+        + root.divider-gap
+        + 1px
+        + root.content-gap;
+
+    property <length> row-height: 30px;
+
+    property <length> dynamic-content-height:
+        33px
+        + root.instrument-indexes.length
+        * root.row-height
+        + 12px;
+
     property <length> tracks-left: 12px;
-    property <length> tracks-top: beat-header.y + beat-header.height + 10px + 1px + 10px;
-    property <length> menu-y: beat-header.y + beat-header.height + 2px;
-    property <length> track-menu-height: 4px + 9 * 24px + 2 * 1px + 26px + 11 * 1px;
+
+    property <length> tracks-top:
+        root.content-top;
+
+    property <length> menu-y:
+        root.content-top;
+
+    property <length> track-menu-height:
+        4px
+        + 9 * 24px
+        + 2 * 1px
+        + 26px
+        + 11 * 1px;
+
+
+    // ============================================================
+    // TAMANHO DO COMPONENTE
+    // ============================================================
 
     width: 800px;
-    height: 480px;
+
+    height:
+        root.content-top
+        + root.dynamic-content-height
+        + 12px;
+
+
+    // ============================================================
+    // FUNDO
+    // ============================================================
 
     background: Theme.surface;
 
     border-radius: 8px;
+
     border-width: 1px;
     border-color: Theme.border;
 
-    out property <bool> mouse-over: hover-zone.has-hover;
+
+    // ============================================================
+    // MOUSE OVER
+    // ============================================================
+
+    out property <bool> mouse-over:
+        hover-zone.has-hover;
 
     hover-zone := TouchArea {
         width: 100%;
         height: 100%;
+
         mouse-cursor: default;
     }
 
-    VerticalLayout {
-        alignment: LayoutAlignment.stretch;
-        padding: 12px;
-        spacing: 10px;
 
+    // ============================================================
+    // HEADER
+    // ============================================================
 
-        beat-header := BeatHeader {
-            beat-name <=> root.beat-name;
+    beat-header := BeatHeader {
 
-            humanize <=> root.humanize;
-            swing <=> root.swing;
+        x: root.header-x;
+        y: root.header-y;
 
-            grid-resolution <=> root.grid-resolution;
+        width:
+            parent.width
+            - root.header-x * 2;
 
-            resolution-options: root.resolution-options;
+        height: root.header-height;
 
-            grid-dropdown-open <=> root.grid-dropdown-open;
-            beat-menu-open <=> root.beat-menu-open;
-            current-pattern <=> root.current-pattern;
-            patterns <=> root.patterns;
-            pattern-indexes <=> root.pattern-indexes;
 
-            close-requested => {
-                root.close-requested();
-            }
+        // --------------------------------------------------------
+        // DADOS
+        // --------------------------------------------------------
 
-            add-track-requested => {
-                root.add-track-requested();
-            }
+        beat-name <=> root.beat-name;
 
-            grid-resolution-changed(value) => {
-                root.grid-resolution-changed(value);
-            }
-            duplicate-beat => { root.duplicate-beat(); }
-            copy-beat => { root.copy-beat(); }
-            clear-beat => { root.clear-beat(); }
-            delete-beat => { root.delete-beat(); }
-            pattern-changed(idx) => { root.pattern-changed(idx); }
-        }
+        humanize <=> root.humanize;
+        swing <=> root.swing;
 
+        grid-resolution
+            <=> root.grid-resolution;
 
-        Rectangle {
-            height: 1px;
-            background: Theme.border;
-        }
+        resolution-options:
+            root.resolution-options;
 
+        grid-dropdown-open
+            <=> root.grid-dropdown-open;
 
-        HorizontalLayout {
-            alignment: LayoutAlignment.stretch;
-            cross-axis-alignment: CrossAxisAlignment.stretch;
-            height: 306px;
-            spacing: 12px;
+        beat-menu-open
+            <=> root.beat-menu-open;
 
+        current-pattern
+            <=> root.current-pattern;
 
-            Rectangle {
-                width: 244px;
-                height: 306px;
+        patterns
+            <=> root.patterns;
 
-                background: Theme.base;
+        pattern-indexes:
+            [0];
 
-                border-radius: 6px;
-                border-width: 1px;
-                border-color: Theme.border;
 
+        // --------------------------------------------------------
+        // CALLBACKS
+        // --------------------------------------------------------
 
-                for inst in root.instrument-indexes: BeatTrack {
-                    track-index: inst;
-
-                    track-name: root.instrument-names[inst];
-
-                    track-color: root.track-colors[inst];
-
-                    track-menu-open-index <=> root.track-menu-open-index;
-
-                    active: root.track-active[inst];
-                    active-changed(v) => { root.track-active[inst] = v; }
-
-                    solo: root.track-solo[inst];
-                    solo-changed(v) => { root.track-solo[inst] = v; }
-
-                    pan: root.track-pan[inst];
-                    pan-changed(v) => { root.track-pan[inst] = v; }
-
-                    volume: root.track-volume[inst];
-                    volume-changed(v) => { root.track-volume[inst] = v; }
-
-                    mixer-channel: root.track-mixer-channel[inst];
-                    mixer-channel-changed(v) => { root.track-mixer-channel[inst] = v; }
-
-                    x: 8px;
-                    y: 33px + inst * 30px;
-                    width: parent.width - 16px;
-                    height: 30px;
-
-                    selected: root.selected-track == inst;
-
-                    selected-changed => {
-                        root.selected-track = inst;
-                        root.track-selected(inst);
-                    }
-                }
-            }
-
-
-            Rectangle {
-                horizontal-stretch: 1;
-                height: 306px;
-
-                background: Theme.base;
-
-                border-radius: 6px;
-                border-width: 1px;
-                border-color: Theme.border;
-
-                property <length> row-pitch: 30px;
-                property <length> rows-top: 33px;
-
-                for inst in root.instrument-indexes: BeatStep {
-                    track-index: inst;
-
-                    x: 8px;
-                    y: 33px + inst * 30px;
-
-                    width: root.grid-resolution * 28px
-                        + max(0, root.grid-resolution - 1) * 2px;
-
-                    height: 30px;
-
-                    steps <=> root.steps;
-
-                    playhead: root.playhead;
-
-                    grid-resolution: root.grid-resolution;
-
-                    step-indexes: root.step-indexes;
-
-                    track-active: root.track-active[inst];
-
-                    accent-color: root.track-colors[inst];
-                }
-
-                grid-touch := TouchArea {
-                    x: 0;
-                    y: 0;
-                    width: 100%;
-                    height: 100%;
-                    mouse-cursor: default;
-
-                    property <int> paint-row: -1;
-                    property <int> paint-col: -1;
-
-                    pointer-event(event) => {
-                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                            root.stick-hit = false;
-                            hit-timer.running = false;
-                            hit-timer.running = true;
-
-                            let r = Math.floor((self.mouse-y - rows-top) / row-pitch);
-                            let c = Math.floor((self.mouse-x - 8px) / 30px);
-
-                            if r >= 0 && r < root.instrument-indexes.length
-                                && c >= 0 && c < root.grid-resolution {
-                                root.steps[r * 16 + c] = !root.steps[r * 16 + c];
-                                root.step-toggled(r * 16 + c, root.steps[r * 16 + c]);
-                                self.paint-row = r;
-                                self.paint-col = c;
-                            }
-                        } else if event.kind == PointerEventKind.move && self.pressed {
-                            let r = Math.floor((self.mouse-y - rows-top) / row-pitch);
-                            let c = Math.floor((self.mouse-x - 8px) / 30px);
-
-                            if r >= 0 && r < root.instrument-indexes.length
-                                && c >= 0 && c < root.grid-resolution
-                                && !(r == self.paint-row && c == self.paint-col) {
-                                root.steps[r * 16 + c] = true;
-                                root.step-toggled(r * 16 + c, true);
-                                self.paint-row = r;
-                                self.paint-col = c;
-                            }
-                        } else if event.kind == PointerEventKind.up {
-                            self.paint-row = -1;
-                            self.paint-col = -1;
-                        }
-                    }
-                }
-
-                hit-timer := Timer {
-                    interval: 90ms;
-                    running: false;
-
-                    triggered => {
-                        self.running = false;
-                        root.stick-hit = false;
-                    }
-                }
-            }
-        }
-    }
-
-
-    if root.grid-dropdown-open : Rectangle {
-        x: beat-header.x + beat-header.steps-anchor-x;
-        y: root.menu-y;
-
-        width: 62px;
-        height: root.resolution-options.length * 26px + 4px;
-
-        background: Theme.surface-high;
-
-        border-radius: 4px;
-        border-width: 1px;
-        border-color: Theme.border;
-
-        z: 30;
-
-        VerticalLayout {
-            alignment: LayoutAlignment.stretch;
-            padding: 2px;
-            spacing: 1px;
-
-            for option in root.resolution-options: Rectangle {
-                width: 58px;
-                height: 24px;
-
-                background: option == root.grid-resolution
-                    ? Theme.accent
-                    : transparent;
-
-                border-radius: 3px;
-
-                Text {
-                    text: "" + option;
-
-                    width: 100%;
-                    height: 100%;
-
-                    color: option == root.grid-resolution
-                        ? Theme.text-primary
-                        : Theme.text-dim;
-
-                    font-size: 9px;
-                    font-weight: 700;
-
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.grid-resolution = option;
-                        root.grid-resolution-changed(option);
-                        root.grid-dropdown-open = false;
-                    }
-                }
-            }
-        }
-    }
-
-    if root.beat-menu-open : Rectangle {
-        x: beat-header.x + beat-header.beat-anchor-x - 160px;
-        y: root.menu-y;
-
-        width: 160px;
-        height: (root.pattern-indexes.length + 6) * 25px;
-
-        background: Theme.surface-high;
-
-        border-radius: 4px;
-        border-width: 1px;
-        border-color: Theme.border;
-
-        z: 30;
-
-        VerticalLayout {
-            padding: 2px;
-            spacing: 1px;
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                Text {
-                    text: "PATTERNS";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-dim;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-            }
-
-            for idx in root.pattern-indexes: Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: idx == root.current-pattern
-                    ? Theme.accent
-                    : transparent;
-
-                border-radius: 3px;
-
-                Text {
-                    text: "Pattern " + (idx + 1);
-                    width: 100%;
-                    height: 100%;
-                    color: idx == root.current-pattern
-                        ? Theme.text-primary
-                        : Theme.text-dim;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.pattern-changed(idx);
-                        root.beat-menu-open = false;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 1px;
-                background: Theme.border;
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Duplicate Beat";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.duplicate-beat();
-                        root.beat-menu-open = false;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Copy Beat";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.copy-beat();
-                        root.beat-menu-open = false;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Clear Beat";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.clear-beat();
-                        root.beat-menu-open = false;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Delete Beat";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.warn;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.delete-beat();
-                        root.beat-menu-open = false;
-                    }
-                }
-            }
-        }
-    }
-
-    if root.track-menu-open-index >= 0 : Rectangle {
-        x: root.tracks-left + 8px;
-        y: root.tracks-top + 33px + root.track-menu-open-index * 30px
-            + root.track-menu-height > self.height
-            ? root.tracks-top + 33px + root.track-menu-open-index * 30px - root.track-menu-height
-            : root.tracks-top + 33px + root.track-menu-open-index * 30px;
-
-        width: 160px;
-        height: root.track-menu-height;
-
-        background: Theme.surface-high;
-
-        border-radius: 4px;
-        border-width: 1px;
-        border-color: Theme.border;
-
-        z: 30;
-
-        VerticalLayout {
-            padding: 2px;
-            spacing: 1px;
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                Text {
-                    text: root.instrument-names[root.track-menu-open-index];
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 1px;
-                background: Theme.border;
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Copy";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.copy-track(root.track-menu-open-index);
-                        root.track-menu-open-index = -1;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Duplicate";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.duplicate-track(root.track-menu-open-index);
-                        root.track-menu-open-index = -1;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Clear";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.clear-track(root.track-menu-open-index);
-                        root.track-menu-open-index = -1;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Delete Track";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.warn;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.delete-track(root.track-menu-open-index);
-                        root.track-menu-open-index = -1;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 1px;
-                background: Theme.border;
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Insert Pattern: 2 Steps";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.insert-pattern(root.track-menu-open-index, 2);
-                        root.track-menu-open-index = -1;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Insert Pattern: 4 Steps";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.insert-pattern(root.track-menu-open-index, 4);
-                        root.track-menu-open-index = -1;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Insert Pattern: 8 Steps";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.insert-pattern(root.track-menu-open-index, 8);
-                        root.track-menu-open-index = -1;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 24px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                Text {
-                    text: "Insert Pattern: 16 Steps";
-                    width: 100%;
-                    height: 100%;
-                    color: Theme.text-primary;
-                    font-size: 9px;
-                    font-weight: 700;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    x: 8px;
-                }
-
-                TouchArea {
-                    clicked => {
-                        root.insert-pattern(root.track-menu-open-index, 16);
-                        root.track-menu-open-index = -1;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 156px;
-                height: 26px;
-
-                background: transparent;
-                border-radius: 3px;
-
-                HorizontalLayout {
-                    padding: 3px;
-                    spacing: 1px;
-                    cross-axis-alignment: CrossAxisAlignment.center;
-
-                    Text {
-                        text: "Color";
-                        width: 32px;
-                        color: Theme.text-dim;
-                        font-size: 9px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                    }
-
-                    for c in root.track-colors: Rectangle {
-                        width: 12px;
-                        height: 12px;
-
-                        background: c;
-                        border-radius: 2px;
-                        border-width: 1px;
-                        border-color: root.track-colors[root.track-menu-open-index] == c
-                            ? Theme.text-primary
-                            : Theme.border;
-
-                        TouchArea {
-                            clicked => {
-                                root.track-colors[root.track-menu-open-index] = c;
-                                root.track-menu-open-index = -1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Timer {
-        interval: 140ms;
-        running: root.playing;
-
-        triggered => {
-            if (root.grid-resolution > 0) {
-                root.playhead =
-                    Math.mod(root.playhead + 1, root.grid-resolution);
-            }
-        }
-    }
-
-    // =====================================================
-    // BEAT / PATTERN ACTIONS (no loops / var / array methods)
-    // =====================================================
-
-    duplicate-beat => {
-        if (root.pattern-indexes.length < 8) {
-            root.pattern-indexes[root.pattern-indexes.length] = root.pattern-indexes.length;
-            root.current-pattern = root.pattern-indexes.length - 1;
-            root.steps = root.patterns[root.current-pattern];
-        }
-    }
-
-    copy-beat => {
-        if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
-            root.beat-clipboard = root.patterns[root.current-pattern];
-        }
-    }
-
-    clear-beat => {
-        if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
-            root.patterns[root.current-pattern][0] = false;
-            root.patterns[root.current-pattern][1] = false;
-            root.patterns[root.current-pattern][2] = false;
-            root.patterns[root.current-pattern][3] = false;
-            root.patterns[root.current-pattern][4] = false;
-            root.patterns[root.current-pattern][5] = false;
-            root.patterns[root.current-pattern][6] = false;
-            root.patterns[root.current-pattern][7] = false;
-            root.patterns[root.current-pattern][8] = false;
-            root.patterns[root.current-pattern][9] = false;
-            root.patterns[root.current-pattern][10] = false;
-            root.patterns[root.current-pattern][11] = false;
-            root.patterns[root.current-pattern][12] = false;
-            root.patterns[root.current-pattern][13] = false;
-            root.patterns[root.current-pattern][14] = false;
-            root.patterns[root.current-pattern][15] = false;
-            root.steps = root.patterns[root.current-pattern];
-        }
-    }
-
-    delete-beat => {
-        if (root.pattern-indexes.length > 1) {
-            root.pattern-indexes[root.pattern-indexes.length - 1] = 0;
-            root.current-pattern = 0;
-            root.steps = root.patterns[root.current-pattern];
-        } else {
+        close-requested => {
             root.close-requested();
         }
-    }
 
-    pattern-changed(idx) => {
-        if (idx >= 0 && idx < root.patterns.length) {
-            root.current-pattern = idx;
-            root.steps = root.patterns[root.current-pattern];
+        add-track-requested => {
+            root.add-track-requested();
+        }
+
+        grid-resolution-changed(value) => {
+            root.grid-resolution-changed(value);
+        }
+
+        duplicate-beat => {
+            root.duplicate-beat();
+        }
+
+        copy-beat => {
+            root.copy-beat();
+        }
+
+        clear-beat => {
+            root.clear-beat();
+        }
+
+        delete-beat => {
+            root.delete-beat();
+        }
+
+        pattern-changed(idx) => {
+            root.pattern-changed(idx);
         }
     }
 
-    // =====================================================
-    // TRACK ACTIONS (no loops / var / array methods)
-    // =====================================================
 
-    copy-track(track) => {
-        if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
-            root.track-clipboard[0] = root.patterns[root.current-pattern][track * 16 + 0];
-            root.track-clipboard[1] = root.patterns[root.current-pattern][track * 16 + 1];
-            root.track-clipboard[2] = root.patterns[root.current-pattern][track * 16 + 2];
-            root.track-clipboard[3] = root.patterns[root.current-pattern][track * 16 + 3];
-            root.track-clipboard[4] = root.patterns[root.current-pattern][track * 16 + 4];
-            root.track-clipboard[5] = root.patterns[root.current-pattern][track * 16 + 5];
-            root.track-clipboard[6] = root.patterns[root.current-pattern][track * 16 + 6];
-            root.track-clipboard[7] = root.patterns[root.current-pattern][track * 16 + 7];
-            root.track-clipboard[8] = root.patterns[root.current-pattern][track * 16 + 8];
-            root.track-clipboard[9] = root.patterns[root.current-pattern][track * 16 + 9];
-            root.track-clipboard[10] = root.patterns[root.current-pattern][track * 16 + 10];
-            root.track-clipboard[11] = root.patterns[root.current-pattern][track * 16 + 11];
-            root.track-clipboard[12] = root.patterns[root.current-pattern][track * 16 + 12];
-            root.track-clipboard[13] = root.patterns[root.current-pattern][track * 16 + 13];
-            root.track-clipboard[14] = root.patterns[root.current-pattern][track * 16 + 14];
-            root.track-clipboard[15] = root.patterns[root.current-pattern][track * 16 + 15];
+    // ============================================================
+    // LINHA DIVISÓRIA
+    //
+    // FICA ABAIXO DO HEADER.
+    //
+    // NÃO USAR vertical-stretch.
+    // ============================================================
+
+    Rectangle {
+
+        x: root.header-x;
+
+        y:
+            beat-header.y
+            + beat-header.height
+            + root.divider-gap;
+
+        width:
+            parent.width
+            - root.header-x * 2;
+
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+
+    // ============================================================
+    // PAINEL DAS TRACKS
+    // ============================================================
+
+    track-panel := BeatTrackPanel {
+
+        x: root.header-x;
+
+        y: root.content-top;
+
+        width: 244px;
+
+        height:
+            root.dynamic-content-height;
+
+
+        // --------------------------------------------------------
+        // DADOS
+        // --------------------------------------------------------
+
+        instrument-indexes:
+            root.instrument-indexes;
+
+        instrument-names:
+            root.instrument-names;
+
+        track-active:
+            root.track-active;
+
+        track-solo:
+            root.track-solo;
+
+        track-pan:
+            root.track-pan;
+
+        track-volume:
+            root.track-volume;
+
+        track-mixer-channel:
+            root.track-mixer-channel;
+
+        track-colors:
+            root.track-colors;
+
+
+        // --------------------------------------------------------
+        // SELEÇÃO / MENU
+        // --------------------------------------------------------
+
+        selected-track
+            <=> root.selected-track;
+
+        track-menu-open-index
+            <=> root.track-menu-open-index;
+
+
+        // --------------------------------------------------------
+        // CALLBACK
+        // --------------------------------------------------------
+
+        track-selected(index) => {
+            root.track-selected(index);
         }
     }
 
-    duplicate-track(track) => {
-        if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
-            root.patterns[root.current-pattern][track * 16 + 0] = root.track-clipboard[0];
-            root.patterns[root.current-pattern][track * 16 + 1] = root.track-clipboard[1];
-            root.patterns[root.current-pattern][track * 16 + 2] = root.track-clipboard[2];
-            root.patterns[root.current-pattern][track * 16 + 3] = root.track-clipboard[3];
-            root.patterns[root.current-pattern][track * 16 + 4] = root.track-clipboard[4];
-            root.patterns[root.current-pattern][track * 16 + 5] = root.track-clipboard[5];
-            root.patterns[root.current-pattern][track * 16 + 6] = root.track-clipboard[6];
-            root.patterns[root.current-pattern][track * 16 + 7] = root.track-clipboard[7];
-            root.patterns[root.current-pattern][track * 16 + 8] = root.track-clipboard[8];
-            root.patterns[root.current-pattern][track * 16 + 9] = root.track-clipboard[9];
-            root.patterns[root.current-pattern][track * 16 + 10] = root.track-clipboard[10];
-            root.patterns[root.current-pattern][track * 16 + 11] = root.track-clipboard[11];
-            root.patterns[root.current-pattern][track * 16 + 12] = root.track-clipboard[12];
-            root.patterns[root.current-pattern][track * 16 + 13] = root.track-clipboard[13];
-            root.patterns[root.current-pattern][track * 16 + 14] = root.track-clipboard[14];
-            root.patterns[root.current-pattern][track * 16 + 15] = root.track-clipboard[15];
-            root.steps = root.patterns[root.current-pattern];
+
+    // ============================================================
+    // GRID
+    // ============================================================
+
+    step-grid := BeatStepGrid {
+
+        x:
+            track-panel.x
+            + track-panel.width
+            + 12px;
+
+        y:
+            root.content-top;
+
+        width:
+            parent.width
+            - self.x
+            - root.header-x;
+
+        height:
+            root.dynamic-content-height;
+
+
+        // --------------------------------------------------------
+        // DADOS
+        // --------------------------------------------------------
+
+        steps <=> root.steps;
+
+        instrument-indexes:
+            root.instrument-indexes;
+
+        step-indexes:
+            root.step-indexes;
+
+        playhead:
+            root.playhead;
+
+        grid-resolution:
+            root.grid-resolution;
+
+        track-active:
+            root.track-active;
+
+        track-colors:
+            root.track-colors;
+
+
+        // --------------------------------------------------------
+        // CALLBACK
+        // --------------------------------------------------------
+
+        step-toggled(index, value) => {
+            root.step-toggled(index, value);
         }
     }
 
-    clear-track(track) => {
-        if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
-            root.patterns[root.current-pattern][track * 16 + 0] = false;
-            root.patterns[root.current-pattern][track * 16 + 1] = false;
-            root.patterns[root.current-pattern][track * 16 + 2] = false;
-            root.patterns[root.current-pattern][track * 16 + 3] = false;
-            root.patterns[root.current-pattern][track * 16 + 4] = false;
-            root.patterns[root.current-pattern][track * 16 + 5] = false;
-            root.patterns[root.current-pattern][track * 16 + 6] = false;
-            root.patterns[root.current-pattern][track * 16 + 7] = false;
-            root.patterns[root.current-pattern][track * 16 + 8] = false;
-            root.patterns[root.current-pattern][track * 16 + 9] = false;
-            root.patterns[root.current-pattern][track * 16 + 10] = false;
-            root.patterns[root.current-pattern][track * 16 + 11] = false;
-            root.patterns[root.current-pattern][track * 16 + 12] = false;
-            root.patterns[root.current-pattern][track * 16 + 13] = false;
-            root.patterns[root.current-pattern][track * 16 + 14] = false;
-            root.patterns[root.current-pattern][track * 16 + 15] = false;
-            root.steps = root.patterns[root.current-pattern];
+
+    // ============================================================
+    // MENUS
+    // ============================================================
+
+    BeatMenus {
+
+        x: 0px;
+        y: 0px;
+
+        width: parent.width;
+        height: parent.height;
+
+
+        // --------------------------------------------------------
+        // ESTADO
+        // --------------------------------------------------------
+
+        grid-dropdown-open
+            <=> root.grid-dropdown-open;
+
+        beat-menu-open
+            <=> root.beat-menu-open;
+
+        track-menu-open-index
+            <=> root.track-menu-open-index;
+
+
+        // --------------------------------------------------------
+        // GRID
+        // --------------------------------------------------------
+
+        resolution-options:
+            root.resolution-options;
+
+        grid-resolution:
+            root.grid-resolution;
+
+
+        // --------------------------------------------------------
+        // PATTERN
+        // --------------------------------------------------------
+
+        pattern-indexes:
+            root.patterns.length > 0
+            ? [0]
+            : [];
+
+        current-pattern:
+            root.current-pattern;
+
+
+        // --------------------------------------------------------
+        // TRACK
+        // --------------------------------------------------------
+
+        instrument-names:
+            root.instrument-names;
+
+        track-colors:
+            root.track-colors;
+
+
+        // --------------------------------------------------------
+        // POSIÇÃO
+        // --------------------------------------------------------
+
+        menu-y:
+            root.menu-y;
+
+        steps-anchor-x:
+            beat-header.x
+            + beat-header.steps-anchor-x;
+
+        beat-anchor-x:
+            beat-header.x
+            + beat-header.beat-anchor-x;
+
+        tracks-left:
+            root.tracks-left;
+
+        tracks-top:
+            root.tracks-top;
+
+        track-menu-height:
+            root.track-menu-height;
+
+
+        // --------------------------------------------------------
+        // GRID CALLBACK
+        // --------------------------------------------------------
+
+        grid-resolution-changed(value) => {
+
+            root.grid-resolution = value;
+
+            root.grid-resolution-changed(
+                value
+            );
+        }
+
+
+        // --------------------------------------------------------
+        // PATTERN CALLBACK
+        // --------------------------------------------------------
+
+        pattern-changed(index) => {
+            root.pattern-changed(index);
+        }
+
+
+        // --------------------------------------------------------
+        // BEAT CALLBACKS
+        // --------------------------------------------------------
+
+        duplicate-beat => {
+            root.duplicate-beat();
+        }
+
+        copy-beat => {
+            root.copy-beat();
+        }
+
+        clear-beat => {
+            root.clear-beat();
+        }
+
+        delete-beat => {
+            root.delete-beat();
+        }
+
+
+        // --------------------------------------------------------
+        // TRACK CALLBACKS
+        // --------------------------------------------------------
+
+        copy-track(track) => {
+            root.copy-track(track);
+        }
+
+        duplicate-track(track) => {
+            root.duplicate-track(track);
+        }
+
+        clear-track(track) => {
+            root.clear-track(track);
+        }
+
+        delete-track(track) => {
+            root.delete-track(track);
+        }
+
+        insert-pattern(track, interval) => {
+            root.insert-pattern(
+                track,
+                interval
+            );
         }
     }
 
-    insert-pattern(track, interval) => {
-        if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
-            root.patterns[root.current-pattern][track * 16 + 0] = true;
-            root.patterns[root.current-pattern][track * 16 + 1] = interval <= 2;
-            root.patterns[root.current-pattern][track * 16 + 2] = true;
-            root.patterns[root.current-pattern][track * 16 + 3] = interval <= 4;
-            root.patterns[root.current-pattern][track * 16 + 4] = true;
-            root.patterns[root.current-pattern][track * 16 + 5] = interval <= 2;
-            root.patterns[root.current-pattern][track * 16 + 6] = true;
-            root.patterns[root.current-pattern][track * 16 + 7] = interval <= 8;
-            root.patterns[root.current-pattern][track * 16 + 8] = true;
-            root.patterns[root.current-pattern][track * 16 + 9] = interval <= 2;
-            root.patterns[root.current-pattern][track * 16 + 10] = true;
-            root.patterns[root.current-pattern][track * 16 + 11] = interval <= 4;
-            root.patterns[root.current-pattern][track * 16 + 12] = true;
-            root.patterns[root.current-pattern][track * 16 + 13] = interval <= 2;
-            root.patterns[root.current-pattern][track * 16 + 14] = true;
-            root.patterns[root.current-pattern][track * 16 + 15] = interval <= 16;
-            root.steps = root.patterns[root.current-pattern];
+
+    // ============================================================
+    // PLAYBACK
+    // ============================================================
+
+    Timer {
+
+        interval: 140ms;
+
+        running:
+            root.playing;
+
+
+        triggered => {
+
+            if root.grid-resolution > 0 {
+
+                root.playhead =
+                    Math.mod(
+                        root.playhead + 1,
+                        root.grid-resolution
+                    );
+            }
         }
-    }
-
-    delete-track(track) => {
-        // Clear track's steps in current pattern (unrolled)
-        if (root.patterns.length > 0 && root.current-pattern < root.patterns.length) {
-            root.patterns[root.current-pattern][track * 16 + 0] = false;
-            root.patterns[root.current-pattern][track * 16 + 1] = false;
-            root.patterns[root.current-pattern][track * 16 + 2] = false;
-            root.patterns[root.current-pattern][track * 16 + 3] = false;
-            root.patterns[root.current-pattern][track * 16 + 4] = false;
-            root.patterns[root.current-pattern][track * 16 + 5] = false;
-            root.patterns[root.current-pattern][track * 16 + 6] = false;
-            root.patterns[root.current-pattern][track * 16 + 7] = false;
-            root.patterns[root.current-pattern][track * 16 + 8] = false;
-            root.patterns[root.current-pattern][track * 16 + 9] = false;
-            root.patterns[root.current-pattern][track * 16 + 10] = false;
-            root.patterns[root.current-pattern][track * 16 + 11] = false;
-            root.patterns[root.current-pattern][track * 16 + 12] = false;
-            root.patterns[root.current-pattern][track * 16 + 13] = false;
-            root.patterns[root.current-pattern][track * 16 + 14] = false;
-            root.patterns[root.current-pattern][track * 16 + 15] = false;
-            root.steps = root.patterns[root.current-pattern];
-        }
-
-        // Mark track as deleted by clearing its name and deactivating
-        // (Full array removal not supported in Slint callbacks)
-        root.instrument-names[track] = "";
-        root.track-active[track] = false;
-        root.track-solo[track] = false;
-
-        // Rebuild instrument-indexes (unrolled for max 8 tracks)
-        root.instrument-indexes = [];
-        if (root.instrument-names.length > 0 && root.instrument-names[0] != "") { root.instrument-indexes[0] = 0; }
-        if (root.instrument-names.length > 1 && root.instrument-names[1] != "") { root.instrument-indexes[1] = 1; }
-        if (root.instrument-names.length > 2 && root.instrument-names[2] != "") { root.instrument-indexes[2] = 2; }
-        if (root.instrument-names.length > 3 && root.instrument-names[3] != "") { root.instrument-indexes[3] = 3; }
-        if (root.instrument-names.length > 4 && root.instrument-names[4] != "") { root.instrument-indexes[4] = 4; }
-        if (root.instrument-names.length > 5 && root.instrument-names[5] != "") { root.instrument-indexes[5] = 5; }
-        if (root.instrument-names.length > 6 && root.instrument-names[6] != "") { root.instrument-indexes[6] = 6; }
-        if (root.instrument-names.length > 7 && root.instrument-names[7] != "") { root.instrument-indexes[7] = 7; }
     }
 }

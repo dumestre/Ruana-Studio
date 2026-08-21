@@ -2,6 +2,7 @@ import { Theme } from "../theme.slint";
 import { KnobWithoutText, PanKnobWithoutText } from "../components/knob.slint";
 
 export component BeatTrack inherits Rectangle {
+
     in-out property <int> track-index: 0;
     in property <string> track-name: "Kick";
 
@@ -17,6 +18,21 @@ export component BeatTrack inherits Rectangle {
     in property <bool> selected: false;
 
     in-out property <int> track-menu-open-index: -1;
+
+    // ============================================================
+    // COLUNAS
+    // ============================================================
+
+    property <length> pan-width: 28px;
+    property <length> volume-width: 28px;
+    property <length> channel-width: 30px;
+    property <length> mute-width: 22px;
+    property <length> solo-width: 22px;
+    property <length> column-spacing: 2px;
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
 
     callback selected-changed;
     callback active-changed(bool);
@@ -39,53 +55,76 @@ export component BeatTrack inherits Rectangle {
         : transparent;
 
 
-    TouchArea {
-        clicked => {
-            root.selected-changed();
-        }
-    }
-
+    // ============================================================
+    // LAYOUT
+    //
+    // PAN | VOL | CH | M | S | TRACK
+    // ============================================================
 
     HorizontalLayout {
         padding-left: 1px;
         padding-right: 1px;
-        spacing: 2px;
+
+        spacing: root.column-spacing;
 
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
 
 
-        PanKnobWithoutText {
-            width: 28px;
-            height: 28px;
-
-            value: (root.pan + 1.0) / 2.0;
-
-            changed(v) => {
-                root.pan = v * 2.0 - 1.0;
-                root.pan-changed(root.pan);
-            }
-        }
-
-
-        KnobWithoutText {
-            width: 28px;
-            height: 28px;
-
-            value: root.volume;
-
-            changed(v) => {
-                root.volume = v;
-                root.volume-changed(root.volume);
-            }
-        }
-
+        // ========================================================
+        // PAN
+        // ========================================================
 
         Rectangle {
-            width: 30px;
+            width: root.pan-width;
+            height: 28px;
+
+            PanKnobWithoutText {
+                width: 100%;
+                height: 100%;
+
+                value: (root.pan + 1.0) / 2.0;
+
+                changed(v) => {
+                    root.pan = v * 2.0 - 1.0;
+                    root.pan-changed(root.pan);
+                }
+            }
+        }
+
+
+        // ========================================================
+        // VOLUME
+        // ========================================================
+
+        Rectangle {
+            width: root.volume-width;
+            height: 28px;
+
+            KnobWithoutText {
+                width: 100%;
+                height: 100%;
+
+                value: root.volume;
+
+                changed(v) => {
+                    root.volume = v;
+                    root.volume-changed(root.volume);
+                }
+            }
+        }
+
+
+        // ========================================================
+        // CHANNEL
+        // ========================================================
+
+        Rectangle {
+            width: root.channel-width;
             height: 24px;
 
             background: #2f2e2e;
+
             border-radius: 4px;
             border-width: 1px;
             border-color: Theme.border;
@@ -97,6 +136,7 @@ export component BeatTrack inherits Rectangle {
                 height: 100%;
 
                 color: Theme.text-dim;
+
                 font-family: "";
                 font-size: 14px;
                 font-weight: 0;
@@ -109,14 +149,21 @@ export component BeatTrack inherits Rectangle {
                 clicked => {
                     root.mixer-channel =
                         Math.mod(root.mixer-channel + 1, 16);
-                    root.mixer-channel-changed(root.mixer-channel);
+
+                    root.mixer-channel-changed(
+                        root.mixer-channel
+                    );
                 }
             }
         }
 
 
+        // ========================================================
+        // MUTE
+        // ========================================================
+
         Rectangle {
-            width: 22px;
+            width: root.mute-width;
             height: 24px;
 
             background: !root.active
@@ -124,6 +171,7 @@ export component BeatTrack inherits Rectangle {
                 : Theme.base;
 
             border-radius: 4px;
+
             border-width: 1px;
 
             border-color: !root.active
@@ -156,8 +204,12 @@ export component BeatTrack inherits Rectangle {
         }
 
 
+        // ========================================================
+        // SOLO
+        // ========================================================
+
         Rectangle {
-            width: 22px;
+            width: root.solo-width;
             height: 24px;
 
             background: root.solo
@@ -165,6 +217,7 @@ export component BeatTrack inherits Rectangle {
                 : Theme.base;
 
             border-radius: 4px;
+
             border-width: 1px;
 
             border-color: root.solo
@@ -197,6 +250,14 @@ export component BeatTrack inherits Rectangle {
         }
 
 
+        // ========================================================
+        // TRACK
+        //
+        // Esta é a única coluna que cresce.
+        // O TouchArea fica DENTRO dela.
+        // Não existe mais x: 139px.
+        // ========================================================
+
         Rectangle {
             horizontal-stretch: 1;
             height: 24px;
@@ -204,20 +265,31 @@ export component BeatTrack inherits Rectangle {
             background: root.track-color;
 
             border-radius: 4px;
+
             border-width: 1px;
+
             border-color: root.selected
                 ? Theme.text-primary
                 : Theme.border;
 
             opacity: root.active ? 1.0 : 0.35;
 
+
+            // ====================================================
+            // NOME
+            // ====================================================
+
             Text {
                 text: root.track-name;
 
-                width: 100%;
-                height: 100%;
+                x: 0px;
+                y: 0px;
+
+                width: parent.width;
+                height: parent.height;
 
                 color: #1a1a1a;
+
                 font-size: 10px;
                 font-weight: 700;
 
@@ -226,27 +298,42 @@ export component BeatTrack inherits Rectangle {
 
                 overflow: elide;
             }
-        }
-    }
 
-    // Overlay on the name area only (after the fixed-width controls),
-    // so it doesn't squeeze the name Text out of the layout.
-    // Left click selects the track, right click opens the track menu.
-    TouchArea {
-        x: 139px;
-        y: 0;
-        width: parent.width - 140px;
-        height: 100%;
-        mouse-cursor: pointer;
 
-        pointer-event(event) => {
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                root.selected-changed();
-            } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
-                if (root.track-menu-open-index == root.track-index) {
-                    root.track-menu-open-index = -1;
-                } else {
-                    root.track-menu-open-index = root.track-index;
+            // ====================================================
+            // INTERAÇÃO DA TRACK
+            //
+            // Agora acompanha automaticamente a largura da
+            // coluna TRACK.
+            // ====================================================
+
+            TouchArea {
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor: pointer;
+
+                pointer-event(event) => {
+
+                    if event.kind == PointerEventKind.down
+                        && event.button == PointerEventButton.left {
+
+                        root.selected-changed();
+
+                    } else if event.kind == PointerEventKind.down
+                        && event.button == PointerEventButton.right {
+
+                        if root.track-menu-open-index
+                            == root.track-index {
+
+                            root.track-menu-open-index = -1;
+
+                        } else {
+
+                            root.track-menu-open-index =
+                                root.track-index;
+                        }
+                    }
                 }
             }
         }

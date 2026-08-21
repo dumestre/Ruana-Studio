@@ -1,0 +1,102 @@
+import { Theme } from "../theme.slint";
+import { BeatTrack } from "beat_track.slint";
+import { BeatTrackHeader } from "beat_track_header.slint";
+
+export component BeatTrackPanel inherits Rectangle {
+
+    in-out property <[int]> instrument-indexes: [];
+    in-out property <[string]> instrument-names: [];
+
+    in-out property <[bool]> track-active: [];
+    in-out property <[bool]> track-solo: [];
+
+    in-out property <[float]> track-pan: [];
+    in-out property <[float]> track-volume: [];
+
+    in-out property <[int]> track-mixer-channel: [];
+    in-out property <[color]> track-colors: [];
+
+    in-out property <int> selected-track: 0;
+    in-out property <int> track-menu-open-index: -1;
+
+    callback track-selected(int);
+
+    background: Theme.base;
+
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+
+    BeatTrackHeader {
+        x: 0px;
+        y: 0px;
+
+        width: parent.width;
+        height: 33px;
+    }
+
+
+    for inst in root.instrument-indexes: BeatTrack {
+
+        track-index: inst;
+
+        track-name:
+            root.instrument-names[inst];
+
+        track-color:
+            root.track-colors[inst];
+
+        track-menu-open-index
+            <=> root.track-menu-open-index;
+
+        active:
+            root.track-active[inst];
+
+        active-changed(v) => {
+            root.track-active[inst] = v;
+        }
+
+        solo:
+            root.track-solo[inst];
+
+        solo-changed(v) => {
+            root.track-solo[inst] = v;
+        }
+
+        pan:
+            root.track-pan[inst];
+
+        pan-changed(v) => {
+            root.track-pan[inst] = v;
+        }
+
+        volume:
+            root.track-volume[inst];
+
+        volume-changed(v) => {
+            root.track-volume[inst] = v;
+        }
+
+        mixer-channel:
+            root.track-mixer-channel[inst];
+
+        mixer-channel-changed(v) => {
+            root.track-mixer-channel[inst] = v;
+        }
+
+        x: 8px;
+        y: 33px + inst * 30px;
+
+        width: parent.width - 16px;
+        height: 30px;
+
+        selected:
+            root.selected-track == inst;
+
+        selected-changed => {
+            root.selected-track = inst;
+            root.track-selected(inst);
+        }
+    }
+}
