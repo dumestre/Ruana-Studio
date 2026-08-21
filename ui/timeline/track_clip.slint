@@ -72,9 +72,6 @@ export component TrackClip inherits Rectangle {
     callback clip-move-delta(int, float, int);     // id, delta-beats, delta-tracks
     callback clip-move-finished(int);              // id
 
-    // Overlay drag: sinaliza início com âncora absoluta para o overlay global capturar
-    callback clip-drag-overlay-started(int, float, float);  // id, anchor-abs-x, anchor-abs-y
-
     callback clip-resize-started(int, int);        // id, side (-1 left, 1 right)
     callback clip-resize-delta(int, int, float);   // id, side, delta-beats acumulado
     callback clip-resize-finished(int);            // id
@@ -157,18 +154,20 @@ export component TrackClip inherits Rectangle {
 
     // =====================================================
     // BORDA
+    //
+    // Seleção: borda CRIMSON — mesma cor da Playhead.
     // =====================================================
 
     border-radius: 4px;
 
     border-width:
         root.selected
-            ? 2px
+            ? 3px
             : 1px;
 
     border-color:
         root.selected
-            ? Theme.text-primary
+            ? Colors.crimson
             : root.hovered
                 ? root.clip-color.brighter(0.22)
                 : root.clip-color.darker(0.18);
@@ -249,15 +248,9 @@ export component TrackClip inherits Rectangle {
             width: parent.width;
             height: 2px;
 
-            background:
-                root.selected
-                    ? Theme.text-primary
-                    : root.clip-color.brighter(0.58);
+            background: root.clip-color.brighter(0.58);
 
-            opacity:
-                root.selected
-                    ? 1.0
-                    : 0.75;
+            opacity: 0.75;
         }
 
 
@@ -320,22 +313,6 @@ export component TrackClip inherits Rectangle {
         }
 
 
-        // =================================================
-        // DOUBLE-CLICK NO HEADER → ENTRA NO MODO RENAME
-        // =================================================
-
-        TouchArea {
-            x: 0; y: 0;
-            width: parent.width;
-            height: parent.height;
-
-            mouse-cursor: root.renaming ? text : pointer;
-
-            double-clicked => {
-                root.rename-buffer = root.name;
-                root.renaming = true;
-            }
-        }
     }
 
 
@@ -412,28 +389,6 @@ export component TrackClip inherits Rectangle {
 
 
     // =====================================================
-    // BORDA INTERNA DE SELEÇÃO
-    // =====================================================
-
-    if root.selected: Rectangle {
-
-        x: 2px;
-        y: 2px;
-        width: parent.width - 4px;
-        height: parent.height - 4px;
-
-        background: transparent;
-
-        border-width: 1px;
-        border-color: Theme.text-primary;
-        border-radius: 2px;
-
-        opacity: 0.55;
-        z: 4;
-    }
-
-
-    // =====================================================
     // PREVIEW DO SLICE
     // =====================================================
 
@@ -472,7 +427,10 @@ export component TrackClip inherits Rectangle {
         width: parent.width;
         height: parent.height;
 
-        enabled: root.clip-id != root.drag-clip-id;
+        // Renaming: libera o mouse para o TextInput do header.
+        // NUNCA desabilitar durante o drag: o grab do ponteiro
+        // morreria no meio do gesto e o clip "gruda".
+        enabled: !root.renaming;
 
         mouse-cursor:
             root.active-tool == 1
@@ -486,18 +444,24 @@ export component TrackClip inherits Rectangle {
 
 
         // =================================================
-        // CLICK SIMPLES (seleciona o clip)
+        // DOUBLE-CLICK NO HEADER → MODO RENAME
+        // (o touch é o topo do clip: o rename vive aqui)
         // =================================================
 
-        clicked => {
-            if root.active-tool == 0 {
-                root.clicked(root.clip-id);
+        double-clicked => {
+            if root.active-tool == 0
+                && self.mouse-y <= root.header-height {
+                root.rename-buffer = root.name;
+                root.renaming = true;
             }
         }
 
 
         // =================================================
         // POINTER EVENT — unifica slice, move, resize, eraser, color
+        //
+        // SELEÇÃO NO PRESS (não no release): 1 clique seleciona
+        // E já permite arrastar na mesma gesto.
         // =================================================
 
         pointer-event(event) => {
@@ -536,6 +500,8 @@ export component TrackClip inherits Rectangle {
                             ? -1
                             : 1;
 
+                    root.clicked(root.clip-id);
+
                     self.resize-side = side;
                     self.resize-start-abs-x = self.mouse-x + self.absolute-position.x;
                     self.resize-start-beat = root.beat;
@@ -567,17 +533,14 @@ export component TrackClip inherits Rectangle {
 
                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
 
+                    root.clicked(root.clip-id);
+
                     self.drag-start-abs-x = self.mouse-x + self.absolute-position.x;
                     self.drag-start-abs-y = self.mouse-y + self.absolute-position.y;
                     self.drag-start-beat = root.beat;
                     self.dragging = true;
 
                     root.clip-move-started(root.clip-id, root.beat);
-                    root.clip-drag-overlay-started(
-                        root.clip-id,
-                        self.drag-start-abs-x / 1px,
-                        self.drag-start-abs-y / 1px
-                    );
 
                 } else if event.kind == PointerEventKind.move && self.dragging {
 
