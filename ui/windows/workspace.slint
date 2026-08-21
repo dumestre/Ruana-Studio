@@ -21,6 +21,8 @@ export component Workspace inherits Rectangle {
     in-out property <float> zoom-level: 1.0;
     in-out property <bool> playing: false;
     in-out property <int> transport-position: 0;
+    // Tempo contínuo da Playhead em segundos (float, sem quantização).
+    in-out property <float> transport-time-seconds: 0;
     // Métrica musical (projetada do core pelo Rust)
     in-out property <int> bpm: 120;
     in-out property <int> ppq: 960;
@@ -213,9 +215,9 @@ export component Workspace inherits Rectangle {
                         timeline := Timeline {
                             horizontal-stretch: 1;
                             selected-track <=> root.selected-track;
-                            position: root.transport-position;
+                            current-time-seconds <=> root.transport-time-seconds;
                             playing: root.playing;
-                            ppq: root.ppq;
+                            bpm: root.bpm;
                             beats-per-bar: root.beats-per-bar;
                             total-bars: root.total-bars;
                             zoom <=> root.zoom-level;

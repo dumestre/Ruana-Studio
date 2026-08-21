@@ -54,6 +54,12 @@ export component MainWindow inherits Window {
     in-out property <int> transport-position:
         0;
 
+    // TEMPO CONTÍNUO da Playhead, em segundos (float).
+    // Fonte: clock visual no Rust. A Timeline converte
+    // segundos → pixels; NUNCA passa por beat/grid/snap.
+    in-out property <float> transport-time-seconds:
+        0;
+
     // =====================================================
     // MÉTRICA MUSICAL (fonte única: Rust projeta do core)
     //
@@ -478,6 +484,7 @@ export component MainWindow inherits Window {
         zoom-level <=> root.zoom-level;
         playing <=> root.playing;
         transport-position <=> root.transport-position;
+        transport-time-seconds <=> root.transport-time-seconds;
         ppq <=> root.ppq;
         beats-per-bar <=> root.beats-per-bar;
         total-bars <=> root.total-bars;

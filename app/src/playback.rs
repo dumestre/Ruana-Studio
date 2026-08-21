@@ -3,7 +3,9 @@
 //! O engine de áudio avança o `Transport` na thread RT (clock
 //! autoritativo). Aqui vive o clock VISUAL do playhead: um Timer
 //! dentro da event loop (~8ms) que lê o transport e EXTRAPOLA a
-//! posição por tempo real (`Instant`) entre os ticks de áudio.
+//! posição por tempo real (`Instant`) entre os ticks de áudio,
+//! publicando SEGUNDOS contínuos (`transport-time-seconds`) — o
+//! domínio da Playhead. Ticks inteiros seguem só para o LCD.
 //!
 //! A correção de drift é gradual (servo/PLL): a cada tick a âncora
 //! absorve uma fração do erro em vez de re-ancorar de uma vez —
@@ -37,34 +39,37 @@ fn next_random(seed: &mut u64) -> f32 {
     (*seed >> 33) as f32 / u32::MAX as f32
 }
 
-/// Clock visual do playhead: âncora `(ticks, Instant)` + taxa em
-/// ticks/seg. A posição exibida é projetada pela âncora; o valor
-/// real do áudio só a corrige gradualmente.
+/// Clock visual do playhead: âncora `(segundos, Instant)`.
+///
+/// A Playhead vive no domínio de TEMPO CONTÍNUO (segundos), nunca
+/// em beats/ticks: a projeção avança à taxa 1 s/s (o clock de áudio
+/// também avança em tempo real) e o valor real só corrige a âncora
+/// gradualmente. A conversão segundos → pixels acontece na UI:
+/// `playhead_x = segundos * pixels_per_second`.
 struct VisualClock {
-    anchor_ticks: f64,
+    anchor_secs: f64,
     anchor_at: Instant,
-    ticks_per_sec: f64,
 }
 
 impl VisualClock {
-    /// Re-ancora instantaneamente (play, seek): salto intencional.
-    fn resync(&mut self, ticks: f64) {
-        self.anchor_ticks = ticks;
+    /// Re-ancora instantaneamente (play, seek, bpm): salto intencional.
+    fn resync(&mut self, secs: f64) {
+        self.anchor_secs = secs;
         self.anchor_at = Instant::now();
     }
 
-    /// Posição projetada "agora".
+    /// Posição projetada "agora", em segundos (contínua).
     fn projected(&self) -> f64 {
-        self.anchor_ticks + self.anchor_at.elapsed().as_secs_f64() * self.ticks_per_sec
+        self.anchor_secs + self.anchor_at.elapsed().as_secs_f64()
     }
 
     /// Servo: absorve 15% do drift por tick (~95% do erro some em
     /// ~160ms). NÃO mexe em `anchor_at` — a projeção continua de
     /// onde está, então não há descontinuidade. Com drift contido,
     /// cada passo corrige < 0.5px: invisível.
-    fn nudge(&mut self, actual_ticks: f64) {
-        let drift = actual_ticks - self.projected();
-        self.anchor_ticks += drift * 0.15;
+    fn nudge(&mut self, actual_secs: f64) {
+        let drift = actual_secs - self.projected();
+        self.anchor_secs += drift * 0.15;
     }
 }
 
@@ -135,12 +140,10 @@ pub fn install(
                 {
                     let mut t = transport.lock().unwrap();
                     t.playing = true;
-                    // Âncora inicial do clock visual
-                    let tps = t.bpm as f64 / 60.0 * t.ppq as f64;
+                    // Âncora inicial do clock visual (segundos contínuos)
                     *visual_clock.borrow_mut() = Some(VisualClock {
-                        anchor_ticks: t.position_ticks as f64,
+                        anchor_secs: t.position_seconds(),
                         anchor_at: Instant::now(),
-                        ticks_per_sec: tps,
                     });
                 }
                 rt_log("[PLAY] transport.playing=true, playhead timer started");
@@ -148,24 +151,27 @@ pub fn install(
                 // Playhead timer: roda NA event loop. Lê o clock
                 // autoritativo (áudio) via try_lock, corrige drift
                 // gradualmente (servo) e projeta por tempo real.
+                // Publica SEGUNDOS (float, sem quantização) para a
+                // agulha e ticks inteiros apenas para o LCD.
                 {
                     let ui_weak_t = ui_weak.clone();
                     let transport = transport.clone();
                     let clock = visual_clock.clone();
-                    let last_shown = Cell::new(i64::MIN);
+                    let last_lcd = Cell::new(i32::MIN);
                     playhead_timer.borrow().start(
                         slint::TimerMode::Repeated,
                         Duration::from_millis(8),
                         move || {
                             let mut guard = clock.borrow_mut();
                             let Some(c) = guard.as_mut() else { return };
+                            let mut lcd_ticks: Option<i64> = None;
                             if let Ok(t) = transport.try_lock() {
                                 if !t.playing {
                                     return;
                                 }
-                                let actual = t.position_ticks as f64;
+                                let actual = t.position_seconds();
                                 let drift = actual - c.projected();
-                                if drift.abs() > c.ticks_per_sec * 0.25 {
+                                if drift.abs() > 0.25 {
                                     // Descontinuidade real (glitch longo):
                                     // re-ancora na posição verdadeira.
                                     c.resync(actual);
@@ -173,15 +179,27 @@ pub fn install(
                                     // Jitter/deriva pequena: servo.
                                     c.nudge(actual);
                                 }
+                                // LCD (bars:beat:ticks) — domínio musical,
+                                // derivado dos segundos com o BPM atual.
+                                lcd_ticks = Some(
+                                    (c.projected().max(0.0)
+                                        * t.bpm as f64
+                                        / 60.0
+                                        * t.ppq as f64) as i64,
+                                );
                             }
-                            let shown = c.projected().max(0.0) as i64;
+                            let secs = c.projected().max(0.0);
                             drop(guard);
-                            if shown != last_shown.get() {
-                                last_shown.set(shown);
-                                if let Some(ui) = ui_weak_t.upgrade() {
-                                    ui.set_transport_position(
-                                        shown.min(i32::MAX as i64) as i32,
-                                    );
+                            if let Some(ui) = ui_weak_t.upgrade() {
+                                // Playhead: valor contínuo, atualiza TODO tick.
+                                ui.set_transport_time_seconds(secs as f32);
+                                // LCD: inteiro dedupado (granularidade de tick).
+                                if let Some(ticks) = lcd_ticks {
+                                    let ticks = (ticks.min(i32::MAX as i64)) as i32;
+                                    if ticks != last_lcd.get() {
+                                        last_lcd.set(ticks);
+                                        ui.set_transport_position(ticks);
+                                    }
                                 }
                             }
                         },
@@ -237,26 +255,27 @@ pub fn install(
         let ui_weak_b = ui_weak.clone();
         ui.on_set_bpm(move |bpm| {
             let bpm = bpm.round().clamp(20.0, 300.0) as u32;
-            let tps;
+            let secs;
             {
                 let mut t = transport.lock().unwrap();
                 if t.bpm == bpm {
                     return;
                 }
                 t.bpm = bpm;
-                tps = bpm as f64 / 60.0 * t.ppq as f64;
+                // Mesma posição musical, novo mapeamento em segundos.
+                secs = t.position_seconds();
             }
-            // Reflete no LCD (property two-way até o Transport).
+            // Re-ancora o clock visual no novo mapeamento, mantendo a
+            // posição projetada contínua. Em TELA a agulha não salta:
+            // px/seg ∝ bpm cancela com seg/beat ∝ 1/bpm (x depende só
+            // da posição musical). Publica já os novos segundos junto
+            // com o novo BPM para não haver frame de transição.
+            if let Some(c) = visual_clock.borrow_mut().as_mut() {
+                c.resync(secs);
+            }
             if let Some(ui) = ui_weak_b.upgrade() {
                 ui.set_bpm(bpm as i32);
-            }
-            // Re-ancora o clock visual com a NOVA taxa, mantendo a
-            // posição projetada contínua — a agulha não salta; o
-            // servo absorve a diferença do clock de áudio.
-            if let Some(c) = visual_clock.borrow_mut().as_mut() {
-                let projected = c.projected();
-                c.ticks_per_sec = tps;
-                c.resync(projected);
+                ui.set_transport_time_seconds(secs as f32);
             }
         });
     }
@@ -267,19 +286,21 @@ pub fn install(
         let ui_weak_s = ui_weak.clone();
         let visual_clock = visual_clock.clone();
         ui.on_seek_to(move |beat| {
-            let ticks = (beat * 960.0) as u64;
-            let pos = {
+            let (pos_ticks, pos_secs) = {
                 let mut t = transport.lock().unwrap();
+                // Clique na régua: pixel → beat exato, SEM snap.
+                let ticks = (beat.max(0.0) as f64 * t.ppq as f64) as u64;
                 t.seek(ticks);
-                t.position_ticks
+                (t.position_ticks, t.position_seconds())
             };
             // Re-ancora o clock visual: agulha salta imediatamente,
             // sem esperar o timer detectar o drift.
             if let Some(c) = visual_clock.borrow_mut().as_mut() {
-                c.resync(pos as f64);
+                c.resync(pos_secs);
             }
             if let Some(ui) = ui_weak_s.upgrade() {
-                ui.set_transport_position(pos.min(i32::MAX as u64) as i32);
+                ui.set_transport_time_seconds(pos_secs as f32);
+                ui.set_transport_position(pos_ticks.min(i32::MAX as u64) as i32);
             }
         });
     }

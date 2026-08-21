@@ -60,6 +60,21 @@ impl Transport {
         self.position_ticks as f32 / self.ppq as f32
     }
 
+    /// Posição em segundos (tempo contínuo).
+    ///
+    /// Fonte da Playhead: a UI converte segundos → pixels via
+    /// `pixels_per_second = pixels_per_beat / seconds_per_beat`,
+    /// sem quantização para beat/grid.
+    pub fn position_seconds(&self) -> f64 {
+        self.position_ticks as f64 / self.ppq as f64 * 60.0 / self.bpm as f64
+    }
+
+    /// Posiciona o playhead em segundos (tempo contínuo).
+    pub fn seek_seconds(&mut self, secs: f64) {
+        let beats = (secs.max(0.0) * self.bpm as f64 / 60.0) * self.ppq as f64;
+        self.position_ticks = beats as u64;
+    }
+
     /// Ticks por compasso.
     pub fn ticks_per_bar(&self) -> u64 {
         self.ppq as u64 * self.beats_per_bar as u64
@@ -112,5 +127,28 @@ mod tests {
         assert_eq!(t.position_ticks, 960);
         assert_eq!(t.position_beats(), 1.0);
         assert_eq!(t.ticks_per_bar(), 3840);
+    }
+
+    #[test]
+    fn seconds_conversion_is_continuous() {
+        // 120 BPM, 960 PPQ → 1 beat = 0.5s.
+        let mut t = Transport::default();
+        assert_eq!(t.position_seconds(), 0.0);
+
+        t.seek(960);
+        assert!((t.position_seconds() - 0.5).abs() < 1e-9);
+
+        // Meio segundo após o seek → 1 beat exato.
+        t.seek_seconds(1.0);
+        assert_eq!(t.position_ticks, 1920);
+        assert!((t.position_seconds() - 1.0).abs() < 1e-9);
+
+        // BPM diferente: mesma posição musical, outro tempo em s.
+        t.bpm = 60;
+        assert!((t.position_seconds() - 2.0).abs() < 1e-9);
+
+        // Negativo é tratado como zero.
+        t.seek_seconds(-3.0);
+        assert_eq!(t.position_ticks, 0);
     }
 }

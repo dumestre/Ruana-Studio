@@ -16,9 +16,12 @@ export component Timeline inherits Rectangle {
 
     // =====================================================
     // TRANSPORTE / ZOOM
+    //
+    // current-time-seconds: TEMPO CONTÍNUO em segundos (fonte
+    // da Playhead). bpm/beats-per-bar: só o GRID MUSICAL.
     // =====================================================
 
-    in property <int> position: 0;
+    in property <float> current-time-seconds: 0;
 
     in property <bool> playing: false;
 
@@ -134,11 +137,11 @@ export component Timeline inherits Rectangle {
 
     // Métrica musical — projetada do core pelo Rust (fonte única,
     // sem hardcodes). Os loops de grid/régua iteram total-bars.
-    in property <int> ppq: 960;
-
     in property <int> total-bars: 32;
 
     in property <int> beats-per-bar: 4;
+
+    in property <int> bpm: 120;
 
 
     // =====================================================
@@ -179,13 +182,25 @@ export component Timeline inherits Rectangle {
 
 
     // =====================================================
-    // PLAYHEAD X
+    // PLAYHEAD X — TEMPO CONTÍNUO (SEGUNDOS → PIXELS)
+    //
+    // seconds_per_beat = 60 / bpm
+    // pixels_per_second = pixels_per_beat / seconds_per_beat
+    // playhead_x = current_time_seconds * pixels_per_second
+    //
+    // Movimento contínuo: NÃO quantiza em beat, NÃO usa snap,
+    // NÃO espera o próximo beat. O BPM só define ONDE ficam as
+    // linhas do grid; a agulha desliza por tempo real.
     // =====================================================
 
+    property <float> seconds-per-beat:
+        60.0 / root.bpm;
+
+    property <length> pixels-per-second:
+        root.px-per-beat / root.seconds-per-beat;
+
     property <length> playhead-x:
-        self.position
-        * self.px-per-beat
-        / self.ppq;
+        root.current-time-seconds * root.pixels-per-second;
 
 
     // =====================================================
@@ -464,13 +479,19 @@ export component Timeline inherits Rectangle {
 
 
             // =============================================
-            // GRID VERTICAL
+            // GRID VERTICAL — MESMO GRID DA RÉGUA
+            //
+            // Origem, matemática e zoom idênticos aos da régua:
+            // x = i * px-per-bar + k * px-per-beat (+ fração).
             //
             // COMPASSOS: cor alterna a cada compasso.
-            // BATEDAS / 1/8 / 1/16: aparecem conforme o zoom.
+            // BATIDAS / 1/8 / 1/16: densidade segue o zoom.
+            // O grid é referência VISUAL — a Playhead não o usa.
             // =============================================
 
             for i in root.total-bars: Rectangle {
+
+                // ---- LINHA DO COMPASSO ----
 
                 x:
                     i * root.px-per-bar;
@@ -489,353 +510,110 @@ export component Timeline inherits Rectangle {
                         : Theme.border.transparentize(0.45);
 
                 z: 0;
+
+                // ---- BATIDAS (k = 0 é a própria linha do compasso) ----
+
+                for k in root.beats-per-bar: Rectangle {
+
+                    visible:
+                        k > 0 && root.px-per-bar >= 40px;
+
+                    x:
+                        i * root.px-per-bar
+                        + k * root.px-per-beat;
+
+                    y:
+                        root.ruler-height;
+
+                    width: 1px;
+
+                    height:
+                        parent.height - root.ruler-height;
+
+                    background:
+                        Theme.border.transparentize(0.6);
+
+                    z: 0;
+                }
+
+                // ---- SUBDIVISÃO 1/8 (meio da batida) ----
+
+                for k in root.beats-per-bar: Rectangle {
+
+                    visible:
+                        root.px-per-bar >= 120px;
+
+                    x:
+                        i * root.px-per-bar
+                        + k * root.px-per-beat
+                        + root.px-per-beat * 0.5;
+
+                    y:
+                        root.ruler-height;
+
+                    width: 1px;
+
+                    height:
+                        parent.height - root.ruler-height;
+
+                    background:
+                        Theme.border.transparentize(0.7);
+
+                    z: 0;
+                }
+
+                // ---- SUBDIVISÃO 1/16 (1/4 da batida) ----
+
+                for k in root.beats-per-bar: Rectangle {
+
+                    visible:
+                        root.px-per-bar >= 240px;
+
+                    x:
+                        i * root.px-per-bar
+                        + k * root.px-per-beat
+                        + root.px-per-beat * 0.25;
+
+                    y:
+                        root.ruler-height;
+
+                    width: 1px;
+
+                    height:
+                        parent.height - root.ruler-height;
+
+                    background:
+                        Theme.border.transparentize(0.8);
+
+                    z: 0;
+                }
+
+                // ---- SUBDIVISÃO 1/16 (3/4 da batida) ----
+
+                for k in root.beats-per-bar: Rectangle {
+
+                    visible:
+                        root.px-per-bar >= 240px;
+
+                    x:
+                        i * root.px-per-bar
+                        + k * root.px-per-beat
+                        + root.px-per-beat * 0.75;
+
+                    y:
+                        root.ruler-height;
+
+                    width: 1px;
+
+                    height:
+                        parent.height - root.ruler-height;
+
+                    background:
+                        Theme.border.transparentize(0.8);
+
+                    z: 0;
+                }
             }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 40px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.25;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.6);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 40px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.50;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.6);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 40px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.75;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.6);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 120px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.125;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.7);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 120px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.375;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.7);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 120px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.625;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.7);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 120px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.875;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.7);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 240px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.0625;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.8);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 240px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.1875;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.8);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 240px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.3125;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.8);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 240px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.4375;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.8);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 240px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.5625;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.8);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 240px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.6875;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.8);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 240px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.8125;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.8);
-
-                z: 0;
-            }
-
-            for i in root.total-bars: Rectangle {
-
-                visible:
-                    root.px-per-bar >= 240px;
-
-                x:
-                    i * root.px-per-bar
-                    + root.px-per-bar * 0.9375;
-
-                y:
-                    root.ruler-height;
-
-                width: 1px;
-
-                height:
-                    parent.height - root.ruler-height;
-
-                background:
-                    Theme.border.transparentize(0.8);
-
-                z: 0;
-            }
-
 
             // =============================================
             // TRACKS

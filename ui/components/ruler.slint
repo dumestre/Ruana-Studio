@@ -151,7 +151,9 @@ export component TimelineRuler inherits Rectangle {
     // LINHAS DE BATIDA
     //
     // Uma por batida do compasso (k = 0 é a própria linha do
-    // compasso, já desenhada). Visíveis quando cabe.
+    // compasso, já desenhada). Mesma matemática/origem/zoom do
+    // grid da Timeline: x = i * px-per-bar + k * px-per-beat.
+    // Visíveis quando cabe.
     // =====================================================
 
     for i in root.total-bars: Rectangle {
@@ -164,7 +166,8 @@ export component TimelineRuler inherits Rectangle {
                 k > 0 && root.px-per-bar >= 40px;
 
             x:
-                k * root.px-per-beat;
+                i * root.px-per-bar
+                + k * root.px-per-beat;
 
             y: 0;
 
@@ -182,7 +185,8 @@ export component TimelineRuler inherits Rectangle {
     // =====================================================
     // SUBDIVISÃO 1/8 (meio da batida)
     //
-    // Visível quando px-per-bar >= 120px.
+    // Visível quando px-per-bar >= 120px (mesmo threshold da
+    // Timeline).
     // =====================================================
 
     for i in root.total-bars: Rectangle {
@@ -195,7 +199,8 @@ export component TimelineRuler inherits Rectangle {
                 root.px-per-bar >= 120px;
 
             x:
-                k * root.px-per-beat
+                i * root.px-per-bar
+                + k * root.px-per-beat
                 + root.px-per-beat * 0.5;
 
             y:
@@ -213,7 +218,8 @@ export component TimelineRuler inherits Rectangle {
     // =====================================================
     // SUBDIVISÃO 1/16 (1/4 e 3/4 da batida)
     //
-    // Visível quando px-per-bar >= 240px.
+    // Visível quando px-per-bar >= 240px (mesmo threshold da
+    // Timeline).
     // =====================================================
 
     for i in root.total-bars: Rectangle {
@@ -226,7 +232,8 @@ export component TimelineRuler inherits Rectangle {
                 root.px-per-bar >= 240px;
 
             x:
-                k * root.px-per-beat
+                i * root.px-per-bar
+                + k * root.px-per-beat
                 + root.px-per-beat * 0.25;
 
             y:
@@ -245,7 +252,8 @@ export component TimelineRuler inherits Rectangle {
                 root.px-per-bar >= 240px;
 
             x:
-                k * root.px-per-beat
+                i * root.px-per-bar
+                + k * root.px-per-beat
                 + root.px-per-beat * 0.75;
 
             y:
