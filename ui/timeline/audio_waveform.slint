@@ -1,8 +1,15 @@
 import { Theme } from "../theme.slint";
 
 export component AudioWaveform inherits Rectangle {
-    in property <color> waveform-color: #1A1A2E;
+    // =====================================================
+    // PROPRIEDADES
+    // =====================================================
+
+    // Waveform escura e nítida, idêntica ao padrão do Ableton Live
+    in property <color> waveform-color: #111111; // Quase preto para contrastar com clips coloridos
+
     in property <bool> hovered: false;
+
     in property <[float]> peaks: [];
 
     background: transparent;
@@ -17,12 +24,13 @@ export component AudioWaveform inherits Rectangle {
         y: (parent.height - 1px) / 2;
         width: parent.width;
         height: 1px;
+
         background: root.waveform-color;
-        opacity: 0.12;
+        opacity: 0.35; // Linha central mais sutil no Ableton
     }
 
     // =====================================================
-    // WAVEFORM (barras dinâmicas)
+    // WAVEFORM
     // =====================================================
 
     Rectangle {
@@ -30,16 +38,31 @@ export component AudioWaveform inherits Rectangle {
         y: 0;
         width: parent.width;
         height: parent.height;
+
         clip: true;
 
         for peak[i] in root.peaks: Rectangle {
             x: i * (parent.width / Math.max(1, root.peaks.length));
-            y: (parent.height - peak * parent.height * 0.88) / 2;
-            width: max(2px, parent.width / Math.max(1, root.peaks.length) - 1px);
-            height: max(2px, peak * parent.height * 0.88);
+
+            // Expandido para 90% para preencher melhor o clip
+            y: (parent.height - peak * parent.height * 0.90) / 2;
+
+            // Largura ajustada para remover o gap (-1px) e formar um desenho contínuo
+            width: max(
+                1px,
+                parent.width / Math.max(1, root.peaks.length)
+            );
+
+            height: max(
+                1px,
+                peak * parent.height * 0.90
+            );
+
             background: root.waveform-color;
-            opacity: 0.45 + peak * 0.35;
-            border-radius: 1px;
+
+             
+
+            // border-radius removido! O Ableton usa renderização de áudio afiada e retangular.
         }
     }
 
@@ -52,7 +75,9 @@ export component AudioWaveform inherits Rectangle {
         y: 0;
         width: parent.width;
         height: parent.height;
-        background: root.waveform-color;
-        opacity: 0.06;
+
+        // No Ableton, o hover geralmente cria uma camada branca/clara sobre o clip
+        background: #FFFFFF;
+        opacity: 0.12;
     }
 }

@@ -69,16 +69,16 @@ export component TrackClip inherits Rectangle {
     callback slice-requested(int, float);
 
     callback clip-move-started(int, float);       // id, start-beat
-    callback clip-move-delta(int, float, int);     // id, delta-beats, delta-tracks
-    callback clip-move-finished(int);              // id
+    callback clip-move-delta(int, float, int);    // id, delta-beats, delta-tracks
+    callback clip-move-finished(int);             // id
 
-    callback clip-resize-started(int, int);        // id, side (-1 left, 1 right)
-    callback clip-resize-delta(int, int, float);   // id, side, delta-beats acumulado
-    callback clip-resize-finished(int);            // id
+    callback clip-resize-started(int, int);       // id, side (-1 left, 1 right)
+    callback clip-resize-delta(int, int, float);  // id, side, delta-beats acumulado
+    callback clip-resize-finished(int);           // id
 
-    callback clip-delete-requested(int);           // id
-    callback clip-rename-requested(int, string);   // id, new-name
-    callback clip-color-cycle-requested(int);      // id → incrementa paleta
+    callback clip-delete-requested(int);          // id
+    callback clip-rename-requested(int, string);  // id, new-name
+    callback clip-color-cycle-requested(int);     // id → incrementa paleta
 
 
     // =====================================================
@@ -119,7 +119,7 @@ export component TrackClip inherits Rectangle {
 
 
     // =====================================================
-    // POSIÇÃO (usa FLOAT agora — NÃO trunca durante drag)
+    // POSIÇÃO (usa FLOAT — NÃO trunca durante drag)
     // =====================================================
 
     x: root.beat * root.px-per-beat;
@@ -154,8 +154,6 @@ export component TrackClip inherits Rectangle {
 
     // =====================================================
     // BORDA
-    //
-    // Seleção: borda CRIMSON — mesma cor da Playhead.
     // =====================================================
 
     border-radius: 4px;
@@ -175,8 +173,6 @@ export component TrackClip inherits Rectangle {
 
     // =====================================================
     // CORPO DO CLIP
-    // =====================================================
-
     Rectangle {
         x: 1px;
         y: root.header-height;
@@ -195,10 +191,8 @@ export component TrackClip inherits Rectangle {
                     : 0.15
             );
 
-        opacity:
-            root.hovered
-                ? 1.0
-                : 0.94;
+        // Garanta que está em 1.0 para não misturar com o fundo da track
+        opacity: 1.0; 
 
         clip: true;
 
@@ -208,7 +202,10 @@ export component TrackClip inherits Rectangle {
             y: 0;
             width: parent.width - 4px;
             height: parent.height;
-            waveform-color: root.clip-color.darker(1.5);
+            
+            // Mude de darker(1.5) para preto absoluto puro se quiser o máximo de contraste
+            waveform-color: #000000; 
+            
             hovered: root.hovered;
             peaks: root.waveform-peaks;
         }
@@ -311,8 +308,6 @@ export component TrackClip inherits Rectangle {
                 }
             }
         }
-
-
     }
 
 
@@ -427,48 +422,30 @@ export component TrackClip inherits Rectangle {
         width: parent.width;
         height: parent.height;
 
-        // Renaming: libera o mouse para o TextInput do header.
-        // NUNCA desabilitar durante o drag: o grab do ponteiro
-        // morreria no meio do gesto e o clip "gruda".
         enabled: !root.renaming;
 
         mouse-cursor:
-            root.active-tool == 1
-                ? crosshair
-                : root.active-tool == 0
-                    && root.on-edge
-                        ? ew-resize
-                        : root.active-tool >= 3
-                            ? none
-                            : pointer;
+            root.active-tool == 1 ? crosshair :
+            self.resizing ? ew-resize :
+            self.dragging ? pointer :
+            root.active-tool == 0 && root.on-edge ? ew-resize :
+            root.active-tool >= 3 ? none : pointer;
 
-
-        // =================================================
-        // DOUBLE-CLICK NO HEADER → MODO RENAME
-        // (o touch é o topo do clip: o rename vive aqui)
-        // =================================================
 
         double-clicked => {
-            if root.active-tool == 0
-                && self.mouse-y <= root.header-height {
+            if root.active-tool == 0 && self.mouse-y <= root.header-height {
                 root.rename-buffer = root.name;
                 root.renaming = true;
             }
         }
 
 
-        // =================================================
-        // POINTER EVENT — unifica slice, move, resize, eraser, color
-        //
-        // SELEÇÃO NO PRESS (não no release): 1 clique seleciona
-        // E já permite arrastar na mesma gesto.
-        // =================================================
-
         pointer-event(event) => {
 
             // ----- RIGHT CLICK: COLOR CYCLE -----
             if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
                 root.clip-color-cycle-requested(root.clip-id);
+                return;
             }
 
             // ----- FERRAMENTA ERASER (2) -----
@@ -476,85 +453,74 @@ export component TrackClip inherits Rectangle {
                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                     root.clip-delete-requested(root.clip-id);
                 }
+                return;
             }
 
             // ----- FERRAMENTA SLICE (1) -----
             if root.active-tool == 1 {
                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                    root.slice-requested(
-                        root.clip-id,
-                        root.slice-preview-x / root.px-per-beat
-                    );
+                    root.slice-requested(root.clip-id, root.slice-preview-x / root.px-per-beat);
                 } else if event.kind == PointerEventKind.move {
                     root.slice-preview-x = self.mouse-x;
                 }
+                return;
             }
 
-            // ----- FERRAMENTA SELECT (0) RESIZE NA BORDA -----
-            if root.active-tool == 0 && root.on-edge {
+            // ----- FERRAMENTA SELECT (0) -----
+            if root.active-tool == 0 && !root.renaming {
 
                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-
-                    let side =
-                        root.on-left-edge
-                            ? -1
-                            : 1;
-
+                    
                     root.clicked(root.clip-id);
 
-                    self.resize-side = side;
-                    self.resize-start-abs-x = self.mouse-x + self.absolute-position.x;
-                    self.resize-start-beat = root.beat;
-                    self.resize-start-len = root.len;
-                    self.resizing = true;
+                    if root.on-edge {
+                        self.resize-side = root.on-left-edge ? -1 : 1;
+                        self.resize-start-abs-x = self.mouse-x + self.absolute-position.x;
+                        self.resize-start-beat = root.beat;
+                        self.resize-start-len = root.len;
+                        self.resizing = true;
+                        
+                        root.clip-resize-started(root.clip-id, self.resize-side);
+                    } else {
+                        self.drag-start-abs-x = self.mouse-x + self.absolute-position.x;
+                        self.drag-start-abs-y = self.mouse-y + self.absolute-position.y;
+                        self.drag-start-beat = root.beat;
+                        self.dragging = true;
+                        
+                        root.clip-move-started(root.clip-id, root.beat);
+                    }
+                } 
+                else if event.kind == PointerEventKind.move {
+                    
+                    let current-abs-x = self.mouse-x + self.absolute-position.x;
+                    let current-abs-y = self.mouse-y + self.absolute-position.y;
 
-                    root.clip-resize-started(root.clip-id, side);
+                    if self.resizing {
+                        let dx = current-abs-x - self.resize-start-abs-x;
+                        let delta_beats = dx / root.px-per-beat;
+                        
+                        root.clip-resize-delta(root.clip-id, self.resize-side, delta_beats);
+                    } 
+                    else if self.dragging {
+                        let dx = current-abs-x - self.drag-start-abs-x;
+                        let dy = current-abs-y - self.drag-start-abs-y;
+                        
+                        let delta_beats = dx / root.px-per-beat;
+                        let delta_tracks = Math.round(dy / root.row-height);
 
-                } else if event.kind == PointerEventKind.move && self.resizing {
-
-                    let dx = (self.mouse-x + self.absolute-position.x) - self.resize-start-abs-x;
-                    let delta_beats = dx / root.px-per-beat;
-
-                    root.clip-resize-delta(
-                        root.clip-id,
-                        self.resize-side,
-                        delta_beats
-                    );
-
-                } else if event.kind == PointerEventKind.up && self.resizing {
-
-                    self.resizing = false;
-                    root.clip-resize-finished(root.clip-id);
-                }
-            }
-
-            // ----- FERRAMENTA SELECT (0) MOVER (não edge) -----
-            if root.active-tool == 0 && !root.on-edge && !root.renaming {
-
-                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-
-                    root.clicked(root.clip-id);
-
-                    self.drag-start-abs-x = self.mouse-x + self.absolute-position.x;
-                    self.drag-start-abs-y = self.mouse-y + self.absolute-position.y;
-                    self.drag-start-beat = root.beat;
-                    self.dragging = true;
-
-                    root.clip-move-started(root.clip-id, root.beat);
-
-                } else if event.kind == PointerEventKind.move && self.dragging {
-
-                    let dx = (self.mouse-x + self.absolute-position.x) - self.drag-start-abs-x;
-                    let dy = (self.mouse-y + self.absolute-position.y) - self.drag-start-abs-y;
-                    let delta_beats = dx / root.px-per-beat;
-                    let delta_tracks = Math.round(dy / root.row-height);
-
-                    root.clip-move-delta(root.clip-id, delta_beats, delta_tracks);
-
-                } else if event.kind == PointerEventKind.up && self.dragging {
-
-                    self.dragging = false;
-                    root.clip-move-finished(root.clip-id);
+                        root.clip-move-delta(root.clip-id, delta_beats, delta_tracks);
+                    }
+                } 
+                else if event.kind == PointerEventKind.up {
+                    
+                    if self.resizing {
+                        self.resizing = false;
+                        root.clip-resize-finished(root.clip-id);
+                    }
+                    if self.dragging {
+                        self.dragging = false;
+                        root.clip-move-finished(root.clip-id);
+                    }
                 }
             }
         }
@@ -562,14 +528,12 @@ export component TrackClip inherits Rectangle {
 
         // ==================== ESTADOS PRIVADOS ====================
 
-        // Move (absolute window coordinates to survive clip repositioning)
         private property <length> drag-start-abs-x: 0px;
         private property <length> drag-start-abs-y: 0px;
         private property <float> drag-start-beat: 0.0;
         private property <bool> dragging: false;
 
-        // Resize
-        private property <int> resize-side: 0;      // -1 left, 1 right
+        private property <int> resize-side: 0;      
         private property <length> resize-start-abs-x: 0px;
         private property <float> resize-start-beat: 0.0;
         private property <float> resize-start-len: 0.0;
