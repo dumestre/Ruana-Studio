@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { AudioWaveform } from "audio_waveform.slint";
+import { ClipContextMenuState } from "../components/context_menu.slint";
 
 export component TrackClip inherits Rectangle {
 
@@ -443,9 +444,23 @@ export component TrackClip inherits Rectangle {
 
         pointer-event(event) => {
 
-            // ----- RIGHT CLICK: DELETE -----
+            // ----- RIGHT CLICK: MENU DE CONTEXTO -----
             if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
-                root.clip-delete-requested(root.clip-id);
+
+                ClipContextMenuState.clip-id =
+                    root.clip-id;
+
+                ClipContextMenuState.x =
+                    self.absolute-position.x
+                    + self.mouse-x;
+
+                ClipContextMenuState.y =
+                    self.absolute-position.y
+                    + self.mouse-y;
+
+                ClipContextMenuState.open =
+                    true;
+
                 return;
             }
 

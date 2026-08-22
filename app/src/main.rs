@@ -1275,6 +1275,30 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // Duplicate de clip (menu de contexto) → cópia na mesma posição.
+    {
+        let project = project.clone();
+        ui.on_clip_duplicate_requested(move |id| {
+            let Some(src) = project
+                .borrow()
+                .clips
+                .iter()
+                .find(|c| c.id as i32 == id)
+                .cloned()
+            else {
+                return;
+            };
+            project.borrow_mut().add_clip_with_path(
+                src.track_id,
+                src.kind,
+                src.name.as_str(),
+                src.start_beat,
+                src.length_beats,
+                src.file_path.clone(),
+            );
+        });
+    }
+
     // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.
     {
         let p = project.clone();

@@ -6,6 +6,7 @@ import { Workspace } from "windows/workspace.slint";
 import { BrowserFileEntry } from "explorer/file_browser.slint";
 import { FloatPanel } from "windows/float_panel.slint";
 import { PianoRollData, PianoRollActions } from "piano_roll/piano_roll_state.slint";
+import { ContextMenu, ClipContextMenuState } from "components/context_menu.slint";
 
 export { FloatPanel }
 export { PianoRollData, PianoRollActions }
@@ -232,6 +233,7 @@ export component MainWindow inherits Window {
     callback clip-color-cycle-requested(int);
     callback clip-copy-requested(int);
     callback clip-paste-requested(float, int);
+    callback clip-duplicate-requested(int);
 
     callback undo-requested;
 
@@ -677,6 +679,50 @@ export component MainWindow inherits Window {
 
         insert-pattern(track, interval) => {
             BeatState.insert-pattern(track, interval);
+        }
+    }
+
+
+    // =====================================================
+    // MENU DE CONTEXTO DE CLIP (botão direito)
+    //
+    // Overlay global reutilizável (components/context_menu.slint).
+    // Estado (aberto/posição/id) vive no global ClipContextMenuState,
+    // escrito diretamente pelo TrackClip no clique direito.
+    // =====================================================
+
+    ContextMenu {
+
+        open <=> ClipContextMenuState.open;
+
+        menu-x: ClipContextMenuState.x;
+
+        menu-y: ClipContextMenuState.y;
+
+        items: [
+            { label: "Copy", action: "copy", separator: false, danger: false, disabled: false },
+            { label: "Duplicate", action: "duplicate", separator: false, danger: false, disabled: false },
+            { label: "Change Color", action: "color", separator: false, danger: false, disabled: false },
+            { label: "", action: "", separator: true, danger: false, disabled: false },
+            { label: "Delete", action: "delete", separator: false, danger: true, disabled: false },
+        ];
+
+        action-chosen(action) => {
+
+            let id = ClipContextMenuState.clip-id;
+
+            if action == "copy" {
+                root.clip-copy-requested(id);
+            }
+            else if action == "duplicate" {
+                root.clip-duplicate-requested(id);
+            }
+            else if action == "color" {
+                root.clip-color-cycle-requested(id);
+            }
+            else if action == "delete" {
+                root.clip-delete-requested(id);
+            }
         }
     }
 
