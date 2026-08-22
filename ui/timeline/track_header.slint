@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Button } from "../components/button.slint";
+import { TimelineVolume } from "../components/timeline_fader.slint";
 
 // ================================================================
 // CONTROL BUTTON
@@ -74,7 +75,6 @@ component ControlButton inherits Rectangle {
     }
 }
 
-
 // ================================================================
 // TRACK HEADER ROW
 // ================================================================
@@ -134,8 +134,8 @@ export component TrackHeaderRow inherits Rectangle {
         return "I";
     }
 
-// ============================================================
-    // DIMENS��ES
+    // ============================================================
+    // DIMENSÕES
     // ============================================================
 
     height: 64px * root.zoom-y;
@@ -242,8 +242,9 @@ export component TrackHeaderRow inherits Rectangle {
         y: 0;
 
         width: parent.width - 20px;
-        cross-axis-alignment: CrossAxisAlignment.center;
         height: parent.height;
+
+        cross-axis-alignment: CrossAxisAlignment.center;
 
         spacing: 8px;
 
@@ -328,17 +329,30 @@ export component TrackHeaderRow inherits Rectangle {
         }
 
         // ========================================================
-        // ESPAÇADOR
+        // VOLUME
         // ========================================================
 
         Rectangle {
-horizontal-stretch: 1;
+            horizontal-stretch: 1;
+            height: parent.height;
+
+            TimelineVolume {
+                width: parent.width;
+                height: 32px;
+
+                value: 0.75;
+
+                changed(value) => {
+                    // Futuramente ligar ao motor de áudio:
+                    // root.volume-changed(root.track-index, value);
+                }
+            }
         }
-        
+
         // ========================================================
         // CONTROLES
         // ========================================================
-        
+
         Rectangle {
             width: 78px;
             height: 26px;
@@ -411,29 +425,48 @@ horizontal-stretch: 1;
                     active-color: Theme.base;
 
                     clicked => {
-                        root.automation-enabled = !root.automation-enabled;
-                        root.automation-clicked(root.track-index);
+                        root.automation-enabled =
+                            !root.automation-enabled;
+
+                        root.automation-clicked(
+                            root.track-index
+                        );
                     }
                 }
             }
         }
-        
-        // Record button fora do retângulo (mesmo estilo da transport bar)
+
+        // ========================================================
+        // RECORD
+        // ========================================================
+
         Button {
             icon: @image-url("../icons/rec.svg");
+
             icon-color: Theme.danger;
+
             toggled: root.record-armed;
+
             toggled-bg: Theme.danger;
+
             toggled-fg: Theme.surface-high;
+
             borderless: true;
+
             icon-size: 14px;
+
             height: 24px;
             width: 24px;
+
             border-radius: 12px;
 
             clicked => {
-                root.record-armed = !root.record-armed;
-                root.record-clicked(root.track-index);
+                root.record-armed =
+                    !root.record-armed;
+
+                root.record-clicked(
+                    root.track-index
+                );
             }
         }
     }

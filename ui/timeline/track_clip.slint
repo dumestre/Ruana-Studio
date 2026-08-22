@@ -160,10 +160,14 @@ export component TrackClip inherits Rectangle {
 
     border-radius: 4px;
 
-    border-width:
+    // Espessura atual — os filhos usam para se insetar,
+    // senão cobrem a borda (filhos desenham por cima).
+    private property <length> bw:
         root.selected
-            ? 6px
+            ? 10px
             : 1px;
+
+    border-width: root.bw;
 
     border-color:
         root.selected
@@ -176,15 +180,15 @@ export component TrackClip inherits Rectangle {
     // =====================================================
     // CORPO DO CLIP
     Rectangle {
-        x: 1px;
+        x: root.bw;
         y: root.header-height;
 
-        width: parent.width - 2px;
+        width: parent.width - 2 * root.bw;
 
         height:
             parent.height
             - root.header-height
-            - 1px;
+            - root.bw;
 
         background:
             root.clip-color.darker(
@@ -318,9 +322,9 @@ export component TrackClip inherits Rectangle {
     // =====================================================
 
     Rectangle {
-        x: 1px;
+        x: root.bw;
         y: root.header-height;
-        width: parent.width - 2px;
+        width: parent.width - 2 * root.bw;
         height: 1px;
 
         background: root.clip-color.brighter(0.30);
