@@ -47,6 +47,9 @@ export component TrackRow inherits Rectangle {
 
     in property <int> drag-track-offset: 0;
 
+    // Total de tracks, para limitar a track de destino.
+    in property <int> track-count: 0;
+
 
     // =====================================================
     // CALLBACKS
@@ -157,9 +160,34 @@ export component TrackRow inherits Rectangle {
 
     for clip in root.clips: TrackClip {
 
+        // =============================================
+        // DRAG VERTICAL EM TEMPO REAL
+        //
+        // Cada row renderiza todos os clips. Durante o
+        // drag, a row de DESTINO é quem exibe o clip
+        // (o próprio clip segue o mouse entre as
+        // tracks); a row de ORIGEM o oculta.
+        // =============================================
+
         visible:
-            clip.track-index
-            == root.track-index;
+            (
+                clip.track-index == root.track-index
+                && !(
+                    clip.id == root.drag-clip-id
+                    && root.drag-track-offset != 0
+                )
+            )
+            || (
+                clip.id == root.drag-clip-id
+                && root.drag-track-offset != 0
+                && root.track-index == max(
+                    0,
+                    min(
+                        root.track-count - 1,
+                        clip.track-index + root.drag-track-offset
+                    )
+                )
+            );
 
 
         // =============================================
@@ -238,6 +266,11 @@ export component TrackRow inherits Rectangle {
 
         drag-track-offset:
             root.drag-track-offset;
+
+        ghosted:
+            clip.id == root.drag-clip-id
+            && root.drag-track-offset != 0
+            && root.track-index == clip.track-index;
 
 
         // =============================================

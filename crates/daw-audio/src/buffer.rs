@@ -95,7 +95,6 @@ impl BufferCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daw_core::Clip;
 
     #[test]
     fn buffer_cache_evict() {

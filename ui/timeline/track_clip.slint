@@ -36,6 +36,10 @@ export component TrackClip inherits Rectangle {
 
     in property <int> drag-track-offset: 0;
 
+    // Instância "fantasma" da row de origem durante
+    // o drag vertical: invisível, mas mantém o grab.
+    in property <bool> ghosted: false;
+
 
     // =====================================================
     // PALETA
@@ -228,12 +232,7 @@ export component TrackClip inherits Rectangle {
         root.beat * root.px-per-beat;
 
     y:
-        2px
-        + (
-            root.clip-id == root.drag-clip-id
-                ? root.drag-track-offset * root.row-height
-                : 0px
-        );
+        2px;
 
 
     // =====================================================
@@ -248,6 +247,18 @@ export component TrackClip inherits Rectangle {
 
     height:
         root.row-height - 4px;
+
+
+    // =====================================================
+    // GHOST
+    //
+    // A row de origem esconde o clip durante o drag
+    // vertical (a instância da row de destino é quem
+    // aparece). Opacity 0 mantém o grab do TouchArea.
+    // =====================================================
+
+    opacity:
+        root.ghosted ? 0 : 1;
 
 
     // =====================================================
