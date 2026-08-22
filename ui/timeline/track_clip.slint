@@ -33,203 +33,333 @@ export component TrackClip inherits Rectangle {
     in property <[float]> waveform-peaks: [];
 
     in property <int> drag-clip-id: -1;
+
     in property <int> drag-track-offset: 0;
 
 
     // =====================================================
-    // PALETA DE CORES (8 opções, index 0 = padrão by-kind)
+    // PALETA
     // =====================================================
 
     private property <[color]> palette: [
-        #6FA86B, // 0: padrão MIDI (verde original)
-        #4F8AE0, // 1: azul
-        #E0A94F, // 2: âmbar
-        #E05E5E, // 3: vermelho
-        #A060D8, // 4: roxo
-        #E05EAA, // 5: rosa
-        #3EC7B0, // 6: turquesa
-        #C0C050, // 7: limão
+        #6FA86B,
+        #4F8AE0,
+        #E0A94F,
+        #E05E5E,
+        #A060D8,
+        #E05EAA,
+        #3EC7B0,
+        #C0C050
     ];
 
     private property <color> audio-default: #00C853;
 
     private property <color> base-color:
         root.color-index == 0
-            ? (root.is-midi ? Theme.clip-midi : root.audio-default)
-            : root.palette[Math.mod(root.color-index, root.palette.length)];
+            ? (
+                root.is-midi
+                    ? Theme.clip-midi
+                    : root.audio-default
+            )
+            : root.palette[
+                Math.mod(
+                    root.color-index,
+                    root.palette.length
+                )
+            ];
 
-    in property <color> clip-color: root.base-color;
+    in property <color> clip-color:
+        root.base-color;
 
 
     // =====================================================
-    // CALLBACKS (PÚBLICOS)
+    // CALLBACKS
     // =====================================================
 
     callback clicked(int);
 
     callback slice-requested(int, float);
 
-    callback clip-move-started(int, float);       // id, start-beat
-    callback clip-move-delta(int, float, int);    // id, delta-beats, delta-tracks
-    callback clip-move-finished(int);             // id
+    callback clip-move-started(int, float);
 
-    callback clip-resize-started(int, int);       // id, side (-1 left, 1 right)
-    callback clip-resize-delta(int, int, float);  // id, side, delta-beats acumulado
-    callback clip-resize-finished(int);           // id
+    callback clip-move-delta(int, float, int);
 
-    callback clip-delete-requested(int);          // id
-    callback clip-rename-requested(int, string);  // id, new-name
-    callback clip-color-cycle-requested(int);     // id → incrementa paleta
-    callback clip-copy-requested(int);            // id → copia p/ clipboard
+    callback clip-move-finished(int);
+
+    callback clip-resize-started(int, int);
+
+    callback clip-resize-delta(int, int, float);
+
+    callback clip-resize-finished(int);
+
+    callback clip-delete-requested(int);
+
+    callback clip-rename-requested(int, string);
+
+    callback clip-color-cycle-requested(int);
+
+    callback clip-copy-requested(int);
 
 
     // =====================================================
     // DIMENSÕES
     // =====================================================
 
-    private property <length> edge-width: 7px;
+    private property <length> edge-width:
+        7px;
 
-    private property <length> header-height: 18px;
+    private property <length> header-height:
+        18px;
+
+    private property <length> minimum-clip-width:
+        4px;
+
+    private property <float> minimum-clip-length:
+        0.0625;
 
 
     // =====================================================
-    // ESTADO DO MOUSE (hover + edges)
+    // ESTADO DO MOUSE
     // =====================================================
 
-    private property <bool> hovered: touch.has-hover;
+    private property <bool> hovered:
+        touch.has-hover;
 
     private property <bool> on-left-edge:
-        touch.has-hover
+        root.hovered
         && touch.mouse-x <= root.edge-width;
 
     private property <bool> on-right-edge:
-        touch.has-hover
-        && touch.mouse-x >= self.width - root.edge-width;
+        root.hovered
+        && touch.mouse-x >= root.width - root.edge-width;
 
     private property <bool> on-edge:
-        self.on-left-edge
-        || self.on-right-edge;
+        root.on-left-edge
+        || root.on-right-edge;
+
+
+    // =====================================================
+    // ESTADO DO DRAG
+    // =====================================================
+
+    private property <bool> dragging:
+        false;
+
+    private property <bool> resizing:
+        false;
+
+    private property <int> resize-side:
+        0;
+
+    private property <length> drag-start-x:
+        0px;
+
+    private property <length> drag-start-y:
+        0px;
+
+    private property <float> drag-start-beat:
+        0.0;
+
+    private property <int> drag-start-track:
+        0;
+
+    private property <length> resize-start-x:
+        0px;
+
+    private property <float> resize-start-beat:
+        0.0;
+
+    private property <float> resize-start-len:
+        0.0;
+
+
+    // =====================================================
+    // RENAME
+    // =====================================================
+
+    private property <bool> renaming:
+        false;
+
+    private property <string> rename-buffer:
+        "";
 
 
     // =====================================================
     // SLICE
     // =====================================================
 
-    property <length> slice-preview-x: -100px;
+    property <length> slice-preview-x:
+        -100px;
 
-    private property <bool> slice-hover: touch.has-hover;
-
-
-    // =====================================================
-    // POSIÇÃO (usa FLOAT — NÃO trunca durante drag)
-    // =====================================================
-
-    x: root.beat * root.px-per-beat;
-
-    y: 2px + (root.clip-id == root.drag-clip-id ? root.drag-track-offset * root.row-height : 0px);
-
-
-    // =====================================================
-    // TAMANHO
-    // =====================================================
-
-    width: root.len * root.px-per-beat;
-
-    height: root.row-height - 4px;
-
-
-    // =====================================================
-    // RENAME MODE
-    // =====================================================
-
-    private property <bool> renaming: false;
-
-    private property <string> rename-buffer: "";
-
-
-    // =====================================================
-    // COR BASE
-    // =====================================================
-
-    background: root.clip-color;
+    private property <bool> slice-hover:
+        root.active-tool == 1
+        && touch.has-hover;
 
 
     // =====================================================
     // BORDA
     // =====================================================
 
-    border-radius: 4px;
-
-    // Espessura atual — os filhos usam para se insetar,
-    // senão cobrem a borda (filhos desenham por cima).
     private property <length> bw:
         root.selected
-            ? 10px
+            ? 2px
             : 1px;
 
-    border-width: root.bw;
+    border-radius:
+        4px;
+
+    border-width:
+        root.bw;
 
     border-color:
         root.selected
-            ? Colors.crimson
+            ? #FFFFFF
             : root.hovered
                 ? root.clip-color.brighter(0.22)
                 : root.clip-color.darker(0.18);
 
 
     // =====================================================
-    // CORPO DO CLIP
-    Rectangle {
-        x: root.bw;
-        y: root.header-height;
+    // POSIÇÃO
+    // =====================================================
 
-        width: parent.width - 2 * root.bw;
+    x:
+        root.beat * root.px-per-beat;
+
+    y:
+        2px
+        + (
+            root.clip-id == root.drag-clip-id
+                ? root.drag-track-offset * root.row-height
+                : 0px
+        );
+
+
+    // =====================================================
+    // TAMANHO
+    // =====================================================
+
+    width:
+        root.len * root.px-per-beat
+            < root.minimum-clip-width
+            ? root.minimum-clip-width
+            : root.len * root.px-per-beat;
+
+    height:
+        root.row-height - 4px;
+
+
+    // =====================================================
+    // FUNDO DO ROOT
+    //
+    // IMPORTANTE:
+    // O ROOT NÃO PINTA O FUNDO.
+    //
+    // Isso permite que o grid continue visível.
+    // =====================================================
+
+    background:
+        #00000000;
+
+
+    // =====================================================
+    // CORPO DO CLIP
+    // =====================================================
+
+    Rectangle {
+
+        x:
+            root.bw;
+
+        y:
+            root.header-height;
+
+        width:
+            parent.width - 2 * root.bw;
 
         height:
             parent.height
             - root.header-height
             - root.bw;
 
+        // =================================================
+        // FUNDO TRANSLÚCIDO
+        //
+        // O alpha está AQUI.
+        // Não usamos opacity no Rectangle.
+        //
+        // Assim a waveform continua opaca.
+        // =================================================
+
         background:
             root.clip-color.darker(
                 root.hovered
                     ? 0.08
                     : 0.15
-            );
+            ).with-alpha(0.48);
 
-        // Garanta que está em 1.0 para não misturar com o fundo da track
-        opacity: 1.0; 
+        clip:
+            true;
 
-        clip: true;
 
-        // WAVEFORM para clips de áudio
-        if !root.is-midi && root.waveform-peaks.length > 0: AudioWaveform {
-            x: 2px;
-            y: 0;
-            width: parent.width - 4px;
-            height: parent.height;
-            
-            // Mude de darker(1.5) para preto absoluto puro se quiser o máximo de contraste
-            waveform-color: #000000; 
-            
-            hovered: root.hovered;
-            peaks: root.waveform-peaks;
-        }
+        // =================================================
+        // WAVEFORM
+        //
+        // TOTALMENTE OPACA
+        // =================================================
+
+        if !root.is-midi
+            && root.waveform-peaks.length > 0:
+
+            AudioWaveform {
+
+                x:
+                    2px;
+
+                y:
+                    0px;
+
+                width:
+                    parent.width - 4px;
+
+                height:
+                    parent.height;
+
+                waveform-color:
+                    root.clip-color.brighter(
+                        root.hovered
+                            ? 0.46
+                            : 0.34
+                    );
+
+                hovered:
+                    root.hovered;
+
+                peaks:
+                    root.waveform-peaks;
+            }
     }
 
 
     // =====================================================
-    // CABEÇALHO VIBRANTE
+    // HEADER
     // =====================================================
 
     Rectangle {
-        x: 1px;
-        y: 1px;
 
-        width: parent.width - 2px;
+        x:
+            root.bw;
 
-        height: root.header-height;
+        y:
+            root.bw;
 
+        width:
+            parent.width - 2 * root.bw;
+
+        height:
+            root.header-height - root.bw;
+
+        // HEADER CONTINUA OPACO
         background:
             root.clip-color.brighter(
                 root.hovered
@@ -237,7 +367,8 @@ export component TrackClip inherits Rectangle {
                     : 0.34
             );
 
-        clip: true;
+        clip:
+            true;
 
 
         // =================================================
@@ -245,109 +376,204 @@ export component TrackClip inherits Rectangle {
         // =================================================
 
         Rectangle {
-            x: 0;
-            y: 0;
 
-            width: parent.width;
-            height: 2px;
+            x:
+                0px;
 
-            background: root.clip-color.brighter(0.58);
+            y:
+                0px;
 
-            opacity: 0.75;
+            width:
+                parent.width;
+
+            height:
+                2px;
+
+            background:
+                root.clip-color.brighter(0.58);
+
+            opacity:
+                root.dragging || root.resizing
+                    ? 1.0
+                    : 0.75;
         }
 
 
         // =================================================
-        // NOME (ou TextInput no modo rename)
+        // NOME
         // =================================================
 
-        if !root.renaming: Text {
-            x: 6px;
-            y: 2px;
+        if !root.renaming:
 
-            width: parent.width - 12px;
-            height: parent.height - 2px;
+            Text {
 
-            text: root.name;
+                x:
+                    6px;
 
-            color: #171717;
+                y:
+                    2px;
 
-            font-size: 9px;
-            font-weight: 700;
+                width:
+                    parent.width - 12px;
 
-            vertical-alignment: center;
+                height:
+                    parent.height - 2px;
 
-            overflow: elide;
-        }
+                text:
+                    root.name;
 
-        if root.renaming: Rectangle {
-            x: 6px;
-            y: 2px;
+                color:
+                    #171717;
 
-            width: parent.width - 12px;
-            height: parent.height - 2px;
+                font-size:
+                    9px;
 
-            background: #ffffff;
-            border-radius: 2px;
+                font-weight:
+                    700;
 
-            TextInput {
-                x: 2px;
-                y: 0;
-                width: parent.width - 4px;
-                height: parent.height;
+                vertical-alignment:
+                    center;
 
-                text <=> root.rename-buffer;
+                overflow:
+                    elide;
+            }
 
-                color: #101010;
 
-                font-size: 9px;
-                font-weight: 700;
+        // =================================================
+        // RENAME
+        // =================================================
 
-                vertical-alignment: center;
-                horizontal-alignment: TextHorizontalAlignment.left;
+        if root.renaming:
 
-                edited => {
-                    if root.rename-buffer != "" {
-                        root.clip-rename-requested(root.clip-id, root.rename-buffer);
+            Rectangle {
+
+                x:
+                    5px;
+
+                y:
+                    1px;
+
+                width:
+                    parent.width - 10px;
+
+                height:
+                    parent.height - 2px;
+
+                background:
+                    #FFFFFF;
+
+                border-radius:
+                    2px;
+
+
+                TextInput {
+
+                    x:
+                        2px;
+
+                    y:
+                        0px;
+
+                    width:
+                        parent.width - 4px;
+
+                    height:
+                        parent.height;
+
+                    text <=> root.rename-buffer;
+
+                    color:
+                        #101010;
+
+                    font-size:
+                        9px;
+
+                    font-weight:
+                        700;
+
+                    vertical-alignment:
+                        center;
+
+                    horizontal-alignment:
+                        TextHorizontalAlignment.left;
+
+
+                    edited => {
+
+                        if root.rename-buffer != "" {
+
+                            root.clip-rename-requested(
+                                root.clip-id,
+                                root.rename-buffer
+                            );
+                        }
+
+                        root.renaming =
+                            false;
                     }
-                    root.renaming = false;
                 }
             }
-        }
     }
 
 
     // =====================================================
-    // DIVISÓRIA DO HEADER
+    // DIVISÓRIA
     // =====================================================
 
     Rectangle {
-        x: root.bw;
-        y: root.header-height;
-        width: parent.width - 2 * root.bw;
-        height: 1px;
 
-        background: root.clip-color.brighter(0.30);
+        x:
+            root.bw;
+
+        y:
+            root.header-height;
+
+        width:
+            parent.width - 2 * root.bw;
+
+        height:
+            1px;
+
+        background:
+            root.clip-color.brighter(0.30);
 
         opacity:
-            root.hovered
-                ? 0.85
-                : 0.55;
+            root.dragging || root.resizing
+                ? 1.0
+                : root.hovered
+                    ? 0.85
+                    : 0.55;
     }
 
 
     // =====================================================
-    // INDICADOR DE TIPO (águlha direita)
+    // INDICADOR DIREITO
     // =====================================================
 
     Rectangle {
-        x: parent.width - 8px;
-        y: 5px;
-        width: 3px;
-        height: 8px;
-        border-radius: 1px;
-        background: Theme.text-primary;
-        opacity: 0.45;
+
+        x:
+            parent.width - root.bw - 6px;
+
+        y:
+            5px;
+
+        width:
+            3px;
+
+        height:
+            8px;
+
+        border-radius:
+            1px;
+
+        background:
+            Theme.text-primary;
+
+        opacity:
+            root.dragging || root.resizing
+                ? 0.9
+                : 0.45;
     }
 
 
@@ -356,18 +582,36 @@ export component TrackClip inherits Rectangle {
     // =====================================================
 
     if root.active-tool == 0
-        && root.on-left-edge: Rectangle {
+        && root.on-left-edge:
 
-        x: 2px;
-        y: 3px;
-        width: 2px;
-        height: parent.height - 6px;
+        Rectangle {
 
-        background: Theme.text-primary;
-        opacity: 0.85;
-        border-radius: 1px;
-        z: 5;
-    }
+            x:
+                root.bw + 1px;
+
+            y:
+                3px;
+
+            width:
+                2px;
+
+            height:
+                parent.height - 6px;
+
+            background:
+                Theme.text-primary;
+
+            opacity:
+                root.resizing
+                    ? 1.0
+                    : 0.85;
+
+            border-radius:
+                1px;
+
+            z:
+                5;
+        }
 
 
     // =====================================================
@@ -375,81 +619,235 @@ export component TrackClip inherits Rectangle {
     // =====================================================
 
     if root.active-tool == 0
-        && root.on-right-edge: Rectangle {
+        && root.on-right-edge:
 
-        x: parent.width - 4px;
-        y: 3px;
-        width: 2px;
-        height: parent.height - 6px;
+        Rectangle {
 
-        background: Theme.text-primary;
-        opacity: 0.85;
-        border-radius: 1px;
-        z: 5;
-    }
+            x:
+                parent.width - root.bw - 3px;
+
+            y:
+                3px;
+
+            width:
+                2px;
+
+            height:
+                parent.height - 6px;
+
+            background:
+                Theme.text-primary;
+
+            opacity:
+                root.resizing
+                    ? 1.0
+                    : 0.85;
+
+            border-radius:
+                1px;
+
+            z:
+                5;
+        }
 
 
     // =====================================================
-    // PREVIEW DO SLICE
+    // INDICADOR DE DRAG
+    // =====================================================
+
+    if root.dragging:
+
+        Rectangle {
+
+            x:
+                root.bw;
+
+            y:
+                root.bw;
+
+            width:
+                parent.width - 2 * root.bw;
+
+            height:
+                2px;
+
+            background:
+                Theme.accent-hover;
+
+            opacity:
+                0.9;
+
+            z:
+                20;
+        }
+
+
+    // =====================================================
+    // INDICADOR DE RESIZE
+    // =====================================================
+
+    if root.resizing:
+
+        Rectangle {
+
+            x:
+                root.resize-side < 0
+                    ? root.bw
+                    : parent.width - root.bw - 2px;
+
+            y:
+                root.bw;
+
+            width:
+                2px;
+
+            height:
+                parent.height - 2 * root.bw;
+
+            background:
+                Theme.accent-hover;
+
+            opacity:
+                0.95;
+
+            z:
+                20;
+        }
+
+
+    // =====================================================
+    // SLICE PREVIEW
     // =====================================================
 
     if root.active-tool == 1
-        && root.slice-hover: Rectangle {
-
-        x: root.slice-preview-x - 1px;
-        y: 0px;
-        width: 2px;
-        height: parent.height;
-
-        background: Theme.playhead;
-        opacity: 0.95;
-        z: 10;
+        && root.slice-hover:
 
         Rectangle {
-            x: -2px;
-            y: 0;
-            width: 6px;
-            height: 100%;
-            background: Theme.playhead;
-            opacity: 0.12;
-        }
-    }
+
+            x:
+                root.slice-preview-x - 1px;
+
+            y:
+                0px;
+
+            width:
+                2px;
+
+            height:
+                parent.height;
+
+            background:
+                Theme.playhead;
+
+            opacity:
+                0.95;
+
+            z:
+                10;
 
 
-    // =====================================================
-    // TOUCH AREA PRINCIPAL — tudo é tratado aqui
-    // =====================================================
+            Rectangle {
 
-    touch := TouchArea {
+                x:
+                    -2px;
 
-        x: 0;
-        y: 0;
+                y:
+                    0px;
 
-        width: parent.width;
-        height: parent.height;
+                width:
+                    6px;
 
-        enabled: !root.renaming;
+                height:
+                    parent.height;
 
-        mouse-cursor:
-            root.active-tool == 1 ? crosshair :
-            self.resizing ? ew-resize :
-            self.dragging ? pointer :
-            root.active-tool == 0 && root.on-edge ? ew-resize :
-            root.active-tool >= 3 ? none : pointer;
+                background:
+                    Theme.playhead;
 
-
-        double-clicked => {
-            if root.active-tool == 0 && self.mouse-y <= root.header-height {
-                root.rename-buffer = root.name;
-                root.renaming = true;
+                opacity:
+                    0.12;
             }
         }
 
 
+    // =====================================================
+    // TOUCH AREA
+    // =====================================================
+
+    touch := TouchArea {
+
+        x:
+            0px;
+
+        y:
+            0px;
+
+        width:
+            parent.width;
+
+        height:
+            parent.height;
+
+        enabled:
+            !root.renaming;
+
+
+        // =================================================
+        // CURSOR
+        // =================================================
+
+        mouse-cursor:
+
+            root.active-tool == 1
+                ? crosshair
+
+            : root.resizing
+                ? ew-resize
+
+            : root.dragging
+                ? pointer
+
+            : root.active-tool == 0
+                && root.on-edge
+                    ? ew-resize
+
+            : root.active-tool >= 3
+                ? none
+
+            : pointer;
+
+
+        // =================================================
+        // DOUBLE CLICK
+        // =================================================
+
+        double-clicked => {
+
+            if root.active-tool == 0
+                && self.mouse-y <= root.header-height {
+
+                root.rename-buffer =
+                    root.name;
+
+                root.renaming =
+                    true;
+            }
+        }
+
+
+        // =================================================
+        // POINTER
+        // =================================================
+
         pointer-event(event) => {
 
-            // ----- RIGHT CLICK: MENU DE CONTEXTO -----
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+            // =================================================
+            // RIGHT CLICK
+            // =================================================
+
+            if event.kind
+                    == PointerEventKind.down
+                && event.button
+                    == PointerEventButton.right {
 
                 ClipContextMenuState.clip-id =
                     root.clip-id;
@@ -468,98 +866,307 @@ export component TrackClip inherits Rectangle {
                 return;
             }
 
-            // ----- FERRAMENTA ERASER (2) -----
+
+            // =================================================
+            // ERASER
+            // =================================================
+
             if root.active-tool == 2 {
-                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                    root.clip-delete-requested(root.clip-id);
+
+                if event.kind
+                        == PointerEventKind.down
+                    && event.button
+                        == PointerEventButton.left {
+
+                    root.clip-delete-requested(
+                        root.clip-id
+                    );
                 }
+
                 return;
             }
 
-            // ----- FERRAMENTA SLICE (1) -----
+
+            // =================================================
+            // SLICE
+            // =================================================
+
             if root.active-tool == 1 {
-                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                    root.slice-requested(root.clip-id, root.slice-preview-x / root.px-per-beat);
-                } else if event.kind == PointerEventKind.move {
-                    root.slice-preview-x = self.mouse-x;
+
+                if event.kind
+                        == PointerEventKind.move {
+
+                    root.slice-preview-x =
+                        self.mouse-x;
                 }
+
+                if event.kind
+                        == PointerEventKind.down
+                    && event.button
+                        == PointerEventButton.left {
+
+                    let slice-x =
+                        self.mouse-x;
+
+                    let slice-px =
+                        slice-x / 1px;
+
+                    let ppb =
+                        root.px-per-beat / 1px;
+
+                    let slice-beat =
+                        slice-px / ppb;
+
+                    if slice-beat > 0.0
+                        && slice-beat < root.len {
+
+                        root.slice-requested(
+                            root.clip-id,
+                            slice-beat
+                        );
+                    }
+                }
+
                 return;
             }
 
-            // ----- FERRAMENTA SELECT (0) -----
-            if root.active-tool == 0 && !root.renaming {
 
-                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+            // =================================================
+            // SELECT
+            // =================================================
 
-                    root.clicked(root.clip-id);
+            if root.active-tool == 0
+                && !root.renaming {
 
-                    // Copia p/ clipboard (paste ao clicar em área vazia, estilo FL Studio)
-                    root.clip-copy-requested(root.clip-id);
+
+                // =============================================
+                // DOWN
+                // =============================================
+
+                if event.kind
+                        == PointerEventKind.down
+                    && event.button
+                        == PointerEventButton.left {
+
+
+                    root.clicked(
+                        root.clip-id
+                    );
+
+
+                    // =========================================
+                    // RESIZE
+                    // =========================================
 
                     if root.on-edge {
-                        self.resize-side = root.on-left-edge ? -1 : 1;
-                        self.resize-start-abs-x = self.mouse-x + self.absolute-position.x;
-                        self.resize-start-beat = root.beat;
-                        self.resize-start-len = root.len;
-                        self.resizing = true;
-                        
-                        root.clip-resize-started(root.clip-id, self.resize-side);
-                    } else {
-                        self.drag-start-abs-x = self.mouse-x + self.absolute-position.x;
-                        self.drag-start-abs-y = self.mouse-y + self.absolute-position.y;
-                        self.drag-start-beat = root.beat;
-                        self.dragging = true;
-                        
-                        root.clip-move-started(root.clip-id, root.beat);
-                    }
-                } 
-                else if event.kind == PointerEventKind.move {
-                    
-                    let current-abs-x = self.mouse-x + self.absolute-position.x;
-                    let current-abs-y = self.mouse-y + self.absolute-position.y;
 
-                    if self.resizing {
-                        let dx = current-abs-x - self.resize-start-abs-x;
-                        let delta_beats = dx / root.px-per-beat;
-                        
-                        root.clip-resize-delta(root.clip-id, self.resize-side, delta_beats);
-                    } 
-                    else if self.dragging {
-                        let dx = current-abs-x - self.drag-start-abs-x;
-                        let dy = current-abs-y - self.drag-start-abs-y;
-                        
-                        let delta_beats = dx / root.px-per-beat;
-                        let delta_tracks = Math.round(dy / root.row-height);
+                        root.resize-side =
+                            root.on-left-edge
+                                ? -1
+                                : 1;
 
-                        root.clip-move-delta(root.clip-id, delta_beats, delta_tracks);
+                        root.resize-start-x =
+                            self.mouse-x;
+
+                        root.resize-start-beat =
+                            root.beat;
+
+                        root.resize-start-len =
+                            root.len;
+
+                        root.resizing =
+                            true;
+
+                        root.clip-resize-started(
+                            root.clip-id,
+                            root.resize-side
+                        );
                     }
-                } 
-                else if event.kind == PointerEventKind.up {
-                    
-                    if self.resizing {
-                        self.resizing = false;
-                        root.clip-resize-finished(root.clip-id);
+
+
+                    // =========================================
+                    // DRAG
+                    // =========================================
+
+                    else {
+
+                        root.drag-start-x =
+                            self.mouse-x;
+
+                        root.drag-start-y =
+                            self.mouse-y;
+
+                        root.drag-start-beat =
+                            root.beat;
+
+                        root.drag-start-track =
+                            root.track-index;
+
+                        root.dragging =
+                            true;
+
+                        root.clip-move-started(
+                            root.clip-id,
+                            root.beat
+                        );
                     }
-                    if self.dragging {
-                        self.dragging = false;
-                        root.clip-move-finished(root.clip-id);
+                }
+
+
+                // =============================================
+                // MOVE
+                // =============================================
+
+                else if event.kind
+                            == PointerEventKind.move {
+
+
+                    // =========================================
+                    // RESIZE
+                    // =========================================
+
+                    if root.resizing {
+
+                        let dx-px =
+                            (
+                                self.mouse-x
+                                - root.resize-start-x
+                            ) / 1px;
+
+                        let ppb =
+                            root.px-per-beat / 1px;
+
+                        let delta-beats =
+                            dx-px / ppb;
+
+
+                        // =====================================
+                        // DIREITA
+                        // =====================================
+
+                        if root.resize-side > 0 {
+
+                            let new-len =
+                                root.resize-start-len
+                                + delta-beats;
+
+                            let final-len =
+                                new-len < root.minimum-clip-length
+                                    ? root.minimum-clip-length
+                                    : new-len;
+
+                            let actual-delta =
+                                final-len
+                                - root.resize-start-len;
+
+                            root.clip-resize-delta(
+                                root.clip-id,
+                                root.resize-side,
+                                actual-delta
+                            );
+                        }
+
+
+                        // =====================================
+                        // ESQUERDA
+                        // =====================================
+
+                        else {
+
+                            let max-negative =
+                                root.resize-start-len
+                                - root.minimum-clip-length;
+
+                            let limited-delta =
+                                delta-beats < -max-negative
+                                    ? -max-negative
+                                    : delta-beats;
+
+                            root.clip-resize-delta(
+                                root.clip-id,
+                                root.resize-side,
+                                limited-delta
+                            );
+                        }
+                    }
+
+
+                    // =========================================
+                    // DRAG
+                    // =========================================
+
+                    else if root.dragging {
+
+                        let dx-px =
+                            (
+                                self.mouse-x
+                                - root.drag-start-x
+                            ) / 1px;
+
+                        let ppb =
+                            root.px-per-beat / 1px;
+
+                        let delta-beats =
+                            dx-px / ppb;
+
+
+                        let dy-px =
+                            (
+                                self.mouse-y
+                                - root.drag-start-y
+                            ) / 1px;
+
+                        let row-height-px =
+                            root.row-height / 1px;
+
+                        let delta-tracks =
+                            Math.round(
+                                dy-px / row-height-px
+                            );
+
+
+                        root.clip-move-delta(
+                            root.clip-id,
+                            delta-beats,
+                            delta-tracks
+                        );
+                    }
+                }
+
+
+                // =============================================
+                // UP
+                // =============================================
+
+                else if event.kind
+                            == PointerEventKind.up {
+
+
+                    if root.resizing {
+
+                        root.resizing =
+                            false;
+
+                        root.resize-side =
+                            0;
+
+                        root.clip-resize-finished(
+                            root.clip-id
+                        );
+                    }
+
+
+                    if root.dragging {
+
+                        root.dragging =
+                            false;
+
+                        root.clip-move-finished(
+                            root.clip-id
+                        );
                     }
                 }
             }
         }
-
-
-        // ==================== ESTADOS PRIVADOS ====================
-
-        private property <length> drag-start-abs-x: 0px;
-        private property <length> drag-start-abs-y: 0px;
-        private property <float> drag-start-beat: 0.0;
-        private property <bool> dragging: false;
-
-        private property <int> resize-side: 0;      
-        private property <length> resize-start-abs-x: 0px;
-        private property <float> resize-start-beat: 0.0;
-        private property <float> resize-start-len: 0.0;
-        private property <bool> resizing: false;
     }
 }
