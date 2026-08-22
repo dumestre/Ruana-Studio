@@ -113,6 +113,9 @@ export component Timeline inherits Rectangle {
     callback clip-delete-requested(int);
     callback clip-rename-requested(int, string);
     callback clip-color-cycle-requested(int);
+    callback clip-copy-requested(int);
+    // Clique em área vazia → cola cópia do clipboard (beat, track)
+    callback paste-requested(float, int);
 
 
     // =====================================================
@@ -242,14 +245,52 @@ export component Timeline inherits Rectangle {
             property <length> drag-start-y: 0px;
             property <length> drag-start-scroll-x: 0px;
             property <length> drag-start-scroll-y: 0px;
-
-            clicked => {
-                if root.active-tool == 0 {
-                    root.selected-clip = -1;
-                }
-            }
+            property <bool> left-pressed: false;
 
             pointer-event(event) => {
+
+                // ----- LEFT CLICK EM ÁREA VAZIA -----
+                // Down: deseleciona. Up: cola cópia do clipboard na
+                // posição clicada (estilo FL Studio), se houver clip.
+                if event.button == PointerEventButton.left {
+
+                    if event.kind == PointerEventKind.down {
+                        self.left-pressed = true;
+                        if root.active-tool == 0 {
+                            root.selected-clip = -1;
+                        }
+                    }
+                    else if event.kind == PointerEventKind.up && self.left-pressed {
+                        self.left-pressed = false;
+                        if root.active-tool == 0 {
+                            let content-y =
+                                self.mouse-y
+                                + root.scroll-y;
+
+                            let track =
+                                Math.floor(
+                                    (content-y - root.ruler-height)
+                                    / root.row-height
+                                );
+
+                            if track >= 0 {
+                                let content-x =
+                                    self.mouse-x
+                                    + root.scroll-x;
+
+                                let beat =
+                                    Math.floor(
+                                        content-x / root.px-per-beat
+                                    );
+
+                                root.paste-requested(
+                                    beat,
+                                    track
+                                );
+                            }
+                        }
+                    }
+                }
 
                 if event.kind == PointerEventKind.down
                     && event.button == PointerEventButton.middle {
@@ -656,6 +697,10 @@ export component Timeline inherits Rectangle {
 
                     clip-color-cycle-requested(id) => {
                         root.clip-color-cycle-requested(id);
+                    }
+
+                    clip-copy-requested(id) => {
+                        root.clip-copy-requested(id);
                     }
                 }
             }

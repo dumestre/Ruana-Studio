@@ -1,0 +1,246 @@
+import { Theme } from "../theme.slint";
+
+export component SamplerWaveform inherits Rectangle {
+
+    in property <[float]> peaks: [];
+    in property <color> waveform-color: Theme.clip-audio;
+
+    in-out property <float> start-position: 0.0;
+    in-out property <float> end-position: 1.0;
+    in-out property <float> playhead-position: 0.0;
+
+    in property <bool> playing: false;
+    in property <bool> hovered: false;
+    in property <bool> sample-loaded: false;
+
+    private property <float> waveform-height: 0.90;
+
+    background: Theme.base;
+    clip: true;
+
+    // ============================================================
+    // GRID
+    // ============================================================
+
+    Rectangle {
+        x: 0;
+        y: parent.height * 0.25;
+        width: parent.width;
+        height: 1px;
+        background: Theme.grid-sub;
+    }
+
+    Rectangle {
+        x: 0;
+        y: parent.height * 0.50;
+        width: parent.width;
+        height: 1px;
+        background: Theme.grid-line;
+    }
+
+    Rectangle {
+        x: 0;
+        y: parent.height * 0.75;
+        width: parent.width;
+        height: 1px;
+        background: Theme.grid-sub;
+    }
+
+    // ============================================================
+    // LINHA CENTRAL
+    // ============================================================
+
+    Rectangle {
+        x: 0;
+        y: (parent.height - 1px) / 2;
+        width: parent.width;
+        height: 1px;
+        background: root.waveform-color;
+        opacity: 0.30;
+    }
+
+    // ============================================================
+    // WAVEFORM
+    // ============================================================
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        background: transparent;
+        clip: true;
+
+        if root.sample-loaded : Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            background: transparent;
+
+            for peak[i] in root.peaks : Rectangle {
+                x: i * (
+                    parent.width /
+                    Math.max(1, root.peaks.length)
+                );
+
+                y: (
+                    parent.height -
+                    peak *
+                    parent.height *
+                    root.waveform-height
+                ) / 2;
+
+                width: max(
+                    1px,
+                    parent.width /
+                    Math.max(1, root.peaks.length)
+                );
+
+                height: max(
+                    1px,
+                    peak *
+                    parent.height *
+                    root.waveform-height
+                );
+
+                background: root.waveform-color;
+            }
+        }
+    }
+
+    // ============================================================
+    // ÁREA FORA DA SELEÇÃO - ESQUERDA
+    // ============================================================
+
+    if root.sample-loaded : Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width * root.start-position;
+        height: parent.height;
+        background: Theme.base;
+        opacity: 0.55;
+    }
+
+    // ============================================================
+    // ÁREA FORA DA SELEÇÃO - DIREITA
+    // ============================================================
+
+    if root.sample-loaded : Rectangle {
+        x: parent.width * root.end-position;
+        y: 0;
+        width: parent.width * (1.0 - root.end-position);
+        height: parent.height;
+        background: Theme.base;
+        opacity: 0.55;
+    }
+
+    // ============================================================
+    // MARCADOR START
+    // ============================================================
+
+    if root.sample-loaded : Rectangle {
+        x: parent.width * root.start-position - 1px;
+        y: 0;
+        width: 2px;
+        height: parent.height;
+        background: Theme.accent;
+    }
+
+    // ============================================================
+    // HANDLE START
+    // ============================================================
+
+    if root.sample-loaded : Rectangle {
+        x: parent.width * root.start-position - 4px;
+        y: 0;
+        width: 8px;
+        height: 10px;
+        background: Theme.accent;
+        border-radius: 2px;
+    }
+
+    // ============================================================
+    // MARCADOR END
+    // ============================================================
+
+    if root.sample-loaded : Rectangle {
+        x: parent.width * root.end-position - 1px;
+        y: 0;
+        width: 2px;
+        height: parent.height;
+        background: Theme.accent;
+    }
+
+    // ============================================================
+    // HANDLE END
+    // ============================================================
+
+    if root.sample-loaded : Rectangle {
+        x: parent.width * root.end-position - 4px;
+        y: 0;
+        width: 8px;
+        height: 10px;
+        background: Theme.accent;
+        border-radius: 2px;
+    }
+
+    // ============================================================
+    // PLAYHEAD
+    // ============================================================
+
+    if root.sample-loaded : Rectangle {
+        x: parent.width * root.playhead-position - 1px;
+        y: 0;
+        width: 2px;
+        height: parent.height;
+        background: Theme.playhead;
+        opacity: root.playing ? 1.0 : 0.65;
+    }
+
+    // ============================================================
+    // PLAYHEAD HANDLE
+    // ============================================================
+
+    if root.sample-loaded : Rectangle {
+        x: parent.width * root.playhead-position - 4px;
+        y: 0;
+        width: 8px;
+        height: 5px;
+        background: Theme.playhead;
+    }
+
+    // ============================================================
+    // HOVER
+    // ============================================================
+
+    if root.hovered : Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        background: #FFFFFF;
+        opacity: 0.06;
+    }
+
+    // ============================================================
+    // EMPTY
+    // ============================================================
+
+    if !root.sample-loaded : Text {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+
+        text: "DROP SAMPLE HERE";
+
+        color: Theme.text-dim;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+
+        font-size: 10px;
+        font-weight: 600;
+    }
+}

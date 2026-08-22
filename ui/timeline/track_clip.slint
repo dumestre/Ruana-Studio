@@ -79,6 +79,7 @@ export component TrackClip inherits Rectangle {
     callback clip-delete-requested(int);          // id
     callback clip-rename-requested(int, string);  // id, new-name
     callback clip-color-cycle-requested(int);     // id → incrementa paleta
+    callback clip-copy-requested(int);            // id → copia p/ clipboard
 
 
     // =====================================================
@@ -160,7 +161,7 @@ export component TrackClip inherits Rectangle {
 
     border-width:
         root.selected
-            ? 3px
+            ? 6px
             : 1px;
 
     border-color:
@@ -442,9 +443,9 @@ export component TrackClip inherits Rectangle {
 
         pointer-event(event) => {
 
-            // ----- RIGHT CLICK: COLOR CYCLE -----
+            // ----- RIGHT CLICK: DELETE -----
             if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
-                root.clip-color-cycle-requested(root.clip-id);
+                root.clip-delete-requested(root.clip-id);
                 return;
             }
 
@@ -470,8 +471,11 @@ export component TrackClip inherits Rectangle {
             if root.active-tool == 0 && !root.renaming {
 
                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                    
+
                     root.clicked(root.clip-id);
+
+                    // Copia p/ clipboard (paste ao clicar em área vazia, estilo FL Studio)
+                    root.clip-copy-requested(root.clip-id);
 
                     if root.on-edge {
                         self.resize-side = root.on-left-edge ? -1 : 1;

@@ -70,6 +70,7 @@ export component TrackRow inherits Rectangle {
     callback clip-delete-requested(int);
     callback clip-rename-requested(int, string);
     callback clip-color-cycle-requested(int);
+    callback clip-copy-requested(int);
 
 
     // =====================================================
@@ -288,6 +289,10 @@ export component TrackRow inherits Rectangle {
 
         clip-color-cycle-requested(id) => {
             root.clip-color-cycle-requested(id);
+        }
+
+        clip-copy-requested(id) => {
+            root.clip-copy-requested(id);
         }
     }
 }

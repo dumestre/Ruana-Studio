@@ -96,6 +96,8 @@ export component Workspace inherits Rectangle {
     callback clip-delete-requested(int);
     callback clip-rename-requested(int, string);
     callback clip-color-cycle-requested(int);
+    callback clip-copy-requested(int);
+    callback clip-paste-requested(float, int);
     callback mixer-param-changed(int, string, float);
     callback mixer-insert-added(int);
     callback mixer-insert-removed(int, int);
@@ -244,6 +246,8 @@ export component Workspace inherits Rectangle {
                             clip-delete-requested(id) => { root.clip-delete-requested(id); }
                             clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
                             clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
+                            clip-copy-requested(id) => { root.clip-copy-requested(id); }
+                            paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }
                             Rectangle { min-width: 16px;
                                 x: 273px;
                                 y: 77px; min-height: 16px; }

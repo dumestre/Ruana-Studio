@@ -1241,6 +1241,40 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // Clipboard interno de clips: clique esquerdo copia, clique em
+    // área vazia da timeline cola uma cópia na posição clicada.
+    let clip_clipboard: Rc<RefCell<Option<Clip>>> = Rc::new(RefCell::new(None));
+    {
+        let project = project.clone();
+        let clipboard = clip_clipboard.clone();
+        ui.on_clip_copy_requested(move |id| {
+            if let Some(clip) = project.borrow().clips.iter().find(|c| c.id as i32 == id) {
+                *clipboard.borrow_mut() = Some(clip.clone());
+            }
+        });
+    }
+    {
+        let project = project.clone();
+        let clipboard = clip_clipboard.clone();
+        ui.on_clip_paste_requested(move |beat, track| {
+            let Some(src) = clipboard.borrow().clone() else {
+                return;
+            };
+            let mut proj = project.borrow_mut();
+            let track_count = proj.tracks.len().max(1);
+            let track_id = (track.max(0) as usize).min(track_count - 1) as u64;
+            let start = beat.max(0.0).round() as u32;
+            proj.add_clip_with_path(
+                track_id,
+                src.kind,
+                src.name.as_str(),
+                start,
+                src.length_beats,
+                src.file_path.clone(),
+            );
+        });
+    }
+
     // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.
     {
         let p = project.clone();

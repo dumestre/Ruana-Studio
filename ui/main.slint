@@ -230,6 +230,8 @@ export component MainWindow inherits Window {
     callback clip-delete-requested(int);
     callback clip-rename-requested(int, string);
     callback clip-color-cycle-requested(int);
+    callback clip-copy-requested(int);
+    callback clip-paste-requested(float, int);
 
     callback undo-requested;
 
@@ -575,6 +577,8 @@ export component MainWindow inherits Window {
         clip-delete-requested(id) => { root.clip-delete-requested(id); }
         clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
         clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
+        clip-copy-requested(id) => { root.clip-copy-requested(id); }
+        clip-paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }
         mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
         mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
         mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
