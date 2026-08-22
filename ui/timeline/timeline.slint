@@ -136,6 +136,9 @@ export component Timeline inherits Rectangle {
 
     in property <int> bpm: 120;
 
+    // Follow playhead durante playback (ícone na toolbar)
+    in property <bool> follow-playhead: true;
+
 
     // =====================================================
     // DIMENSÕES
@@ -278,10 +281,9 @@ export component Timeline inherits Rectangle {
                                     self.mouse-x
                                     + root.scroll-x;
 
+                                // Beat cru — o snap (ou não) é decidido no Rust
                                 let beat =
-                                    Math.floor(
-                                        content-x / root.px-per-beat
-                                    );
+                                    content-x / root.px-per-beat;
 
                                 root.paste-requested(
                                     beat,
@@ -821,7 +823,7 @@ export component Timeline inherits Rectangle {
 
     Timer {
         interval: 16ms;
-        running: root.playing;
+        running: root.playing && root.follow-playhead;
 
         triggered() => {
             let px = root.playhead-x;

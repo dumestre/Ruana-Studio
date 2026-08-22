@@ -1,0 +1,271 @@
+import { Theme } from "../theme.slint";
+import { Knob } from "../components/knob.slint";
+import { Button } from "../components/button.slint";
+
+export component SamplerPlayback inherits Rectangle {
+
+    // ============================================================
+    // POSIÇÕES
+    // ============================================================
+
+    in-out property <float> start-position: 0.0;
+    in-out property <float> end-position: 1.0;
+
+    in-out property <float> loop-start: 0.0;
+    in-out property <float> loop-end: 1.0;
+
+    // ============================================================
+    // FADE
+    // ============================================================
+
+    in-out property <float> fade-in: 0.0;
+    in-out property <float> fade-out: 0.0;
+
+    // ============================================================
+    // LOOP
+    // ============================================================
+
+    in-out property <bool> loop-enabled: false;
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
+
+    callback start-position-changed(float);
+    callback end-position-changed(float);
+
+    callback loop-start-changed(float);
+    callback loop-end-changed(float);
+
+    callback fade-in-changed(float);
+    callback fade-out-changed(float);
+
+    callback loop-enabled-changed(bool);
+
+    // ============================================================
+    // FUNDO
+    // ============================================================
+
+    background: Theme.surface-high;
+
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    // ============================================================
+    // TÍTULO
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 5px;
+
+        width: parent.width - 16px;
+        height: 18px;
+
+        text: "PLAYBACK";
+
+        color: Theme.text-dim;
+
+        font-size: 9px;
+        font-weight: 600;
+
+        vertical-alignment: center;
+    }
+
+    // ============================================================
+    // DIVISÓRIA
+    // ============================================================
+
+    Rectangle {
+        x: 8px;
+        y: 27px;
+
+        width: parent.width - 16px;
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+    // ============================================================
+    // START
+    // ============================================================
+
+    Knob {
+        x: 8px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.start-position;
+
+        caption: "START";
+
+        display-value: Math.round(root.start-position * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.start-position = min(value, root.end-position);
+            root.start-position-changed(root.start-position);
+        }
+    }
+
+    // ============================================================
+    // END
+    // ============================================================
+
+    Knob {
+        x: 64px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.end-position;
+
+        caption: "END";
+
+        display-value: Math.round(root.end-position * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.end-position = max(value, root.start-position);
+            root.end-position-changed(root.end-position);
+        }
+    }
+
+    // ============================================================
+    // LOOP START
+    // ============================================================
+
+    Knob {
+        x: 120px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.loop-start;
+
+        caption: "L START";
+
+        display-value: Math.round(root.loop-start * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.loop-start = min(value, root.loop-end);
+            root.loop-start-changed(root.loop-start);
+        }
+    }
+
+    // ============================================================
+    // LOOP END
+    // ============================================================
+
+    Knob {
+        x: 176px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.loop-end;
+
+        caption: "L END";
+
+        display-value: Math.round(root.loop-end * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.loop-end = max(value, root.loop-start);
+            root.loop-end-changed(root.loop-end);
+        }
+    }
+
+    // ============================================================
+    // FADE IN
+    // ============================================================
+
+    Knob {
+        x: 232px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.fade-in;
+
+        caption: "FADE IN";
+
+        display-value: Math.round(root.fade-in * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.fade-in = value;
+            root.fade-in-changed(value);
+        }
+    }
+
+    // ============================================================
+    // FADE OUT
+    // ============================================================
+
+    Knob {
+        x: 288px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.fade-out;
+
+        caption: "FADE OUT";
+
+        display-value: Math.round(root.fade-out * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.fade-out = value;
+            root.fade-out-changed(value);
+        }
+    }
+
+    // ============================================================
+    // LOOP BUTTON
+    // ============================================================
+
+    Button {
+        x: 344px;
+        y: 48px;
+
+        width: 54px;
+        height: 26px;
+
+        text: "LOOP";
+
+        toggled: root.loop-enabled;
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.loop-enabled = !root.loop-enabled;
+            root.loop-enabled-changed(root.loop-enabled);
+        }
+    }
+}

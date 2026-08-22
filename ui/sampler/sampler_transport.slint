@@ -1,0 +1,193 @@
+import { Theme } from "../theme.slint";
+
+export component SamplerTransport inherits Rectangle {
+
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
+    in-out property <bool> playing: false;
+    in-out property <bool> loop-enabled: false;
+    in-out property <bool> reverse-enabled: false;
+    in-out property <bool> one-shot: true;
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
+
+    private property <length> control-height: 36px;
+    private property <length> button-gap: 4px;
+
+    height: control-height;
+
+    background: Theme.surface-high;
+
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    // ============================================================
+    // PLAY / STOP
+    // ============================================================
+
+    Rectangle {
+        x: 4px;
+        y: 4px;
+
+        width: 58px;
+        height: 28px;
+
+        background: root.playing
+            ? Theme.accent
+            : Theme.surface;
+
+        border-radius: 3px;
+
+        Text {
+            width: parent.width;
+            height: parent.height;
+
+            text: root.playing ? "STOP" : "PLAY";
+
+            color: root.playing
+                ? Theme.on-accent
+                : Theme.text-primary;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+
+            font-size: 9px;
+            font-weight: 600;
+        }
+
+        TouchArea {
+            clicked => {
+                root.playing = !root.playing;
+            }
+        }
+    }
+
+    // ============================================================
+    // LOOP
+    // ============================================================
+
+    Rectangle {
+        x: 66px;
+        y: 4px;
+
+        width: 58px;
+        height: 28px;
+
+        background: root.loop-enabled
+            ? Theme.accent
+            : Theme.surface;
+
+        border-radius: 3px;
+
+        Text {
+            width: parent.width;
+            height: parent.height;
+
+            text: "LOOP";
+
+            color: root.loop-enabled
+                ? Theme.on-accent
+                : Theme.text-primary;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+
+            font-size: 9px;
+            font-weight: 600;
+        }
+
+        TouchArea {
+            clicked => {
+                root.loop-enabled = !root.loop-enabled;
+            }
+        }
+    }
+
+    // ============================================================
+    // REVERSE
+    // ============================================================
+
+    Rectangle {
+        x: 128px;
+        y: 4px;
+
+        width: 58px;
+        height: 28px;
+
+        background: root.reverse-enabled
+            ? Theme.accent
+            : Theme.surface;
+
+        border-radius: 3px;
+
+        Text {
+            width: parent.width;
+            height: parent.height;
+
+            text: "REV";
+
+            color: root.reverse-enabled
+                ? Theme.on-accent
+                : Theme.text-primary;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+
+            font-size: 9px;
+            font-weight: 600;
+        }
+
+        TouchArea {
+            clicked => {
+                root.reverse-enabled =
+                    !root.reverse-enabled;
+            }
+        }
+    }
+
+    // ============================================================
+    // ONE SHOT
+    // ============================================================
+
+    Rectangle {
+        x: 190px;
+        y: 4px;
+
+        width: 66px;
+        height: 28px;
+
+        background: root.one-shot
+            ? Theme.accent
+            : Theme.surface;
+
+        border-radius: 3px;
+
+        Text {
+            width: parent.width;
+            height: parent.height;
+
+            text: "ONE SHOT";
+
+            color: root.one-shot
+                ? Theme.on-accent
+                : Theme.text-primary;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+
+            font-size: 9px;
+            font-weight: 600;
+        }
+
+        TouchArea {
+            clicked => {
+                root.one-shot = !root.one-shot;
+            }
+        }
+    }
+}

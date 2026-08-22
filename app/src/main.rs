@@ -1100,11 +1100,15 @@ fn main() -> Result<(), slint::PlatformError> {
         let move_track_deltas = move_track_deltas.clone();
         let ui_weak = ui.as_weak();
         ui.on_clip_move_delta(move |id, delta_beats, delta_tracks| {
+            // Snap ON → trava na grade; OFF → movimento livre.
+            let snap = ui_weak.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
+            let d = if snap { delta_beats.round() } else { delta_beats };
+
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(mut clip) = clips_model.row_data(i) {
                     let originals = move_originals.borrow();
                     if let Some(&(orig_beat, _orig_track)) = originals.get(&id) {
-                        clip.beat = (orig_beat + delta_beats).max(0.0);
+                        clip.beat = (orig_beat + d).max(0.0);
                         clips_model.set_row_data(i, clip);
                     }
                     drop(originals);
@@ -1141,11 +1145,21 @@ fn main() -> Result<(), slint::PlatformError> {
                     if let Some(mut clip) = clips_model.row_data(i) {
                         let num_tracks = project.borrow().tracks.len() as i32;
                         clip.track_index = (orig_track + delta_tracks).max(0).min(num_tracks - 1);
+                        let free_beat = clip.beat;
+                        let snap = ui_weak.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
                         let new_beat = clip.beat.round().max(0.0) as u32;
                         let track_id = clip.track_index as u64;
                         clips_model.set_row_data(i, clip);
                         let mut proj = project.borrow_mut();
                         proj.move_clip(id as u64, track_id, new_beat);
+                        // Snap OFF → mantém a posição livre no visual
+                        // (o core persiste arredondado ao beat mais próximo).
+                        if !snap {
+                            if let Some(mut restored) = clips_model.row_data(i) {
+                                restored.beat = free_beat;
+                                clips_model.set_row_data(i, restored);
+                            }
+                        }
                     }
                 }
             }
@@ -1168,6 +1182,7 @@ fn main() -> Result<(), slint::PlatformError> {
         // resize-delta: feedback visual imediato (atualiza beat + len no modelo).
         let clips_model = clips_model.clone();
         let project_snap = project.clone();
+        let ui_snap = ui.as_weak();
         ui.on_clip_resize_delta(move |id, side, delta| {
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(mut clip) = clips_model.row_data(i) {
@@ -1178,15 +1193,18 @@ fn main() -> Result<(), slint::PlatformError> {
                         .find(|c| c.id as i32 == id)
                         .cloned();
                     if let Some(core) = core_clip {
+                        // Snap ON → delta trava na grade; OFF → livre.
+                        let snap = ui_snap.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
+                        let d = if snap { delta.round() } else { delta };
                         if side < 0 {
                             // borda esquerda: move start e reduz comprimento
-                            let new_beat = (core.start_beat as f32 + delta).max(0.0);
-                            let new_len = (core.length_beats as f32 - delta).max(0.5);
+                            let new_beat = (core.start_beat as f32 + d).max(0.0);
+                            let new_len = (core.length_beats as f32 - d).max(0.5);
                             clip.beat = new_beat;
                             clip.len = new_len;
                         } else {
                             // borda direita: estende/encolhe comprimento
-                            let new_len = (core.length_beats as f32 + delta).max(0.5);
+                            let new_len = (core.length_beats as f32 + d).max(0.5);
                             clip.len = new_len;
                         }
                         clips_model.set_row_data(i, clip);
@@ -1200,13 +1218,24 @@ fn main() -> Result<(), slint::PlatformError> {
         let project = project.clone();
         let clips_model = clips_model.clone();
         let resize_originals = resize_originals.clone();
+        let ui_rs = ui.as_weak();
         ui.on_clip_resize_finished(move |id| {
             resize_originals.borrow_mut().remove(&id);
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(clip) = clips_model.row_data(i) {
+                    let snap = ui_rs.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
+                    let (free_beat, free_len) = (clip.beat, clip.len);
                     let new_start = clip.beat.round().max(0.0) as u32;
                     let new_len = clip.len.round().max(1.0) as u32;
                     project.borrow_mut().resize_clip(id as u64, new_start, new_len);
+                    // Snap OFF → mantém tamanho/posição livres no visual.
+                    if !snap {
+                        if let Some(mut restored) = clips_model.row_data(i) {
+                            restored.beat = free_beat;
+                            restored.len = free_len;
+                            clips_model.set_row_data(i, restored);
+                        }
+                    }
                 }
             }
         });
@@ -1256,14 +1285,22 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let project = project.clone();
         let clipboard = clip_clipboard.clone();
+        let ui_paste = ui.as_weak();
         ui.on_clip_paste_requested(move |beat, track| {
             let Some(src) = clipboard.borrow().clone() else {
                 return;
             };
+            // Snap ON → cola no início da célula; OFF → onde o mouse clicou.
+            let snap = ui_paste.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
             let mut proj = project.borrow_mut();
             let track_count = proj.tracks.len().max(1);
             let track_id = (track.max(0) as usize).min(track_count - 1) as u64;
-            let start = beat.max(0.0).round() as u32;
+            let start = if snap {
+                beat.floor()
+            } else {
+                beat.round()
+            }
+            .max(0.0) as u32;
             proj.add_clip_with_path(
                 track_id,
                 src.kind,

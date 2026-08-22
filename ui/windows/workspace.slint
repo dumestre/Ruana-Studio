@@ -116,6 +116,11 @@ export component Workspace inherits Rectangle {
     in-out property <int> selected-tab: -1;
     in-out property <int> selected-clip: -1;
 
+    // SNAP / FOLLOW PLAYHEAD (estado vem da Toolbar; Timeline e
+    // Rust consomem via two-way binding com a MainWindow)
+    in-out property <bool> snap-enabled: true;
+    in-out property <bool> follow-playhead: true;
+
     callback float-toggle(int);
     callback tool-changed(int);
     callback timeline-bounds-changed(float, float, float, float);
@@ -128,6 +133,8 @@ export component Workspace inherits Rectangle {
         // TOOLBAR
         Toolbar {
             full-screen <=> root.full-screen;
+            snap-enabled <=> root.snap-enabled;
+            follow-enabled <=> root.follow-playhead;
 
             zoom-in => {
                 root.zoom-level = min(root.zoom-level + 0.25, 4.0);
@@ -228,6 +235,7 @@ export component Workspace inherits Rectangle {
                             drag-clip-id: root.drag-clip-id;
                             drag-track-offset: root.drag-track-offset;
                             drop-visible: root.drag-active && root.drag-inited && root.drag-over-timeline;
+                            follow-playhead: root.follow-playhead;
                             drop-x: root.drag-snap-beat * timeline.px-per-beat;
                             drop-track: root.drag-drop-track;
                             drop-len-beats: 4.0;

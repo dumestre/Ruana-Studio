@@ -99,6 +99,14 @@ export component MainWindow inherits Window {
     in-out property <int> active-tool:
         0;
 
+    // SNAP e FOLLOW PLAYHEAD (Toolbar ↔ Workspace ↔ janela).
+    // O Rust lê snap-enabled para aplicar/ignorar o grid.
+    in-out property <bool> snap-enabled:
+        true;
+
+    in-out property <bool> follow-playhead:
+        true;
+
 
     // =====================================================
     // PAINÉIS
@@ -513,6 +521,8 @@ export component MainWindow inherits Window {
 
     workspace := Workspace {
         full-screen <=> root.full-screen;
+        snap-enabled <=> root.snap-enabled;
+        follow-playhead <=> root.follow-playhead;
         zoom-level <=> root.zoom-level;
         playing <=> root.playing;
         transport-position <=> root.transport-position;

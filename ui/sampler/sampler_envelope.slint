@@ -1,0 +1,136 @@
+import { Theme } from "../theme.slint";
+import { Knob } from "../components/knob.slint";
+
+export component SamplerEnvelope inherits Rectangle {
+
+    in-out property <float> attack: 0.01;
+    in-out property <float> decay: 0.20;
+    in-out property <float> sustain: 0.80;
+    in-out property <float> release: 0.25;
+
+    callback attack-changed(float);
+    callback decay-changed(float);
+    callback sustain-changed(float);
+    callback release-changed(float);
+
+    background: Theme.surface-high;
+
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    Text {
+        x: 8px;
+        y: 5px;
+
+        width: parent.width - 16px;
+        height: 18px;
+
+        text: "AMP ENVELOPE";
+
+        color: Theme.text-dim;
+
+        font-size: 9px;
+        font-weight: 600;
+
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        x: 8px;
+        y: 27px;
+
+        width: parent.width - 16px;
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+    Knob {
+        x: 8px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.attack;
+
+        caption: "ATTACK";
+
+        display-value: Math.round(root.attack * 1000) + " ms";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.attack = value;
+            root.attack-changed(value);
+        }
+    }
+
+    Knob {
+        x: 64px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.decay;
+
+        caption: "DECAY";
+
+        display-value: Math.round(root.decay * 1000) + " ms";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.decay = value;
+            root.decay-changed(value);
+        }
+    }
+
+    Knob {
+        x: 120px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.sustain;
+
+        caption: "SUSTAIN";
+
+        display-value: Math.round(root.sustain * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.sustain = value;
+            root.sustain-changed(value);
+        }
+    }
+
+    Knob {
+        x: 176px;
+        y: 34px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.release;
+
+        caption: "RELEASE";
+
+        display-value: Math.round(root.release * 1000) + " ms";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.release = value;
+            root.release-changed(value);
+        }
+    }
+}

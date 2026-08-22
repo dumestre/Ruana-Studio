@@ -1,0 +1,302 @@
+import { Theme } from "../theme.slint";
+import { Knob, PanKnob } from "../components/knob.slint";
+import { Button } from "../components/button.slint";
+
+export component SamplerAmp inherits Rectangle {
+
+    // ============================================================
+    // PROPRIEDADES
+    // ============================================================
+
+    in-out property <float> volume: 0.75;
+    in-out property <float> pan: 0.5;
+    in-out property <float> stereo-width: 1.0;
+    in-out property <float> phase: 0.0;
+
+    in-out property <bool> muted: false;
+    in-out property <bool> solo: false;
+
+    callback volume-changed(float);
+    callback pan-changed(float);
+    callback stereo-width-changed(float);
+    callback phase-changed(float);
+    callback muted-changed(bool);
+    callback solo-changed(bool);
+
+    // ============================================================
+    // FUNDO
+    // ============================================================
+
+    background: Theme.surface-high;
+
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    // ============================================================
+    // TÍTULO
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 5px;
+
+        width: parent.width - 16px;
+        height: 18px;
+
+        text: "AMP";
+
+        color: Theme.text-dim;
+
+        font-size: 9px;
+        font-weight: 600;
+
+        vertical-alignment: center;
+    }
+
+    // ============================================================
+    // DIVISÓRIA
+    // ============================================================
+
+    Rectangle {
+        x: 8px;
+        y: 27px;
+
+        width: parent.width - 16px;
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+    // ============================================================
+    // VOLUME
+    // ============================================================
+
+    Knob {
+        x: 8px;
+        y: 36px;
+
+        width: 52px;
+        height: 68px;
+
+        value: root.volume;
+
+        caption: "VOLUME";
+
+        display-value:
+            Math.round(root.volume * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.volume = value;
+            root.volume-changed(value);
+        }
+    }
+
+    // ============================================================
+    // PAN
+    // ============================================================
+
+    PanKnob {
+        x: 68px;
+        y: 36px;
+
+        width: 52px;
+        height: 68px;
+
+        value: root.pan;
+
+        caption: "PAN";
+
+        display-value:
+            root.pan == 0.5
+                ? "C"
+                : (
+                    root.pan < 0.5
+                        ? "L "
+                            + Math.round(
+                                (0.5 - root.pan) * 200
+                            )
+                        : "R "
+                            + Math.round(
+                                (root.pan - 0.5) * 200
+                            )
+                );
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.pan = value;
+            root.pan-changed(value);
+        }
+    }
+
+    // ============================================================
+    // STEREO WIDTH
+    // ============================================================
+
+    Knob {
+        x: 128px;
+        y: 36px;
+
+        width: 52px;
+        height: 68px;
+
+        value: root.stereo-width;
+
+        caption: "WIDTH";
+
+        display-value:
+            Math.round(
+                root.stereo-width * 100
+            ) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.stereo-width = value;
+            root.stereo-width-changed(value);
+        }
+    }
+
+    // ============================================================
+    // PHASE
+    // ============================================================
+
+    Knob {
+        x: 188px;
+        y: 36px;
+
+        width: 52px;
+        height: 68px;
+
+        value: root.phase;
+
+        caption: "PHASE";
+
+        display-value:
+            Math.round(
+                root.phase * 180
+            ) + "°";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.phase = value;
+            root.phase-changed(value);
+        }
+    }
+
+    // ============================================================
+    // MUTE
+    // ============================================================
+
+    Button {
+        x: 248px;
+        y: 42px;
+
+        width: 48px;
+        height: 26px;
+
+        text: "M";
+
+        toggled: root.muted;
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.danger;
+        toggled-fg: Theme.text-primary;
+
+        clicked => {
+            root.muted = !root.muted;
+            root.muted-changed(root.muted);
+        }
+    }
+
+    // ============================================================
+    // SOLO
+    // ============================================================
+
+    Button {
+        x: 248px;
+        y: 74px;
+
+        width: 48px;
+        height: 26px;
+
+        text: "S";
+
+        toggled: root.solo;
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.solo = !root.solo;
+            root.solo-changed(root.solo);
+        }
+    }
+
+    // ============================================================
+    // GANHO
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 110px;
+
+        width: 232px;
+        height: 20px;
+
+        text:
+            "GAIN  "
+            + Math.round(
+                (root.volume - 0.75) * 48
+            )
+            + " dB";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        vertical-alignment: center;
+    }
+
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
+    Text {
+        x: 248px;
+        y: 108px;
+
+        width: 48px;
+        height: 20px;
+
+        text:
+            root.muted
+                ? "MUTED"
+                : root.solo
+                    ? "SOLO"
+                    : "ON";
+
+        color:
+            root.muted
+                ? Theme.danger
+                : root.solo
+                    ? Theme.accent
+                    : Theme.text-dim;
+
+        font-size: 7px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

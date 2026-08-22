@@ -1,0 +1,406 @@
+import { Theme } from "../theme.slint";
+import { Knob } from "../components/knob.slint";
+import { Button } from "../components/button.slint";
+
+export component SamplerModulation inherits Rectangle {
+
+    // ============================================================
+    // PROPRIEDADES
+    // ============================================================
+
+    in-out property <float> rate: 0.35;
+    in-out property <float> depth: 0.0;
+
+    in-out property <string> waveform: "SINE";
+    in-out property <string> destination: "PITCH";
+
+    in-out property <bool> enabled: false;
+    in-out property <bool> sync: false;
+
+    callback rate-changed(float);
+    callback depth-changed(float);
+    callback waveform-changed(string);
+    callback destination-changed(string);
+    callback enabled-changed(bool);
+    callback sync-changed(bool);
+
+    // ============================================================
+    // FUNDO
+    // ============================================================
+
+    background: Theme.surface-high;
+
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    // ============================================================
+    // TÍTULO
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 5px;
+
+        width: parent.width - 16px;
+        height: 18px;
+
+        text: "LFO";
+
+        color: Theme.text-dim;
+
+        font-size: 9px;
+        font-weight: 600;
+
+        vertical-alignment: center;
+    }
+
+    // ============================================================
+    // ON/OFF
+    // ============================================================
+
+    Button {
+        x: parent.width - 50px;
+        y: 4px;
+
+        width: 42px;
+        height: 20px;
+
+        text: "ON";
+
+        toggled: root.enabled;
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.enabled = !root.enabled;
+            root.enabled-changed(root.enabled);
+        }
+    }
+
+    // ============================================================
+    // DIVISÓRIA
+    // ============================================================
+
+    Rectangle {
+        x: 8px;
+        y: 27px;
+
+        width: parent.width - 16px;
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+    // ============================================================
+    // RATE
+    // ============================================================
+
+    Knob {
+        x: 8px;
+        y: 36px;
+
+        width: 54px;
+        height: 68px;
+
+        value: root.rate;
+
+        caption: "RATE";
+
+        display-value:
+            root.sync
+                ? (
+                    root.rate < 0.25
+                        ? "1/16"
+                        : root.rate < 0.50
+                            ? "1/8"
+                            : root.rate < 0.75
+                                ? "1/4"
+                                : "1/2"
+                )
+                : (
+                    Math.round(
+                        0.1 + root.rate * 19.9
+                    ) / 10
+                ) + " Hz";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.rate = value;
+            root.rate-changed(value);
+        }
+    }
+
+    // ============================================================
+    // DEPTH
+    // ============================================================
+
+    Knob {
+        x: 70px;
+        y: 36px;
+
+        width: 54px;
+        height: 68px;
+
+        value: root.depth;
+
+        caption: "DEPTH";
+
+        display-value:
+            Math.round(
+                root.depth * 100
+            ) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.depth = value;
+            root.depth-changed(value);
+        }
+    }
+
+    // ============================================================
+    // SYNC
+    // ============================================================
+
+    Button {
+        x: 132px;
+        y: 48px;
+
+        width: 54px;
+        height: 26px;
+
+        text: "SYNC";
+
+        toggled: root.sync;
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.sync = !root.sync;
+            root.sync-changed(root.sync);
+        }
+    }
+
+    // ============================================================
+    // DESTINO
+    // ============================================================
+
+    Text {
+        x: 198px;
+        y: 36px;
+
+        width: 60px;
+        height: 18px;
+
+        text: "DEST";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        vertical-alignment: center;
+    }
+
+    Button {
+        x: 198px;
+        y: 56px;
+
+        width: 52px;
+        height: 22px;
+
+        text: "PITCH";
+
+        toggled: root.destination == "PITCH";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.destination = "PITCH";
+            root.destination-changed("PITCH");
+        }
+    }
+
+    Button {
+        x: 254px;
+        y: 56px;
+
+        width: 52px;
+        height: 22px;
+
+        text: "FILTER";
+
+        toggled: root.destination == "FILTER";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.destination = "FILTER";
+            root.destination-changed("FILTER");
+        }
+    }
+
+    Button {
+        x: 198px;
+        y: 82px;
+
+        width: 52px;
+        height: 22px;
+
+        text: "AMP";
+
+        toggled: root.destination == "AMP";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.destination = "AMP";
+            root.destination-changed("AMP");
+        }
+    }
+
+    // ============================================================
+    // FORMA DE ONDA
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 110px;
+
+        width: 50px;
+        height: 18px;
+
+        text: "SHAPE";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        vertical-alignment: center;
+    }
+
+    Button {
+        x: 62px;
+        y: 106px;
+
+        width: 48px;
+        height: 22px;
+
+        text: "SINE";
+
+        toggled: root.waveform == "SINE";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.waveform = "SINE";
+            root.waveform-changed("SINE");
+        }
+    }
+
+    Button {
+        x: 114px;
+        y: 106px;
+
+        width: 48px;
+        height: 22px;
+
+        text: "TRI";
+
+        toggled: root.waveform == "TRI";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.waveform = "TRI";
+            root.waveform-changed("TRI");
+        }
+    }
+
+    Button {
+        x: 166px;
+        y: 106px;
+
+        width: 48px;
+        height: 22px;
+
+        text: "SAW";
+
+        toggled: root.waveform == "SAW";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.waveform = "SAW";
+            root.waveform-changed("SAW");
+        }
+    }
+
+    Button {
+        x: 218px;
+        y: 106px;
+
+        width: 48px;
+        height: 22px;
+
+        text: "SQR";
+
+        toggled: root.waveform == "SQR";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.waveform = "SQR";
+            root.waveform-changed("SQR");
+        }
+    }
+
+    // ============================================================
+    // INDICADOR
+    // ============================================================
+
+    Rectangle {
+        x: parent.width - 20px;
+        y: 30px;
+
+        width: 6px;
+        height: 6px;
+
+        background:
+            root.enabled
+                ? Theme.accent
+                : Theme.border;
+
+        border-radius: 3px;
+    }
+}

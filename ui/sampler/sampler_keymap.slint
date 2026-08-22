@@ -1,0 +1,355 @@
+import { Theme } from "../theme.slint";
+import { Knob } from "../components/knob.slint";
+import { Button } from "../components/button.slint";
+
+export component SamplerKeymap inherits Rectangle {
+
+    // ============================================================
+    // PROPRIEDADES
+    // ============================================================
+
+    in-out property <float> root-key: 0.5;
+    in-out property <float> low-key: 0.0;
+    in-out property <float> high-key: 1.0;
+
+    in-out property <float> low-velocity: 0.0;
+    in-out property <float> high-velocity: 1.0;
+
+    in-out property <bool> chromatic: true;
+
+    callback root-key-changed(float);
+    callback low-key-changed(float);
+    callback high-key-changed(float);
+
+    callback low-velocity-changed(float);
+    callback high-velocity-changed(float);
+
+    callback chromatic-changed(bool);
+
+    // ============================================================
+    // FUNDO
+    // ============================================================
+
+    background: Theme.surface-high;
+
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    // ============================================================
+    // TÍTULO
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 5px;
+
+        width: parent.width - 16px;
+        height: 18px;
+
+        text: "KEYMAP";
+
+        color: Theme.text-dim;
+
+        font-size: 9px;
+        font-weight: 600;
+
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        x: 8px;
+        y: 27px;
+
+        width: parent.width - 16px;
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+    // ============================================================
+    // TECLADO VISUAL
+    // ============================================================
+
+    Rectangle {
+        x: 8px;
+        y: 34px;
+
+        width: parent.width - 16px;
+        height: 44px;
+
+        background: Theme.base;
+
+        border-width: 1px;
+        border-color: Theme.border;
+        border-radius: 2px;
+
+        // --------------------------------------------------------
+        // TECLAS BRANCAS
+        // --------------------------------------------------------
+
+        for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]: Rectangle {
+            x: i * (parent.width / 16.0);
+
+            y: 0;
+
+            width: parent.width / 16.0 - 1px;
+
+            height: parent.height;
+
+            background: Theme.surface;
+
+            border-width: 1px;
+            border-color: Theme.border;
+        }
+
+        // --------------------------------------------------------
+        // TECLAS PRETAS
+        // --------------------------------------------------------
+
+        for i in [0, 1, 3, 4, 5, 7, 8, 10, 11, 12, 14]: Rectangle {
+            x: (i + 0.70) * (parent.width / 16.0);
+
+            y: 0;
+
+            width: parent.width / 16.0 * 0.58;
+
+            height: parent.height * 0.60;
+
+            background: Theme.base;
+
+            border-width: 1px;
+            border-color: Theme.border;
+        }
+
+        // --------------------------------------------------------
+        // ROOT KEY
+        // --------------------------------------------------------
+
+        Rectangle {
+            x: root.root-key * (parent.width - 1px);
+
+            y: 0;
+
+            width: 2px;
+
+            height: parent.height;
+
+            background: Theme.accent;
+        }
+
+        // --------------------------------------------------------
+        // LOW RANGE
+        // --------------------------------------------------------
+
+        Rectangle {
+            x: root.low-key * (parent.width - 1px);
+
+            y: parent.height - 4px;
+
+            width: 2px;
+
+            height: 4px;
+
+            background: Theme.warn;
+        }
+
+        // --------------------------------------------------------
+        // HIGH RANGE
+        // --------------------------------------------------------
+
+        Rectangle {
+            x: root.high-key * (parent.width - 1px);
+
+            y: parent.height - 4px;
+
+            width: 2px;
+
+            height: 4px;
+
+            background: Theme.warn;
+        }
+    }
+
+    // ============================================================
+    // ROOT KEY
+    // ============================================================
+
+    Knob {
+        x: 8px;
+        y: 86px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.root-key;
+
+        caption: "ROOT";
+
+        display-value:
+            Math.round(root.root-key * 127);
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.root-key = value;
+            root.root-key-changed(value);
+        }
+    }
+
+    // ============================================================
+    // LOW KEY
+    // ============================================================
+
+    Knob {
+        x: 64px;
+        y: 86px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.low-key;
+
+        caption: "LOW";
+
+        display-value:
+            Math.round(root.low-key * 127);
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.low-key = min(value, root.high-key);
+            root.low-key-changed(root.low-key);
+        }
+    }
+
+    // ============================================================
+    // HIGH KEY
+    // ============================================================
+
+    Knob {
+        x: 120px;
+        y: 86px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.high-key;
+
+        caption: "HIGH";
+
+        display-value:
+            Math.round(root.high-key * 127);
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.high-key = max(value, root.low-key);
+            root.high-key-changed(root.high-key);
+        }
+    }
+
+    // ============================================================
+    // LOW VELOCITY
+    // ============================================================
+
+    Knob {
+        x: 176px;
+        y: 86px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.low-velocity;
+
+        caption: "VEL LOW";
+
+        display-value:
+            Math.round(root.low-velocity * 127);
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.low-velocity = min(value, root.high-velocity);
+            root.low-velocity-changed(root.low-velocity);
+        }
+    }
+
+    // ============================================================
+    // HIGH VELOCITY
+    // ============================================================
+
+    Knob {
+        x: 232px;
+        y: 86px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.high-velocity;
+
+        caption: "VEL HIGH";
+
+        display-value:
+            Math.round(root.high-velocity * 127);
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.high-velocity = max(value, root.low-velocity);
+            root.high-velocity-changed(root.high-velocity);
+        }
+    }
+
+    // ============================================================
+    // CHROMATIC
+    // ============================================================
+
+    Button {
+        x: 288px;
+        y: 102px;
+
+        width: 76px;
+        height: 26px;
+
+        text: "CHROMATIC";
+
+        toggled: root.chromatic;
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.chromatic = !root.chromatic;
+            root.chromatic-changed(root.chromatic);
+        }
+    }
+
+    // ============================================================
+    // INFO
+    // ============================================================
+
+    Text {
+        x: 288px;
+        y: 132px;
+
+        width: 76px;
+        height: 20px;
+
+        text: "MIDI 0–127";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

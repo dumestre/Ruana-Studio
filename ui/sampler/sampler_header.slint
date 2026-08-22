@@ -1,0 +1,142 @@
+import { Theme } from "../theme.slint";
+
+export component SamplerHeader inherits Rectangle {
+
+    // ============================================================
+    // PROPRIEDADES
+    // ============================================================
+
+    in property <string> sample-name: "No Sample";
+    in property <bool> sample-loaded: false;
+    in property <string> sample-format: "";
+    in property <string> sample-duration: "";
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
+
+    private property <length> header-height: 42px;
+
+    height: header-height;
+    background: Theme.surface-high;
+
+    // ============================================================
+    // NOME DA AMOSTRA
+    // ============================================================
+
+    Text {
+        x: 12px;
+        y: 0;
+
+        width: parent.width - 270px;
+        height: parent.height;
+
+        text: root.sample-loaded
+            ? root.sample-name
+            : "Sampler";
+
+        color: Theme.text-primary;
+
+        vertical-alignment: center;
+
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    // ============================================================
+    // FORMATO
+    // ============================================================
+
+    if root.sample-loaded && root.sample-format != "" : Text {
+        x: parent.width - 250px;
+        y: 0;
+
+        width: 55px;
+        height: parent.height;
+
+        text: root.sample-format;
+
+        color: Theme.text-dim;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+
+        font-size: 9px;
+        font-weight: 600;
+    }
+
+    // ============================================================
+    // DURAÇÃO
+    // ============================================================
+
+    if root.sample-loaded && root.sample-duration != "" : Text {
+        x: parent.width - 195px;
+        y: 0;
+
+        width: 75px;
+        height: parent.height;
+
+        text: root.sample-duration;
+
+        color: Theme.text-dim;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+
+        font-size: 9px;
+        font-weight: 600;
+    }
+
+    // ============================================================
+    // STATUS
+    // ============================================================
+
+    Rectangle {
+        x: parent.width - 108px;
+        y: 17px;
+
+        width: 8px;
+        height: 8px;
+
+        border-radius: 4px;
+
+        background: root.sample-loaded
+            ? Theme.activ
+            : Theme.border;
+    }
+
+    Text {
+        x: parent.width - 94px;
+        y: 0;
+
+        width: 70px;
+        height: parent.height;
+
+        text: root.sample-loaded
+            ? "LOADED"
+            : "EMPTY";
+
+        color: root.sample-loaded
+            ? Theme.text-primary
+            : Theme.text-dim;
+
+        vertical-alignment: center;
+
+        font-size: 9px;
+        font-weight: 600;
+    }
+
+    // ============================================================
+    // DIVISÓRIA
+    // ============================================================
+
+    Rectangle {
+        x: 0;
+        y: parent.height - 1px;
+
+        width: parent.width;
+        height: 1px;
+
+        background: Theme.border;
+    }
+}

@@ -4,6 +4,7 @@ import { ProjectKey } from "components/project_key.slint";
 
 export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
+    in-out property <bool> follow-enabled: true;
     in-out property <bool> grid-enabled: true;
     in-out property <bool> full-screen: false;
     in-out property <bool> jump-to-pattern: false;
@@ -11,6 +12,7 @@ export component Toolbar inherits Rectangle {
     callback zoom-in;
     callback zoom-out;
     callback snap-toggled(bool);
+    callback follow-toggled(bool);
     callback grid-toggled(bool);
     callback close;
     callback minimize;
@@ -104,15 +106,7 @@ export component Toolbar inherits Rectangle {
                 height: 20px; width: 20px;
                 icon: @image-url("icons/redo.svg"); icon-size: 16px; icon-color: #9a9a9a; borderless: true; clicked => {} 
             }
-            Button {
-                text: ""; borderless: true; height: 22px; width: 22px;
-                icon: @image-url("icons/pagejump.svg"); icon-size: 22px; icon-color: Theme.text-dim;
-                toggled: root.jump-to-pattern; toggled-bg: Theme.accent; toggled-fg: Theme.on-accent;
-                clicked => {
-                    root.jump-to-pattern = !root.jump-to-pattern;
-                    root.page-toggled(root.jump-to-pattern);
-                }
-            }
+            
             Button {
                 icon: @image-url("icons/snap.svg"); filled-icon: @image-url("icons/snap_filled.svg");
                 icon-size: 16px; icon-color: Theme.text-dim; height: 22px; width: 22px;
@@ -120,6 +114,15 @@ export component Toolbar inherits Rectangle {
                 clicked => {
                     root.snap-enabled = !root.snap-enabled;
                     root.snap-toggled(root.snap-enabled);
+                }
+            }
+            Button {
+                icon: @image-url("icons/follow.svg"); filled-icon: @image-url("icons/follow_filled.svg");
+                icon-size: 16px; icon-color: Theme.text-dim; height: 22px; width: 22px;
+                toggled: root.follow-enabled; toggled-bg: Theme.accent; toggled-fg: Theme.on-accent; borderless: true;
+                clicked => {
+                    root.follow-enabled = !root.follow-enabled;
+                    root.follow-toggled(root.follow-enabled);
                 }
             }
             Button {

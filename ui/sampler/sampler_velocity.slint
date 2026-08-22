@@ -1,0 +1,325 @@
+import { Theme } from "../theme.slint";
+import { Knob } from "../components/knob.slint";
+import { Button } from "../components/button.slint";
+
+export component SamplerVelocity inherits Rectangle {
+
+    // ============================================================
+    // PROPRIEDADES
+    // ============================================================
+
+    in-out property <float> volume-amount: 1.0;
+    in-out property <float> filter-amount: 0.0;
+    in-out property <float> pitch-amount: 0.0;
+
+    in-out property <string> curve: "LINEAR";
+
+    callback volume-amount-changed(float);
+    callback filter-amount-changed(float);
+    callback pitch-amount-changed(float);
+    callback curve-changed(string);
+
+    // ============================================================
+    // FUNDO
+    // ============================================================
+
+    background: Theme.surface-high;
+
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    // ============================================================
+    // TÍTULO
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 5px;
+
+        width: parent.width - 16px;
+        height: 18px;
+
+        text: "VELOCITY";
+
+        color: Theme.text-dim;
+
+        font-size: 9px;
+        font-weight: 600;
+
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        x: 8px;
+        y: 27px;
+
+        width: parent.width - 16px;
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+    // ============================================================
+    // CURVA
+    // ============================================================
+
+    Rectangle {
+        x: 8px;
+        y: 34px;
+
+        width: 100px;
+        height: 72px;
+
+        background: Theme.base;
+
+        border-width: 1px;
+        border-color: Theme.border;
+        border-radius: 2px;
+
+        // --------------------------------------------------------
+        // GRID
+        // --------------------------------------------------------
+
+        Rectangle {
+            x: 0;
+            y: parent.height / 2;
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.grid-sub;
+        }
+
+        Rectangle {
+            x: parent.width / 2;
+            y: 0;
+
+            width: 1px;
+            height: parent.height;
+
+            background: Theme.grid-sub;
+        }
+
+        // --------------------------------------------------------
+        // CURVA LINEAR
+        // --------------------------------------------------------
+
+        for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]: Rectangle {
+            visible: root.curve == "LINEAR";
+
+            property <float> p: i / 31.0;
+
+            x: self.p * parent.width;
+
+            y: parent.height
+                - self.p * parent.height;
+
+            width: max(1px, parent.width / 31.0 + 1px);
+            height: 1px;
+
+            background: Theme.accent;
+        }
+
+        // --------------------------------------------------------
+        // CURVA SOFT
+        // --------------------------------------------------------
+
+        for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]: Rectangle {
+            visible: root.curve == "SOFT";
+
+            property <float> p: i / 31.0;
+
+            x: self.p * parent.width;
+
+            y: parent.height
+                - Math.sqrt(self.p) * parent.height;
+
+            width: max(1px, parent.width / 31.0 + 1px);
+            height: 1px;
+
+            background: Theme.accent;
+        }
+
+        // --------------------------------------------------------
+        // CURVA HARD
+        // --------------------------------------------------------
+
+        for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]: Rectangle {
+            visible: root.curve == "HARD";
+
+            property <float> p: i / 31.0;
+
+            x: self.p * parent.width;
+
+            y: parent.height
+                - self.p * self.p * parent.height;
+
+            width: max(1px, parent.width / 31.0 + 1px);
+            height: 1px;
+
+            background: Theme.accent;
+        }
+    }
+
+    // ============================================================
+    // CURVE BUTTONS
+    // ============================================================
+
+    Button {
+        x: 116px;
+        y: 34px;
+
+        width: 58px;
+        height: 22px;
+
+        text: "LINEAR";
+
+        borderless: true;
+
+        toggled: root.curve == "LINEAR";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.curve = "LINEAR";
+            root.curve-changed("LINEAR");
+        }
+    }
+
+    Button {
+        x: 176px;
+        y: 34px;
+
+        width: 58px;
+        height: 22px;
+
+        text: "SOFT";
+
+        borderless: true;
+
+        toggled: root.curve == "SOFT";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.curve = "SOFT";
+            root.curve-changed("SOFT");
+        }
+    }
+
+    Button {
+        x: 236px;
+        y: 34px;
+
+        width: 58px;
+        height: 22px;
+
+        text: "HARD";
+
+        borderless: true;
+
+        toggled: root.curve == "HARD";
+
+        text-color: Theme.text-dim;
+
+        toggled-bg: Theme.accent;
+        toggled-fg: Theme.on-accent;
+
+        clicked => {
+            root.curve = "HARD";
+            root.curve-changed("HARD");
+        }
+    }
+
+    // ============================================================
+    // VOLUME
+    // ============================================================
+
+    Knob {
+        x: 116px;
+        y: 62px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.volume-amount;
+
+        caption: "VOLUME";
+
+        display-value:
+            Math.round(root.volume-amount * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        changed(value) => {
+            root.volume-amount = value;
+            root.volume-amount-changed(value);
+        }
+    }
+
+    // ============================================================
+    // FILTER
+    // ============================================================
+
+    Knob {
+        x: 172px;
+        y: 62px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.filter-amount;
+
+        caption: "FILTER";
+
+        display-value:
+            Math.round(root.filter-amount * 100) + "%";
+
+        show-display: true;
+        show-text: true;
+
+        centered: true;
+
+        changed(value) => {
+            root.filter-amount = value;
+            root.filter-amount-changed(value);
+        }
+    }
+
+    // ============================================================
+    // PITCH
+    // ============================================================
+
+    Knob {
+        x: 228px;
+        y: 62px;
+
+        width: 48px;
+        height: 64px;
+
+        value: root.pitch-amount;
+
+        caption: "PITCH";
+
+        display-value:
+            Math.round((root.pitch-amount - 0.5) * 24) + " st";
+
+        show-display: true;
+        show-text: true;
+
+        centered: true;
+
+        changed(value) => {
+            root.pitch-amount = value;
+            root.pitch-amount-changed(value);
+        }
+    }
+}
