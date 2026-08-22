@@ -1,6 +1,7 @@
 slint::include_modules!();
 
 mod cursors;
+mod icon;
 mod playback;
 
 use std::cell::RefCell;
@@ -9,7 +10,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, set_timeline_bounds, set_beat_bounds, set_drumstick_active, reset_cursor_to_default};
+use crate::cursors::{init_cursor_manager, set_cursor_for_tool, set_cursor_window_handle, set_timeline_bounds, reset_cursor_to_default};
 use daw_core::clip::{Clip, ClipKind};
 use daw_core::mixer::MixerParam;
 use daw_core::project::{ChangeKind, DocumentEvent, Project};
@@ -632,6 +633,18 @@ fn main() -> Result<(), slint::PlatformError> {
         slint::CloseRequestResponse::HideWindow
     });
 
+    // Ícone da janela/barra de tarefas: aplica já na criação e de novo
+    // após o event loop subir (a janela winit pode ser criada tardiamente).
+    icon::apply(window);
+    {
+        let ui_weak = ui.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(200), move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                icon::apply(ui.window());
+            }
+        });
+    }
+
 // Set up cursor window handle after window is created
     let ui_weak = ui.as_weak();
     slint::Timer::single_shot(std::time::Duration::from_millis(100), move || {
@@ -955,6 +968,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
 
             p.show().ok();
+            icon::apply(p.window());
             {
                 let mut slots = panels.borrow_mut();
                 slots[idx] = Some(p);
@@ -1332,14 +1346,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
     ui.on_timeline_bounds_changed(move |x, y, w, h| {
         set_timeline_bounds(x, y, w, h);
-    });
-
-    ui.on_beat_bounds_changed(move |x, y, w, h| {
-        set_beat_bounds(x, y, w, h);
-    });
-
-    ui.on_drumstick_changed(move |active| {
-        set_drumstick_active(active);
     });
 
     ui.on_window_close(move || {

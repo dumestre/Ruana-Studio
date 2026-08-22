@@ -23,7 +23,6 @@ pub enum ToolCursor {
     Glue = 2,
     Draw = 4,
     Erase = 5,
-    Drumstick = 6,
 }
 
 impl ToolCursor {
@@ -34,7 +33,6 @@ impl ToolCursor {
             2 => Some(ToolCursor::Glue),
             4 => Some(ToolCursor::Draw),
             5 => Some(ToolCursor::Erase),
-            6 => Some(ToolCursor::Drumstick),
             _ => None,
         }
     }
@@ -46,7 +44,6 @@ impl ToolCursor {
             ToolCursor::Glue => "glue.cur",
             ToolCursor::Draw => "draw.cur",
             ToolCursor::Erase => "erase.cur",
-            ToolCursor::Drumstick => "drumstick.cur",
         }
     }
 }
@@ -81,7 +78,6 @@ impl CursorManager {
                 ToolCursor::Glue,
                 ToolCursor::Draw,
                 ToolCursor::Erase,
-                ToolCursor::Drumstick,
             ] {
                 let cur_path = cursor_dir.join(tool.cursor_file_name());
                 if !cur_path.exists() {
@@ -153,11 +149,6 @@ impl CursorManager {
         Ok(())
     }
 
-    #[cfg(windows)]
-    pub fn get_hcursor(&self, tool: &ToolCursor) -> Option<HCURSOR> {
-        self.cursors.get(tool).map(|ch| ch.hcursor)
-    }
-
     pub fn set_timeline_bounds(x: f32, y: f32, w: f32, h: f32) {
         #[cfg(windows)]
         {
@@ -199,12 +190,6 @@ static ACTIVE_CURSOR: OnceLock<Mutex<Option<isize>>> = OnceLock::new();
 
 #[cfg(windows)]
 static TIMELINE_BOUNDS: OnceLock<Mutex<TimelineBounds>> = OnceLock::new();
-
-#[cfg(windows)]
-static BEAT_BOUNDS: OnceLock<Mutex<TimelineBounds>> = OnceLock::new();
-
-#[cfg(windows)]
-static DRUMSTICK_ACTIVE: OnceLock<Mutex<bool>> = OnceLock::new();
 
 #[cfg(windows)]
 #[derive(Clone, Copy)]
@@ -250,29 +235,6 @@ unsafe fn is_cursor_over_timeline(hwnd: HWND) -> bool {
 }
 
 #[cfg(windows)]
-unsafe fn is_cursor_over_beat(hwnd: HWND) -> bool {
-    let bounds = match BEAT_BOUNDS.get().and_then(|m| m.lock().ok()) {
-        Some(b) => *b,
-        None => return false,
-    };
-    if !bounds.valid {
-        return false;
-    }
-
-    let mut pt = POINT::default();
-    if unsafe { GetCursorPos(&mut pt) }.is_err() {
-        return false;
-    }
-    if !unsafe { ScreenToClient(hwnd, &mut pt) }.as_bool() {
-        return false;
-    }
-
-    let cx = pt.x as f32;
-    let cy = pt.y as f32;
-    cx >= bounds.x && cx <= bounds.x + bounds.w && cy >= bounds.y && cy <= bounds.y + bounds.h
-}
-
-#[cfg(windows)]
 unsafe extern "system" fn cursor_subclass_proc(
     hwnd: HWND,
     msg: u32,
@@ -282,23 +244,6 @@ unsafe extern "system" fn cursor_subclass_proc(
     _ref_data: usize,
 ) -> LRESULT {
     if msg == WM_SETCURSOR && (lparam.0 & 0xFFFF) as u32 == 1 {
-        // Check drumstick first (beat sequencer area)
-        let drumstick_on = DRUMSTICK_ACTIVE
-            .get()
-            .and_then(|m| m.lock().ok())
-            .map(|v| *v)
-            .unwrap_or(false);
-
-        if drumstick_on && unsafe { is_cursor_over_beat(hwnd) } {
-            if let Some(mgr) = get_cursor_manager_lock() {
-                if let Some(hcursor) = mgr.get_hcursor(&ToolCursor::Drumstick) {
-                    unsafe { SetCursor(hcursor) };
-                    return LRESULT(1);
-                }
-            }
-        }
-
-        // Then check timeline tool cursors
         if unsafe { is_cursor_over_timeline(hwnd) } {
             if let Some(active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()).and_then(|c| *c) {
                 unsafe { SetCursor(HCURSOR(active as *mut core::ffi::c_void)) };
@@ -343,30 +288,6 @@ pub fn set_cursor_window_handle(hwnd: *mut std::ffi::c_void) {
     {
         if let Some(mut mgr) = get_cursor_manager_lock() {
             mgr.set_window_handle(HWND(hwnd));
-        }
-    }
-}
-
-pub fn set_beat_bounds(x: f32, y: f32, w: f32, h: f32) {
-    #[cfg(windows)]
-    {
-        let _ = BEAT_BOUNDS.get_or_init(|| Mutex::new(TimelineBounds::default()));
-        if let Some(mut bounds) = BEAT_BOUNDS.get().and_then(|m| m.lock().ok()) {
-            bounds.x = x;
-            bounds.y = y;
-            bounds.w = w;
-            bounds.h = h;
-            bounds.valid = true;
-        }
-    }
-}
-
-pub fn set_drumstick_active(active: bool) {
-    #[cfg(windows)]
-    {
-        let _ = DRUMSTICK_ACTIVE.get_or_init(|| Mutex::new(false));
-        if let Some(mut flag) = DRUMSTICK_ACTIVE.get().and_then(|m| m.lock().ok()) {
-            *flag = active;
         }
     }
 }

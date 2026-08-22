@@ -2,222 +2,950 @@
 import { Theme } from "theme.slint";
 
 export component Transport inherits Rectangle {
+
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
     in-out property <bool> playing: false;
     in-out property <bool> recording: false;
     in-out property <bool> loop-enabled: false;
     in-out property <bool> metronome-enabled: false;
+
     in-out property <int> position: 0;
+
     in property <int> bpm: 120;
     in property <int> beats-per-bar: 4;
     in property <int> ppq: 960;
+
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
 
     callback play-state-changed(bool);
     callback record-state-changed(bool);
     callback loop-state-changed(bool);
     callback metronome-state-changed(bool);
-
-    // BPM novo (inteiro). O backend atualiza o Transport e
-    // re-ancora o clock visual do playhead com a nova taxa.
     callback set-bpm(float);
 
-    property <int> ticks-per-bar: self.ppq * self.beats-per-bar;
-    property <int> bars: self.position / self.ticks-per-bar + 1;
-    property <int> beat: Math.mod(self.position, self.ticks-per-bar) / self.ppq + 1;
-    property <int> ticks: Math.mod(self.position, self.ppq);
+
+    // ============================================================
+    // TRANSPORT POSITION
+    // ============================================================
+
+    property <int> ticks-per-bar:
+        self.ppq * self.beats-per-bar;
+
+    property <int> bars:
+        self.position / self.ticks-per-bar + 1;
+
+    property <int> beat:
+        Math.mod(
+            self.position,
+            self.ticks-per-bar
+        ) / self.ppq + 1;
+
+    property <int> ticks:
+        Math.mod(
+            self.position,
+            self.ppq
+        );
+
 
     function pad2(v: int) -> string {
-        return v < 10 ? "0" + v : "" + v;
+        return v < 10
+            ? "0" + v
+            : "" + v;
     }
 
-    
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
+
     height: 48px;
-    background: Theme.surface;
+
+    background:
+        Theme.surface;
+
+
+    // ============================================================
+    // TRANSPORT
+    // ============================================================
 
     HorizontalLayout {
+
         padding-left: 8px;
         padding-right: 8px;
         padding-top: 5px;
         padding-bottom: 5px;
+
         spacing: 6px;
-        alignment: LayoutAlignment.center;
-        cross-axis-alignment: CrossAxisAlignment.center;
+
+        alignment:
+            LayoutAlignment.center;
+
+        cross-axis-alignment:
+            CrossAxisAlignment.center;
+
+
+        // ========================================================
+        // SKIP BACK
+        // ========================================================
 
         Button {
-            icon: @image-url("icons/skip_back.svg");
-            clicked => {
-                root.position = 0;
+
+            width: 28px;
+            height: 28px;
+
+            background:
+                skip-back-hover.has-hover
+                ? Theme.surface-high
+                : transparent;
+
+            border-radius:
+                14px;
+
+            border-width:
+                0px;
+
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+
+                width: parent.width;
+                height: parent.height;
+
+                background:
+                    skip-back-hover.has-hover
+                    ? Theme.surface-high
+                    : transparent;
+
+                border-radius:
+                    14px;
+            }
+
+
+            Image {
+
+                source:
+                    @image-url(
+                        "icons/skip_back3d.png"
+                    );
+
+                width: 24px;
+                height: 24px;
+
+                x:
+                    (parent.width - self.width) / 2;
+
+                y:
+                    (parent.height - self.height) / 2;
+
+                image-fit:
+                    ImageFit.contain;
+            }
+
+
+            skip-back-hover := TouchArea {
+
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor:
+                    pointer;
+
+                clicked => {
+                    root.position = 0;
+                }
             }
         }
+
+
+        // ========================================================
+        // SKIP FORWARD
+        // ========================================================
+
         Button {
-            icon: @image-url("icons/skip_fwd.svg");
-            clicked => {
-                root.position = root.ticks-per-bar * 15;
+
+            width: 28px;
+            height: 28px;
+
+            background:
+                skip-forward-hover.has-hover
+                ? Theme.surface-high
+                : transparent;
+
+            border-radius:
+                14px;
+
+            border-width:
+                0px;
+
+
+            Rectangle {
+
+                width: parent.width;
+                height: parent.height;
+
+                background:
+                    skip-forward-hover.has-hover
+                    ? Theme.surface-high
+                    : transparent;
+
+                border-radius:
+                    14px;
+            }
+
+
+            Image {
+
+                source:
+                    @image-url(
+                        "icons/skip_fwd3d.png"
+                    );
+
+                width: 24px;
+                height: 24px;
+
+                x:
+                    (parent.width - self.width) / 2;
+
+                y:
+                    (parent.height - self.height) / 2;
+
+                image-fit:
+                    ImageFit.contain;
+            }
+
+
+            skip-forward-hover := TouchArea {
+
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor:
+                    pointer;
+
+                clicked => {
+                    root.position =
+                        root.ticks-per-bar * 15;
+                }
             }
         }
+
+
+        // ========================================================
+        // PLAY / PAUSE
+        // ========================================================
+
         Button {
-            icon: root.playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
-            icon-color: Theme.accent;
-            toggled: root.playing;
-            toggled-bg: #f26a21;
-            subtle-toggled: true;
-            toggled-icon-color: Theme.accent;
-            clicked => {
-                root.playing = !root.playing;
-                root.play-state-changed(root.playing);
+
+            width: 28px;
+            height: 28px;
+
+            background:
+                play-hover.has-hover
+                ? Theme.surface-high
+                : transparent;
+
+            border-radius:
+                14px;
+
+            border-width:
+                0px;
+
+
+            Rectangle {
+
+                width: parent.width;
+                height: parent.height;
+
+                background:
+                    play-hover.has-hover
+                    ? Theme.surface-high
+                    : transparent;
+
+                border-radius:
+                    14px;
+            }
+
+
+            Image {
+
+                source:
+                    root.playing
+                    ? @image-url(
+                        "icons/pause3d.png"
+                    )
+                    : @image-url(
+                        "icons/play3d.png"
+                    );
+
+                width: 24px;
+                height: 24px;
+
+                x:
+                    (parent.width - self.width) / 2;
+
+                y:
+                    (parent.height - self.height) / 2;
+
+                image-fit:
+                    ImageFit.contain;
+            }
+
+
+            play-hover := TouchArea {
+
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor:
+                    pointer;
+
+                clicked => {
+
+                    root.playing =
+                        !root.playing;
+
+                    root.play-state-changed(
+                        root.playing
+                    );
+                }
             }
         }
+
+
+        // ========================================================
+        // STOP
+        // ========================================================
+
         Button {
-            icon: @image-url("icons/stop.svg");
-            clicked => {
-                root.playing = false;
-                root.play-state-changed(false);
+
+            width: 28px;
+            height: 28px;
+
+            background:
+                stop-hover.has-hover
+                ? Theme.surface-high
+                : transparent;
+
+            border-radius:
+                14px;
+
+            border-width:
+                0px;
+
+
+            Rectangle {
+
+                width: parent.width;
+                height: parent.height;
+
+                background:
+                    stop-hover.has-hover
+                    ? Theme.surface-high
+                    : transparent;
+
+                border-radius:
+                    14px;
+            }
+
+
+            Image {
+
+                source:
+                    @image-url(
+                        "icons/stop3d.png"
+                    );
+
+                width: 24px;
+                height: 24px;
+
+                x:
+                    (parent.width - self.width) / 2;
+
+                y:
+                    (parent.height - self.height) / 2;
+
+                image-fit:
+                    ImageFit.contain;
+            }
+
+
+            stop-hover := TouchArea {
+
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor:
+                    pointer;
+
+                clicked => {
+
+                    root.playing =
+                        false;
+
+                    root.play-state-changed(
+                        false
+                    );
+                }
             }
         }
+
+
+        // ========================================================
+        // RECORD
+        // ========================================================
+
         Button {
-            icon: @image-url("icons/rec.svg");
-            icon-color: Theme.danger;
-            toggled: root.recording;
-            toggled-bg: Theme.danger;
-            toggled-fg: #1E1E1E;
-            clicked => {
-                root.recording = !root.recording;
-                root.record-state-changed(root.recording);
+
+            width: 28px;
+            height: 28px;
+
+            background:
+                record-hover.has-hover
+                ? (
+                    root.recording
+                    ? Theme.danger
+                    : Theme.surface-high
+                )
+                : (
+                    root.recording
+                    ? Theme.danger
+                    : transparent
+                );
+
+            border-radius:
+                14px;
+
+            border-width:
+                0px;
+
+
+            Rectangle {
+
+                width: parent.width;
+                height: parent.height;
+
+                background:
+                    record-hover.has-hover
+                    ? (
+                        root.recording
+                        ? Theme.danger
+                        : Theme.surface-high
+                    )
+                    : (
+                        root.recording
+                        ? Theme.danger
+                        : transparent
+                    );
+
+                border-radius:
+                    14px;
+            }
+
+
+            Image {
+
+                source:
+                    root.recording
+                    ? @image-url(
+                        "icons/recording3d.png"
+                    )
+                    : @image-url(
+                        "icons/rec3d.png"
+                    );
+
+                width: 24px;
+                height: 24px;
+
+                x:
+                    (parent.width - self.width) / 2
+                    - 1px;
+
+                y:
+                    (parent.height - self.height) / 2;
+
+                image-fit:
+                    ImageFit.contain;
+            }
+
+
+            record-hover := TouchArea {
+
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor:
+                    pointer;
+
+                clicked => {
+
+                    root.recording =
+                        !root.recording;
+
+                    root.record-state-changed(
+                        root.recording
+                    );
+                }
             }
         }
+
+
+        // ========================================================
+        // LOOP
+        // ========================================================
+
         Button {
-            icon: @image-url("icons/loop.svg");
-            toggled: root.loop-enabled;
-            subtle-toggled: true;
-            toggled-icon-color: Theme.accent;
-            clicked => {
-                root.loop-enabled = !root.loop-enabled;
-                root.loop-state-changed(root.loop-enabled);
+
+            width: 28px;
+            height: 28px;
+
+            background:
+                loop-hover.has-hover
+                ? Theme.surface-high
+                : transparent;
+
+            border-radius:
+                14px;
+
+            border-width:
+                0px;
+
+
+            Rectangle {
+
+                width: parent.width;
+                height: parent.height;
+
+                background:
+                    loop-hover.has-hover
+                    ? Theme.surface-high
+                    : transparent;
+
+                border-radius:
+                    14px;
+            }
+
+
+            Image {
+
+                source:
+                    root.loop-enabled
+                    ? @image-url(
+                        "icons/loop3dactiv.png"
+                    )
+                    : @image-url(
+                        "icons/loop3d.png"
+                    );
+
+                width: 24px;
+                height: 24px;
+
+                x:
+                    (parent.width - self.width) / 2;
+
+                y:
+                    (parent.height - self.height) / 2;
+
+                image-fit:
+                    ImageFit.contain;
+            }
+
+
+            loop-hover := TouchArea {
+
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor:
+                    pointer;
+
+                clicked => {
+
+                    root.loop-enabled =
+                        !root.loop-enabled;
+
+                    root.loop-state-changed(
+                        root.loop-enabled
+                    );
+                }
             }
         }
+
+
+        // ========================================================
+        // POSITION
+        // ========================================================
 
         Rectangle {
+
             width: 120px;
             height: 26px;
-            background: Theme.base;
-            border-radius: 4px;
-            border-width: 1px;
-            border-color: Theme.border;
 
-            
+            background:
+                Theme.base;
+
+            border-radius:
+                4px;
+
+            border-width:
+                1px;
+
+            border-color:
+                Theme.border;
+
 
             Text {
-                text: root.pad2(root.bars) + ":" + root.pad2(root.beat) + ":" + root.pad2(root.ticks);
-                color: Theme.accent;
-                font-size: 15px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+
+                text:
+                    root.pad2(root.bars)
+                    + ":"
+                    + root.pad2(root.beat)
+                    + ":"
+                    + root.pad2(root.ticks);
+
+                width: 100%;
+                height: 100%;
+
+                color:
+                    Theme.accent;
+
+                font-size:
+                    15px;
+
+                horizontal-alignment:
+                    center;
+
+                vertical-alignment:
+                    center;
             }
         }
+
+
+        // ========================================================
+        // ESPAÇO FLEXÍVEL
+        // ========================================================
 
         Rectangle {
-            horizontal-stretch: 1;
-            background: transparent;
+
+            horizontal-stretch:
+                1;
+
+            background:
+                transparent;
         }
+
+
+        // ========================================================
+        // METRONOME + BPM
+        // ========================================================
 
         HorizontalLayout {
+
             spacing: 8px;
-            alignment: LayoutAlignment.stretch;
-            cross-axis-alignment: CrossAxisAlignment.center;
+
+            alignment:
+                LayoutAlignment.stretch;
+
+            cross-axis-alignment:
+                CrossAxisAlignment.center;
+
+
+            // ====================================================
+            // METRONOME
+            // ====================================================
 
             Button {
-                icon: @image-url("icons/metronome.svg");
-                icon-size: 28px;
-                borderless: true;
-                keep-icon-color: true;
-                toggled: root.metronome-enabled;
-                preferred-width: 20px;
-                subtle-toggled: true;
-                toggled-icon-color: #0eec2c;
-                clicked => {
-                    root.metronome-enabled = !root.metronome-enabled;
-                    root.metronome-state-changed(root.metronome-enabled);
+
+                width: 28px;
+                height: 28px;
+
+                background:
+                    metro-hover.has-hover
+                    ? Theme.surface-high
+                    : transparent;
+
+                border-radius:
+                    14px;
+
+                border-width:
+                    0px;
+
+
+                Rectangle {
+
+                    width: parent.width;
+                    height: parent.height;
+
+                    background:
+                        metro-hover.has-hover
+                        ? Theme.surface-high
+                        : transparent;
+
+                    border-radius:
+                        14px;
+                }
+
+
+                Image {
+
+                    source:
+                        root.metronome-enabled
+                        ? @image-url(
+                            "icons/metronome3dactiv.png"
+                        )
+                        : @image-url(
+                            "icons/metronome3d.png"
+                        );
+
+                    width: 24px;
+                    height: 24px;
+
+                    x:
+                        (parent.width - self.width) / 2;
+
+                    y:
+                        (parent.height - self.height) / 2;
+
+                    image-fit:
+                        ImageFit.contain;
+                }
+
+
+                metro-hover := TouchArea {
+
+                    width: parent.width;
+                    height: parent.height;
+
+                    mouse-cursor:
+                        pointer;
+
+                    clicked => {
+
+                        root.metronome-enabled =
+                            !root.metronome-enabled;
+
+                        root.metronome-state-changed(
+                            root.metronome-enabled
+                        );
+                    }
                 }
             }
-             Rectangle {
-            width: 1px;
-            height: 20px;
-            background: Theme.border;
-        }
+
+
+            // ====================================================
+            // DIVISOR
+            // ====================================================
+
+            Rectangle {
+
+                width: 1px;
+                height: 20px;
+
+                background:
+                    Theme.border;
+            }
+
+
+            // ====================================================
+            // BPM VALUE
+            // ====================================================
 
             Text {
-                text: "" + root.bpm;
-                color: Theme.accent;
-                font-size: 12px;
-                horizontal-alignment: TextHorizontalAlignment.center;
-                vertical-alignment: center;
+
+                text:
+                    "" + root.bpm;
+
+                color:
+                    Theme.accent;
+
+                font-size:
+                    12px;
+
+                horizontal-alignment:
+                    TextHorizontalAlignment.center;
+
+                vertical-alignment:
+                    center;
             }
 
-            // BPM interativo: arrastar vertical (3px = ±1 BPM)
-            // ou scroll do mouse. Limites 20–300.
+
+            // ====================================================
+            // BPM CONTROL
+            // ====================================================
+
             Rectangle {
+
                 width: 34px;
                 height: 20px;
-                background: transparent;
 
-                property <length> anchor-y: 0px;
-                property <int> anchor-value: 120;
+                background:
+                    transparent;
+
+
+                property <length> anchor-y:
+                    0px;
+
+                property <int> anchor-value:
+                    120;
+
 
                 Text {
-                    text: "BPM";
-                    color: Theme.text-primary;
-                    font-size: 12px;
-                    horizontal-alignment: TextHorizontalAlignment.center;
-                    vertical-alignment: center;
+
+                    text:
+                        "BPM";
+
+                    width: 100%;
+                    height: 100%;
+
+                    color:
+                        Theme.text-primary;
+
+                    font-size:
+                        12px;
+
+                    horizontal-alignment:
+                        TextHorizontalAlignment.center;
+
+                    vertical-alignment:
+                        center;
                 }
 
+
                 TouchArea {
-                    mouse-cursor: MouseCursor.ns_resize;
+
+                    mouse-cursor:
+                        MouseCursor.ns_resize;
+
 
                     pointer-event(ev) => {
-                        if ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left {
-                            parent.anchor-y = self.mouse-y;
-                            parent.anchor-value = root.bpm;
+
+                        if ev.kind
+                            == PointerEventKind.down
+                            && ev.button
+                            == PointerEventButton.left {
+
+                            parent.anchor-y =
+                                self.mouse-y;
+
+                            parent.anchor-value =
+                                root.bpm;
                         }
                     }
+
 
                     moved => {
-                        let steps = Math.floor((parent.anchor-y - self.mouse-y) / 3px);
-                        let target = max(20, min(300, parent.anchor-value + steps));
-                        if (target != root.bpm) {
-                            root.set-bpm(target);
+
+                        let steps =
+                            Math.floor(
+                                (
+                                    parent.anchor-y
+                                    - self.mouse-y
+                                ) / 3px
+                            );
+
+                        let target =
+                            max(
+                                20,
+                                min(
+                                    300,
+                                    parent.anchor-value
+                                    + steps
+                                )
+                            );
+
+
+                        if target != root.bpm {
+
+                            root.set-bpm(
+                                target
+                            );
                         }
                     }
 
+
                     scroll-event(e) => {
-                        if (e.delta-y > 0) {
-                            root.set-bpm(min(300, root.bpm + 1));
+
+                        if e.delta-y > 0 {
+
+                            root.set-bpm(
+                                min(
+                                    300,
+                                    root.bpm + 1
+                                )
+                            );
+
                         } else {
-                            root.set-bpm(max(20, root.bpm - 1));
+
+                            root.set-bpm(
+                                max(
+                                    20,
+                                    root.bpm - 1
+                                )
+                            );
                         }
+
                         accept;
                     }
                 }
             }
         }
 
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+
         Rectangle {
+
             width: 1px;
             height: 20px;
-            background: Theme.border;
+
+            background:
+                Theme.border;
         }
 
+
+        // ========================================================
+        // TIME SIGNATURE
+        // ========================================================
+
         Text {
-            text: root.beats-per-bar + "/4";
-            color: Theme.accent;
-            font-size: 12px;
-            vertical-alignment: center;
+
+            text:
+                root.beats-per-bar
+                + "/4";
+
+            color:
+                Theme.accent;
+
+            font-size:
+                12px;
+
+            vertical-alignment:
+                center;
         }
     }
 
+
+    // ============================================================
+    // BORDA INFERIOR
+    // ============================================================
+
     Rectangle {
-        y: parent.height - 1px;
+
+        y:
+            parent.height - 1px;
+
         width: 100%;
         height: 1px;
-        background: Theme.border;
+
+        background:
+            Theme.border;
     }
 }

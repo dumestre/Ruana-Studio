@@ -27,3 +27,4 @@ resvg = { version = "0.48", features = ["raster-images"] }
 usvg = "0.48"
 tiny-skia = "0.8"
 png = "0.17"
+winresource = "0.1"

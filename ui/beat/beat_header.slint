@@ -3,166 +3,351 @@ import { Button } from "../components/button.slint";
 import { KnobWithoutText } from "../components/knob.slint";
 
 export component BeatHeader inherits Rectangle {
-    in-out property <string> beat-name: "BEAT SEQUENCER";
+
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
+    in-out property <string> beat-name:
+        "BEAT SEQUENCER";
+
     in-out property <float> humanize: 0.0;
     in-out property <float> swing: 0.0;
+
     in-out property <int> grid-resolution: 16;
 
     in-out property <bool> grid-dropdown-open: false;
     in-out property <bool> beat-menu-open: false;
 
+    in-out property <bool> playing: false;
+
     in-out property <int> current-pattern: 0;
     in-out property <[[bool]]> patterns: [[]];
     in-out property <[int]> pattern-indexes: [0];
 
-    in property <[int]> resolution-options: [8, 16, 32, 64];
+    in property <[int]> resolution-options:
+        [8, 16, 32, 64];
+
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
 
     callback close-requested;
     callback add-track-requested;
     callback grid-resolution-changed(int);
+
     callback duplicate-beat;
     callback copy-beat;
     callback clear-beat;
     callback delete-beat;
+
     callback pattern-changed(int);
 
+    callback play-state-changed(bool);
+
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
+
     height: 34px;
+
     background: transparent;
+
     z: 10;
 
+
+    // ============================================================
+    // HEADER
+    // ============================================================
+
     HorizontalLayout {
+
         spacing: 8px;
-        cross-axis-alignment: CrossAxisAlignment.center;
+
+        cross-axis-alignment:
+            CrossAxisAlignment.center;
+
+
+        // ========================================================
+        // ACCENT
+        // ========================================================
 
         Rectangle {
+
             width: 4px;
             height: 24px;
 
-            background: Theme.accent;
+            background:
+                Theme.accent;
+
             border-radius: 2px;
+
+            
         }
+
+
+        // ========================================================
+        // NOME
+        // ========================================================
 
         Text {
-            text: root.beat-name;
 
-            color: Theme.text-primary;
+            text:
+                root.beat-name;
+
+            color:
+                Theme.text-primary;
+
             font-family: "";
+
             font-size: 14px;
+
             font-weight: 700;
 
-            vertical-alignment: center;
+            vertical-alignment:
+                center;
         }
+
+
+        // ========================================================
+        // ESPAÇO
+        // ========================================================
 
         Rectangle {
+
             horizontal-stretch: 1;
+
+            background: transparent;
+
+            play-button := Rectangle {
+    width: 30px;
+    height: 30px;
+    background: transparent;
+
+    border-radius: 15px;
+
+    Image {
+        source:
+            root.playing
+            ? @image-url("../icons/pause3d.png")
+            : @image-url("../icons/play3d.png");
+
+        width: 24px;
+        height: 24px;
+
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+
+        image-fit: ImageFit.contain;
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+
+        clicked => {
+            root.playing = !root.playing;
+            root.play-state-changed(root.playing);
         }
+    }
+}
+        }
+
+
+        // ========================================================
+        // PLAY / PAUSE
+        //
+        // Usa:
+        // play3d.png
+        // pause3d.png
+        // ========================================================
+
+       
+
+
+        // ========================================================
+        // HUMANIZE
+        // ========================================================
 
         Text {
+
             text: "HUM";
 
-            color: Theme.text-dim;
+            color:
+                Theme.text-dim;
+
             font-size: 9px;
+
             font-weight: 700;
 
-            vertical-alignment: center;
+            vertical-alignment:
+                center;
         }
 
+
         KnobWithoutText {
+
             width: 26px;
             height: 26px;
 
             value <=> root.humanize;
         }
 
+
+        // ========================================================
+        // SWING
+        // ========================================================
+
         Text {
+
             text: "SWG";
 
-            color: Theme.text-dim;
+            color:
+                Theme.text-dim;
+
             font-size: 9px;
+
             font-weight: 700;
 
-            vertical-alignment: center;
+            vertical-alignment:
+                center;
         }
 
+
         KnobWithoutText {
+
             width: 26px;
             height: 26px;
 
             value <=> root.swing;
         }
 
+
+        // ========================================================
+        // STEPS
+        // ========================================================
+
         Text {
+
             text: "STEPS";
 
-            color: Theme.text-dim;
+            color:
+                Theme.text-dim;
+
             font-size: 9px;
+
             font-weight: 700;
 
-            vertical-alignment: center;
+            vertical-alignment:
+                center;
         }
 
+
         steps-button := Rectangle {
+
             width: 32px;
             height: 26px;
 
-            background: root.grid-dropdown-open
+            background:
+                root.grid-dropdown-open
                 ? Theme.surface-high
                 : Theme.base;
 
             border-radius: 4px;
+
             border-width: 1px;
-            border-color: Theme.border;
+
+            border-color:
+                Theme.border;
+
 
             Text {
-                text: "" + root.grid-resolution;
+
+                text:
+                    "" + root.grid-resolution;
 
                 width: 100%;
                 height: 100%;
 
-                color: Theme.text-dim;
+                color:
+                    Theme.text-dim;
+
                 font-size: 10px;
+
                 font-weight: 700;
 
-                horizontal-alignment: center;
-                vertical-alignment: center;
+                horizontal-alignment:
+                    center;
+
+                vertical-alignment:
+                    center;
             }
 
+
             TouchArea {
+
+                mouse-cursor:
+                    pointer;
+
                 clicked => {
+
                     root.grid-dropdown-open =
                         !root.grid-dropdown-open;
                 }
             }
         }
 
-        Rectangle {
+
+        // ========================================================
+        // ADD TRACK
+        // ========================================================
+
+        add-track-button := Rectangle {
+
             width: 74px;
             height: 26px;
 
-            background: touch.has-hover
+            background:
+                touch.has-hover
                 ? Theme.surface-high
                 : Theme.base;
 
             border-radius: 4px;
+
             border-width: 1px;
-            border-color: Theme.border;
+
+            border-color:
+                Theme.border;
+
 
             Text {
-                text: "+ TRACK";
+
+                text:
+                    "+ TRACK";
 
                 width: 100%;
                 height: 100%;
 
-                color: Theme.text-dim;
+                color:
+                    Theme.text-dim;
+
                 font-size: 10px;
+
                 font-weight: 700;
 
-                horizontal-alignment: center;
-                vertical-alignment: center;
+                horizontal-alignment:
+                    center;
+
+                vertical-alignment:
+                    center;
             }
 
+
             touch := TouchArea {
-                mouse-cursor: pointer;
+
+                mouse-cursor:
+                    pointer;
 
                 clicked => {
                     root.add-track-requested();
@@ -170,30 +355,58 @@ export component BeatHeader inherits Rectangle {
             }
         }
 
+
+        // ========================================================
+        // MENU
+        // ========================================================
+
         menu-button := Button {
+
             width: 24px;
             height: 24px;
 
             border-radius: 12px;
 
-            icon: @image-url("../icons/menu_dots.svg");
+            icon:
+                @image-url(
+                    "../icons/menu_dots.svg"
+                );
+
             icon-size: 14px;
-            icon-color: Theme.text-dim;
+
+            icon-color:
+                Theme.text-dim;
+
 
             clicked => {
-                root.beat-menu-open = !root.beat-menu-open;
+
+                root.beat-menu-open =
+                    !root.beat-menu-open;
             }
         }
 
+
+        // ========================================================
+        // CLOSE
+        // ========================================================
+
         Button {
+
             width: 24px;
             height: 24px;
 
             border-radius: 12px;
 
-            icon: @image-url("../icons/close.svg");
+            icon:
+                @image-url(
+                    "../icons/close.svg"
+                );
+
             icon-size: 14px;
-            icon-color: Theme.text-primary;
+
+            icon-color:
+                Theme.text-primary;
+
 
             clicked => {
                 root.close-requested();
@@ -201,8 +414,15 @@ export component BeatHeader inherits Rectangle {
         }
     }
 
-    // Anchors for the dropdown menus, which are rendered at the parent
-    // (BeatContent) root level so they paint above the track grid.
-    out property <length> steps-anchor-x: steps-button.x;
-    out property <length> beat-anchor-x: menu-button.x + menu-button.width;
+
+    // ============================================================
+    // ANCHORS DOS MENUS
+    // ============================================================
+
+    out property <length> steps-anchor-x:
+        steps-button.x;
+
+    out property <length> beat-anchor-x:
+        menu-button.x
+        + menu-button.width;
 }
