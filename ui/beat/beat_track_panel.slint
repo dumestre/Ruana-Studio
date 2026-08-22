@@ -21,6 +21,10 @@ export component BeatTrackPanel inherits Rectangle {
 
     callback track-selected(int);
 
+    // Persistência no core.
+    // param: "active" | "solo" | "pan" | "volume" | "channel"
+    callback track-param-changed(int, string, float);
+
     background: Theme.base;
 
     border-radius: 6px;
@@ -55,6 +59,7 @@ export component BeatTrackPanel inherits Rectangle {
 
         active-changed(v) => {
             root.track-active[inst] = v;
+            root.track-param-changed(inst, "active", v ? 1.0 : 0.0);
         }
 
         solo:
@@ -62,6 +67,7 @@ export component BeatTrackPanel inherits Rectangle {
 
         solo-changed(v) => {
             root.track-solo[inst] = v;
+            root.track-param-changed(inst, "solo", v ? 1.0 : 0.0);
         }
 
         pan:
@@ -69,6 +75,7 @@ export component BeatTrackPanel inherits Rectangle {
 
         pan-changed(v) => {
             root.track-pan[inst] = v;
+            root.track-param-changed(inst, "pan", v);
         }
 
         volume:
@@ -76,6 +83,7 @@ export component BeatTrackPanel inherits Rectangle {
 
         volume-changed(v) => {
             root.track-volume[inst] = v;
+            root.track-param-changed(inst, "volume", v);
         }
 
         mixer-channel:
@@ -83,6 +91,7 @@ export component BeatTrackPanel inherits Rectangle {
 
         mixer-channel-changed(v) => {
             root.track-mixer-channel[inst] = v;
+            root.track-param-changed(inst, "channel", v * 1.0);
         }
 
         x: 8px;

@@ -21,7 +21,7 @@ export component FileBrowser inherits Rectangle {
     callback directory-entered(string); // path
     callback explorer-go-up();
 
-    callback audio-drag-started(string, string, color, bool);
+    callback audio-drag-started(string, string, string, color, bool); // name, path, type, color, is-midi
     callback audio-drag-moved(length, length);
     callback audio-drag-finished();
 
@@ -165,6 +165,7 @@ export component FileBrowser inherits Rectangle {
                     drag-started() => {
                         root.audio-drag-started(
                             entry.name,
+                            entry.path,
                             entry.entry-type,
                             Theme.clip-audio,
                             false

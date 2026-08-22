@@ -7,6 +7,7 @@ export component BeatStep inherits Rectangle {
     in property <int> playhead: -1;
     in property <int> grid-resolution: 16;
     in property <[int]> step-indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    in property <int> stride: 16;
     in property <color> accent-color: Theme.accent;
     in property <bool> track-active: true;
 
@@ -21,7 +22,7 @@ export component BeatStep inherits Rectangle {
         for step in root.step-indexes: StepCell {
             visible: step < root.grid-resolution;
 
-            active: root.steps[root.track-index * 16 + step];
+            active: root.steps[root.track-index * root.stride + step];
             current: root.playhead == step;
 
             beat-group-highlight:

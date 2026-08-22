@@ -14,7 +14,7 @@ use crate::clip::{Clip, ClipKind};
 use crate::history::History;
 use crate::mixer::{MixerChannel, MixerParam};
 use crate::track::{Track, TrackKind};
-use daw_midi::{BeatPatterns, DrumPattern};
+use daw_midi::{BeatPatterns, DrumPattern, DrumTrackParams};
 
 /// Tipo de mudança de um evento do documento.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -674,6 +674,41 @@ impl Project {
     pub fn toggle_beat_step(&mut self, track: usize, step: usize) -> Option<bool> {
         self.current_beat_pattern_mut()
             .map(|p| p.toggle_step(track, step))
+    }
+
+    /// Define o estado de um passo no padrão atual. Retorna `true` se gravou.
+    pub fn set_beat_step(&mut self, track: usize, step: usize, on: bool) -> bool {
+        let Some(p) = self.current_beat_pattern_mut() else {
+            return false;
+        };
+        p.set_step(track, step, on)
+    }
+
+    /// Redefine a resolução do padrão atual (preserva passos gravados).
+    pub fn set_beat_resolution(&mut self, resolution: u32) -> bool {
+        let Some(p) = self.current_beat_pattern_mut() else {
+            return false;
+        };
+        p.set_resolution(resolution);
+        true
+    }
+
+    /// Insere passos vazios no início de todas as trilhas do padrão atual
+    /// (desloca os gravados para a direita).
+    pub fn insert_beat_steps(&mut self, count: usize) -> bool {
+        let Some(p) = self.current_beat_pattern_mut() else {
+            return false;
+        };
+        p.insert_steps(count);
+        true
+    }
+
+    /// Parâmetros de uma trilha do padrão atual (mute/solo/pan/volume/
+    /// canal/sample/nome), para edição direta pelo bridge.
+    pub fn beat_track_params_mut(&mut self, track: usize) -> Option<&mut DrumTrackParams> {
+        self.current_beat_pattern_mut()?
+            .track_params
+            .get_mut(track)
     }
 
     /// Limpa uma trilha no padrão atual.

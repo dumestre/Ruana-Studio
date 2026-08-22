@@ -5,21 +5,27 @@
 /// Parâmetros de uma trilha do beat sequencer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DrumTrackParams {
+    /// Nome da trilha (ex.: "Kick", "Snare").
+    pub name: String,
     pub active: bool,
     pub solo: bool,
     pub pan: f32,
     pub volume: f32,
     pub mixer_channel: i32,
+    /// Sample atribuído à trilha via drag & drop (path do arquivo).
+    pub sample_path: Option<String>,
 }
 
 impl Default for DrumTrackParams {
     fn default() -> Self {
         Self {
+            name: String::new(),
             active: true,
             solo: false,
             pan: 0.0,
             volume: 1.0,
             mixer_channel: 0,
+            sample_path: None,
         }
     }
 }
@@ -48,10 +54,30 @@ impl Default for DrumPattern {
 }
 
 impl DrumPattern {
+    /// Nomes padrão de trilha (kit de bateria).
+    const DEFAULT_TRACK_NAMES: [&'static str; 8] = [
+        "Kick",
+        "Snare",
+        "Clap",
+        "Closed Hat",
+        "Open Hat",
+        "Tom",
+        "Cymbal",
+        "Perc",
+    ];
+
     /// Cria um padrão vazio com N trilhas e resolução.
     pub fn new(name: impl Into<String>, num_tracks: usize, resolution: u32) -> Self {
         let grid = vec![vec![false; resolution as usize]; num_tracks];
-        let track_params = (0..num_tracks).map(|_| DrumTrackParams::default()).collect();
+        let track_params = (0..num_tracks)
+            .map(|i| DrumTrackParams {
+                name: Self::DEFAULT_TRACK_NAMES
+                    .get(i)
+                    .map(|s| (*s).to_string())
+                    .unwrap_or_else(|| format!("Track {}", i + 1)),
+                ..Default::default()
+            })
+            .collect();
         Self {
             name: name.into(),
             grid,
@@ -79,6 +105,40 @@ impl DrumPattern {
             self.grid[track][step]
         } else {
             false
+        }
+    }
+
+    /// Define o estado de um passo (track, step). Retorna `true` se existia.
+    pub fn set_step(&mut self, track: usize, step: usize, on: bool) -> bool {
+        let Some(row) = self.grid.get_mut(track) else {
+            return false;
+        };
+        let Some(cell) = row.get_mut(step) else {
+            return false;
+        };
+        *cell = on;
+        true
+    }
+
+    /// Redefine a resolução, preservando os passos já gravados.
+    pub fn set_resolution(&mut self, resolution: u32) {
+        let resolution = resolution as usize;
+        self.resolution = resolution as u32;
+        for row in &mut self.grid {
+            row.resize(resolution, false);
+        }
+    }
+
+    /// Insere `count` passos vazios no início de todas as trilhas,
+    /// deslocando os passos gravados para a direita (os últimos caem fora).
+    pub fn insert_steps(&mut self, count: usize) {
+        let steps = self.steps();
+        let shift = count.min(steps);
+        for row in &mut self.grid {
+            row.rotate_right(shift);
+            for cell in row.iter_mut().take(shift) {
+                *cell = false;
+            }
         }
     }
 

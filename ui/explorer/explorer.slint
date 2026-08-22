@@ -20,7 +20,7 @@ export component Explorer inherits Rectangle {
     in-out property <int> history-index: -1;
     in-out property <[BrowserFileEntry]> entries: [];
 
-    callback audio-drag-started(string, string, color, bool);
+    callback audio-drag-started(string, string, string, color, bool);
     callback audio-drag-moved(length, length);
     callback audio-drag-finished();
 
@@ -124,8 +124,8 @@ export component Explorer inherits Rectangle {
                 explorer-go-up() => {
                     root.explorer-go-up();
                 }
-                audio-drag-started(name, type, color, is-midi) => {
-                    root.audio-drag-started(name, type, color, is-midi);
+                audio-drag-started(name, path, type, color, is-midi) => {
+                    root.audio-drag-started(name, path, type, color, is-midi);
                 }
                 audio-drag-moved(x, y) => {
                     root.audio-drag-moved(x, y);
@@ -146,8 +146,8 @@ export component Explorer inherits Rectangle {
                     root.preview-file-info = type + " | " + path;
                 }
 
-                audio-drag-started(name, type, color, is-midi) => {
-                    root.audio-drag-started(name, type, color, is-midi);
+                audio-drag-started(name, path, type, color, is-midi) => {
+                    root.audio-drag-started(name, path, type, color, is-midi);
                 }
 
                 audio-drag-moved(x, y) => {

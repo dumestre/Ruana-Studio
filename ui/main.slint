@@ -1,6 +1,7 @@
 import { Theme } from "theme.slint";
 import { ClipData } from "timeline/clip_data.slint";
 import { BeatPopup } from "beat/beat_popup.slint";
+import { BeatState } from "beat/beat_state.slint";
 import { Workspace } from "windows/workspace.slint";
 import { BrowserFileEntry } from "explorer/file_browser.slint";
 import { FloatPanel } from "windows/float_panel.slint";
@@ -9,6 +10,7 @@ import { PianoRollData, PianoRollActions } from "piano_roll/piano_roll_state.sli
 export { FloatPanel }
 export { PianoRollData, PianoRollActions }
 export { BrowserFileEntry }
+export { BeatState }
 
 export struct TimelineCoords {
     track: int,
@@ -280,6 +282,11 @@ export component MainWindow inherits Window {
     in-out property <bool> drag-is-midi:
         true;
 
+    // Path do arquivo de áudio arrastado (vazio quando a
+    // origem é um clip do ClipPool, que ainda não tem arquivo).
+    in-out property <string> drag-path:
+        "";
+
     in-out property <length> drag-x:
         0px;
 
@@ -311,20 +318,27 @@ export component MainWindow inherits Window {
 
 
     // =====================================================
-    // DRAG COMPARTILHADO (ClipPool + Explorer → timeline)
+    // DRAG COMPARTILHADO (ClipPool + Explorer → timeline / beat)
     //
     // Callbacks alimentados pelo ClipPool e pelo Explorer de
     // áudio. Ghost, tilt, snap e drop preview são os mesmos
     // para as duas origens.
+    //
+    // Assinatura: name, path, position, duration, color, is-midi
     // =====================================================
 
-    callback drag-begin(string, string, string, color, bool);
+    callback drag-begin(string, string, string, string, color, bool);
     callback drag-move(length, length);
     callback drag-end();
+
+    // Drop de sample numa linha do beat sequencer
+    // (track da linha, nome do arquivo, path completo).
+    callback beat-sample-dropped(int, string, string);
 
 
     drag-begin(
         name,
+        path,
         position,
         duration,
         color,
@@ -332,6 +346,7 @@ export component MainWindow inherits Window {
     ) => {
 
         root.drag-name = name;
+        root.drag-path = path;
         root.drag-position = position;
         root.drag-duration = duration;
         root.drag-color = color;
@@ -396,18 +411,32 @@ export component MainWindow inherits Window {
     drag-end() => {
 
         if root.drag-active
-            && root.drag-inited
-            && root.track-names.length > 0
-            && root.drag-over-timeline {
+            && root.drag-inited {
 
-            // O core é dono dos dados: a UI só emite a
-            // intenção; o bridge (Rust) cria o clip.
-            root.clip-dropped(
-                root.drag-drop-track,
-                root.drag-snap-beat,
-                root.drag-name,
-                root.drag-is-midi
-            );
+            // Prioridade: beat sequencer aberto com o cursor
+            // sobre uma linha do grid → define o sample da
+            // track (fluxo do channel rack do FL Studio).
+            if root.beat-open
+                && beat_popup.hover-track >= 0 {
+
+                root.beat-sample-dropped(
+                    beat_popup.hover-track,
+                    root.drag-name,
+                    root.drag-path
+                );
+
+            } else if root.track-names.length > 0
+                && root.drag-over-timeline {
+
+                // O core é dono dos dados: a UI só emite a
+                // intenção; o bridge (Rust) cria o clip.
+                root.clip-dropped(
+                    root.drag-drop-track,
+                    root.drag-snap-beat,
+                    root.drag-name,
+                    root.drag-is-midi
+                );
+            }
         }
 
         root.drag-active = false;
@@ -415,6 +444,7 @@ export component MainWindow inherits Window {
         root.drag-tilt = 0deg;
         root.drag-tilt-display = 0deg;
         root.drag-speed = 0.0;
+        root.drag-path = "";
     }
 
 
@@ -555,18 +585,95 @@ export component MainWindow inherits Window {
         float-toggle(tab) => { root.float-toggle(tab); }
         tool-changed(tool) => { root.tool-changed(tool); }
         timeline-bounds-changed(x, y, w, h) => { root.timeline-bounds-changed(x, y, w, h); }
-        drag-begin(name, position, duration, color, is-midi) => { root.drag-begin(name, position, duration, color, is-midi); }
+        drag-begin(name, path, position, duration, color, is-midi) => { root.drag-begin(name, path, position, duration, color, is-midi); }
         drag-move(x, y) => { root.drag-move(x, y); }
         drag-end() => { root.drag-end(); }
     }
 
     // =====================================================
     // BEAT POPUP
+    //
+    // As propriedades de dados e os callbacks de persistência
+    // são ponteados ao global BeatState, consumido pelo Rust.
     // =====================================================
     beat_popup := BeatPopup {
 
         open <=>
             root.beat-open;
+
+        drag-active <=> root.drag-active;
+        drag-x <=> root.drag-x;
+        drag-y <=> root.drag-y;
+
+
+        // ----------------------------------------------------
+        // DADOS (core ↔ UI)
+        // ----------------------------------------------------
+
+        patterns <=> BeatState.patterns;
+
+        current-pattern <=> BeatState.current-pattern;
+
+        grid-resolution <=> BeatState.grid-resolution;
+
+        humanize <=> BeatState.humanize;
+
+        swing <=> BeatState.swing;
+
+        instrument-names <=> BeatState.instrument-names;
+
+        track-active <=> BeatState.track-active;
+
+        track-solo <=> BeatState.track-solo;
+
+        track-pan <=> BeatState.track-pan;
+
+        track-volume <=> BeatState.track-volume;
+
+        track-mixer-channel <=> BeatState.track-mixer-channel;
+
+
+        // ----------------------------------------------------
+        // PERSISTÊNCIA
+        // ----------------------------------------------------
+
+        step-committed(index, value) => {
+            BeatState.step-committed(index, value);
+        }
+
+        grid-resolution-committed(value) => {
+            BeatState.grid-resolution-committed(value);
+        }
+
+        humanize-committed(value) => {
+            BeatState.humanize-committed(value);
+        }
+
+        swing-committed(value) => {
+            BeatState.swing-committed(value);
+        }
+
+        track-param-committed(track, param, value) => {
+            BeatState.track-param-committed(track, param, value);
+        }
+
+        pattern-changed(index) => {
+            BeatState.pattern-changed(index);
+        }
+
+        duplicate-beat => { BeatState.duplicate-beat(); }
+        copy-beat => { BeatState.copy-beat(); }
+        clear-beat => { BeatState.clear-beat(); }
+        delete-beat => { BeatState.delete-beat(); }
+
+        copy-track(track) => { BeatState.copy-track(track); }
+        duplicate-track(track) => { BeatState.duplicate-track(track); }
+        delete-track(track) => { BeatState.delete-track(track); }
+        clear-track(track) => { BeatState.clear-track(track); }
+
+        insert-pattern(track, interval) => {
+            BeatState.insert-pattern(track, interval);
+        }
     }
 
 

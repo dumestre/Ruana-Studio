@@ -1,0 +1,67 @@
+// ============================================================
+// BEAT STATE
+//
+// Ponte UI ↔ bridge (Rust) do beat sequencer.
+//
+// O Rust projeta o estado do core aqui (fonte única) e consome
+// os callbacks de persistência. O MainWindow faz a ponte destas
+// propriedades com a instância do BeatPopup.
+// ============================================================
+
+export global BeatState {
+
+    // --------------------------------------------------------
+    // DADOS (projetados do core pelo Rust)
+    // --------------------------------------------------------
+
+    in-out property <[[bool]]> patterns: [[]];
+
+    in-out property <int> current-pattern: 0;
+
+    in-out property <int> grid-resolution: 16;
+
+    in-out property <float> humanize: 0.0;
+
+    in-out property <float> swing: 0.0;
+
+    in-out property <[string]> instrument-names: [];
+
+    in-out property <[bool]> track-active: [];
+
+    in-out property <[bool]> track-solo: [];
+
+    in-out property <[float]> track-pan: [];
+
+    in-out property <[float]> track-volume: [];
+
+    in-out property <[int]> track-mixer-channel: [];
+
+
+    // --------------------------------------------------------
+    // PERSISTÊNCIA (callbacks consumidos pelo Rust)
+    // --------------------------------------------------------
+
+    callback step-committed(int, bool);
+
+    callback grid-resolution-committed(int);
+
+    callback humanize-committed(float);
+
+    callback swing-committed(float);
+
+    callback track-param-committed(int, string, float);
+
+    callback pattern-changed(int);
+
+    callback duplicate-beat;
+    callback copy-beat;
+    callback clear-beat;
+    callback delete-beat;
+
+    callback copy-track(int);
+    callback duplicate-track(int);
+    callback delete-track(int);
+    callback clear-track(int);
+
+    callback insert-pattern(int, int);
+}

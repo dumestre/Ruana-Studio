@@ -1,5 +1,6 @@
 slint::include_modules!();
 
+mod beat;
 mod cursors;
 mod icon;
 mod playback;
@@ -714,6 +715,12 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Piano roll da janela principal (estado por janela; cada float tem o seu).
     wire_piano_roll(&ui, Rc::new(RefCell::new(NoteEditor::new())));
+
+    // Beat sequencer: projeção inicial + persistência no core.
+    {
+        let project = project.clone();
+        beat::wire_beat(&ui, project);
+    }
 
     // Slots das janelas flutuantes, um por tool (0=Mixer, 1=Sampler, 2=Piano Roll).
     let float_panels: Rc<RefCell<[Option<FloatPanel>; 3]>> = Rc::new(RefCell::new([None, None, None]));

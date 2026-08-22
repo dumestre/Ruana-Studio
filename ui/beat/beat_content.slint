@@ -13,7 +13,38 @@ export component BeatContent inherits Rectangle {
     in-out property <[[bool]]> patterns: [[]];
     in-out property <int> current-pattern: 0;
 
-    in-out property <[bool]> steps: [];
+    // ============================================================
+    // FONTE ÚNICA DE VERDADE
+    //
+    // A grade desenha SEMPRE do pattern atual. O clique grava
+    // em patterns[current-pattern] (via callback do dono) e
+    // este binding redesenha as células. Nunca dessincroniza.
+    // ============================================================
+
+    private property <[bool]> steps:
+        root.patterns.length > 0
+        && root.current-pattern >= 0
+        && root.current-pattern < root.patterns.length
+            ? root.patterns[root.current-pattern]
+            : [];
+
+    // ============================================================
+    // STRIDE
+    //
+    // Passos por trilha no model (linha achatada do pattern).
+    // O índice global de um passo é row * stride + col; nunca
+    // assumir 16, senão resoluções maiores invadem a linha de
+    // cima.
+    // ============================================================
+
+    private property <int> stride:
+        root.patterns.length > 0
+        && root.current-pattern >= 0
+        && root.current-pattern < root.patterns.length
+        && root.instrument-indexes.length > 0
+            ? max(1, root.patterns[root.current-pattern].length
+                / root.instrument-indexes.length)
+            : 16;
 
     in-out property <int> playhead: -1;
 
@@ -101,6 +132,11 @@ export component BeatContent inherits Rectangle {
     callback insert-pattern(int, int);
     callback pattern-changed(int);
 
+    // Persistência no core (repassados ao popup).
+    callback humanize-committed(float);
+    callback swing-committed(float);
+    callback track-param-changed(int, string, float);
+
 
     // ============================================================
     // MENUS
@@ -153,6 +189,18 @@ export component BeatContent inherits Rectangle {
         + 2 * 1px
         + 26px
         + 11 * 1px;
+
+
+    // ============================================================
+    // DRAG DE SAMPLE (browser → linha do beat)
+    // ============================================================
+
+    in property <bool> drag-active: false;
+    in property <length> drag-x: 0px;
+    in property <length> drag-y: 0px;
+
+    // Linha sob o cursor durante o drag (-1 = fora do grid).
+    out property <int> drag-hover-track: -1;
 
 
     // ============================================================
@@ -259,6 +307,14 @@ export component BeatContent inherits Rectangle {
 
         grid-resolution-changed(value) => {
             root.grid-resolution-changed(value);
+        }
+
+        humanize-changed(value) => {
+            root.humanize-committed(value);
+        }
+
+        swing-changed(value) => {
+            root.swing-committed(value);
         }
 
         duplicate-beat => {
@@ -373,6 +429,10 @@ export component BeatContent inherits Rectangle {
         track-selected(index) => {
             root.track-selected(index);
         }
+
+        track-param-changed(track, param, value) => {
+            root.track-param-changed(track, param, value);
+        }
     }
 
 
@@ -401,9 +461,14 @@ export component BeatContent inherits Rectangle {
 
         // --------------------------------------------------------
         // DADOS
+        //
+        // steps agora é derivado de patterns[current-pattern]
+        // (binding unidirecional — a fonte de verdade é o pattern).
         // --------------------------------------------------------
 
-        steps <=> root.steps;
+        steps: root.steps;
+
+        stride: root.stride;
 
         instrument-indexes:
             root.instrument-indexes;
@@ -422,6 +487,17 @@ export component BeatContent inherits Rectangle {
 
         track-colors:
             root.track-colors;
+
+
+        // --------------------------------------------------------
+        // DRAG DE SAMPLE
+        // --------------------------------------------------------
+
+        hover-row:
+            root.drag-hover-track;
+
+        drag-active:
+            root.drag-active;
 
 
         // --------------------------------------------------------
@@ -618,4 +694,55 @@ export component BeatContent inherits Rectangle {
             }
         }
     }
+
+
+    // ============================================================
+    // HOVER DO DRAG DE SAMPLE
+    //
+    // Enquanto um sample é arrastado, descobre sobre qual
+    // linha do grid o cursor está (mesma geometria do
+    // BeatStepGrid: rows-top 33px, pitch 30px).
+    // ============================================================
+
+    Timer {
+
+        interval: 16ms;
+
+        running:
+            root.drag-active;
+
+        triggered => {
+
+            let gx =
+                step-grid.absolute-position.x;
+
+            let gy =
+                step-grid.absolute-position.y;
+
+            let inside-x =
+                root.drag-x >= gx
+                && root.drag-x <= gx + step-grid.width;
+
+            let row =
+                Math.floor(
+                    (root.drag-y - gy - 33px) / 30px
+                );
+
+            root.drag-hover-track =
+                inside-x
+                && root.drag-y >= gy + 33px
+                && root.drag-y <= gy + 33px + root.instrument-indexes.length * 30px
+                && row >= 0
+                && row < root.instrument-indexes.length
+                    ? row
+                    : -1;
+        }
+    }
+
+    // Drag terminou → limpa o highlight.
+    states [
+        idle when !root.drag-active: {
+            drag-hover-track: -1;
+        }
+    ]
 }

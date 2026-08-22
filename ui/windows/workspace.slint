@@ -103,7 +103,7 @@ export component Workspace inherits Rectangle {
     callback explorer-path-changed(string);
     callback explorer-directory-entered(string);
     callback explorer-go-up();
-    callback drag-begin(string, string, string, color, bool);
+    callback drag-begin(string, string, string, string, color, bool);
     callback drag-move(length, length);
     callback drag-end();
 
@@ -173,7 +173,7 @@ export component Workspace inherits Rectangle {
                 clips: root.clips;
 
                 clip-drag-started(name, position, duration, color, is-midi) => {
-                    root.drag-begin(name, position, duration, color, is-midi);
+                    root.drag-begin(name, "", position, duration, color, is-midi);
                 }
                 clip-drag-moved(x, y) => { root.drag-move(x, y); }
                 clip-drag-finished() => { root.drag-end(); }
@@ -244,7 +244,9 @@ export component Workspace inherits Rectangle {
                             clip-delete-requested(id) => { root.clip-delete-requested(id); }
                             clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
                             clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
-                            Rectangle { min-width: 16px; min-height: 16px; }
+                            Rectangle { min-width: 16px;
+                                x: 273px;
+                                y: 77px; min-height: 16px; }
                         }
                     }
                 }
@@ -423,7 +425,7 @@ export component Workspace inherits Rectangle {
                     path-history <=> root.explorer-path-history;
                     history-index <=> root.explorer-history-index;
                     entries <=> root.explorer-entries;
-                    audio-drag-started(name, type, color, is-midi) => { root.drag-begin(name, "", "", color, is-midi); }
+                    audio-drag-started(name, path, type, color, is-midi) => { root.drag-begin(name, path, "", "", color, is-midi); }
                     audio-drag-moved(x, y) => { root.drag-move(x, y); }
                     audio-drag-finished() => { root.drag-end(); }
                     explorer-path-changed(path) => { root.explorer-path-changed(path); }

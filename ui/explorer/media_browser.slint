@@ -17,7 +17,7 @@ export component MediaBrowser inherits Rectangle {
 
     callback media-selected(string, string, string); // name, type, path
 
-    callback audio-drag-started(string, string, color, bool);
+    callback audio-drag-started(string, string, string, color, bool); // name, path, type, color, is-midi
     callback audio-drag-moved(length, length);
     callback audio-drag-finished();
 
@@ -138,6 +138,7 @@ export component MediaBrowser inherits Rectangle {
                     drag-started() => {
                         root.audio-drag-started(
                             item.name,
+                            item.path,
                             item.type,
                             Theme.clip-audio,
                             false

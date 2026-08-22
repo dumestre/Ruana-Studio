@@ -46,8 +46,6 @@ export component Beat inherits Rectangle {
 
     in-out property <int> current-pattern: 0;
 
-    in-out property <[bool]> steps: [];
-
     in-out property <int> playhead: -1;
 
     in-out property <int> grid-resolution: 16;
@@ -114,7 +112,6 @@ export component Beat inherits Rectangle {
         height: 100%;
 
 
-        steps <=> root.steps;
         playhead <=> root.playhead;
 
         grid-resolution
