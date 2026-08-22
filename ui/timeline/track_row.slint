@@ -5,7 +5,7 @@ import { ClipData } from "clip_data.slint";
 export component TrackRow inherits Rectangle {
 
     // =====================================================
-    // DADOS DO TRACK
+    // DADOS
     // =====================================================
 
     in property <int> track-index: 0;
@@ -30,10 +30,6 @@ export component TrackRow inherits Rectangle {
 
     // =====================================================
     // MÉTRICA MUSICAL
-    //
-    // Recebidas da Timeline (projetadas do core). O grid
-    // vertical não é mais desenhado aqui, mas ficam
-    // disponíveis para os clips e uso futuro.
     // =====================================================
 
     in property <int> total-bars: 32;
@@ -48,6 +44,7 @@ export component TrackRow inherits Rectangle {
     in property <int> active-tool: 0;
 
     in property <int> drag-clip-id: -1;
+
     in property <int> drag-track-offset: 0;
 
 
@@ -60,16 +57,23 @@ export component TrackRow inherits Rectangle {
     callback slice-requested(int, float);
 
     callback clip-move-started(int, float);
+
     callback clip-move-delta(int, float, int);
+
     callback clip-move-finished(int);
 
     callback clip-resize-started(int, int);
+
     callback clip-resize-delta(int, int, float);
+
     callback clip-resize-finished(int);
 
     callback clip-delete-requested(int);
+
     callback clip-rename-requested(int, string);
+
     callback clip-color-cycle-requested(int);
+
     callback clip-copy-requested(int);
 
 
@@ -84,8 +88,9 @@ export component TrackRow inherits Rectangle {
     // =====================================================
     // FUNDO
     //
-    // Transparente: o fundo alternado por compasso é
-    // desenhado pela Timeline atrás das linhas de clips.
+    // IMPORTANTE:
+    // transparente para deixar o grid da Timeline
+    // continuar aparecendo.
     // =====================================================
 
     background:
@@ -94,12 +99,16 @@ export component TrackRow inherits Rectangle {
 
     // =====================================================
     // HIGHLIGHT DA TRACK SELECIONADA
+    //
+    // 82% transparente = apenas uma tonalidade.
+    // O grid continua visível por baixo.
     // =====================================================
 
     Rectangle {
 
-        x: 0;
-        y: 0;
+        x: 0px;
+
+        y: 0px;
 
         width:
             parent.width;
@@ -109,18 +118,22 @@ export component TrackRow inherits Rectangle {
 
         background:
             root.selected-track
-                ? Theme.surface-high.transparentize(0.15)
+                ? Theme.surface-high.transparentize(
+                    0.82
+                )
                 : transparent;
+
+        z: 1;
     }
 
 
     // =====================================================
-    // LINHA INFERIOR DA TRACK
+    // LINHA INFERIOR
     // =====================================================
 
     Rectangle {
 
-        x: 0;
+        x: 0px;
 
         y:
             parent.height - 1px;
@@ -140,20 +153,18 @@ export component TrackRow inherits Rectangle {
 
     // =====================================================
     // CLIPS
-    //
-    // Cada TrackRow renderiza apenas os clips cujo
-    // track-index corresponde ao próprio track.
     // =====================================================
 
     for clip in root.clips: TrackClip {
 
         visible:
-            clip.track-index == root.track-index;
+            clip.track-index
+            == root.track-index;
 
 
-        // =================================================
+        // =============================================
         // IDENTIDADE
-        // =================================================
+        // =============================================
 
         name:
             clip.name;
@@ -165,25 +176,25 @@ export component TrackRow inherits Rectangle {
             root.track-index;
 
 
-        // =================================================
+        // =============================================
         // POSIÇÃO
-        // =================================================
+        // =============================================
 
         beat:
             clip.beat;
 
 
-        // =================================================
+        // =============================================
         // DURAÇÃO
-        // =================================================
+        // =============================================
 
         len:
             clip.len;
 
 
-        // =================================================
+        // =============================================
         // TIPO / COR
-        // =================================================
+        // =============================================
 
         is-midi:
             clip.is-midi;
@@ -195,9 +206,9 @@ export component TrackRow inherits Rectangle {
             clip.waveform-points;
 
 
-        // =================================================
+        // =============================================
         // ESCALA
-        // =================================================
+        // =============================================
 
         px-per-beat:
             root.px-per-beat;
@@ -206,17 +217,18 @@ export component TrackRow inherits Rectangle {
             root.row-height;
 
 
-        // =================================================
+        // =============================================
         // SELEÇÃO
-        // =================================================
+        // =============================================
 
         selected:
-            root.selected-clip == clip.id;
+            root.selected-clip
+            == clip.id;
 
 
-        // =================================================
+        // =============================================
         // FERRAMENTA
-        // =================================================
+        // =============================================
 
         active-tool:
             root.active-tool;
@@ -228,9 +240,9 @@ export component TrackRow inherits Rectangle {
             root.drag-track-offset;
 
 
-        // =================================================
+        // =============================================
         // CLIQUE
-        // =================================================
+        // =============================================
 
         clicked(id) => {
 
@@ -240,9 +252,9 @@ export component TrackRow inherits Rectangle {
         }
 
 
-        // =================================================
+        // =============================================
         // SLICE
-        // =================================================
+        // =============================================
 
         slice-requested(
             id,
@@ -255,44 +267,142 @@ export component TrackRow inherits Rectangle {
             );
         }
 
-        clip-move-started(id, beat) => {
-            root.clip-move-started(id, beat);
+
+        // =============================================
+        // MOVE
+        // =============================================
+
+        clip-move-started(
+            id,
+            beat
+        ) => {
+
+            root.clip-move-started(
+                id,
+                beat
+            );
         }
 
-        clip-move-delta(id, delta_beats, delta_tracks) => {
-            root.clip-move-delta(id, delta_beats, delta_tracks);
+
+        clip-move-delta(
+            id,
+            delta_beats,
+            delta_tracks
+        ) => {
+
+            root.clip-move-delta(
+                id,
+                delta_beats,
+                delta_tracks
+            );
         }
 
-        clip-move-finished(id) => {
-            root.clip-move-finished(id);
+
+        clip-move-finished(
+            id
+        ) => {
+
+            root.clip-move-finished(
+                id
+            );
         }
 
-        clip-resize-started(id, side) => {
-            root.clip-resize-started(id, side);
+
+        // =============================================
+        // RESIZE
+        // =============================================
+
+        clip-resize-started(
+            id,
+            side
+        ) => {
+
+            root.clip-resize-started(
+                id,
+                side
+            );
         }
 
-        clip-resize-delta(id, side, delta) => {
-            root.clip-resize-delta(id, side, delta);
+
+        clip-resize-delta(
+            id,
+            side,
+            delta
+        ) => {
+
+            root.clip-resize-delta(
+                id,
+                side,
+                delta
+            );
         }
 
-        clip-resize-finished(id) => {
-            root.clip-resize-finished(id);
+
+        clip-resize-finished(
+            id
+        ) => {
+
+            root.clip-resize-finished(
+                id
+            );
         }
 
-        clip-delete-requested(id) => {
-            root.clip-delete-requested(id);
+
+        // =============================================
+        // DELETE
+        // =============================================
+
+        clip-delete-requested(
+            id
+        ) => {
+
+            root.clip-delete-requested(
+                id
+            );
         }
 
-        clip-rename-requested(id, new_name) => {
-            root.clip-rename-requested(id, new_name);
+
+        // =============================================
+        // RENAME
+        // =============================================
+
+        clip-rename-requested(
+            id,
+            new_name
+        ) => {
+
+            root.clip-rename-requested(
+                id,
+                new_name
+            );
         }
 
-        clip-color-cycle-requested(id) => {
-            root.clip-color-cycle-requested(id);
+
+        // =============================================
+        // COLOR
+        // =============================================
+
+        clip-color-cycle-requested(
+            id
+        ) => {
+
+            root.clip-color-cycle-requested(
+                id
+            );
         }
 
-        clip-copy-requested(id) => {
-            root.clip-copy-requested(id);
+
+        // =============================================
+        // COPY
+        // =============================================
+
+        clip-copy-requested(
+            id
+        ) => {
+
+            root.clip-copy-requested(
+                id
+            );
         }
     }
 }

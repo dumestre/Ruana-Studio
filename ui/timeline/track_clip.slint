@@ -52,7 +52,8 @@ export component TrackClip inherits Rectangle {
         #C0C050
     ];
 
-    private property <color> audio-default: #00C853;
+    private property <color> audio-default:
+        #00C853;
 
     private property <color> base-color:
         root.color-index == 0
@@ -250,12 +251,7 @@ export component TrackClip inherits Rectangle {
 
 
     // =====================================================
-    // FUNDO DO ROOT
-    //
-    // IMPORTANTE:
-    // O ROOT NÃO PINTA O FUNDO.
-    //
-    // Isso permite que o grid continue visível.
+    // ROOT
     // =====================================================
 
     background:
@@ -264,6 +260,11 @@ export component TrackClip inherits Rectangle {
 
     // =====================================================
     // CORPO DO CLIP
+    //
+    // SOMENTE O CORPO É TRANSLÚCIDO.
+    //
+    // Alpha baixo para permitir enxergar claramente
+    // as linhas do grid por baixo do clip.
     // =====================================================
 
     Rectangle {
@@ -282,21 +283,16 @@ export component TrackClip inherits Rectangle {
             - root.header-height
             - root.bw;
 
-        // =================================================
-        // FUNDO TRANSLÚCIDO
-        //
-        // O alpha está AQUI.
-        // Não usamos opacity no Rectangle.
-        //
-        // Assim a waveform continua opaca.
-        // =================================================
-
         background:
             root.clip-color.darker(
                 root.hovered
-                    ? 0.08
-                    : 0.15
-            ).with-alpha(0.48);
+                    ? 0.05
+                    : 0.12
+            ).with-alpha(
+                root.hovered
+                    ? 0.36
+                    : 0.30
+            );
 
         clip:
             true;
@@ -305,7 +301,8 @@ export component TrackClip inherits Rectangle {
         // =================================================
         // WAVEFORM
         //
-        // TOTALMENTE OPACA
+        // OPACA.
+        // Não herda o alpha do corpo.
         // =================================================
 
         if !root.is-midi
@@ -343,6 +340,8 @@ export component TrackClip inherits Rectangle {
 
     // =====================================================
     // HEADER
+    //
+    // TOTALMENTE OPACO.
     // =====================================================
 
     Rectangle {
@@ -359,7 +358,6 @@ export component TrackClip inherits Rectangle {
         height:
             root.header-height - root.bw;
 
-        // HEADER CONTINUA OPACO
         background:
             root.clip-color.brighter(
                 root.hovered
@@ -517,7 +515,7 @@ export component TrackClip inherits Rectangle {
 
 
     // =====================================================
-    // DIVISÓRIA
+    // DIVISÓRIA HEADER / CORPO
     // =====================================================
 
     Rectangle {
@@ -840,9 +838,9 @@ export component TrackClip inherits Rectangle {
 
         pointer-event(event) => {
 
-            // =================================================
+            // =============================================
             // RIGHT CLICK
-            // =================================================
+            // =============================================
 
             if event.kind
                     == PointerEventKind.down
@@ -867,9 +865,9 @@ export component TrackClip inherits Rectangle {
             }
 
 
-            // =================================================
+            // =============================================
             // ERASER
-            // =================================================
+            // =============================================
 
             if root.active-tool == 2 {
 
@@ -887,9 +885,9 @@ export component TrackClip inherits Rectangle {
             }
 
 
-            // =================================================
+            // =============================================
             // SLICE
-            // =================================================
+            // =============================================
 
             if root.active-tool == 1 {
 
@@ -931,17 +929,17 @@ export component TrackClip inherits Rectangle {
             }
 
 
-            // =================================================
+            // =============================================
             // SELECT
-            // =================================================
+            // =============================================
 
             if root.active-tool == 0
                 && !root.renaming {
 
 
-                // =============================================
+                // =========================================
                 // DOWN
-                // =============================================
+                // =========================================
 
                 if event.kind
                         == PointerEventKind.down
@@ -954,9 +952,9 @@ export component TrackClip inherits Rectangle {
                     );
 
 
-                    // =========================================
+                    // =====================================
                     // RESIZE
-                    // =========================================
+                    // =====================================
 
                     if root.on-edge {
 
@@ -984,9 +982,9 @@ export component TrackClip inherits Rectangle {
                     }
 
 
-                    // =========================================
+                    // =====================================
                     // DRAG
-                    // =========================================
+                    // =====================================
 
                     else {
 
@@ -1013,17 +1011,17 @@ export component TrackClip inherits Rectangle {
                 }
 
 
-                // =============================================
+                // =========================================
                 // MOVE
-                // =============================================
+                // =========================================
 
                 else if event.kind
                             == PointerEventKind.move {
 
 
-                    // =========================================
+                    // =====================================
                     // RESIZE
-                    // =========================================
+                    // =====================================
 
                     if root.resizing {
 
@@ -1040,9 +1038,9 @@ export component TrackClip inherits Rectangle {
                             dx-px / ppb;
 
 
-                        // =====================================
+                        // =================================
                         // DIREITA
-                        // =====================================
+                        // =================================
 
                         if root.resize-side > 0 {
 
@@ -1067,9 +1065,9 @@ export component TrackClip inherits Rectangle {
                         }
 
 
-                        // =====================================
+                        // =================================
                         // ESQUERDA
-                        // =====================================
+                        // =================================
 
                         else {
 
@@ -1091,9 +1089,9 @@ export component TrackClip inherits Rectangle {
                     }
 
 
-                    // =========================================
+                    // =====================================
                     // DRAG
-                    // =========================================
+                    // =====================================
 
                     else if root.dragging {
 
@@ -1134,9 +1132,9 @@ export component TrackClip inherits Rectangle {
                 }
 
 
-                // =============================================
+                // =========================================
                 // UP
-                // =============================================
+                // =========================================
 
                 else if event.kind
                             == PointerEventKind.up {

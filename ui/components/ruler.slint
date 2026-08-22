@@ -2,8 +2,10 @@ import { Theme } from "../theme.slint";
 
 export component TimelineRuler inherits Rectangle {
 
-    // Métrica musical — projetada do core pelo Rust.
-    // Nenhum hardcode de 4/4: tudo deriva de beats-per-bar.
+    // =====================================================
+    // MÉTRICA MUSICAL
+    // =====================================================
+
     in property <int> total-bars: 32;
 
     in property <int> beats-per-bar: 4;
@@ -14,156 +16,339 @@ export component TimelineRuler inherits Rectangle {
 
     in property <length> scroll-x: 0px;
 
+
+    // =====================================================
+    // CALLBACK
+    // =====================================================
+
     callback seek-to-beat(float);
+
+
+    // =====================================================
+    // DIMENSÃO
+    // =====================================================
 
     height:
         root.ruler-height;
 
-    background:
-        Theme.surface;
 
-    // Largura de uma batida em pixels.
-    property <length> px-per-beat:
-        root.px-per-bar / root.beats-per-bar;
+    // =====================================================
+    // COR DA RÉGUA
+    //
+    // A régua fica mais escura que a área da timeline.
+    // =====================================================
+
+    background:
+        Theme.base;
 
 
     // =====================================================
-    // LOOP PRINCIPAL (CONTAINER POR COMPASSO)
-    // Agrupa fundo, linhas, texto e subdivisões no mesmo loop
+    // MÉTRICA POR BATIDA
+    // =====================================================
+
+    property <length> px-per-beat:
+        root.px-per-bar
+        / root.beats-per-bar;
+
+
+    // =====================================================
+    // COMPASSOS
     // =====================================================
 
     for i in root.total-bars: Rectangle {
-        // Container do compasso
-        x: i * root.px-per-bar;
-        y: 0;
-        width: root.px-per-bar;
-        height: parent.height;
+
+        x:
+            i * root.px-per-bar;
+
+        y:
+            0px;
+
+        width:
+            root.px-per-bar;
+
+        height:
+            parent.height;
+
         z: -1;
 
-        // ---- FUNDO DO COMPASSO ----
-        background: Math.mod(i, 2) == 1
-            ? Theme.base
-            : Theme.surface;
 
-        // ---- LINHA DO COMPASSO (Início do container) ----
+        // =============================================
+        // FUNDO DO COMPASSO
+        // =============================================
+
+        background:
+            Math.mod(i, 2) == 1
+                ? Theme.surface
+                : Theme.base;
+
+
+        // =============================================
+        // LINHA DO COMPASSO
+        // =============================================
+
         Rectangle {
-            x: 0;
-            y: 0;
-            width: 1px;
-            height: parent.height - 1px;
 
-            background: Math.mod(i, 2) == 1
-                ? Theme.border
-                : Theme.border.transparentize(0.45);
+            x: 0px;
+
+            y: 0px;
+
+            width: 1px;
+
+            height:
+                parent.height - 1px;
+
+            background:
+                Math.mod(i, 2) == 1
+                    ? Theme.border
+                    : Theme.border.transparentize(
+                        0.45
+                    );
         }
 
-        // ---- NÚMERO DO COMPASSO ----
+
+        // =============================================
+        // NÚMERO DO COMPASSO
+        // =============================================
+
         Text {
-            x: 2px;
-            y: 0;
-            width: parent.width - 2px;
-            height: parent.height;
 
-            text: "" + (i + 1);
-            color: Math.mod(i, 2) == 1
-                ? Theme.text-primary
-                : Theme.text-dim;
+            x: 3px;
 
-            font-size: Math.mod(i, 2) == 1 ? 10px : 9px;
-            font-weight: Math.mod(i, 2) == 1 ? 700 : 500;
+            y: 0px;
 
-            vertical-alignment: center;
-            horizontal-alignment: left;
-            overflow: elide;
+            width:
+                parent.width - 5px;
+
+            height:
+                parent.height;
+
+            text:
+                "" + (i + 1);
+
+            color:
+                Math.mod(i, 2) == 1
+                    ? Theme.text-primary
+                    : Theme.text-dim;
+
+            font-size:
+                Math.mod(i, 2) == 1
+                    ? 10px
+                    : 9px;
+
+            font-weight:
+                Math.mod(i, 2) == 1
+                    ? 700
+                    : 500;
+
+            vertical-alignment:
+                center;
+
+            horizontal-alignment:
+                left;
+
+            overflow:
+                elide;
         }
 
-        // ---- LINHAS DE BATIDA ----
+
+        // =============================================
+        // LINHAS DE BATIDA
+        // =============================================
+
         for k in root.beats-per-bar: Rectangle {
-            visible: k > 0 && root.px-per-bar >= 40px;
-            
-            x: k * root.px-per-beat;
-            y: 0;
-            width: 1px;
-            height: parent.height - 1px;
-            
-            background: Theme.border.transparentize(0.6);
+
+            visible:
+                k > 0
+                && root.px-per-bar >= 40px;
+
+            x:
+                k * root.px-per-beat;
+
+            y:
+                0px;
+
+            width:
+                1px;
+
+            height:
+                parent.height - 1px;
+
+            background:
+                Theme.border.transparentize(
+                    0.60
+                );
         }
 
-        // ---- SUBDIVISÃO 1/8 (meio da batida) ----
+
+        // =============================================
+        // SUBDIVISÃO 1/8
+        // =============================================
+
         for k in root.beats-per-bar: Rectangle {
-            visible: root.px-per-bar >= 120px;
-            
-            x: k * root.px-per-beat + root.px-per-beat * 0.5;
-            y: parent.height - 8px;
-            width: 1px;
-            height: 7px;
-            
-            background: Theme.border.transparentize(0.25);
+
+            visible:
+                root.px-per-bar >= 120px;
+
+            x:
+                k * root.px-per-beat
+                + root.px-per-beat * 0.5;
+
+            y:
+                parent.height - 8px;
+
+            width:
+                1px;
+
+            height:
+                7px;
+
+            background:
+                Theme.border.transparentize(
+                    0.25
+                );
         }
 
-        // ---- SUBDIVISÃO 1/16 (1/4 da batida) ----
+
+        // =============================================
+        // SUBDIVISÃO 1/16 — 1/4
+        // =============================================
+
         for k in root.beats-per-bar: Rectangle {
-            visible: root.px-per-bar >= 240px;
-            
-            x: k * root.px-per-beat + root.px-per-beat * 0.25;
-            y: parent.height - 6px;
-            width: 1px;
-            height: 5px;
-            
-            background: Theme.border.transparentize(0.25);
+
+            visible:
+                root.px-per-bar >= 240px;
+
+            x:
+                k * root.px-per-beat
+                + root.px-per-beat * 0.25;
+
+            y:
+                parent.height - 6px;
+
+            width:
+                1px;
+
+            height:
+                5px;
+
+            background:
+                Theme.border.transparentize(
+                    0.25
+                );
         }
 
-        // ---- SUBDIVISÃO 1/16 (3/4 da batida) ----
+
+        // =============================================
+        // SUBDIVISÃO 1/16 — 3/4
+        // =============================================
+
         for k in root.beats-per-bar: Rectangle {
-            visible: root.px-per-bar >= 240px;
-            
-            x: k * root.px-per-beat + root.px-per-beat * 0.75;
-            y: parent.height - 6px;
-            width: 1px;
-            height: 5px;
-            
-            background: Theme.border.transparentize(0.25);
+
+            visible:
+                root.px-per-bar >= 240px;
+
+            x:
+                k * root.px-per-beat
+                + root.px-per-beat * 0.75;
+
+            y:
+                parent.height - 6px;
+
+            width:
+                1px;
+
+            height:
+                5px;
+
+            background:
+                Theme.border.transparentize(
+                    0.25
+                );
         }
     }
 
 
     // =====================================================
-    // LINHA INFERIOR DA RÉGUA (BASE)
+    // LINHA INFERIOR DA RÉGUA
     // =====================================================
 
     Rectangle {
-        x: 0;
-        y: parent.height - 1px;
-        width: parent.width;
-        height: 1px;
-        background: Theme.border;
+
+        x: 0px;
+
+        y:
+            parent.height - 1px;
+
+        width:
+            parent.width;
+
+        height:
+            1px;
+
+        background:
+            Theme.border;
+
         z: 10;
     }
 
 
     // =====================================================
-    // CLICK-TO-SEEK
+    // CLICK / SEEK
     // =====================================================
 
     TouchArea {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: parent.height;
+
+        x: 0px;
+
+        y: 0px;
+
+        width:
+            parent.width;
+
+        height:
+            parent.height;
+
 
         clicked => {
-            let beat = (self.mouse-x + root.scroll-x)
+
+            let beat =
+                (
+                    self.mouse-x
+                    + root.scroll-x
+                )
                 / root.px-per-bar
                 * root.beats-per-bar;
-            root.seek-to-beat(max(0.0, beat));
+
+            root.seek-to-beat(
+                max(
+                    0.0,
+                    beat
+                )
+            );
         }
 
+
         pointer-event(event) => {
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                let beat = (self.mouse-x + root.scroll-x)
+
+            if event.kind
+                    == PointerEventKind.down
+                && event.button
+                    == PointerEventButton.left {
+
+                let beat =
+                    (
+                        self.mouse-x
+                        + root.scroll-x
+                    )
                     / root.px-per-bar
                     * root.beats-per-bar;
-                root.seek-to-beat(max(0.0, beat));
+
+                root.seek-to-beat(
+                    max(
+                        0.0,
+                        beat
+                    )
+                );
             }
         }
     }
