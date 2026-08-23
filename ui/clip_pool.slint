@@ -3,6 +3,7 @@
 // ============================================================
 
 import { Theme } from "theme.slint";
+import { ClipPalette } from "clip_palette.slint";
 import { ClipData } from "timeline/clip_data.slint";
 
 
@@ -405,18 +406,6 @@ export component ClipPool inherits Rectangle {
     // PALETA
     // ========================================================
 
-    private property <[color]> palette: [
-
-        #6FA86B,
-        #4F8AE0,
-        #E0A94F,
-        #E05E5E,
-        #A060D8,
-        #E05EAA,
-        #3EC7B0,
-        #C0C050
-    ];
-
     private property <color> audio-default:
         #00C853;
 
@@ -596,10 +585,10 @@ export component ClipPool inherits Rectangle {
                                 ? Theme.clip-midi
                                 : root.audio-default
                         )
-                        : root.palette[
+                        : ClipPalette.colors[
                             Math.mod(
                                 clip.color,
-                                root.palette.length
+                                ClipPalette.colors.length
                             )
                         ];
 

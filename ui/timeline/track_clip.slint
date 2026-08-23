@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { ClipPalette } from "../clip_palette.slint";
 import { AudioWaveform } from "audio_waveform.slint";
 import { ClipContextMenuState } from "../components/context_menu.slint";
 
@@ -36,25 +37,10 @@ export component TrackClip inherits Rectangle {
 
     in property <int> drag-track-offset: 0;
 
-    // Instância "fantasma" da row de origem durante
-    // o drag vertical: invisível, mas mantém o grab.
-    in property <bool> ghosted: false;
-
 
     // =====================================================
     // PALETA
     // =====================================================
-
-    private property <[color]> palette: [
-        #6FA86B,
-        #4F8AE0,
-        #E0A94F,
-        #E05E5E,
-        #A060D8,
-        #E05EAA,
-        #3EC7B0,
-        #C0C050
-    ];
 
     private property <color> audio-default:
         #00C853;
@@ -66,10 +52,10 @@ export component TrackClip inherits Rectangle {
                     ? Theme.clip-midi
                     : root.audio-default
             )
-            : root.palette[
+            : ClipPalette.colors[
                 Math.mod(
                     root.color-index,
-                    root.palette.length
+                    ClipPalette.colors.length
                 )
             ];
 
@@ -162,6 +148,18 @@ export component TrackClip inherits Rectangle {
     private property <length> drag-start-y:
         0px;
 
+    // Cursor em coordenadas da JANELA no momento do press.
+    //
+    // self.mouse-x/y é relativo ao PRÓPRIO clip — que se
+    // move durante o arrasto — gerando loop de feedback
+    // (a "tremedeira"). Compensando com absolute-position,
+    // o delta reflete o deslocamento FÍSICO real do mouse.
+    private property <length> drag-start-abs-x:
+        0px;
+
+    private property <length> drag-start-abs-y:
+        0px;
+
     private property <float> drag-start-beat:
         0.0;
 
@@ -169,6 +167,9 @@ export component TrackClip inherits Rectangle {
         0;
 
     private property <length> resize-start-x:
+        0px;
+
+    private property <length> resize-start-abs-x:
         0px;
 
     private property <float> resize-start-beat:
@@ -231,8 +232,17 @@ export component TrackClip inherits Rectangle {
     x:
         root.beat * root.px-per-beat;
 
+    // Offset vertical em tempo real durante o drag:
+    // o clip desliza sobre as tracks vizinhas (rows
+    // têm fundo transparente). No release, o Rust
+    // aplica exatamente esta track no modelo.
     y:
-        2px;
+        2px
+        + (
+            root.clip-id == root.drag-clip-id
+                ? root.drag-track-offset * root.row-height
+                : 0px
+        );
 
 
     // =====================================================
@@ -247,18 +257,6 @@ export component TrackClip inherits Rectangle {
 
     height:
         root.row-height - 4px;
-
-
-    // =====================================================
-    // GHOST
-    //
-    // A row de origem esconde o clip durante o drag
-    // vertical (a instância da row de destino é quem
-    // aparece). Opacity 0 mantém o grab do TouchArea.
-    // =====================================================
-
-    opacity:
-        root.ghosted ? 0 : 1;
 
 
     // =====================================================
@@ -977,6 +975,10 @@ export component TrackClip inherits Rectangle {
                         root.resize-start-x =
                             self.mouse-x;
 
+                        root.resize-start-abs-x =
+                            self.absolute-position.x
+                            + self.mouse-x;
+
                         root.resize-start-beat =
                             root.beat;
 
@@ -1004,6 +1006,14 @@ export component TrackClip inherits Rectangle {
 
                         root.drag-start-y =
                             self.mouse-y;
+
+                        root.drag-start-abs-x =
+                            self.absolute-position.x
+                            + self.mouse-x;
+
+                        root.drag-start-abs-y =
+                            self.absolute-position.y
+                            + self.mouse-y;
 
                         root.drag-start-beat =
                             root.beat;
@@ -1036,10 +1046,16 @@ export component TrackClip inherits Rectangle {
 
                     if root.resizing {
 
+                        // Delta físico real do mouse (ver
+                        // drag-start-abs-x).
+                        let cursor-abs-x =
+                            self.absolute-position.x
+                            + self.mouse-x;
+
                         let dx-px =
                             (
-                                self.mouse-x
-                                - root.resize-start-x
+                                cursor-abs-x
+                                - root.resize-start-abs-x
                             ) / 1px;
 
                         let ppb =
@@ -1103,13 +1119,22 @@ export component TrackClip inherits Rectangle {
                     // =====================================
                     // DRAG
                     // =====================================
-
                     else if root.dragging {
+
+                        // Deltas físicos reais do mouse —
+                        // imunes ao movimento do próprio clip.
+                        let cursor-abs-x =
+                            self.absolute-position.x
+                            + self.mouse-x;
+
+                        let cursor-abs-y =
+                            self.absolute-position.y
+                            + self.mouse-y;
 
                         let dx-px =
                             (
-                                self.mouse-x
-                                - root.drag-start-x
+                                cursor-abs-x
+                                - root.drag-start-abs-x
                             ) / 1px;
 
                         let ppb =
@@ -1119,10 +1144,11 @@ export component TrackClip inherits Rectangle {
                             dx-px / ppb;
 
 
+
                         let dy-px =
                             (
-                                self.mouse-y
-                                - root.drag-start-y
+                                cursor-abs-y
+                                - root.drag-start-abs-y
                             ) / 1px;
 
                         let row-height-px =

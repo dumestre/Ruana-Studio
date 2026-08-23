@@ -1092,8 +1092,10 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     // Mover clip: delta acumulado do início do drag → aplica sobre a posição original.
+    // Beat é aplicado em TEMPO REAL (seguindo o mouse).
     // NOTA: track_index NÃO é alterado durante o drag (só beat).
-    // O delta de track é guardado e aplicado apenas no finish.
+    // O delta de track é guardado e aplicado apenas no finish;
+    // durante o drag a UI desliza o clip via drag-track-offset.
     {
         let clips_model = clips_model.clone();
         let move_originals = move_originals.clone();
@@ -1115,7 +1117,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     move_track_deltas.borrow_mut().insert(id, delta_tracks);
                 }
             }
-            // Visual feedback: move clip vertically via translate-y
+            // Feedback visual: desliza o clip verticalmente
+            // (translate-y na row de origem, sem trocar instância).
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_drag_clip_id(id);
                 ui.set_drag_track_offset(delta_tracks);
@@ -1257,16 +1260,41 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Ciclo de cor do clip (swatch click) → core (incrementa paleta mod 8).
+    // Ciclo de cor do clip (swatch click) → core.
+    // Paleta de 20 cores (ver ui/clip_palette.slint).
     {
         let project = project.clone();
         ui.on_clip_color_cycle_requested(move |id| {
             let new_color = {
                 let proj = project.borrow();
                 let current = proj.clips.iter().find(|c| c.id as i32 == id).map(|c| c.color).unwrap_or(0);
-                (current + 1) % 8
+                (current + 1) % 20
             };
             project.borrow_mut().set_clip_color(id as u64, new_color);
+        });
+    }
+
+    // Botão "add color" da toolbar → aplica o índice de cor escolhido
+    // a TODOS os clips da track selecionada.
+    {
+        let project = project.clone();
+        ui.on_track_recolor_requested(move |track_index, color| {
+            let mut proj = project.borrow_mut();
+            if proj.tracks.is_empty() {
+                return;
+            }
+            let idx = (track_index.max(0) as usize).min(proj.tracks.len() - 1);
+            let track_id = proj.tracks[idx].id;
+            let ids: Vec<u64> = proj
+                .clips
+                .iter()
+                .filter(|c| c.track_id == track_id)
+                .map(|c| c.id)
+                .collect();
+            let color = color.clamp(0, 255) as u8;
+            for id in ids {
+                proj.set_clip_color(id, color);
+            }
         });
     }
 

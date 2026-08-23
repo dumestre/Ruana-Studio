@@ -264,6 +264,8 @@ export component MainWindow inherits Window {
     callback tool-changed(int);
     callback timeline-bounds-changed(float, float, float, float);
 
+    callback track-recolor-requested(int, int);
+
 
     // =====================================================
     // DRAG & DROP (clip do ClipPool → timeline)
@@ -600,6 +602,7 @@ export component MainWindow inherits Window {
         explorer-go-up() => { root.explorer-go-up(); }
         float-toggle(tab) => { root.float-toggle(tab); }
         tool-changed(tool) => { root.tool-changed(tool); }
+        track-recolor-requested(track, color) => { root.track-recolor-requested(track, color); }
         timeline-bounds-changed(x, y, w, h) => { root.timeline-bounds-changed(x, y, w, h); }
         drag-begin(name, path, position, duration, color, is-midi) => { root.drag-begin(name, path, position, duration, color, is-midi); }
         drag-move(x, y) => { root.drag-move(x, y); }

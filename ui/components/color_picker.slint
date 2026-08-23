@@ -1,0 +1,151 @@
+import { Theme } from "../theme.slint";
+import { ClipPalette } from "../clip_palette.slint";
+
+// ============================================================
+// SELETOR DE CORES
+//
+// 20 cores (2 linhas × 10) lidas de ClipPalette — a mesma
+// paleta usada pelos clips. Índice 0 = cor padrão
+// (MIDI/Audio por tipo), renderizado em tom neutro.
+// ============================================================
+
+export component ColorPicker inherits Rectangle {
+
+    // Índice da paleta escolhido pelo usuário.
+    callback picked(int);
+
+    // Índice atualmente ativo (para highlight).
+    in property <int> current: -1;
+
+
+    width:
+        2 * 5px
+        + 10 * 16px
+        + 9 * 3px;
+
+    height:
+        2 * 5px
+        + 2 * 16px
+        + 3px;
+
+    background:
+        Theme.surface-high;
+
+    border-radius:
+        6px;
+
+    border-width:
+        1px;
+
+    border-color:
+        Theme.border;
+
+
+    VerticalLayout {
+
+        padding-left: 5px;
+
+        padding-right: 5px;
+
+        padding-top: 5px;
+
+        padding-bottom: 5px;
+
+        spacing:
+            3px;
+
+
+        // =============================================
+        // LINHA 1 — índices 0..9
+        // =============================================
+
+        HorizontalLayout {
+
+            spacing:
+                3px;
+
+            for c[idx] in ClipPalette.top: Rectangle {
+
+                width:
+                    16px;
+
+                height:
+                    16px;
+
+                border-radius:
+                    4px;
+
+                background:
+                    idx == 0
+                        ? Theme.text-dim
+                        : c;
+
+                border-width:
+                    idx == root.current
+                        ? 2px
+                        : 0px;
+
+                border-color:
+                    Theme.accent;
+
+
+                TouchArea {
+
+                    mouse-cursor: pointer;
+
+                    clicked => {
+                        root.picked(
+                            idx
+                        );
+                    }
+                }
+            }
+        }
+
+
+        // =============================================
+        // LINHA 2 — índices 10..19
+        // =============================================
+
+        HorizontalLayout {
+
+            spacing:
+                3px;
+
+            for c[idx] in ClipPalette.bottom: Rectangle {
+
+                width:
+                    16px;
+
+                height:
+                    16px;
+
+                border-radius:
+                    4px;
+
+                background:
+                    c;
+
+                border-width:
+                    idx + 10 == root.current
+                        ? 2px
+                        : 0px;
+
+                border-color:
+                    Theme.accent;
+
+
+                TouchArea {
+
+                    mouse-cursor: pointer;
+
+                    clicked => {
+                        root.picked(
+                            idx + 10
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

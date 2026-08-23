@@ -1,0 +1,69 @@
+// ============================================================
+// PALETA DE CORES DOS CLIPS
+//
+// FONTE ÚNICA DA PALETA — usar ClipPalette em vez de
+// duplicar cores locais.
+//
+// Índice 0 = slot "padrão" (clips MIDI/Audio usam a cor
+// do tema quando color == 0; nunca renderizar colors[0]
+// diretamente como swatch colorido).
+//
+// Ao alterar aqui, NENHUM outro arquivo precisa mudar:
+// track_clip.slint, clip_pool.slint e o seletor leem
+// destaques glob.
+// ============================================================
+
+export global ClipPalette {
+
+    // Paleta completa (índices 0..19).
+    out property <[color]> colors: [
+        #6FA86B,
+        #4F8AE0,
+        #E0A94F,
+        #E05E5E,
+        #A060D8,
+        #E05EAA,
+        #3EC7B0,
+        #C0C050,
+        #E07A3E,
+        #8FD14F,
+        #3FA34D,
+        #35B5E5,
+        #5A8FE0,
+        #5560D8,
+        #9B5CE0,
+        #D84FB2,
+        #E04F6F,
+        #A8744A,
+        #D8C04F,
+        #7A93A8
+    ];
+
+    // Primeira linha do seletor (índices 0..9).
+    out property <[color]> top: [
+        #6FA86B,
+        #4F8AE0,
+        #E0A94F,
+        #E05E5E,
+        #A060D8,
+        #E05EAA,
+        #3EC7B0,
+        #C0C050,
+        #E07A3E,
+        #8FD14F
+    ];
+
+    // Segunda linha do seletor (índices 10..19).
+    out property <[color]> bottom: [
+        #3FA34D,
+        #35B5E5,
+        #5A8FE0,
+        #5560D8,
+        #9B5CE0,
+        #D84FB2,
+        #E04F6F,
+        #A8744A,
+        #D8C04F,
+        #7A93A8
+    ];
+}

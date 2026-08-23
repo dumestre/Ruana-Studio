@@ -32,6 +32,10 @@ export component TrackPanel inherits Rectangle {
     callback track-clicked(int);
     callback add-track-requested(string);
 
+    // Cor escolhida no seletor do cabeçalho
+    // (track selecionada, índice da paleta).
+    callback recolor-requested(int, int);
+
 
     // =====================================================
     // FUNDO
@@ -84,6 +88,15 @@ export component TrackPanel inherits Rectangle {
 
             root.add-track-requested(
                 type
+            );
+        }
+
+
+        recolor-requested(track, color) => {
+
+            root.recolor-requested(
+                track,
+                color
             );
         }
     }

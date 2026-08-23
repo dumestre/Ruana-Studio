@@ -345,6 +345,13 @@ export component Workspace inherits Rectangle {
 
     callback tool-changed(int);
 
+    // Recoloriza os clips da track selecionada
+    // com o índice de cor da paleta.
+    callback track-recolor-requested(
+        int,
+        int
+    );
+
     callback timeline-bounds-changed(
         float,
         float,
@@ -918,6 +925,14 @@ export component Workspace inherits Rectangle {
                             add-track-requested(type) => {
                                 root.add-track-requested(
                                     type
+                                );
+                            }
+
+
+                            recolor-requested(track, color) => {
+                                root.track-recolor-requested(
+                                    track,
+                                    color
                                 );
                             }
                         }
