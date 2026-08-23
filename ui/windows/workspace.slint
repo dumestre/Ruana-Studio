@@ -223,6 +223,10 @@ export component Workspace inherits Rectangle {
 
     in-out property <[BrowserFileEntry]> explorer-entries: [];
 
+    in-out property <bool> explorer-can-go-up: false;
+
+    in-out property <string> explorer-search-text: "";
+
 
     // ========================================================
     // BOTTOM PANEL
@@ -333,6 +337,10 @@ export component Workspace inherits Rectangle {
     callback explorer-directory-entered(string);
 
     callback explorer-go-up();
+
+    callback explorer-history-go(int);
+
+    callback explorer-search-changed(string);
 
     callback drag-begin(
         string,
@@ -1736,6 +1744,12 @@ export component Workspace inherits Rectangle {
                     entries <=>
                         root.explorer-entries;
 
+                    can-go-up <=>
+                        root.explorer-can-go-up;
+
+                    search-text <=>
+                        root.explorer-search-text;
+
 
                     audio-drag-started(
                         name,
@@ -1785,6 +1799,20 @@ export component Workspace inherits Rectangle {
 
                     explorer-go-up() => {
                         root.explorer-go-up();
+                    }
+
+
+                    explorer-history-go(delta) => {
+                        root.explorer-history-go(
+                            delta
+                        );
+                    }
+
+
+                    explorer-search-changed(term) => {
+                        root.explorer-search-changed(
+                            term
+                        );
                     }
                 }
             }

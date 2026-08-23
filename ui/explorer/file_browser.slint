@@ -1,3 +1,4 @@
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { BrowserItem } from "../components/browser_item.slint";
 
@@ -13,6 +14,8 @@ export component FileBrowser inherits Rectangle {
     in property <string> current-path: "";
     in property <[string]> path-history: [];
     in property <int> history-index: -1;
+    // O Rust sabe se existe pasta-pai; a UI só reflete.
+    in property <bool> can-go-up: false;
 
     in-out property <int> selected-index: -1;
 
@@ -20,21 +23,27 @@ export component FileBrowser inherits Rectangle {
     callback file-selected(string, string, string); // name, type, path
     callback directory-entered(string); // path
     callback explorer-go-up();
+    // Andar no histórico: -1 = voltar, +1 = avançar.
+    callback history-go(int);
 
     callback audio-drag-started(string, string, string, color, bool); // name, path, type, color, is-midi
     callback audio-drag-moved(length, length);
     callback audio-drag-finished();
 
+    property <bool> can-back: root.history-index > 0;
+    property <bool> can-forward: root.history-index < root.path-history.length - 1;
+
     background: transparent;
 
     VerticalLayout {
-        alignment: LayoutAlignment.start;
+        alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.stretch;
         spacing: 5px;
 
         // NAVEGAÇÃO
         Rectangle {
             height: 28px;
+            vertical-stretch: 0;
             background: Theme.base;
             border-width: 1px;
             border-color: Theme.border;
@@ -50,9 +59,11 @@ export component FileBrowser inherits Rectangle {
                 Rectangle {
                     width: 24px;
                     height: 24px;
-                    background: transparent;
+                    background: back-touch.has-hover && root.can-back
+                        ? Theme.surface-high
+                        : transparent;
                     border-radius: 3px;
-                    opacity: root.history-index > 0 ? 1.0 : 0.45;
+                    opacity: root.can-back ? 1.0 : 0.45;
 
                     Image {
                         source: @image-url("../icons/arrow_back.svg");
@@ -61,10 +72,14 @@ export component FileBrowser inherits Rectangle {
                         colorize: Theme.text-dim;
                     }
 
-                    TouchArea {
+                    back-touch := TouchArea {
+                        mouse-cursor: root.can-back
+                            ? MouseCursor.pointer
+                            : MouseCursor.default;
+
                         clicked => {
-                            if root.history-index > 0 {
-                                root.path-changed(root.path-history[root.history-index - 1]);
+                            if root.can-back {
+                                root.history-go(-1);
                             }
                         }
                     }
@@ -73,9 +88,11 @@ export component FileBrowser inherits Rectangle {
                 Rectangle {
                     width: 24px;
                     height: 24px;
-                    background: transparent;
+                    background: fwd-touch.has-hover && root.can-forward
+                        ? Theme.surface-high
+                        : transparent;
                     border-radius: 3px;
-                    opacity: root.history-index < root.path-history.length - 1 ? 1.0 : 0.45;
+                    opacity: root.can-forward ? 1.0 : 0.45;
 
                     Image {
                         source: @image-url("../icons/arrow_fwd.svg");
@@ -84,10 +101,14 @@ export component FileBrowser inherits Rectangle {
                         colorize: Theme.text-dim;
                     }
 
-                    TouchArea {
+                    fwd-touch := TouchArea {
+                        mouse-cursor: root.can-forward
+                            ? MouseCursor.pointer
+                            : MouseCursor.default;
+
                         clicked => {
-                            if root.history-index < root.path-history.length - 1 {
-                                root.path-changed(root.path-history[root.history-index + 1]);
+                            if root.can-forward {
+                                root.history-go(1);
                             }
                         }
                     }
@@ -96,9 +117,11 @@ export component FileBrowser inherits Rectangle {
                 Rectangle {
                     width: 24px;
                     height: 24px;
-                    background: transparent;
+                    background: up-touch.has-hover && root.can-go-up
+                        ? Theme.surface-high
+                        : transparent;
                     border-radius: 3px;
-                    opacity: 0.45;
+                    opacity: root.can-go-up ? 1.0 : 0.45;
 
                     Image {
                         source: @image-url("../icons/arrow_up.svg");
@@ -107,9 +130,15 @@ export component FileBrowser inherits Rectangle {
                         colorize: Theme.text-dim;
                     }
 
-                    TouchArea {
+                    up-touch := TouchArea {
+                        mouse-cursor: root.can-go-up
+                            ? MouseCursor.pointer
+                            : MouseCursor.default;
+
                         clicked => {
-                            root.explorer-go-up();
+                            if root.can-go-up {
+                                root.explorer-go-up();
+                            }
                         }
                     }
                 }
@@ -132,50 +161,77 @@ export component FileBrowser inherits Rectangle {
         }
 
         // LISTA DE ARQUIVOS
+        //
+        // Com ScrollView: uma pasta de samples tem centenas de
+        // arquivos, e sem rolagem os de baixo eram inalcançáveis.
         Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
             background: transparent;
+            clip: true;
 
-            VerticalLayout {
-                alignment: LayoutAlignment.stretch;
-                cross-axis-alignment: CrossAxisAlignment.stretch;
-                spacing: 1px;
+            ScrollView {
+                width: 100%;
+                height: 100%;
 
-                for entry[index] in root.entries : BrowserItem {
-                    name: entry.name;
-                    type: entry.entry-type;
-                    selected: root.selected-index == index;
-                    icon: "";
-                    icon-image:
-                        entry.is-directory
-                            ? @image-url("../icons/folder.svg")
-                            : @image-url("../icons/audio.svg");
-                    drag-enabled: !entry.is-directory && (entry.entry-type == "WAV" || entry.entry-type == "MP3");
+                VerticalLayout {
+                    alignment: LayoutAlignment.start;
+                    cross-axis-alignment: CrossAxisAlignment.stretch;
+                    spacing: 1px;
 
-                    clicked => {
-                        root.selected-index = index;
-                        if entry.is-directory {
-                            root.directory-entered(entry.path);
-                        } else {
-                            root.file-selected(entry.name, entry.entry-type, entry.path);
+                    for entry[index] in root.entries : BrowserItem {
+                        name: entry.name;
+                        type: entry.entry-type;
+                        selected: root.selected-index == index;
+                        icon: "";
+                        icon-image:
+                            entry.is-directory
+                                ? @image-url("../icons/folder.svg")
+                                : @image-url("../icons/audio.svg");
+                        // Arrastável = decodificável. "File" é o que o
+                        // Rust marca quando não sabe abrir.
+                        drag-enabled:
+                            !entry.is-directory
+                            && entry.entry-type != "File";
+
+                        clicked => {
+                            root.selected-index = index;
+                            if entry.is-directory {
+                                root.directory-entered(entry.path);
+                            } else {
+                                root.file-selected(entry.name, entry.entry-type, entry.path);
+                            }
+                        }
+
+                        drag-started() => {
+                            root.audio-drag-started(
+                                entry.name,
+                                entry.path,
+                                entry.entry-type,
+                                Theme.clip-audio,
+                                false
+                            );
+                        }
+                        drag-moved(x, y) => {
+                            root.audio-drag-moved(x, y);
+                        }
+                        drag-finished() => {
+                            root.audio-drag-finished();
                         }
                     }
 
-                    drag-started() => {
-                        root.audio-drag-started(
-                            entry.name,
-                            entry.path,
-                            entry.entry-type,
-                            Theme.clip-audio,
-                            false
-                        );
-                    }
-                    drag-moved(x, y) => {
-                        root.audio-drag-moved(x, y);
-                    }
-                    drag-finished() => {
-                        root.audio-drag-finished();
+                    // Pasta vazia (ou filtro sem resultado) precisa
+                    // dizer isso — lista em branco parece bug.
+                    if root.entries.length == 0: Rectangle {
+                        height: 40px;
+
+                        Text {
+                            text: "Pasta vazia";
+                            color: Theme.text-dim;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
                     }
                 }
             }

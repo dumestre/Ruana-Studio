@@ -41,7 +41,7 @@ fn bars_for_end_beat(end_beat: f64, beats_per_bar: i32) -> i32 {
 /// Fim (em batidas) relevante do evento, para crescer total-bars.
 /// Considera old E new — cobrir undo/redo sem ramificar.
 fn event_max_end_beat(event: &DocumentEvent) -> Option<f64> {
-    let end = |c: &Clip| (c.start_beat + c.length_beats) as f64;
+    let end = |c: &Clip| c.end_beat() as f64;
     let both = |a: &Clip, b: &Clip| end(a).max(end(b));
     match event {
         DocumentEvent::ClipAdded(c) => Some(end(c)),
@@ -61,8 +61,8 @@ fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
         id: clip.id as i32,
         name: clip.name.clone().into(),
         track_index: clip.track_id as i32,
-        beat: clip.start_beat as f32,
-        len: clip.length_beats as f32,
+        beat: clip.start_beat,
+        len: clip.length_beats,
         is_midi: clip.is_midi(),
         color: clip.color as i32,
         waveform_points: {
@@ -89,35 +89,181 @@ fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache) -> 
     }
 }
 
-fn load_directory_entries(path: &std::path::Path) -> Vec<BrowserFileEntry> {
-    if let Ok(entries) = list_directory(path) {
-        entries
-            .iter()
-            .map(|e| {
-                let entry_type = if e.is_directory {
-                    "Folder".to_string()
-                } else {
-                    let ext = e.path.extension()
-                        .and_then(|ext| ext.to_str())
-                        .unwrap_or("")
-                        .to_uppercase();
-                    if ext == "WAV" || ext == "MP3" {
-                        ext
-                    } else {
-                        "File".to_string()
-                    }
-                };
-                BrowserFileEntry {
-                    name: e.name.clone().into(),
-                    entry_type: entry_type.into(),
-                    path: e.path.to_string_lossy().to_string().into(),
-                    is_directory: e.is_directory,
-                }
-            })
-            .collect()
-    } else {
-        Vec::new()
+/// Extensões de áudio que o `daw-media` sabe decodificar.
+const AUDIO_EXTS: [&str; 5] = ["WAV", "MP3", "FLAC", "OGG", "OGA"];
+
+/// O arquivo é um áudio importável?
+fn is_audio_path(path: &std::path::Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_uppercase();
+    AUDIO_EXTS.contains(&ext.as_str())
+}
+
+/// Quantos beats um trecho de `seconds` ocupa a `bpm`.
+///
+/// É isto que impede a waveform de ser achatada: o clip passa a ter o
+/// comprimento real do arquivo em vez de um valor fixo em que o
+/// desenho tinha que caber.
+fn beats_for_seconds(seconds: f32, bpm: f32) -> f32 {
+    let bpm = if bpm > 0.0 { bpm } else { 120.0 };
+    (seconds * bpm / 60.0).max(0.01)
+}
+
+/// Importa um arquivo de áudio para a timeline.
+///
+/// Caminho ÚNICO de importação: o drop do explorador interno e o drop
+/// do Sistema Operacional passam os dois por aqui, então as duas rotas
+/// ganham a mesma duração real, o mesmo waveform e a mesma garantia de
+/// não empilhar clip em cima de clip.
+///
+/// Retorna o id do clip criado, ou `None` se o arquivo não decodificou
+/// / não havia trilha com espaço.
+fn import_audio_file(
+    path: &std::path::Path,
+    track_hint: i32,
+    beat_hint: f32,
+    bpm: f32,
+    project: &RefCell<Project>,
+    waveforms: &RefCell<WaveformCache>,
+    clips_model: &slint::VecModel<ClipData>,
+) -> Option<u64> {
+    let name = path
+        .file_stem()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Audio Clip")
+        .to_string();
+
+    // Decodifica ANTES de tocar no documento: sem duração real não há
+    // como saber o comprimento do clip, e um arquivo quebrado não deve
+    // deixar um clip morto na timeline.
+    let decoded = match decode_audio(path) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("[import] {} não decodificou: {err}", name);
+            return None;
+        }
+    };
+    let length = beats_for_seconds(decoded.duration_seconds, bpm);
+
+    // Resolução proporcional à duração: com um número fixo de pontos,
+    // um loop de 1 s e um take de 3 min viravam o mesmo borrão. O teto
+    // existe porque cada ponto é um retângulo no desenho do clip.
+    let points = ((length * 24.0) as usize).clamp(64, 512);
+    let peaks = waveform_points(&decoded, points);
+
+    let clip_id = {
+        let mut proj = project.borrow_mut();
+        let preferred = track_hint.max(0) as u64;
+        // Prefere a trilha onde o usuário soltou; se ela já está
+        // ocupada naquele instante, tenta outra trilha antes de
+        // empurrar no tempo — é o que uma DAW faz ao importar vários
+        // arquivos de uma vez.
+        let track_id = proj
+            .track_with_room(preferred, beat_hint.max(0.0), length)
+            .or_else(|| proj.track(preferred).map(|t| t.id))?;
+        let start = proj.find_free_slot(track_id, beat_hint.max(0.0), length);
+        proj.add_clip_with_path(
+            track_id,
+            ClipKind::Audio,
+            name.as_str(),
+            start,
+            length,
+            Some(path.to_string_lossy().to_string()),
+        )?
+    };
+
+    // `ClipAdded` já disparou e leu o cache ainda vazio; preenche
+    // agora e reprojeta só a linha desse clip.
+    if !peaks.is_empty() {
+        waveforms.borrow_mut().insert(clip_id, peaks);
+        let wf = waveforms.borrow();
+        if let Some(i) = clip_row(clips_model, clip_id as i32) {
+            if let Some(data) = clips_model.row_data(i) {
+                clips_model.set_row_data(i, to_clip_data_from_id(clip_id, &data, &wf));
+            }
+        }
     }
+    Some(clip_id)
+}
+
+/// Mostra um diretório no explorador.
+///
+/// `push_history` distingue navegar (empurra no histórico, cortando
+/// o "avançar" pendente, como um navegador) de andar no histórico
+/// (só troca o conteúdo; o índice é de quem chamou).
+///
+/// Retorna `false` se o caminho não é um diretório legível — assim o
+/// botão de voltar não move o índice para uma pasta que sumiu.
+fn show_explorer_dir(ui: &MainWindow, path: &std::path::Path, push_history: bool) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    let text = slint::SharedString::from(path.to_string_lossy().as_ref());
+
+    if push_history {
+        let history: Vec<slint::SharedString> = ui.get_explorer_path_history().iter().collect();
+        let idx = ui.get_explorer_history_index();
+        // Corta o ramo à frente: navegar depois de voltar descarta o
+        // "avançar", igual a um navegador.
+        let keep = ((idx + 1).max(0) as usize).min(history.len());
+        let mut new_history = history[..keep].to_vec();
+        new_history.push(text.clone());
+        ui.set_explorer_history_index(new_history.len() as i32 - 1);
+        ui.set_explorer_path_history(Rc::new(slint::VecModel::from(new_history)).into());
+    }
+
+    ui.set_explorer_current_path(text);
+    ui.set_explorer_can_go_up(path.parent().is_some_and(|p| p.is_dir()));
+    let filter = ui.get_explorer_search_text();
+    let entries = load_directory_entries(path, filter.as_str());
+    ui.set_explorer_entries(Rc::new(slint::VecModel::from(entries)).into());
+    true
+}
+
+/// Lista um diretório para o explorador.
+///
+/// `filter` vazio lista tudo; senão mantém só os nomes que contêm o
+/// termo (case-insensitive). Diretórios sempre passam, para o usuário
+/// continuar navegando enquanto filtra.
+fn load_directory_entries(path: &std::path::Path, filter: &str) -> Vec<BrowserFileEntry> {
+    let needle = filter.trim().to_lowercase();
+    let Ok(entries) = list_directory(path) else {
+        return Vec::new();
+    };
+    entries
+        .iter()
+        .filter(|e| {
+            needle.is_empty() || e.is_directory || e.name.to_lowercase().contains(&needle)
+        })
+        .map(|e| {
+            let entry_type = if e.is_directory {
+                "Folder".to_string()
+            } else {
+                let ext = e
+                    .path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or("")
+                    .to_uppercase();
+                // Todo formato que o decoder aceita mostra a extensão —
+                // é isso que habilita o arraste no `file_browser`.
+                if AUDIO_EXTS.contains(&ext.as_str()) {
+                    ext
+                } else {
+                    "File".to_string()
+                }
+            };
+            BrowserFileEntry {
+                name: e.name.clone().into(),
+                entry_type: entry_type.into(),
+                path: e.path.to_string_lossy().to_string().into(),
+                is_directory: e.is_directory,
+            }
+        })
+        .collect()
 }
 
 /// Editor de notas do piano roll (sem suporte a clip ainda: lista global
@@ -469,14 +615,23 @@ fn initial_bind(
     ui.set_mixer_insert_enabled(Rc::new(slint::VecModel::from(insert_enabled)).into());
     ui.set_mixer_max_inserts(max_inserts);
 
-    // Inicializa file browser com pasta de samples padrão
+    // Inicializa file browser na pasta de samples padrão. Se ela não
+    // puder ser criada (disco cheio, perfil sem Documentos), cai para o
+    // diretório de trabalho — abrir num explorador vazio parece defeito.
     let samples_dir = default_samples_dir();
-    std::fs::create_dir_all(&samples_dir).ok();
-    let initial_path = samples_dir.to_string_lossy().to_string();
+    let start_dir = match std::fs::create_dir_all(&samples_dir) {
+        Ok(()) => samples_dir,
+        Err(err) => {
+            eprintln!("[explorer] {} indisponível: {err}", samples_dir.display());
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        }
+    };
+    let initial_path = start_dir.to_string_lossy().to_string();
     ui.set_explorer_current_path(initial_path.clone().into());
     ui.set_explorer_path_history(Rc::new(slint::VecModel::from(vec![initial_path.into()])).into());
     ui.set_explorer_history_index(0);
-    let initial_entries = load_directory_entries(&samples_dir);
+    ui.set_explorer_can_go_up(start_dir.parent().is_some_and(|p| p.is_dir()));
+    let initial_entries = load_directory_entries(&start_dir, "");
     ui.set_explorer_entries(Rc::new(slint::VecModel::from(initial_entries)).into());
 
     (tracks_model, clips_model, track_colors_model)
@@ -740,9 +895,8 @@ fn main() -> Result<(), slint::PlatformError> {
         let end = proj
             .clips
             .iter()
-            .map(|c| c.start_beat + c.length_beats)
-            .max()
-            .unwrap_or(0);
+            .map(|c| c.end_beat())
+            .fold(0.0f32, f32::max);
         ui.set_total_bars(bars_for_end_beat(end as f64, bpb));
     }
 
@@ -1038,17 +1192,43 @@ fn main() -> Result<(), slint::PlatformError> {
     // Drop de clip (ClipPool / Explorer) → core (evento reprojeta).
     {
         let project = project.clone();
-        ui.on_clip_dropped(move |track, beat, name, is_midi| {
+        let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_clip_dropped(move |track, beat, name, is_midi, path| {
+            let bpm = ui_weak.upgrade().map(|u| u.get_bpm() as f32).unwrap_or(120.0);
+
+            // Arquivo real de áudio → mesma rota do drop do Sistema
+            // Operacional: duração real, waveform e vaga livre.
+            if !is_midi && !path.is_empty() {
+                let file = std::path::PathBuf::from(path.as_str());
+                if is_audio_path(&file) && file.is_file() {
+                    import_audio_file(
+                        &file,
+                        track,
+                        beat,
+                        bpm,
+                        &project,
+                        &waveforms,
+                        &clips_model,
+                    );
+                    return;
+                }
+            }
+
+            // Sem arquivo (clip pool / MIDI): bloco padrão de 4 beats.
             let kind = if is_midi {
                 ClipKind::Midi
             } else {
                 ClipKind::Audio
             };
             let track_id = track.max(0) as u64;
-            let start = beat.round().max(0.0) as u32;
             let mut proj = project.borrow_mut();
             if proj.track(track_id).is_some() {
-                proj.add_clip(track_id, kind, name.as_str(), start, 4);
+                // Nunca empilha: se o beat pedido está ocupado, o clip
+                // encosta depois do vizinho em vez de sumir embaixo dele.
+                let start = proj.find_free_slot(track_id, beat.max(0.0), 4.0);
+                proj.add_clip(track_id, kind, name.as_str(), start, 4.0);
             }
         });
     }
@@ -1089,7 +1269,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(clip) = proj.clip(id).cloned() else {
                 return;
             };
-            let at = clip.start_beat + position.round().max(0.0) as u32;
+            let at = clip.start_beat + position.max(0.0);
             proj.slice_clip(id, at);
         });
     }
@@ -1113,7 +1293,7 @@ fn main() -> Result<(), slint::PlatformError> {
             if ppb <= 0.0 {
                 return -1;
             }
-            let beat = ((x as f32 + scroll_x as f32).max(0.0) / ppb) as u32;
+            let beat = (x as f32 + scroll_x as f32).max(0.0) / ppb;
             project
                 .clip_at_beat(row as u64, beat)
                 .map(|clip| clip.id as i32)
@@ -1133,36 +1313,26 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let project = project.clone();
         let clips_model = clips_model.clone();
-        let ui_weak = ui.as_weak();
         ui.on_clip_move_committed(move |id, new_track_index, new_beat| {
             let num_tracks = project.borrow().tracks.len() as i32;
             if num_tracks == 0 {
                 return;
             }
-            let snap = ui_weak.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
 
-            // Track clampada ao número de tracks; beat livre
-            // (o core persiste arredondado ao beat mais próximo).
+            // Track clampada ao número de tracks; beat exatamente como a
+            // UI calculou — o core guarda beats fracionários, então não
+            // existe mais divergência entre o visual e o documento.
             let track_index = new_track_index.clamp(0, num_tracks - 1);
-            let free_beat = new_beat.max(0.0);
-            let core_beat = free_beat.round().max(0.0) as u32;
-            let track_id = track_index as u64;
+            let beat = new_beat.max(0.0);
 
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(mut clip) = clips_model.row_data(i) {
                     clip.track_index = track_index;
-                    clip.beat = free_beat;
+                    clip.beat = beat;
                     clips_model.set_row_data(i, clip);
-                    project.borrow_mut().move_clip(id as u64, track_id, core_beat);
-
-                    // Snap OFF → mantém a posição livre no visual
-                    // (eventos do core podem ter reescrito a linha).
-                    if !snap {
-                        if let Some(mut restored) = clips_model.row_data(i) {
-                            restored.beat = free_beat;
-                            clips_model.set_row_data(i, restored);
-                        }
-                    }
+                    project
+                        .borrow_mut()
+                        .move_clip(id as u64, track_index as u64, beat);
                 }
             }
         });
@@ -1173,36 +1343,19 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let project = project.clone();
         let clips_model = clips_model.clone();
-        let ui_weak = ui.as_weak();
         ui.on_clip_resize_committed(move |id, side, new_len, new_beat| {
-            let snap = ui_weak.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
-
-            let free_len = new_len.max(0.25);
-            let free_beat = new_beat.max(0.0);
+            let len = new_len.max(0.25);
+            let beat = new_beat.max(0.0);
 
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(mut clip) = clips_model.row_data(i) {
-                    let beat_for_core = if side < 0 { free_beat } else { clip.beat };
+                    let start = if side < 0 { beat } else { clip.beat };
                     if side < 0 {
-                        clip.beat = free_beat;
+                        clip.beat = beat;
                     }
-                    clip.len = free_len;
-
-                    let core_start = beat_for_core.round().max(0.0) as u32;
-                    let core_len = free_len.round().max(1.0) as u32;
+                    clip.len = len;
                     clips_model.set_row_data(i, clip);
-                    project.borrow_mut().resize_clip(id as u64, core_start, core_len);
-
-                    // Snap OFF → preserva valores livres no visual.
-                    if !snap {
-                        if let Some(mut restored) = clips_model.row_data(i) {
-                            if side < 0 {
-                                restored.beat = free_beat;
-                            }
-                            restored.len = free_len;
-                            clips_model.set_row_data(i, restored);
-                        }
-                    }
+                    project.borrow_mut().resize_clip(id as u64, start, len);
                 }
             }
         });
@@ -1294,12 +1447,8 @@ fn main() -> Result<(), slint::PlatformError> {
             let mut proj = project.borrow_mut();
             let track_count = proj.tracks.len().max(1);
             let track_id = (track.max(0) as usize).min(track_count - 1) as u64;
-            let start = if snap {
-                beat.floor()
-            } else {
-                beat.round()
-            }
-            .max(0.0) as u32;
+            let desired = if snap { beat.floor() } else { beat }.max(0.0);
+            let start = proj.find_free_slot(track_id, desired, src.length_beats);
             proj.add_clip_with_path(
                 track_id,
                 src.kind,
@@ -1324,11 +1473,15 @@ fn main() -> Result<(), slint::PlatformError> {
             else {
                 return;
             };
-            project.borrow_mut().add_clip_with_path(
+            let mut proj = project.borrow_mut();
+            // Duplicar coloca a cópia DEPOIS do original, encostada.
+            // Na mesma posição ela ficaria invisível e inaudível.
+            let start = proj.find_free_slot(src.track_id, src.end_beat(), src.length_beats);
+            proj.add_clip_with_path(
                 src.track_id,
                 src.kind,
                 src.name.as_str(),
-                src.start_beat,
+                start,
                 src.length_beats,
                 src.file_path.clone(),
             );
@@ -1386,48 +1539,73 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     // Filesystem: navegação de diretórios
+    //
+    // Uma função só faz o trabalho ("mostre esta pasta"); o que muda
+    // entre os handlers é apenas se o histórico avança ou não.
     {
         let ui_weak = ui.as_weak();
         ui.on_explorer_path_changed(move |path| {
             if let Some(ui) = ui_weak.upgrade() {
-                let path = PathBuf::from(path.as_str());
-                if path.is_dir() {
-                    // Atualiza histórico
-                    let history: Vec<slint::SharedString> = ui.get_explorer_path_history().iter().collect();
-                    let idx = ui.get_explorer_history_index();
-                    let mut new_history = history[..=idx as usize].to_vec();
-                    new_history.push(slint::SharedString::from(path.to_string_lossy().as_ref()));
-                    ui.set_explorer_path_history(Rc::new(slint::VecModel::from(new_history)).into());
-                    ui.set_explorer_history_index(idx + 1);
-                    ui.set_explorer_current_path(slint::SharedString::from(path.to_string_lossy().as_ref()));
+                show_explorer_dir(&ui, &PathBuf::from(path.as_str()), true);
+            }
+        });
+    }
 
-                    // Carrega entradas
-                    // Carrega entradas
-                    let file_entries = load_directory_entries(&path);
-                    ui.set_explorer_entries(Rc::new(slint::VecModel::from(file_entries)).into());
+    // Filesystem: entrar em diretório (duplo papel do path-changed,
+    // mantido separado porque a UI distingue clique em pasta de
+    // navegação por caminho).
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_directory_entered(move |path| {
+            if let Some(ui) = ui_weak.upgrade() {
+                show_explorer_dir(&ui, &PathBuf::from(path.as_str()), true);
+            }
+        });
+    }
+
+    // Filesystem: subir um nível.
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_go_up(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let current = PathBuf::from(ui.get_explorer_current_path().as_str());
+                if let Some(parent) = current.parent() {
+                    show_explorer_dir(&ui, &parent.to_path_buf(), true);
                 }
             }
         });
     }
 
-    // Filesystem: entrar em diretório
+    // Filesystem: voltar / avançar.
+    //
+    // Anda NO histórico em vez de empurrar nele — empurrar era o que
+    // fazia o "voltar" virar um caminho novo e travar o botão.
     {
         let ui_weak = ui.as_weak();
-        ui.on_explorer_directory_entered(move |path| {
+        ui.on_explorer_history_go(move |delta| {
             if let Some(ui) = ui_weak.upgrade() {
-                let path_buf = PathBuf::from(path.as_str());
-                if path_buf.is_dir() {
-                    let history: Vec<slint::SharedString> = ui.get_explorer_path_history().iter().collect();
-                    let idx = ui.get_explorer_history_index();
-                    let mut new_history = history[..=idx as usize].to_vec();
-                    new_history.push(slint::SharedString::from(path_buf.to_string_lossy().as_ref()));
-                    ui.set_explorer_path_history(Rc::new(slint::VecModel::from(new_history)).into());
-                    ui.set_explorer_history_index(idx + 1);
-                    ui.set_explorer_current_path(slint::SharedString::from(path_buf.to_string_lossy().as_ref()));
-
-                    let file_entries = load_directory_entries(&path_buf);
-                    ui.set_explorer_entries(Rc::new(slint::VecModel::from(file_entries)).into());
+                let history: Vec<slint::SharedString> =
+                    ui.get_explorer_path_history().iter().collect();
+                let target = ui.get_explorer_history_index() + delta;
+                if target < 0 || target as usize >= history.len() {
+                    return;
                 }
+                let path = PathBuf::from(history[target as usize].as_str());
+                if show_explorer_dir(&ui, &path, false) {
+                    ui.set_explorer_history_index(target);
+                }
+            }
+        });
+    }
+
+    // Filesystem: filtro de busca — relê a pasta atual.
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_search_changed(move |term| {
+            if let Some(ui) = ui_weak.upgrade() {
+                let current = PathBuf::from(ui.get_explorer_current_path().as_str());
+                let entries = load_directory_entries(&current, term.as_str());
+                ui.set_explorer_entries(Rc::new(slint::VecModel::from(entries)).into());
             }
         });
     }
@@ -1484,12 +1662,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
                 WindowEvent::DroppedFile(path) => {
                     if let Some(ui) = ui_weak.upgrade() {
-                        let ext = path.extension()
-                            .and_then(|ext| ext.to_str())
-                            .unwrap_or("")
-                            .to_uppercase();
-                        let supported = matches!(ext.as_str(), "WAV" | "MP3" | "FLAC" | "OGG" | "OGA");
-                        if supported {
+                        if is_audio_path(&path) {
                             let (phys_x, phys_y) = *last_phys_pos.borrow();
                             let scale_factor = ui.window().scale_factor();
                             let logical_x = phys_x as f32 / scale_factor;
@@ -1497,52 +1670,15 @@ fn main() -> Result<(), slint::PlatformError> {
 
                             let coords = ui.invoke_map_window_coords_to_timeline(logical_x, logical_y);
 
-                            let track_id = coords.track.max(0) as u64;
-                            let start = coords.beat.round().max(0.0) as u32;
-                            let name = path.file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or("Audio Clip");
-
-                            // Decodifica ANTES de adicionar o clip.
-                            let file_path = path.to_string_lossy().to_string();
-                            let peaks: Vec<f32> = match decode_audio(&path) {
-                                Ok(wav_data) => {
-                                    waveform_points(&wav_data, 200)
-                                }
-                                Err(e) => {
-                                    eprintln!("[waveform] failed to decode {}: {}", name, e);
-                                    Vec::new()
-                                }
-                            };
-
-                            let mut proj = project.borrow_mut();
-                            if proj.track(track_id).is_some() {
-                                let clip_id = proj.add_clip_with_path(
-                                    track_id, ClipKind::Audio, name, start, 4,
-                                    Some(file_path),
-                                );
-                                drop(proj);
-
-                                // Após add_clip_with_path, o ClipAdded já disparou
-                                // e to_clip_data leu o cache (ainda vazio).
-                                // Agora inserimos no cache E atualizamos o modelo diretamente.
-                                if let Some(id) = clip_id {
-                                    if !peaks.is_empty() {
-                                        waveforms.borrow_mut().insert(id, peaks.clone());
-
-                                        // Atualiza o ClipData no modelo da UI com os picos.
-                                        let wf = waveforms.borrow();
-                                        for i in 0..clips_model.row_count() {
-                                            if let Some(data) = clips_model.row_data(i) {
-                                                if data.id == id as i32 {
-                                                    clips_model.set_row_data(i, to_clip_data_from_id(id, &data, &wf));
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            import_audio_file(
+                                &path,
+                                coords.track,
+                                coords.beat,
+                                ui.get_bpm() as f32,
+                                &project,
+                                &waveforms,
+                                &clips_model,
+                            );
                         }
                     }
                 }

@@ -122,12 +122,12 @@ impl Project {
         master_mixer.add_insert("Master Limiter");
 
         let clips = vec![
-            Clip::midi(0, 0, "Drums", 0, 4),
-            Clip::midi(100, 0, "Drums 02", 8, 4),
-            Clip::midi(1, 1, "Bass", 4, 6),
-            Clip::audio(2, 2, "Vocal", 8, 8),
-            Clip::audio(202, 2, "Vocal Take", 0, 10),
-            Clip::midi(3, 3, "Synth", 2, 5),
+            Clip::midi(0, 0, "Drums", 0.0, 4.0),
+            Clip::midi(100, 0, "Drums 02", 8.0, 4.0),
+            Clip::midi(1, 1, "Bass", 4.0, 6.0),
+            Clip::audio(2, 2, "Vocal", 8.0, 8.0),
+            Clip::audio(202, 2, "Vocal Take", 0.0, 10.0),
+            Clip::midi(3, 3, "Synth", 2.0, 5.0),
         ];
 
         Self {
@@ -322,7 +322,7 @@ impl Project {
             .iter()
             .filter(|c| c.track_id == track_id)
             .collect();
-        clips.sort_by_key(|c| c.start_beat);
+        clips.sort_by(|a, b| a.start_beat.total_cmp(&b.start_beat));
         clips
     }
 
@@ -343,10 +343,80 @@ impl Project {
     }
 
     /// Clip de uma trilha que contém o beat informado (inclusive), se houver.
-    pub fn clip_at_beat(&self, track_id: u64, beat: u32) -> Option<&Clip> {
-        self.clips.iter().find(|c| {
-            c.track_id == track_id && beat >= c.start_beat && beat < c.start_beat + c.length_beats
-        })
+    pub fn clip_at_beat(&self, track_id: u64, beat: f32) -> Option<&Clip> {
+        self.clips
+            .iter()
+            .find(|c| c.track_id == track_id && beat >= c.start_beat && beat < c.end_beat())
+    }
+
+    /// Primeiro beat livre numa trilha para um clip de `length` beats.
+    ///
+    /// Se `desired` já está livre, devolve `desired` — a posição pedida
+    /// pelo usuário é sempre a primeira escolha. Se está ocupado,
+    /// caminha para a direita pelo FIM de cada clip que atravessa,
+    /// então o novo clip encosta no vizinho em vez de deixar buraco.
+    ///
+    /// Importar áudio nunca deve empilhar um clip em cima do outro: o
+    /// que fica embaixo vira inaudível e invisível.
+    pub fn find_free_slot(&self, track_id: u64, desired: f32, length: f32) -> f32 {
+        let length = length.max(crate::clip::BEAT_EPSILON);
+        let mut start = desired.max(0.0);
+
+        // Cada iteração salta o clip que bloqueia. Um clip só pode
+        // bloquear uma vez (o salto é sempre para o fim dele), então o
+        // laço termina em no máximo `clips.len()` passos.
+        for _ in 0..=self.clips.len() {
+            let blocker = self
+                .clips
+                .iter()
+                .filter(|c| c.track_id == track_id)
+                .filter(|c| c.overlaps(start, start + length))
+                .max_by(|a, b| a.end_beat().total_cmp(&b.end_beat()));
+
+            match blocker {
+                Some(c) => start = c.end_beat(),
+                None => return start,
+            }
+        }
+        start
+    }
+
+    /// Trilha com espaço livre no intervalo pedido.
+    ///
+    /// Começa na trilha `preferred` e desce a partir dela, dando a volta
+    /// no fim da lista. Descer é o que importar vários arquivos de uma
+    /// vez espera: o segundo arquivo cai na trilha de baixo, não numa
+    /// trilha aleatória acima de onde o usuário soltou.
+    ///
+    /// `None` = nenhuma trilha existente cabe; quem chama decide (criar
+    /// trilha ou deslocar no tempo).
+    pub fn track_with_room(&self, preferred: u64, start: f32, length: f32) -> Option<u64> {
+        let end = start + length;
+        let free = |id: u64| {
+            !self
+                .clips
+                .iter()
+                .any(|c| c.track_id == id && c.overlaps(start, end))
+        };
+
+        let usable = |t: &Track| t.kind == TrackKind::Audio || t.kind == TrackKind::Midi;
+        if self.track(preferred).is_some_and(usable) && free(preferred) {
+            return Some(preferred);
+        }
+
+        // Ponto de partida da varredura. Se a preferida existe ela já
+        // foi testada acima, então começa na seguinte; se não existe,
+        // varre a lista desde o começo.
+        let (from, first) = match self.tracks.iter().position(|t| t.id == preferred) {
+            Some(i) => (i, 1),
+            None => (0, 0),
+        };
+        let count = self.tracks.len();
+        (first..first + count)
+            .map(|offset| &self.tracks[(from + offset) % count])
+            .filter(|t| usable(t))
+            .map(|t| t.id)
+            .find(|&id| free(id))
     }
 
     /// Próximo ID de trilha (único no documento).
@@ -396,8 +466,8 @@ impl Project {
         track_id: u64,
         kind: ClipKind,
         name: impl Into<String>,
-        start_beat: u32,
-        length_beats: u32,
+        start_beat: f32,
+        length_beats: f32,
     ) -> Option<u64> {
         self.add_clip_with_path(track_id, kind, name, start_beat, length_beats, None)
     }
@@ -408,15 +478,22 @@ impl Project {
         track_id: u64,
         kind: ClipKind,
         name: impl Into<String>,
-        start_beat: u32,
-        length_beats: u32,
+        start_beat: f32,
+        length_beats: f32,
         file_path: Option<String>,
     ) -> Option<u64> {
-        if self.track(track_id).is_none() || length_beats == 0 {
+        if self.track(track_id).is_none() || length_beats <= crate::clip::BEAT_EPSILON {
             return None;
         }
         let id = self.next_clip_id();
-        let mut clip = Clip::new(id, track_id, name, kind, start_beat, length_beats);
+        let mut clip = Clip::new(
+            id,
+            track_id,
+            name,
+            kind,
+            start_beat.max(0.0),
+            length_beats,
+        );
         clip.file_path = file_path;
         self.clips.push(clip.clone());
 
@@ -431,11 +508,14 @@ impl Project {
     /// O clip original encolhe até `at_beat`; o clip da direita
     /// é criado com o restante. Retorna o id do novo clip, ou
     /// `None` se o clip não existe / o corte é inválido.
-    pub fn slice_clip(&mut self, clip_id: u64, at_beat: u32) -> Option<u64> {
+    pub fn slice_clip(&mut self, clip_id: u64, at_beat: f32) -> Option<u64> {
         let index = self.clips.iter().position(|c| c.id == clip_id)?;
         let clip = &self.clips[index];
 
-        if at_beat <= clip.start_beat || at_beat >= clip.start_beat + clip.length_beats {
+        // Cortar rente à borda não gera clip de tamanho zero.
+        if at_beat <= clip.start_beat + crate::clip::BEAT_EPSILON
+            || at_beat >= clip.end_beat() - crate::clip::BEAT_EPSILON
+        {
             return None;
         }
 
@@ -452,7 +532,7 @@ impl Project {
             original.name.clone(),
             original.kind,
             at_beat,
-            original.start_beat + original.length_beats - at_beat,
+            original.end_beat() - at_beat,
         );
         right.file_path = original.file_path.clone();
 
@@ -483,7 +563,7 @@ impl Project {
             .position(|c| {
                 c.track_id == left.track_id
                     && c.kind == left.kind
-                    && c.start_beat == left.start_beat + left.length_beats
+                    && crate::clip::beats_eq(c.start_beat, left.end_beat())
             })?;
         let right = self.clips[right_index].clone();
 
@@ -508,7 +588,7 @@ impl Project {
     /// Move um clip para outra trilha/posição.
     ///
     /// Retorna `false` se o clip ou a trilha de destino não existem.
-    pub fn move_clip(&mut self, clip_id: u64, new_track_id: u64, new_beat: u32) -> bool {
+    pub fn move_clip(&mut self, clip_id: u64, new_track_id: u64, new_beat: f32) -> bool {
         if self.track(new_track_id).is_none() {
             return false;
         }
@@ -517,7 +597,7 @@ impl Project {
         };
         let old = self.clips[index].clone();
         self.clips[index].track_id = new_track_id;
-        self.clips[index].start_beat = new_beat;
+        self.clips[index].start_beat = new_beat.max(0.0);
         let new = self.clips[index].clone();
 
         let event = DocumentEvent::ClipMoved { old, new };
@@ -543,15 +623,15 @@ impl Project {
     ///
     /// Muda o `start_beat` e/ou `length_beats`. Impede valores inválidos
     /// (comprimento 0 ou start negativo). Retorna `false` se clip não existe.
-    pub fn resize_clip(&mut self, clip_id: u64, new_start: u32, new_length: u32) -> bool {
-        if new_length == 0 {
+    pub fn resize_clip(&mut self, clip_id: u64, new_start: f32, new_length: f32) -> bool {
+        if new_length <= crate::clip::BEAT_EPSILON {
             return false;
         }
         let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
             return false;
         };
         let old = self.clips[index].clone();
-        self.clips[index].start_beat = new_start;
+        self.clips[index].start_beat = new_start.max(0.0);
         self.clips[index].length_beats = new_length;
         let new = self.clips[index].clone();
 
@@ -821,23 +901,23 @@ mod tests {
         let project = demo();
         let drums = project.clips_for_track(0);
         assert_eq!(drums.len(), 2);
-        assert_eq!(drums[0].start_beat, 0);
-        assert_eq!(drums[1].start_beat, 8);
+        assert_eq!(drums[0].start_beat, 0.0);
+        assert_eq!(drums[1].start_beat, 8.0);
     }
 
     #[test]
     fn clip_at_beat_finds_containing_clip() {
         let project = demo();
         // Clip 1 (Bass) ocupa beats 4..10 na trilha 1.
-        assert_eq!(project.clip_at_beat(1, 4).map(|c| c.id), Some(1));
-        assert_eq!(project.clip_at_beat(1, 9).map(|c| c.id), Some(1));
+        assert_eq!(project.clip_at_beat(1, 4.0).map(|c| c.id), Some(1));
+        assert_eq!(project.clip_at_beat(1, 9.0).map(|c| c.id), Some(1));
         // Limites: início incluso, fim exclusivo.
-        assert!(project.clip_at_beat(1, 3).is_none());
-        assert!(project.clip_at_beat(1, 10).is_none());
+        assert!(project.clip_at_beat(1, 3.0).is_none());
+        assert!(project.clip_at_beat(1, 10.0).is_none());
         // Trilha errada → None.
-        assert!(project.clip_at_beat(0, 4).is_none());
+        assert!(project.clip_at_beat(0, 4.0).is_none());
         // Overlap entre trilhas não vaza.
-        assert_eq!(project.clip_at_beat(2, 8).map(|c| c.id), Some(2));
+        assert_eq!(project.clip_at_beat(2, 8.0).map(|c| c.id), Some(2));
     }
 
     #[test]
@@ -871,56 +951,56 @@ mod tests {
     #[test]
     fn add_clip_to_existing_track() {
         let mut project = demo();
-        let id = project.add_clip(0, ClipKind::Midi, "Kick", 4, 2).unwrap();
+        let id = project.add_clip(0, ClipKind::Midi, "Kick", 4.0, 2.0).unwrap();
         assert_eq!(id, 203);
         let clip = project.clip(id).unwrap();
         assert_eq!(clip.track_id, 0);
-        assert_eq!(clip.start_beat, 4);
-        assert_eq!(clip.length_beats, 2);
+        assert_eq!(clip.start_beat, 4.0);
+        assert_eq!(clip.length_beats, 2.0);
     }
 
     #[test]
     fn add_clip_rejects_missing_track_and_zero_len() {
         let mut project = demo();
-        assert_eq!(project.add_clip(999, ClipKind::Midi, "X", 0, 4), None);
-        assert_eq!(project.add_clip(0, ClipKind::Midi, "X", 0, 0), None);
+        assert_eq!(project.add_clip(999, ClipKind::Midi, "X", 0.0, 4.0), None);
+        assert_eq!(project.add_clip(0, ClipKind::Midi, "X", 0.0, 0.0), None);
     }
 
     #[test]
     fn slice_clip_splits_and_shrinks() {
         let mut project = demo();
-        let new_id = project.slice_clip(1, 6).unwrap();
+        let new_id = project.slice_clip(1, 6.0).unwrap();
         assert_eq!(new_id, 203);
 
         let left = project.clip(1).unwrap();
-        assert_eq!(left.start_beat, 4);
-        assert_eq!(left.length_beats, 2);
+        assert_eq!(left.start_beat, 4.0);
+        assert_eq!(left.length_beats, 2.0);
 
         let right = project.clip(new_id).unwrap();
-        assert_eq!(right.start_beat, 6);
-        assert_eq!(right.length_beats, 4);
+        assert_eq!(right.start_beat, 6.0);
+        assert_eq!(right.length_beats, 4.0);
         assert_eq!(right.track_id, 1);
     }
 
     #[test]
     fn slice_clip_rejects_invalid_cuts() {
         let mut project = demo();
-        assert_eq!(project.slice_clip(999, 4), None);
-        assert_eq!(project.slice_clip(1, 4), None);
-        assert_eq!(project.slice_clip(1, 10), None);
+        assert_eq!(project.slice_clip(999, 4.0), None);
+        assert_eq!(project.slice_clip(1, 4.0), None);
+        assert_eq!(project.slice_clip(1, 10.0), None);
     }
 
     #[test]
     fn glue_clip_merges_adjacent() {
         let mut project = demo();
-        let right_id = project.slice_clip(0, 2).unwrap();
+        let right_id = project.slice_clip(0, 2.0).unwrap();
 
         let removed = project.glue_clip(0).unwrap();
         assert_eq!(removed, right_id);
 
         let left = project.clip(0).unwrap();
-        assert_eq!(left.start_beat, 0);
-        assert_eq!(left.length_beats, 4);
+        assert_eq!(left.start_beat, 0.0);
+        assert_eq!(left.length_beats, 4.0);
         assert!(project.clip(right_id).is_none());
         assert_eq!(project.clips.len(), 6);
     }
@@ -929,9 +1009,9 @@ mod tests {
     fn glue_clip_rejects_non_adjacent() {
         let mut project = demo();
         assert_eq!(project.glue_clip(1), None);
-        assert_eq!(project.clip(1).unwrap().length_beats, 6);
+        assert_eq!(project.clip(1).unwrap().length_beats, 6.0);
 
-        let gap = project.add_clip(0, ClipKind::Midi, "Far", 12, 2).unwrap();
+        let gap = project.add_clip(0, ClipKind::Midi, "Far", 12.0, 2.0).unwrap();
         assert_eq!(project.glue_clip(0), None);
         assert!(project.clip(gap).is_some());
     }
@@ -939,10 +1019,10 @@ mod tests {
     #[test]
     fn glue_clip_rejects_wrong_kind_or_track() {
         let mut project = demo();
-        project.add_clip(1, ClipKind::Audio, "Audio", 10, 2);
+        project.add_clip(1, ClipKind::Audio, "Audio", 10.0, 2.0);
         assert_eq!(project.glue_clip(1), None);
 
-        let other_track = project.add_clip(3, ClipKind::Midi, "Synth 02", 10, 2).unwrap();
+        let other_track = project.add_clip(3, ClipKind::Midi, "Synth 02", 10.0, 2.0).unwrap();
         assert_eq!(project.glue_clip(other_track), None);
     }
 
@@ -963,7 +1043,7 @@ mod tests {
             });
         }
 
-        project.slice_clip(0, 2);
+        project.slice_clip(0, 2.0);
         project.glue_clip(0);
 
         let events = events.borrow();
@@ -974,18 +1054,18 @@ mod tests {
     #[test]
     fn undo_redo_glue_restores_clips() {
         let mut project = demo();
-        let right_id = project.slice_clip(0, 2).unwrap();
+        let right_id = project.slice_clip(0, 2.0).unwrap();
         project.glue_clip(0);
 
         project.undo();
         let left = project.clip(0).unwrap();
-        assert_eq!(left.length_beats, 2);
+        assert_eq!(left.length_beats, 2.0);
         assert!(project.clip(right_id).is_some());
         assert_eq!(project.clips.len(), 7);
 
         project.redo();
         let left = project.clip(0).unwrap();
-        assert_eq!(left.length_beats, 4);
+        assert_eq!(left.length_beats, 4.0);
         assert!(project.clip(right_id).is_none());
         assert_eq!(project.clips.len(), 6);
     }
@@ -993,17 +1073,17 @@ mod tests {
     #[test]
     fn move_clip_relocates() {
         let mut project = demo();
-        assert!(project.move_clip(1, 3, 0));
+        assert!(project.move_clip(1, 3, 0.0));
         let clip = project.clip(1).unwrap();
         assert_eq!(clip.track_id, 3);
-        assert_eq!(clip.start_beat, 0);
+        assert_eq!(clip.start_beat, 0.0);
     }
 
     #[test]
     fn move_clip_rejects_missing_targets() {
         let mut project = demo();
-        assert!(!project.move_clip(999, 0, 0));
-        assert!(!project.move_clip(1, 999, 0));
+        assert!(!project.move_clip(999, 0, 0.0));
+        assert!(!project.move_clip(1, 999, 0.0));
     }
 
     #[test]
@@ -1028,9 +1108,9 @@ mod tests {
         }
 
         project.add_track(TrackKind::Audio, "Vocal 2");
-        project.add_clip(0, ClipKind::Midi, "Kick", 0, 1);
-        project.move_clip(1, 2, 0);
-        project.slice_clip(1, 5);
+        project.add_clip(0, ClipKind::Midi, "Kick", 0.0, 1.0);
+        project.move_clip(1, 2, 0.0);
+        project.slice_clip(1, 5.0);
         project.delete_clip(2);
 
         let events = events.borrow();
@@ -1050,9 +1130,9 @@ mod tests {
             let count = count.clone();
             project.subscribe(move |_, _| *count.borrow_mut() += 1)
         };
-        project.add_clip(0, ClipKind::Midi, "A", 0, 1);
+        project.add_clip(0, ClipKind::Midi, "A", 0.0, 1.0);
         project.unsubscribe(handle);
-        project.add_clip(0, ClipKind::Midi, "B", 1, 1);
+        project.add_clip(0, ClipKind::Midi, "B", 1.0, 1.0);
         assert_eq!(*count.borrow(), 1);
     }
 
@@ -1060,7 +1140,7 @@ mod tests {
     fn undo_redo_add_clip() {
         let mut project = demo();
         let before = project.clips.len();
-        project.add_clip(0, ClipKind::Midi, "Undo", 20, 2);
+        project.add_clip(0, ClipKind::Midi, "Undo", 20.0, 2.0);
         assert_eq!(project.clips.len(), before + 1);
 
         assert!(project.can_undo());
@@ -1077,33 +1157,33 @@ mod tests {
     #[test]
     fn undo_redo_slice_restores_length() {
         let mut project = demo();
-        project.slice_clip(1, 6);
+        project.slice_clip(1, 6.0);
 
         project.undo();
         let bass = project.clip(1).unwrap();
-        assert_eq!(bass.length_beats, 6);
+        assert_eq!(bass.length_beats, 6.0);
         assert_eq!(project.clips.len(), 6);
 
         project.redo();
         let left = project.clip(1).unwrap();
-        assert_eq!(left.length_beats, 2);
+        assert_eq!(left.length_beats, 2.0);
         assert_eq!(project.clips.len(), 7);
     }
 
     #[test]
     fn undo_redo_move_restores_position() {
         let mut project = demo();
-        project.move_clip(1, 3, 0);
+        project.move_clip(1, 3, 0.0);
 
         project.undo();
         let clip = project.clip(1).unwrap();
         assert_eq!(clip.track_id, 1);
-        assert_eq!(clip.start_beat, 4);
+        assert_eq!(clip.start_beat, 4.0);
 
         project.redo();
         let clip = project.clip(1).unwrap();
         assert_eq!(clip.track_id, 3);
-        assert_eq!(clip.start_beat, 0);
+        assert_eq!(clip.start_beat, 0.0);
     }
 
     #[test]
@@ -1136,11 +1216,11 @@ mod tests {
     #[test]
     fn new_mutation_clears_redo_stack() {
         let mut project = demo();
-        project.add_clip(0, ClipKind::Midi, "A", 0, 1);
+        project.add_clip(0, ClipKind::Midi, "A", 0.0, 1.0);
         project.undo();
         assert!(project.can_redo());
 
-        project.add_clip(0, ClipKind::Midi, "B", 1, 1);
+        project.add_clip(0, ClipKind::Midi, "B", 1.0, 1.0);
         assert!(!project.can_redo());
     }
 
@@ -1153,7 +1233,7 @@ mod tests {
             project.subscribe(move |_, kind| kinds.borrow_mut().push(kind));
         }
 
-        project.add_clip(0, ClipKind::Midi, "A", 0, 1);
+        project.add_clip(0, ClipKind::Midi, "A", 0.0, 1.0);
         project.undo();
         project.redo();
 
@@ -1192,5 +1272,120 @@ mod tests {
         assert!(!project.add_mixer_insert(999));
         assert!(!project.remove_mixer_insert(1, 99));
         assert!(!project.toggle_mixer_insert(1, 99));
+    }
+
+    // =====================================================
+    // COLOCAÇÃO SEM SOBREPOSIÇÃO
+    // =====================================================
+
+    /// Projeto com duas trilhas de áudio vazias. Devolve os ids delas.
+    fn two_audio_tracks() -> (Project, u64, u64) {
+        let mut project = Project::default();
+        let a = project.add_track(TrackKind::Audio, "A");
+        let b = project.add_track(TrackKind::Audio, "B");
+        (project, a, b)
+    }
+
+    #[test]
+    fn free_slot_keeps_desired_position_when_empty() {
+        let (project, a, _) = two_audio_tracks();
+        assert_eq!(project.find_free_slot(a, 3.5, 2.0), 3.5);
+    }
+
+    #[test]
+    fn free_slot_clamps_negative_desired() {
+        let (project, a, _) = two_audio_tracks();
+        assert_eq!(project.find_free_slot(a, -8.0, 2.0), 0.0);
+    }
+
+    #[test]
+    fn free_slot_lands_right_after_the_blocker() {
+        let (mut project, a, _) = two_audio_tracks();
+        project.add_clip(a, ClipKind::Audio, "um", 0.0, 3.5);
+
+        // Pediu 1.0, mas 0.0..3.5 está ocupado: encosta em 3.5.
+        assert_eq!(project.find_free_slot(a, 1.0, 2.0), 3.5);
+        // Pediu 3.5, que já está livre: respeita o pedido.
+        assert_eq!(project.find_free_slot(a, 3.5, 2.0), 3.5);
+    }
+
+    #[test]
+    fn free_slot_walks_over_a_chain_of_clips() {
+        let (mut project, a, _) = two_audio_tracks();
+        project.add_clip(a, ClipKind::Audio, "um", 0.0, 2.0);
+        project.add_clip(a, ClipKind::Audio, "dois", 2.0, 2.0);
+        project.add_clip(a, ClipKind::Audio, "tres", 4.0, 1.5);
+
+        // Três clips encostados: o quarto vai para depois do último.
+        assert_eq!(project.find_free_slot(a, 0.0, 2.0), 5.5);
+    }
+
+    #[test]
+    fn free_slot_fills_a_gap_between_clips() {
+        let (mut project, a, _) = two_audio_tracks();
+        project.add_clip(a, ClipKind::Audio, "um", 0.0, 2.0);
+        project.add_clip(a, ClipKind::Audio, "dois", 6.0, 2.0);
+
+        // Cabe no buraco 2.0..6.0.
+        assert_eq!(project.find_free_slot(a, 2.0, 4.0), 2.0);
+        // Não cabe no buraco: pula o segundo clip.
+        assert_eq!(project.find_free_slot(a, 2.0, 5.0), 8.0);
+    }
+
+    #[test]
+    fn free_slot_ignores_other_tracks() {
+        let (mut project, a, b) = two_audio_tracks();
+        project.add_clip(b, ClipKind::Audio, "outra", 0.0, 8.0);
+
+        assert_eq!(project.find_free_slot(a, 0.0, 4.0), 0.0);
+    }
+
+    #[test]
+    fn track_with_room_prefers_the_requested_track() {
+        let (mut project, a, b) = two_audio_tracks();
+        project.add_clip(b, ClipKind::Audio, "outra", 0.0, 8.0);
+
+        assert_eq!(project.track_with_room(a, 0.0, 4.0), Some(a));
+    }
+
+    #[test]
+    fn track_with_room_falls_back_to_a_free_track() {
+        let (mut project, a, b) = two_audio_tracks();
+        project.add_clip(a, ClipKind::Audio, "ocupa", 0.0, 8.0);
+
+        assert_eq!(project.track_with_room(a, 0.0, 4.0), Some(b));
+    }
+
+    #[test]
+    fn track_with_room_returns_none_when_all_busy() {
+        let (mut project, a, b) = two_audio_tracks();
+        project.add_clip(a, ClipKind::Audio, "a", 0.0, 8.0);
+        project.add_clip(b, ClipKind::Audio, "b", 0.0, 8.0);
+
+        assert_eq!(project.track_with_room(a, 0.0, 4.0), None);
+        // Depois do fim dos dois, a preferida volta a servir.
+        assert_eq!(project.track_with_room(a, 8.0, 4.0), Some(a));
+    }
+
+    #[test]
+    fn track_with_room_ignores_unknown_preferred() {
+        let (project, a, _) = two_audio_tracks();
+        assert_eq!(project.track_with_room(999, 0.0, 4.0), Some(a));
+    }
+
+    #[test]
+    fn track_with_room_searches_downwards_then_wraps() {
+        let mut project = Project::default();
+        let a = project.add_track(TrackKind::Audio, "A");
+        let b = project.add_track(TrackKind::Audio, "B");
+        let c = project.add_track(TrackKind::Audio, "C");
+        project.add_clip(b, ClipKind::Audio, "ocupa b", 0.0, 4.0);
+
+        // Soltou em B (ocupada) → desce para C, não sobe para A.
+        assert_eq!(project.track_with_room(b, 0.0, 4.0), Some(c));
+
+        // Com C também ocupada, dá a volta e chega em A.
+        project.add_clip(c, ClipKind::Audio, "ocupa c", 0.0, 4.0);
+        assert_eq!(project.track_with_room(b, 0.0, 4.0), Some(a));
     }
 }

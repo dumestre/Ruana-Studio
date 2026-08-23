@@ -129,6 +129,10 @@ export component MainWindow inherits Window {
         -1;
     in-out property <[BrowserFileEntry]> explorer-entries:
         [];
+    in-out property <bool> explorer-can-go-up:
+        false;
+    in-out property <string> explorer-search-text:
+        "";
 
     // =====================================================
     // DIMENSÕES
@@ -228,7 +232,7 @@ export component MainWindow inherits Window {
 
     callback add-track-requested(string);
 
-    callback clip-dropped(int, float, string, bool);
+    callback clip-dropped(int, float, string, bool, string);
 
     callback clip-slice-requested(int, float);
 
@@ -260,6 +264,8 @@ export component MainWindow inherits Window {
 
     callback map-window-coords-to-timeline(length, length) -> TimelineCoords;
     callback explorer-go-up();
+    callback explorer-history-go(int);
+    callback explorer-search-changed(string);
 
     callback float-toggle(int);
 
@@ -502,12 +508,15 @@ export component MainWindow inherits Window {
                 && root.drag-over-timeline {
 
                 // O core é dono dos dados: a UI só emite a
-                // intenção; o bridge (Rust) cria o clip.
+                // intenção; o bridge (Rust) cria o clip. O path
+                // vai junto — sem ele o Rust não sabe qual
+                // arquivo decodificar e o clip nasce mudo.
                 root.clip-dropped(
                     root.drag-drop-track,
                     root.drag-snap-beat,
                     root.drag-name,
-                    root.drag-is-midi
+                    root.drag-is-midi,
+                    root.drag-path
                 );
             }
         }
@@ -632,6 +641,8 @@ export component MainWindow inherits Window {
         explorer-path-history <=> root.explorer-path-history;
         explorer-history-index <=> root.explorer-history-index;
         explorer-entries <=> root.explorer-entries;
+        explorer-can-go-up <=> root.explorer-can-go-up;
+        explorer-search-text <=> root.explorer-search-text;
 
         close => { root.window-close(); }
         minimize => { root.minimize(); }
@@ -656,6 +667,8 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
         explorer-path-changed(path) => { root.explorer-path-changed(path); }
         explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
         explorer-go-up() => { root.explorer-go-up(); }
+        explorer-history-go(delta) => { root.explorer-history-go(delta); }
+        explorer-search-changed(term) => { root.explorer-search-changed(term); }
         float-toggle(tab) => { root.float-toggle(tab); }
         tool-changed(tool) => { root.tool-changed(tool); }
         track-recolor-requested(track, color) => { root.track-recolor-requested(track, color); }

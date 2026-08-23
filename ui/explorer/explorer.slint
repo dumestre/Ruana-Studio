@@ -19,6 +19,7 @@ export component Explorer inherits Rectangle {
     in-out property <[string]> path-history: [];
     in-out property <int> history-index: -1;
     in-out property <[BrowserFileEntry]> entries: [];
+    in-out property <bool> can-go-up: false;
 
     callback audio-drag-started(string, string, string, color, bool);
     callback audio-drag-moved(length, length);
@@ -27,6 +28,8 @@ export component Explorer inherits Rectangle {
     callback explorer-path-changed(string);
     callback explorer-directory-entered(string);
     callback explorer-go-up();
+    callback explorer-history-go(int);
+    callback explorer-search-changed(string);
 
     preferred-width: 300px;
     width: 300px;
@@ -91,6 +94,14 @@ export component Explorer inherits Rectangle {
                 : root.browser-mode == 1
                     ? "Search media..."
                     : "Search plugins...";
+
+            // Filtrar é releitura da pasta atual no Rust — o filtro
+            // roda sobre os nomes reais, não sobre uma lista congelada.
+            changed text => {
+                if root.browser-mode == 0 {
+                    root.explorer-search-changed(self.text);
+                }
+            }
         }
 
 
@@ -109,6 +120,7 @@ export component Explorer inherits Rectangle {
                 current-path: root.current-path;
                 path-history: root.path-history;
                 history-index: root.history-index;
+                can-go-up: root.can-go-up;
                 selected-index: -1;
 
                 path-changed(path) => {
@@ -123,6 +135,9 @@ export component Explorer inherits Rectangle {
                 }
                 explorer-go-up() => {
                     root.explorer-go-up();
+                }
+                history-go(delta) => {
+                    root.explorer-history-go(delta);
                 }
                 audio-drag-started(name, path, type, color, is-midi) => {
                     root.audio-drag-started(name, path, type, color, is-midi);

@@ -1,5 +1,19 @@
 //! Clips da DAW.
 
+/// Tolerância para comparar posições em beats.
+///
+/// Beats são `f32`, então "encostado" nunca é igualdade exata: um clip
+/// cortado em 3.7 e recolado precisa reconhecer o vizinho mesmo com o
+/// resíduo do arredondamento. 1/1000 de beat é ~0.5 ms em 120 BPM —
+/// abaixo de qualquer coisa audível ou clicável.
+pub const BEAT_EPSILON: f32 = 0.001;
+
+/// Duas posições em beats são a mesma?
+#[inline]
+pub fn beats_eq(a: f32, b: f32) -> bool {
+    (a - b).abs() <= BEAT_EPSILON
+}
+
 /// Tipo de conteúdo de um clip.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClipKind {
@@ -18,9 +32,13 @@ pub struct Clip {
     pub name: String,
     pub kind: ClipKind,
     /// Posição inicial em beats na timeline.
-    pub start_beat: u32,
+    ///
+    /// Fracionário: a duração de um arquivo de áudio quase nunca cai
+    /// numa batida inteira, e forçar inteiro esticava ou achatava a
+    /// waveform para caber.
+    pub start_beat: f32,
     /// Duração em beats.
-    pub length_beats: u32,
+    pub length_beats: f32,
     /// Índice de cor (paleta na UI). 0 = padrão MIDI/Audio.
     pub color: u8,
     /// Caminho do arquivo de áudio (apenas clips de áudio).
@@ -34,8 +52,8 @@ impl Clip {
         track_id: u64,
         name: impl Into<String>,
         kind: ClipKind,
-        start_beat: u32,
-        length_beats: u32,
+        start_beat: f32,
+        length_beats: f32,
     ) -> Self {
         Self {
             id,
@@ -54,8 +72,8 @@ impl Clip {
         id: u64,
         track_id: u64,
         name: impl Into<String>,
-        start_beat: u32,
-        length_beats: u32,
+        start_beat: f32,
+        length_beats: f32,
     ) -> Self {
         Self::new(
             id,
@@ -72,8 +90,8 @@ impl Clip {
         id: u64,
         track_id: u64,
         name: impl Into<String>,
-        start_beat: u32,
-        length_beats: u32,
+        start_beat: f32,
+        length_beats: f32,
     ) -> Self {
         Self::new(
             id,
@@ -85,6 +103,20 @@ impl Clip {
         )
     }
 
+    /// Beat onde o clip termina.
+    #[inline]
+    pub fn end_beat(&self) -> f32 {
+        self.start_beat + self.length_beats
+    }
+
+    /// O clip cobre o intervalo `[start, end)`?
+    ///
+    /// Encostar não é sobrepor: um clip que termina exatamente onde o
+    /// outro começa é adjacente, e adjacente é legal.
+    pub fn overlaps(&self, start: f32, end: f32) -> bool {
+        start < self.end_beat() - BEAT_EPSILON && end > self.start_beat + BEAT_EPSILON
+    }
+
     /// True se o clip é MIDI.
     pub fn is_midi(&self) -> bool {
         self.kind == ClipKind::Midi
@@ -94,5 +126,42 @@ impl Clip {
     pub fn with_file_path(mut self, path: impl Into<String>) -> Self {
         self.file_path = Some(path.into());
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn clip_at(start: f32, len: f32) -> Clip {
+        Clip::audio(1, 0, "x", start, len)
+    }
+
+    #[test]
+    fn end_beat_is_start_plus_length() {
+        assert_eq!(clip_at(2.5, 1.25).end_beat(), 3.75);
+    }
+
+    #[test]
+    fn adjacent_clips_do_not_overlap() {
+        let c = clip_at(4.0, 2.0);
+        // Termina em 6.0: começar em 6.0 é encostar, não sobrepor.
+        assert!(!c.overlaps(6.0, 8.0));
+        assert!(!c.overlaps(0.0, 4.0));
+    }
+
+    #[test]
+    fn partial_and_total_overlap_detected() {
+        let c = clip_at(4.0, 2.0);
+        assert!(c.overlaps(5.0, 7.0)); // entra pela direita
+        assert!(c.overlaps(3.0, 5.0)); // entra pela esquerda
+        assert!(c.overlaps(0.0, 16.0)); // engole
+        assert!(c.overlaps(4.5, 5.5)); // dentro
+    }
+
+    #[test]
+    fn beats_eq_tolerates_float_residue() {
+        assert!(beats_eq(3.7, 3.7 + BEAT_EPSILON * 0.5));
+        assert!(!beats_eq(3.7, 3.8));
     }
 }
