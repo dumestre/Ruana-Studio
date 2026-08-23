@@ -1,5 +1,6 @@
 slint::include_modules!();
 
+mod audio_bridge;
 mod beat;
 mod cursors;
 mod icon;
@@ -674,6 +675,44 @@ fn main() -> Result<(), slint::PlatformError> {
     let project = Rc::new(RefCell::new(Project::demo()));
     let transport = Arc::new(Mutex::new(Transport::default()));
 
+    // Motor de áudio: abre UMA vez e fica aberto pela vida do app.
+    //
+    // Antes o stream nascia no play e morria no stop. Isso custava
+    // ~100ms de handshake com o driver no início de cada play (o
+    // primeiro compasso saía picado) e tornava impossível pré-escutar
+    // sample com o transporte parado — que é justamente o que o
+    // channel rack do FL Studio faz. Se o dispositivo não abrir, o
+    // app continua rodando em silêncio em vez de morrer.
+    let audio_engine = match daw_audio::AudioEngine::start(transport.clone()) {
+        Ok(engine) => {
+            let cfg = engine.output_config();
+            eprintln!(
+                "[audio] {} Hz, {} canais",
+                cfg.sample_rate, cfg.channels
+            );
+            Some(engine)
+        }
+        Err(err) => {
+            eprintln!("[audio] dispositivo indisponível: {err} — seguindo em silêncio");
+            None
+        }
+    };
+    let audio = audio_bridge::AudioBridge::new(audio_engine.as_ref().map(|e| e.handle()));
+
+    // Qualquer evento de documento (clip criado, movido, cortado,
+    // apagado, undo/redo) muda o que a thread RT precisa ouvir.
+    // Assinar aqui é melhor que marcar sujo em cada call site: um
+    // caminho novo de edição não pode nascer mudo por esquecimento.
+    {
+        let audio = audio.clone();
+        project.borrow().subscribe(move |_event, _kind| {
+            audio.mark_dirty();
+        });
+    }
+
+    // Republica o projeto na thread RT quando algo muda (coalescido).
+    let _audio_sync = audio_bridge::start_sync_timer(audio.clone(), project.clone());
+
     // Cache de waveforms: clip_id → picos normalizados.
     let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(HashMap::new()));
 
@@ -726,7 +765,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Beat sequencer: projeção inicial + persistência no core.
     {
         let project = project.clone();
-        beat::wire_beat(&ui, project);
+        beat::wire_beat(&ui, project, audio.clone());
     }
 
     // Slots das janelas flutuantes, um por tool (0=Mixer, 1=Sampler, 2=Piano Roll).
@@ -807,6 +846,7 @@ fn main() -> Result<(), slint::PlatformError> {
         // Clone para o float toggle sem consumir os originais
         let mixer_models_for_float = mixer_models.clone();
         let meter_model_for_float = meter_model.clone();
+        let audio_for_float = audio.clone();
         ui.on_float_toggle(move |tab| {
             let _ui = match ui_weak.upgrade() {
                 Some(u) => u,
@@ -874,6 +914,7 @@ fn main() -> Result<(), slint::PlatformError> {
             {
                 let project = project.clone();
                 let mixer_models = mixer_models_for_float.clone();
+                let audio = audio_for_float.clone();
                 p.on_mixer_param_changed(move |channel, param, value| {
                     let Some(param) = MixerParam::from_str(param.as_str()) else {
                         return;
@@ -881,6 +922,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     let channel = channel as usize;
                     project.borrow_mut().set_mixer_param(channel, param, value);
                     mixer_models.borrow().update_channel(channel, param, value);
+                    audio.mark_dirty();
                 });
             }
 
@@ -1309,6 +1351,7 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let project = project.clone();
         let mixer_models = mixer_models.clone();
+        let audio = audio.clone();
         ui.on_mixer_param_changed(move |channel, param, value| {
             let Some(param) = MixerParam::from_str(param.as_str()) else {
                 return;
@@ -1316,6 +1359,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let channel = channel as usize;
             project.borrow_mut().set_mixer_param(channel, param, value);
             mixer_models.borrow().update_channel(channel, param, value);
+            audio.mark_dirty();
         });
     }
 
@@ -1396,6 +1440,7 @@ fn main() -> Result<(), slint::PlatformError> {
         project.clone(),
         meter_model.clone(),
         meter_state.clone(),
+        audio.clone(),
     );
 
 

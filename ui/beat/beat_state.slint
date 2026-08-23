@@ -30,6 +30,12 @@ export global BeatState {
 
     in-out property <[string]> instrument-names: [];
 
+    // Nome do sample carregado em cada linha ("" = linha vazia).
+    //
+    // Serve para a linha mostrar que tem som carregado — sem isso o
+    // único sinal de que o drop funcionou era o nome da trilha mudar.
+    in-out property <[string]> track-sample-names: [];
+
     in-out property <[bool]> track-active: [];
 
     in-out property <[bool]> track-solo: [];
@@ -39,6 +45,12 @@ export global BeatState {
     in-out property <[float]> track-volume: [];
 
     in-out property <[int]> track-mixer-channel: [];
+
+    // Passo que está soando (-1 = parado).
+    //
+    // Escrito pelo Rust a partir do MESMO relógio do áudio, então a
+    // coluna acesa é a que se ouve.
+    in-out property <int> playhead: -1;
 
 
     // --------------------------------------------------------
@@ -68,4 +80,10 @@ export global BeatState {
     callback clear-track(int);
 
     callback insert-pattern(int, int);
+
+    // Toca o sample da linha na hora (pré-escuta).
+    //
+    // Soa com o transporte parado — é o clique no botão de canal do
+    // channel rack.
+    callback preview-track(int);
 }

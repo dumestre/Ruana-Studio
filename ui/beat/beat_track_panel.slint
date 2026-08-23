@@ -7,6 +7,9 @@ export component BeatTrackPanel inherits Rectangle {
     in-out property <[int]> instrument-indexes: [];
     in-out property <[string]> instrument-names: [];
 
+    // Sample carregado em cada linha ("" = vazia).
+    in-out property <[string]> track-sample-names: [];
+
     in-out property <[bool]> track-active: [];
     in-out property <[bool]> track-solo: [];
 
@@ -20,6 +23,9 @@ export component BeatTrackPanel inherits Rectangle {
     in-out property <int> track-menu-open-index: -1;
 
     callback track-selected(int);
+
+    // Pré-escuta do sample de uma linha.
+    callback track-preview-requested(int);
 
     // Persistência no core.
     // param: "active" | "solo" | "pan" | "volume" | "channel"
@@ -47,6 +53,15 @@ export component BeatTrackPanel inherits Rectangle {
 
         track-name:
             root.instrument-names[inst];
+
+        sample-name:
+            inst < root.track-sample-names.length
+                ? root.track-sample-names[inst]
+                : "";
+
+        preview-requested => {
+            root.track-preview-requested(inst);
+        }
 
         track-color:
             root.track-colors[inst];

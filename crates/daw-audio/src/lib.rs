@@ -11,8 +11,11 @@ pub mod resample;
 
 #[cfg(feature = "cpal-out")]
 pub use backend::{AudioConfig, AudioError, CpalBackend};
-pub use buffer::{BufferCache, SampleBuffer};
+pub use buffer::{AudioBuffer, BufferCache};
 #[cfg(feature = "cpal-out")]
-pub use engine::{AudioEngine, ProjectSnapshot};
-pub use mixer::{clamp_stereo, mix_stereo_frame, stereo_gains, track_is_active};
-pub use resample::resample_linear;
+pub use engine::{AudioEngine, EngineHandle, ProjectSnapshot, STEPS_PER_BEAT};
+pub use mixer::{
+    clamp_stereo, limit_stereo, mix_stereo_frame, mix_stereo_source, soft_clip, stereo_gains,
+    stereo_gains_bipolar, track_is_active,
+};
+pub use resample::{resample_linear, resample_sinc};

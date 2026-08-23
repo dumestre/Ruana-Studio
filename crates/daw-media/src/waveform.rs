@@ -5,10 +5,43 @@ use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct WaveformData {
+    /// Downmix mono — usado APENAS para desenhar a waveform.
+    ///
+    /// Não usar para reprodução: somar L+R cancela conteúdo fora
+    /// de fase e destrói a imagem stereo do sample.
     pub samples: Vec<f32>,
+    /// Samples no layout ORIGINAL do arquivo (intercalado).
+    ///
+    /// Esta é a fonte para o motor de áudio: preserva os canais
+    /// como estão no arquivo, então o sample sai igual ao original.
+    pub interleaved: Vec<f32>,
     pub sample_rate: u32,
     pub channels: u16,
     pub duration_seconds: f32,
+}
+
+impl WaveformData {
+    /// Quantidade de frames (samples por canal).
+    pub fn frames(&self) -> usize {
+        let ch = self.channels.max(1) as usize;
+        self.interleaved.len() / ch
+    }
+
+    /// Extrai um canal do buffer intercalado.
+    ///
+    /// Arquivos mono devolvem o mesmo conteúdo para qualquer canal
+    /// pedido — quem chama trata mono como "L igual a R".
+    pub fn channel(&self, index: usize) -> Vec<f32> {
+        let ch = self.channels.max(1) as usize;
+        let index = index.min(ch - 1);
+        if ch == 1 {
+            return self.interleaved.clone();
+        }
+        self.interleaved
+            .chunks(ch)
+            .filter_map(|frame| frame.get(index).copied())
+            .collect()
+    }
 }
 
 /// Decodifica um arquivo WAV via hound (rápido e confiável).
@@ -30,23 +63,30 @@ fn decode_wav_file(path: &Path) -> Result<WaveformData, Box<dyn std::error::Erro
     let channels = spec.channels as u16;
     let sample_rate = spec.sample_rate;
 
-    let mono_samples = if channels == 2 {
-        samples
-            .chunks(2)
-            .map(|chunk| (chunk[0] + chunk[1]) * 0.5)
-            .collect()
-    } else {
-        samples
-    };
-
+    let mono_samples = downmix_mono(&samples, channels as usize);
     let duration_seconds = mono_samples.len() as f32 / sample_rate as f32;
 
     Ok(WaveformData {
         samples: mono_samples,
+        interleaved: samples,
         sample_rate,
         channels,
         duration_seconds,
     })
+}
+
+/// Downmix para mono — SÓ para o desenho da waveform.
+///
+/// Stereo vira média dos dois canais; multicanal usa o primeiro.
+fn downmix_mono(interleaved: &[f32], channels: usize) -> Vec<f32> {
+    match channels {
+        0 | 1 => interleaved.to_vec(),
+        2 => interleaved
+            .chunks(2)
+            .map(|c| if c.len() == 2 { (c[0] + c[1]) * 0.5 } else { c[0] })
+            .collect(),
+        n => interleaved.chunks(n).map(|c| c[0]).collect(),
+    }
 }
 
 /// Decodifica MP3/FLAC/OGG via symphonia.
@@ -118,25 +158,15 @@ fn decode_symphonia(path: &Path) -> Result<WaveformData, Box<dyn std::error::Err
         }
     }
 
-    // Mistura para mono se necessário
-    let mono_samples = if channel_count == 2 {
-        all_samples
-            .chunks(2)
-            .map(|c| if c.len() == 2 { (c[0] + c[1]) * 0.5 } else { c[0] })
-            .collect()
-    } else if channel_count > 2 {
-        all_samples
-            .chunks(channel_count)
-            .map(|c| c[0])
-            .collect()
-    } else {
-        all_samples
-    };
+    // Mistura para mono só para o desenho; a reprodução usa o
+    // buffer intercalado original.
+    let mono_samples = downmix_mono(&all_samples, channel_count);
 
     let duration_seconds = mono_samples.len() as f32 / sample_rate as f32;
 
     Ok(WaveformData {
         samples: mono_samples,
+        interleaved: all_samples,
         sample_rate,
         channels: channel_count as u16,
         duration_seconds,
@@ -197,6 +227,7 @@ mod tests {
     fn waveform_downsample() {
         let data = WaveformData {
             samples: vec![0.0, 0.5, -0.5, 1.0, -1.0, 0.0, 0.0, 0.0],
+            interleaved: vec![0.0, 0.5, -0.5, 1.0, -1.0, 0.0, 0.0, 0.0],
             sample_rate: 44100,
             channels: 1,
             duration_seconds: 0.0,
@@ -208,5 +239,35 @@ mod tests {
         assert_eq!(pts[1], 1.0);
         assert_eq!(pts[2], 1.0);
         assert_eq!(pts[3], 0.0);
+    }
+
+    #[test]
+    fn stereo_keeps_channels_separate() {
+        // L = 1.0 constante, R = -1.0 constante: o downmix mono
+        // cancela (0.0), mas os canais originais sobrevivem.
+        let data = WaveformData {
+            samples: downmix_mono(&[1.0, -1.0, 1.0, -1.0], 2),
+            interleaved: vec![1.0, -1.0, 1.0, -1.0],
+            sample_rate: 48000,
+            channels: 2,
+            duration_seconds: 0.0,
+        };
+        assert_eq!(data.samples, vec![0.0, 0.0]);
+        assert_eq!(data.frames(), 2);
+        assert_eq!(data.channel(0), vec![1.0, 1.0]);
+        assert_eq!(data.channel(1), vec![-1.0, -1.0]);
+    }
+
+    #[test]
+    fn mono_channel_duplicates() {
+        let data = WaveformData {
+            samples: vec![0.25, 0.5],
+            interleaved: vec![0.25, 0.5],
+            sample_rate: 48000,
+            channels: 1,
+            duration_seconds: 0.0,
+        };
+        assert_eq!(data.channel(0), vec![0.25, 0.5]);
+        assert_eq!(data.channel(1), vec![0.25, 0.5]);
     }
 }

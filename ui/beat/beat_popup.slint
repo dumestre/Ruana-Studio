@@ -64,6 +64,9 @@ export component BeatPopup inherits Rectangle {
     in-out property <[int]> track-mixer-channel:
         [0, 1, 2, 3, 4, 5, 6, 7];
 
+    // Sample carregado em cada linha ("" = vazia).
+    in-out property <[string]> track-sample-names: [];
+
     in-out property <int> selected-track: 0;
 
 
@@ -141,6 +144,12 @@ export component BeatPopup inherits Rectangle {
 
     callback insert-pattern(int, int);
     callback pattern-changed(int);
+
+    // Play/stop do header → transporte global.
+    callback play-state-changed(bool);
+
+    // Pré-escuta do sample de uma linha.
+    callback preview-track(int);
 
     // Persistência no core.
     callback step-committed(int, bool);
@@ -220,6 +229,9 @@ export component BeatPopup inherits Rectangle {
         track-mixer-channel
             <=> root.track-mixer-channel;
 
+        track-sample-names
+            <=> root.track-sample-names;
+
         selected-track
             <=> root.selected-track;
 
@@ -266,6 +278,16 @@ export component BeatPopup inherits Rectangle {
 
 
         track-selected(index) => {
+        }
+
+
+        track-preview-requested(index) => {
+            root.preview-track(index);
+        }
+
+
+        play-state-changed(value) => {
+            root.play-state-changed(value);
         }
 
 

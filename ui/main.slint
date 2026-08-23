@@ -697,6 +697,8 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
 
         instrument-names <=> BeatState.instrument-names;
 
+        track-sample-names <=> BeatState.track-sample-names;
+
         track-active <=> BeatState.track-active;
 
         track-solo <=> BeatState.track-solo;
@@ -706,6 +708,20 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
         track-volume <=> BeatState.track-volume;
 
         track-mixer-channel <=> BeatState.track-mixer-channel;
+
+        // Playhead e play vêm do transporte — o beat NÃO tem clock
+        // próprio, senão a coluna acesa não corresponde ao som.
+        playhead <=> BeatState.playhead;
+
+        playing <=> root.playing;
+
+        play-state-changed(state) => {
+            root.play-state-changed(state);
+        }
+
+        preview-track(track) => {
+            BeatState.preview-track(track);
+        }
 
 
         // ----------------------------------------------------

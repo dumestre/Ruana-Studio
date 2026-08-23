@@ -19,8 +19,9 @@ use std::time::{Duration, Instant};
 
 use daw_core::project::Project;
 use daw_core::transport::Transport;
-use slint::{ComponentHandle, Model};
+use slint::{ComponentHandle, Global, Model};
 
+use crate::audio_bridge::AudioBridge;
 use crate::MainWindow;
 
 /// Log de runtime (playback) — só ativo com `RUANA_LOG` definido.
@@ -73,14 +74,40 @@ impl VisualClock {
     }
 }
 
+/// Publica no `BeatState` o passo que está soando.
+///
+/// Derivado do mesmo relógio do áudio, com a mesma divisão que o
+/// motor usa (semicolcheia). Deduplicado: o passo só muda ~8×/s no
+/// máximo, e escrever a propriedade a cada 8 ms invalidaria o grid
+/// inteiro sem necessidade.
+fn publish_beat_step(ui: &MainWindow, secs: f64, bpm: f64, last: &Cell<i32>) {
+    let st = crate::BeatState::get(ui);
+    let steps = st.get_grid_resolution();
+    if steps <= 0 {
+        return;
+    }
+    let beats = secs * bpm / 60.0;
+    let step = (beats * daw_audio::STEPS_PER_BEAT).floor() as i64;
+    let step = step.rem_euclid(steps as i64) as i32;
+    if step != last.get() {
+        last.set(step);
+        st.set_playhead(step);
+    }
+}
+
 /// Instala os handlers de transporte na UI: play/pause/stop, seek e
 /// os timers de playhead + meters. Chamar uma vez no startup.
+///
+/// O motor de áudio já está rodando quando isto é chamado (ver
+/// [`crate::audio_bridge`]): play/stop aqui só ligam e desligam o
+/// transporte, sem abrir nem fechar o dispositivo.
 pub fn install(
     ui: &slint::Weak<MainWindow>,
     transport: Arc<Mutex<Transport>>,
     project: Rc<RefCell<Project>>,
     meter_model: Rc<slint::VecModel<f32>>,
     meter_state: Rc<RefCell<Vec<f32>>>,
+    audio: AudioBridge,
 ) {
     // Handlers precisam da instância forte; o Weak é só para os
     // closures dos timers (evita ciclo com a event loop).
@@ -88,19 +115,11 @@ pub fn install(
     let ui_weak = ui.as_weak();
     let mut seed: u64 = 0x1234_5678_9abc_def0;
 
-    // AudioEngine: fica vivo enquanto estiver tocando.
-    let audio_engine: Rc<RefCell<Option<daw_audio::AudioEngine>>> =
-        Rc::new(RefCell::new(None));
-    let _audio_snapshot: Rc<RefCell<Option<Arc<Mutex<daw_audio::ProjectSnapshot>>>>> =
-        Rc::new(RefCell::new(None));
-    let _audio_buffers: Rc<RefCell<Option<Arc<Mutex<daw_audio::BufferCache>>>>> =
-        Rc::new(RefCell::new(None));
-
     let meter_timer = Rc::new(RefCell::new(slint::Timer::default()));
     let playhead_timer = Rc::new(RefCell::new(slint::Timer::default()));
     let visual_clock: Rc<RefCell<Option<VisualClock>>> = Rc::new(RefCell::new(None));
     // Guarda de idempotência: espaço/stop repetidos não re-executam
-    // o start/stop (evita recriar engine e timers duplicados).
+    // o start/stop (evita timers duplicados).
     let is_playing = Rc::new(Cell::new(false));
 
     // ---- PLAY / STOP ------------------------------------------------
@@ -112,31 +131,18 @@ pub fn install(
         let is_playing = is_playing.clone();
         let playhead_timer = playhead_timer.clone();
         let meter_timer = meter_timer.clone();
-        let audio_engine = audio_engine.clone();
+        let audio = audio.clone();
         ui.on_play_state_changed(move |playing| {
             if playing {
                 if is_playing.get() {
                     return;
                 }
                 is_playing.set(true);
-                // Inicia o audio engine (abre stream CPAL)
-                match daw_audio::AudioEngine::start(transport.clone(), 48000) {
-                    Ok((engine, snapshot, buffers)) => {
-                        // Atualiza o snapshot e pré-carrega clips
-                        {
-                            let proj = project.borrow();
-                            let mut snap = snapshot.lock().unwrap();
-                            snap.update_from(&proj);
-                        }
-                        engine.preload_clips(&project.borrow());
-                        *_audio_snapshot.borrow_mut() = Some(snapshot);
-                        *_audio_buffers.borrow_mut() = Some(buffers);
-                        *audio_engine.borrow_mut() = Some(engine);
-                    }
-                    Err(e) => {
-                        eprintln!("audio engine: {}", e);
-                    }
-                }
+
+                // O snapshot precisa estar publicado ANTES do primeiro
+                // buffer tocar, senão o começo sai em silêncio.
+                audio.flush_now(&project.borrow());
+
                 {
                     let mut t = transport.lock().unwrap();
                     t.playing = true;
@@ -158,6 +164,7 @@ pub fn install(
                     let transport = transport.clone();
                     let clock = visual_clock.clone();
                     let last_lcd = Cell::new(i32::MIN);
+                    let last_step = Cell::new(i32::MIN);
                     playhead_timer.borrow().start(
                         slint::TimerMode::Repeated,
                         Duration::from_millis(8),
@@ -165,10 +172,12 @@ pub fn install(
                             let mut guard = clock.borrow_mut();
                             let Some(c) = guard.as_mut() else { return };
                             let mut lcd_ticks: Option<i64> = None;
+                            let mut bpm = 120.0f64;
                             if let Ok(t) = transport.try_lock() {
                                 if !t.playing {
                                     return;
                                 }
+                                bpm = t.bpm as f64;
                                 let actual = t.position_seconds();
                                 let drift = actual - c.projected();
                                 if drift.abs() > 0.25 {
@@ -201,6 +210,11 @@ pub fn install(
                                         ui.set_transport_position(ticks);
                                     }
                                 }
+                                // Passo do beat sequencer: derivado do
+                                // MESMO relógio do áudio, então a coluna
+                                // acesa é a que está soando (antes era um
+                                // Timer de 140ms sem relação com nada).
+                                publish_beat_step(&ui, secs, bpm, &last_step);
                             }
                         },
                     );
@@ -240,10 +254,13 @@ pub fn install(
                 *visual_clock.borrow_mut() = None;
                 transport.lock().unwrap().playing = false;
                 meter_timer.borrow().stop();
-                // Para o audio engine
-                *audio_engine.borrow_mut() = None;
-                *_audio_snapshot.borrow_mut() = None;
-                *_audio_buffers.borrow_mut() = None;
+                // O dispositivo de áudio NÃO fecha aqui: continua
+                // aberto para a pré-escuta de samples com o transporte
+                // parado. Ver `audio_bridge`.
+                if let Some(ui) = ui_weak.upgrade() {
+                    let st = crate::BeatState::get(&ui);
+                    st.set_playhead(-1);
+                }
             }
         });
     }

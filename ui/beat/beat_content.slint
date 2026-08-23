@@ -59,6 +59,9 @@ export component BeatContent inherits Rectangle {
         ["Kick", "Snare", "Clap", "Closed Hat",
          "Open Hat", "Tom", "Cymbal", "Perc"];
 
+    // Sample carregado em cada linha ("" = vazia).
+    in-out property <[string]> track-sample-names: [];
+
     in-out property <[bool]> track-active:
         [true, true, true, true,
          true, true, true, true];
@@ -118,6 +121,12 @@ export component BeatContent inherits Rectangle {
     callback grid-resolution-changed(int);
     callback track-selected(int);
     callback step-toggled(int, bool);
+
+    // Play/stop do header → transporte global (não um clock local).
+    callback play-state-changed(bool);
+
+    // Pré-escuta do sample de uma linha.
+    callback track-preview-requested(int);
 
     callback duplicate-beat;
     callback copy-beat;
@@ -253,7 +262,8 @@ export component BeatContent inherits Rectangle {
          playing <=> root.playing;
 
     play-state-changed(value) => {
-        root.playing = value;}
+        root.playing = value;
+        root.play-state-changed(value);}
 
         width:
             parent.width
@@ -392,6 +402,9 @@ export component BeatContent inherits Rectangle {
         instrument-names:
             root.instrument-names;
 
+        track-sample-names:
+            root.track-sample-names;
+
         track-active:
             root.track-active;
 
@@ -428,6 +441,10 @@ export component BeatContent inherits Rectangle {
 
         track-selected(index) => {
             root.track-selected(index);
+        }
+
+        track-preview-requested(index) => {
+            root.track-preview-requested(index);
         }
 
         track-param-changed(track, param, value) => {
@@ -672,28 +689,12 @@ export component BeatContent inherits Rectangle {
 
     // ============================================================
     // PLAYBACK
+    //
+    // NÃO existe clock aqui. `playhead` vem do Rust, derivado da
+    // posição real do áudio. O Timer de 140ms que ficava neste lugar
+    // andava sozinho: a coluna acesa não tinha relação nenhuma com o
+    // que estava soando, e nem com o BPM.
     // ============================================================
-
-    Timer {
-
-        interval: 140ms;
-
-        running:
-            root.playing;
-
-
-        triggered => {
-
-            if root.grid-resolution > 0 {
-
-                root.playhead =
-                    Math.mod(
-                        root.playhead + 1,
-                        root.grid-resolution
-                    );
-            }
-        }
-    }
 
 
     // ============================================================
