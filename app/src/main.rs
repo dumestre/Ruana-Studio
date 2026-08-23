@@ -441,6 +441,7 @@ fn initial_bind(
 ) -> (
     Rc<slint::VecModel<slint::SharedString>>,
     Rc<slint::VecModel<ClipData>>,
+    Rc<slint::VecModel<i32>>,
 ) {
     let track_names: Vec<slint::SharedString> = project
         .tracks
@@ -449,6 +450,11 @@ fn initial_bind(
         .collect();
     let tracks_model = Rc::new(slint::VecModel::from(track_names));
     ui.set_track_names(tracks_model.clone().into());
+
+    // Cores das tracks (índice na paleta da UI).
+    let track_colors: Vec<i32> = project.tracks.iter().map(|t| t.color as i32).collect();
+    let track_colors_model = Rc::new(slint::VecModel::from(track_colors));
+    ui.set_track_colors(track_colors_model.clone().into());
 
     let clips: Vec<ClipData> = project.clips.iter().map(|c| to_clip_data(c, waveforms)).collect();
     let clips_model = Rc::new(slint::VecModel::from(clips));
@@ -472,7 +478,7 @@ fn initial_bind(
     let initial_entries = load_directory_entries(&samples_dir);
     ui.set_explorer_entries(Rc::new(slint::VecModel::from(initial_entries)).into());
 
-    (tracks_model, clips_model)
+    (tracks_model, clips_model, track_colors_model)
 }
 
 
@@ -671,7 +677,8 @@ fn main() -> Result<(), slint::PlatformError> {
     // Cache de waveforms: clip_id → picos normalizados.
     let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(HashMap::new()));
 
-    let (tracks_model, clips_model) = initial_bind(&ui, &project.borrow(), &waveforms.borrow());
+    let (tracks_model, clips_model, track_colors_model) =
+        initial_bind(&ui, &project.borrow(), &waveforms.borrow());
     bind_document_events(
         &project.borrow(),
         tracks_model,
@@ -1009,6 +1016,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let project = project.clone();
         let apply_mixer = apply_mixer_state.clone();
         let fit_float_mixers = fit_float_mixer_windows.clone();
+        let colors_model = track_colors_model.clone();
         ui.on_add_track_requested(move |kind| {
             let kind = match kind.as_str() {
                 "AUDIO" => TrackKind::Audio,
@@ -1024,6 +1032,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let count = proj.tracks.len() + 1;
                 proj.add_track(kind, format!("{} {count}", kind.base_name()));
             }
+            colors_model.push(0);
             apply_mixer();
             fit_float_mixers();
         });
@@ -1070,171 +1079,84 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Estado para armazenar posição original de clips durante move/resize.
-    let move_originals: Rc<RefCell<HashMap<i32, (f32, i32)>>> =
-        Rc::new(RefCell::new(HashMap::new()));
-    let move_track_deltas: Rc<RefCell<HashMap<i32, i32>>> =
-        Rc::new(RefCell::new(HashMap::new()));
-    let resize_originals: Rc<RefCell<HashMap<i32, (f32, f32)>>> =
-        Rc::new(RefCell::new(HashMap::new()));
+    // ========================================================
+    // MOVE / RESIZE DE CLIPS — COMMIT ÚNICO
+    //
+    // Todo o gesto acontece na UI (global ClipDragState em
+    // puro Slint, sem roundtrips). O core só recebe UMA
+    // mutação por gesto, aqui.
+    // ========================================================
 
-    // Mover clip via drag (ferramenta select) — armazena posição original.
+    // Mover clip: track e beat finais, aplicados uma única vez.
     {
+        let project = project.clone();
         let clips_model = clips_model.clone();
-        let move_originals = move_originals.clone();
-        ui.on_clip_move_started(move |id, _beat| {
-            if let Some(i) = clip_row(&clips_model, id) {
-                if let Some(clip) = clips_model.row_data(i) {
-                    move_originals.borrow_mut().insert(id, (clip.beat, clip.track_index));
-                }
-            }
-        });
-    }
-
-    // Mover clip: delta acumulado do início do drag → aplica sobre a posição original.
-    // Beat é aplicado em TEMPO REAL (seguindo o mouse).
-    // NOTA: track_index NÃO é alterado durante o drag (só beat).
-    // O delta de track é guardado e aplicado apenas no finish;
-    // durante o drag a UI desliza o clip via drag-track-offset.
-    {
-        let clips_model = clips_model.clone();
-        let move_originals = move_originals.clone();
-        let move_track_deltas = move_track_deltas.clone();
         let ui_weak = ui.as_weak();
-        ui.on_clip_move_delta(move |id, delta_beats, delta_tracks| {
-            // Snap ON → trava na grade; OFF → movimento livre.
+        ui.on_clip_move_committed(move |id, new_track_index, new_beat| {
+            let num_tracks = project.borrow().tracks.len() as i32;
+            if num_tracks == 0 {
+                return;
+            }
             let snap = ui_weak.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
-            let d = if snap { delta_beats.round() } else { delta_beats };
+
+            // Track clampada ao número de tracks; beat livre
+            // (o core persiste arredondado ao beat mais próximo).
+            let track_index = new_track_index.clamp(0, num_tracks - 1);
+            let free_beat = new_beat.max(0.0);
+            let core_beat = free_beat.round().max(0.0) as u32;
+            let track_id = track_index as u64;
 
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(mut clip) = clips_model.row_data(i) {
-                    let originals = move_originals.borrow();
-                    if let Some(&(orig_beat, _orig_track)) = originals.get(&id) {
-                        clip.beat = (orig_beat + d).max(0.0);
-                        clips_model.set_row_data(i, clip);
-                    }
-                    drop(originals);
-                    move_track_deltas.borrow_mut().insert(id, delta_tracks);
-                }
-            }
-            // Feedback visual: desliza o clip verticalmente
-            // (translate-y na row de origem, sem trocar instância).
-            if let Some(ui) = ui_weak.upgrade() {
-                ui.set_drag_clip_id(id);
-                ui.set_drag_track_offset(delta_tracks);
-            }
-        });
-    }
+                    clip.track_index = track_index;
+                    clip.beat = free_beat;
+                    clips_model.set_row_data(i, clip);
+                    project.borrow_mut().move_clip(id as u64, track_id, core_beat);
 
-    // Mover clip: finalizado → persiste no core e limpa estado.
-    {
-        let project = project.clone();
-        let clips_model = clips_model.clone();
-        let move_originals = move_originals.clone();
-        let move_track_deltas = move_track_deltas.clone();
-        let ui_weak = ui.as_weak();
-        ui.on_clip_move_finished(move |id| {
-            let orig = move_originals.borrow_mut().remove(&id);
-            let delta_tracks = move_track_deltas.borrow_mut().remove(&id).unwrap_or(0);
-
-            // Clear visual drag offset
-            if let Some(ui) = ui_weak.upgrade() {
-                ui.set_drag_clip_id(-1);
-                ui.set_drag_track_offset(0);
-            }
-
-            if let Some((_, orig_track)) = orig {
-                if let Some(i) = clip_row(&clips_model, id) {
-                    if let Some(mut clip) = clips_model.row_data(i) {
-                        let num_tracks = project.borrow().tracks.len() as i32;
-                        clip.track_index = (orig_track + delta_tracks).max(0).min(num_tracks - 1);
-                        let free_beat = clip.beat;
-                        let snap = ui_weak.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
-                        let new_beat = clip.beat.round().max(0.0) as u32;
-                        let track_id = clip.track_index as u64;
-                        clips_model.set_row_data(i, clip);
-                        let mut proj = project.borrow_mut();
-                        proj.move_clip(id as u64, track_id, new_beat);
-                        // Snap OFF → mantém a posição livre no visual
-                        // (o core persiste arredondado ao beat mais próximo).
-                        if !snap {
-                            if let Some(mut restored) = clips_model.row_data(i) {
-                                restored.beat = free_beat;
-                                clips_model.set_row_data(i, restored);
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    // Resize de clip (handles das bordas) → core.
-    {
-        let clips_model = clips_model.clone();
-        let resize_originals = resize_originals.clone();
-        ui.on_clip_resize_started(move |id, _side| {
-            if let Some(i) = clip_row(&clips_model, id) {
-                if let Some(clip) = clips_model.row_data(i) {
-                    resize_originals.borrow_mut().insert(id, (clip.beat, clip.len));
-                }
-            }
-        });
-    }
-    {
-        // resize-delta: feedback visual imediato (atualiza beat + len no modelo).
-        let clips_model = clips_model.clone();
-        let project_snap = project.clone();
-        let ui_snap = ui.as_weak();
-        ui.on_clip_resize_delta(move |id, side, delta| {
-            if let Some(i) = clip_row(&clips_model, id) {
-                if let Some(mut clip) = clips_model.row_data(i) {
-                    let core_clip = project_snap
-                        .borrow()
-                        .clips
-                        .iter()
-                        .find(|c| c.id as i32 == id)
-                        .cloned();
-                    if let Some(core) = core_clip {
-                        // Snap ON → delta trava na grade; OFF → livre.
-                        let snap = ui_snap.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
-                        let d = if snap { delta.round() } else { delta };
-                        if side < 0 {
-                            // borda esquerda: move start e reduz comprimento
-                            let new_beat = (core.start_beat as f32 + d).max(0.0);
-                            let new_len = (core.length_beats as f32 - d).max(0.5);
-                            clip.beat = new_beat;
-                            clip.len = new_len;
-                        } else {
-                            // borda direita: estende/encolhe comprimento
-                            let new_len = (core.length_beats as f32 + d).max(0.5);
-                            clip.len = new_len;
-                        }
-                        clips_model.set_row_data(i, clip);
-                    }
-                }
-            }
-        });
-    }
-    {
-        // resize-finished: persiste no core com valores do modelo e limpa estado.
-        let project = project.clone();
-        let clips_model = clips_model.clone();
-        let resize_originals = resize_originals.clone();
-        let ui_rs = ui.as_weak();
-        ui.on_clip_resize_finished(move |id| {
-            resize_originals.borrow_mut().remove(&id);
-            if let Some(i) = clip_row(&clips_model, id) {
-                if let Some(clip) = clips_model.row_data(i) {
-                    let snap = ui_rs.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
-                    let (free_beat, free_len) = (clip.beat, clip.len);
-                    let new_start = clip.beat.round().max(0.0) as u32;
-                    let new_len = clip.len.round().max(1.0) as u32;
-                    project.borrow_mut().resize_clip(id as u64, new_start, new_len);
-                    // Snap OFF → mantém tamanho/posição livres no visual.
+                    // Snap OFF → mantém a posição livre no visual
+                    // (eventos do core podem ter reescrito a linha).
                     if !snap {
                         if let Some(mut restored) = clips_model.row_data(i) {
                             restored.beat = free_beat;
+                            clips_model.set_row_data(i, restored);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Resize de clip: len (e beat, na borda esquerda) finais,
+    // aplicados uma única vez.
+    {
+        let project = project.clone();
+        let clips_model = clips_model.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_clip_resize_committed(move |id, side, new_len, new_beat| {
+            let snap = ui_weak.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
+
+            let free_len = new_len.max(0.25);
+            let free_beat = new_beat.max(0.0);
+
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(mut clip) = clips_model.row_data(i) {
+                    let beat_for_core = if side < 0 { free_beat } else { clip.beat };
+                    if side < 0 {
+                        clip.beat = free_beat;
+                    }
+                    clip.len = free_len;
+
+                    let core_start = beat_for_core.round().max(0.0) as u32;
+                    let core_len = free_len.round().max(1.0) as u32;
+                    clips_model.set_row_data(i, clip);
+                    project.borrow_mut().resize_clip(id as u64, core_start, core_len);
+
+                    // Snap OFF → preserva valores livres no visual.
+                    if !snap {
+                        if let Some(mut restored) = clips_model.row_data(i) {
+                            if side < 0 {
+                                restored.beat = free_beat;
+                            }
                             restored.len = free_len;
                             clips_model.set_row_data(i, restored);
                         }
@@ -1274,10 +1196,11 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Botão "add color" da toolbar → aplica o índice de cor escolhido
-    // a TODOS os clips da track selecionada.
+    // Botão "add color" do cabeçalho TRACKS → aplica o índice de cor
+    // escolhido à track (cabeçalho) e a TODOS os seus clips.
     {
         let project = project.clone();
+        let colors_model = track_colors_model.clone();
         ui.on_track_recolor_requested(move |track_index, color| {
             let mut proj = project.borrow_mut();
             if proj.tracks.is_empty() {
@@ -1285,13 +1208,19 @@ fn main() -> Result<(), slint::PlatformError> {
             }
             let idx = (track_index.max(0) as usize).min(proj.tracks.len() - 1);
             let track_id = proj.tracks[idx].id;
+            let color = color.clamp(0, 255) as u8;
+
+            // A cor da track em si (indicador do cabeçalho).
+            proj.tracks[idx].color = color;
+            colors_model.set_row_data(idx, color as i32);
+
+            // E todos os clips dela.
             let ids: Vec<u64> = proj
                 .clips
                 .iter()
                 .filter(|c| c.track_id == track_id)
                 .map(|c| c.id)
                 .collect();
-            let color = color.clamp(0, 255) as u8;
             for id in ids {
                 proj.set_clip_color(id, color);
             }

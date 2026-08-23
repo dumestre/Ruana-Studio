@@ -10,6 +10,9 @@ export component TrackPanel inherits Rectangle {
 
     in property <[string]> track-names: [];
 
+    // Índice de cor da paleta por track (0 = padrão por tipo).
+    in property <[int]> track-colors: [];
+
     in-out property <int> selected-track: 0;
 
     in property <length> ruler-height: 30px;
@@ -65,6 +68,9 @@ export component TrackPanel inherits Rectangle {
 
         track-names:
             root.track-names;
+
+        track-colors:
+            root.track-colors;
 
         selected-track:
             root.selected-track;

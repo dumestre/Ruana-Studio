@@ -2,6 +2,7 @@ import { Theme } from "../theme.slint";
 import { ClipPalette } from "../clip_palette.slint";
 import { AudioWaveform } from "audio_waveform.slint";
 import { ClipContextMenuState } from "../components/context_menu.slint";
+import { ClipDragState } from "clip_drag/clip_drag_state.slint";
 
 export component TrackClip inherits Rectangle {
 
@@ -33,9 +34,37 @@ export component TrackClip inherits Rectangle {
 
     in property <[float]> waveform-peaks: [];
 
-    in property <int> drag-clip-id: -1;
+    // Total de tracks do projeto (clamp vertical do arrasto).
+    in property <int> track-count: 1;
 
-    in property <int> drag-track-offset: 0;
+
+    // =====================================================
+    // MODO
+    // =====================================================
+
+    // Recebe eventos de mouse?
+    //
+    // O overlay de arrasto instancia um TrackClip só para
+    // desenhar; ele NÃO pode ter TouchArea viva, senão fica
+    // exatamente embaixo do cursor, acima das rows, roubando
+    // hit-test e hover do clip que está sustentando o gesto.
+    in property <bool> interactive: true;
+
+    // Esta é a instância de ORIGEM de um arrasto em andamento?
+    //
+    // Ela continua na árvore, visível e interativa — é ela que
+    // detém o grab do mouse e recebe os MOVE/UP do gesto. Só o
+    // visual vira fantasma, como em qualquer DAW.
+    //
+    // (Antes a row usava `visible: false` aqui. Em Slint isso é
+    // compilado para um `Clip` de tamanho ZERO em volta do
+    // elemento, ou seja: apagava o dono do gesto no meio dele.)
+    in property <bool> ghost: false;
+
+    private property <float> ghost-opacity:
+        root.ghost
+            ? 0.22
+            : 1.0;
 
 
     // =====================================================
@@ -65,23 +94,28 @@ export component TrackClip inherits Rectangle {
 
     // =====================================================
     // CALLBACKS
+    //
+    // Commit único: o gesto inteiro acontece em puro Slint
+    // (via ClipDragState / props locais) e o core recebe
+    // UMA chamada no release. Zero roundtrips por frame.
     // =====================================================
 
     callback clicked(int);
 
     callback slice-requested(int, float);
 
-    callback clip-move-started(int, float);
+    callback clip-move-committed(
+        int,
+        int,
+        float
+    );
 
-    callback clip-move-delta(int, float, int);
-
-    callback clip-move-finished(int);
-
-    callback clip-resize-started(int, int);
-
-    callback clip-resize-delta(int, int, float);
-
-    callback clip-resize-finished(int);
+    callback clip-resize-committed(
+        int,
+        int,
+        float,
+        float
+    );
 
     callback clip-delete-requested(int);
 
@@ -113,8 +147,11 @@ export component TrackClip inherits Rectangle {
     // ESTADO DO MOUSE
     // =====================================================
 
+    // Fantasma não reage a hover: o realce pertence à instância
+    // que está seguindo o mouse no overlay.
     private property <bool> hovered:
-        touch.has-hover;
+        touch.has-hover
+        && !root.ghost;
 
     private property <bool> on-left-edge:
         root.hovered
@@ -131,6 +168,10 @@ export component TrackClip inherits Rectangle {
 
     // =====================================================
     // ESTADO DO DRAG
+    //
+    // O MOVE do arrasto vive no ClipDragState (global).
+    // Aqui fica só o estado local do RESIZE, cujo feedback
+    // é renderizado no próprio clip via live-len/live-beat.
     // =====================================================
 
     private property <bool> dragging:
@@ -142,32 +183,13 @@ export component TrackClip inherits Rectangle {
     private property <int> resize-side:
         0;
 
-    private property <length> drag-start-x:
-        0px;
-
-    private property <length> drag-start-y:
-        0px;
-
-    // Cursor em coordenadas da JANELA no momento do press.
-    //
-    // self.mouse-x/y é relativo ao PRÓPRIO clip — que se
-    // move durante o arrasto — gerando loop de feedback
-    // (a "tremedeira"). Compensando com absolute-position,
-    // o delta reflete o deslocamento FÍSICO real do mouse.
-    private property <length> drag-start-abs-x:
-        0px;
-
-    private property <length> drag-start-abs-y:
-        0px;
-
-    private property <float> drag-start-beat:
+    // Comprimento ao vivo durante o resize (borda esq. ou dir.).
+    private property <float> live-len:
         0.0;
 
-    private property <int> drag-start-track:
-        0;
-
-    private property <length> resize-start-x:
-        0px;
+    // Beat ao vivo durante o resize pela borda ESQUERDA.
+    private property <float> live-beat:
+        0.0;
 
     private property <length> resize-start-abs-x:
         0px;
@@ -218,42 +240,59 @@ export component TrackClip inherits Rectangle {
         root.bw;
 
     border-color:
-        root.selected
+        root.ghost
+            ? root.clip-color.transparentize(0.72)
+
+        : root.selected
             ? #FFFFFF
-            : root.hovered
-                ? root.clip-color.brighter(0.22)
-                : root.clip-color.darker(0.18);
+
+        : root.hovered
+            ? root.clip-color.brighter(0.22)
+
+        : root.clip-color.darker(0.18);
 
 
     // =====================================================
     // POSIÇÃO
+    //
+    // Durante resize pela borda ESQUERDA, o clip desliza
+    // localmente via live-beat (sem tocar no modelo).
     // =====================================================
 
     x:
-        root.beat * root.px-per-beat;
+        root.resizing
+        && root.resize-side < 0
+            ? root.live-beat * root.px-per-beat
+            : root.beat * root.px-per-beat;
 
-    // Offset vertical em tempo real durante o drag:
-    // o clip desliza sobre as tracks vizinhas (rows
-    // têm fundo transparente). No release, o Rust
-    // aplica exatamente esta track no modelo.
     y:
-        2px
-        + (
-            root.clip-id == root.drag-clip-id
-                ? root.drag-track-offset * root.row-height
-                : 0px
-        );
+        2px;
 
 
     // =====================================================
     // TAMANHO
+    //
+    // Durante resize, a largura acompanha o mouse ao vivo.
     // =====================================================
 
     width:
-        root.len * root.px-per-beat
-            < root.minimum-clip-width
-            ? root.minimum-clip-width
-            : root.len * root.px-per-beat;
+        root.resizing
+            ? (
+                (
+                    root.live-len * root.px-per-beat
+                        < root.minimum-clip-width
+                )
+                    ? root.minimum-clip-width
+                    : root.live-len * root.px-per-beat
+            )
+            : (
+                (
+                    root.len * root.px-per-beat
+                        < root.minimum-clip-width
+                )
+                    ? root.minimum-clip-width
+                    : root.len * root.px-per-beat
+            );
 
     height:
         root.row-height - 4px;
@@ -302,6 +341,9 @@ export component TrackClip inherits Rectangle {
                     ? 0.36
                     : 0.30
             );
+
+        opacity:
+            root.ghost-opacity;
 
         clip:
             true;
@@ -373,6 +415,9 @@ export component TrackClip inherits Rectangle {
                     ? 0.46
                     : 0.34
             );
+
+        opacity:
+            root.ghost-opacity;
 
         clip:
             true;
@@ -545,11 +590,14 @@ export component TrackClip inherits Rectangle {
             root.clip-color.brighter(0.30);
 
         opacity:
-            root.dragging || root.resizing
-                ? 1.0
-                : root.hovered
-                    ? 0.85
-                    : 0.55;
+            (
+                root.dragging || root.resizing
+                    ? 1.0
+                    : root.hovered
+                        ? 0.85
+                        : 0.55
+            )
+            * root.ghost-opacity;
     }
 
 
@@ -578,9 +626,12 @@ export component TrackClip inherits Rectangle {
             Theme.text-primary;
 
         opacity:
-            root.dragging || root.resizing
-                ? 0.9
-                : 0.45;
+            (
+                root.dragging || root.resizing
+                    ? 0.9
+                    : 0.45
+            )
+            * root.ghost-opacity;
     }
 
 
@@ -660,9 +711,13 @@ export component TrackClip inherits Rectangle {
 
     // =====================================================
     // INDICADOR DE DRAG
+    //
+    // Só na instância que está seguindo o mouse — o fantasma
+    // fica limpo.
     // =====================================================
 
-    if root.dragging:
+    if root.dragging
+        && !root.ghost:
 
         Rectangle {
 
@@ -795,7 +850,8 @@ export component TrackClip inherits Rectangle {
             parent.height;
 
         enabled:
-            !root.renaming;
+            root.interactive
+            && !root.renaming;
 
 
         // =================================================
@@ -846,6 +902,40 @@ export component TrackClip inherits Rectangle {
         // =================================================
 
         pointer-event(event) => {
+
+            // =============================================
+            // CANCEL
+            //
+            // O grab foi perdido (janela perdeu o foco, item
+            // desabilitado, gesto interrompido pelo sistema).
+            //
+            // Sem tratar isto o arrasto ficava preso para
+            // sempre: `active` seguia true, o clip de origem
+            // seguia fantasma e o overlay ficava colado no
+            // cursor — exatamente o "clip fantasma que não
+            // solta".
+            // =============================================
+
+            if event.kind
+                    == PointerEventKind.cancel {
+
+                if root.dragging {
+
+                    root.dragging =
+                        false;
+
+                    ClipDragState.reset();
+                }
+
+                root.resizing =
+                    false;
+
+                root.resize-side =
+                    0;
+
+                return;
+            }
+
 
             // =============================================
             // RIGHT CLICK
@@ -963,6 +1053,8 @@ export component TrackClip inherits Rectangle {
 
                     // =====================================
                     // RESIZE
+                    //
+                    // 100% local: sem callback no DOWN.
                     // =====================================
 
                     if root.on-edge {
@@ -971,9 +1063,6 @@ export component TrackClip inherits Rectangle {
                             root.on-left-edge
                                 ? -1
                                 : 1;
-
-                        root.resize-start-x =
-                            self.mouse-x;
 
                         root.resize-start-abs-x =
                             self.absolute-position.x
@@ -985,49 +1074,87 @@ export component TrackClip inherits Rectangle {
                         root.resize-start-len =
                             root.len;
 
+                        root.live-len =
+                            root.len;
+
+                        root.live-beat =
+                            root.beat;
+
                         root.resizing =
                             true;
-
-                        root.clip-resize-started(
-                            root.clip-id,
-                            root.resize-side
-                        );
                     }
 
 
                     // =====================================
                     // DRAG
+                    //
+                    // Popula o global — nenhum callback.
+                    //
+                    // `active` NÃO é ligado aqui: no DOWN o
+                    // gesto está apenas armado. Ele vira
+                    // arrasto no primeiro MOVE que passa do
+                    // limiar, e é só aí que o overlay nasce e
+                    // esta instância vira fantasma. Ligar no
+                    // DOWN fazia todo clique simples piscar.
                     // =====================================
 
                     else {
 
-                        root.drag-start-x =
-                            self.mouse-x;
+                        ClipDragState.clip-id =
+                            root.clip-id;
 
-                        root.drag-start-y =
-                            self.mouse-y;
+                        ClipDragState.name =
+                            root.name;
 
-                        root.drag-start-abs-x =
+                        ClipDragState.orig-beat =
+                            root.beat;
+
+                        ClipDragState.orig-track =
+                            root.track-index;
+
+                        ClipDragState.len-beats =
+                            root.len;
+
+                        ClipDragState.color-index =
+                            root.color-index;
+
+                        ClipDragState.is-midi =
+                            root.is-midi;
+
+                        ClipDragState.waveform-peaks =
+                            root.waveform-peaks;
+
+                        ClipDragState.px-per-beat =
+                            root.px-per-beat;
+
+                        ClipDragState.row-height =
+                            root.row-height;
+
+                        ClipDragState.track-count =
+                            root.track-count;
+
+                        let cursor-abs-x =
                             self.absolute-position.x
                             + self.mouse-x;
 
-                        root.drag-start-abs-y =
+                        let cursor-abs-y =
                             self.absolute-position.y
                             + self.mouse-y;
 
-                        root.drag-start-beat =
-                            root.beat;
+                        ClipDragState.start-cursor-x =
+                            cursor-abs-x;
 
-                        root.drag-start-track =
-                            root.track-index;
+                        ClipDragState.start-cursor-y =
+                            cursor-abs-y;
+
+                        ClipDragState.cursor-x =
+                            cursor-abs-x;
+
+                        ClipDragState.cursor-y =
+                            cursor-abs-y;
 
                         root.dragging =
                             true;
-
-                        root.clip-move-started(
-                            root.clip-id,
-                            root.beat
-                        );
                     }
                 }
 
@@ -1042,12 +1169,14 @@ export component TrackClip inherits Rectangle {
 
                     // =====================================
                     // RESIZE
+                    //
+                    // Matemática local: atualiza live-len /
+                    // live-beat. Nenhum callback, nenhum
+                    // acesso ao modelo.
                     // =====================================
 
                     if root.resizing {
 
-                        // Delta físico real do mouse (ver
-                        // drag-start-abs-x).
                         let cursor-abs-x =
                             self.absolute-position.x
                             + self.mouse-x;
@@ -1065,6 +1194,15 @@ export component TrackClip inherits Rectangle {
                             dx-px / ppb;
 
 
+                        // Snap local (grade de 1 beat).
+                        let snap-d =
+                            ClipDragState.snap-enabled
+                                ? Math.round(
+                                    delta-beats
+                                )
+                                : delta-beats;
+
+
                         // =================================
                         // DIREITA
                         // =================================
@@ -1073,22 +1211,13 @@ export component TrackClip inherits Rectangle {
 
                             let new-len =
                                 root.resize-start-len
-                                + delta-beats;
+                                + snap-d;
 
-                            let final-len =
-                                new-len < root.minimum-clip-length
+                            root.live-len =
+                                new-len
+                                    < root.minimum-clip-length
                                     ? root.minimum-clip-length
                                     : new-len;
-
-                            let actual-delta =
-                                final-len
-                                - root.resize-start-len;
-
-                            root.clip-resize-delta(
-                                root.clip-id,
-                                root.resize-side,
-                                actual-delta
-                            );
                         }
 
 
@@ -1102,75 +1231,65 @@ export component TrackClip inherits Rectangle {
                                 root.resize-start-len
                                 - root.minimum-clip-length;
 
-                            let limited-delta =
-                                delta-beats < -max-negative
+                            let limited-d =
+                                snap-d < -max-negative
                                     ? -max-negative
-                                    : delta-beats;
+                                    : snap-d;
 
-                            root.clip-resize-delta(
-                                root.clip-id,
-                                root.resize-side,
-                                limited-delta
-                            );
+                            root.live-beat =
+                                Math.max(
+                                    0.0,
+                                    root.resize-start-beat
+                                        + limited-d
+                                );
+
+                            root.live-len =
+                                Math.max(
+                                    root.minimum-clip-length,
+                                    root.resize-start-len
+                                        - limited-d
+                                );
                         }
                     }
 
 
                     // =====================================
                     // DRAG
+                    //
+                    // Só publica o cursor — 2 floats.
+                    // A posição do overlay é derivada por
+                    // binding a cada frame.
                     // =====================================
+
                     else if root.dragging {
 
-                        // Deltas físicos reais do mouse —
-                        // imunes ao movimento do próprio clip.
-                        let cursor-abs-x =
+                        ClipDragState.cursor-x =
                             self.absolute-position.x
                             + self.mouse-x;
 
-                        let cursor-abs-y =
+                        ClipDragState.cursor-y =
                             self.absolute-position.y
                             + self.mouse-y;
 
-                        let dx-px =
-                            (
-                                cursor-abs-x
-                                - root.drag-start-abs-x
-                            ) / 1px;
 
-                        let ppb =
-                            root.px-per-beat / 1px;
+                        // Latch do início do arrasto: uma
+                        // escrita só, e nunca desliga no meio
+                        // do gesto — voltar para dentro do
+                        // limiar não pode fazer o overlay
+                        // sumir e reaparecer.
 
-                        let delta-beats =
-                            dx-px / ppb;
+                        if !ClipDragState.active
+                            && ClipDragState.moved {
 
-
-
-                        let dy-px =
-                            (
-                                cursor-abs-y
-                                - root.drag-start-abs-y
-                            ) / 1px;
-
-                        let row-height-px =
-                            root.row-height / 1px;
-
-                        let delta-tracks =
-                            Math.round(
-                                dy-px / row-height-px
-                            );
-
-
-                        root.clip-move-delta(
-                            root.clip-id,
-                            delta-beats,
-                            delta-tracks
-                        );
+                            ClipDragState.active =
+                                true;
+                        }
                     }
                 }
 
 
                 // =========================================
-                // UP
+                // UP → COMMIT ÚNICO
                 // =========================================
 
                 else if event.kind
@@ -1182,11 +1301,23 @@ export component TrackClip inherits Rectangle {
                         root.resizing =
                             false;
 
+                        let side =
+                            root.resize-side;
+
+                        let final-len =
+                            root.live-len;
+
+                        let final-beat =
+                            root.live-beat;
+
                         root.resize-side =
                             0;
 
-                        root.clip-resize-finished(
-                            root.clip-id
+                        root.clip-resize-committed(
+                            root.clip-id,
+                            side,
+                            final-len,
+                            final-beat
                         );
                     }
 
@@ -1196,9 +1327,22 @@ export component TrackClip inherits Rectangle {
                         root.dragging =
                             false;
 
-                        root.clip-move-finished(
-                            root.clip-id
-                        );
+
+                        // `active` já implica ter passado do
+                        // limiar (é ligado por latch no MOVE),
+                        // então um clique simples nunca chega
+                        // aqui como commit.
+
+                        if ClipDragState.active {
+
+                            root.clip-move-committed(
+                                root.clip-id,
+                                ClipDragState.live-track,
+                                ClipDragState.live-beat
+                            );
+                        }
+
+                        ClipDragState.reset();
                     }
                 }
             }

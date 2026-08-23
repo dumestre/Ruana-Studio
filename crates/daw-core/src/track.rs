@@ -47,6 +47,8 @@ pub struct Track {
     pub id: u64,
     pub name: String,
     pub kind: TrackKind,
+    /// Índice de cor na paleta da UI (0 = padrão por tipo).
+    pub color: u8,
     /// Parâmetros do canal no mixer.
     pub mixer: MixerChannel,
 }
@@ -58,6 +60,7 @@ impl Track {
             id,
             name: name.into(),
             kind,
+            color: 0,
             mixer: MixerChannel::default(),
         }
     }

@@ -1,0 +1,206 @@
+// ============================================================
+// CLIP DRAG STATE
+//
+// Estado global do arrasto de clips da timeline e métricas
+// da timeline para drags externos (pool/explorer/sampler).
+//
+// Filosofia anti-lag:
+//   DURANTE o gesto, NENHUMA chamada ao Rust e NENHUMA
+//   escrita no modelo de dados. Apenas floats mudam aqui e
+//   a posição é derivada por binding — atualiza a cada frame.
+//   O core só recebe UM commit no release (UP/drop).
+// ============================================================
+
+// ------------------------------------------------------------
+// Arrasto INTERNO de clips (ferramenta select).
+// ------------------------------------------------------------
+
+export global ClipDragState {
+
+    // Arrasto DE VERDADE em andamento?
+    //
+    // Só vira true depois do limiar de movimento (ver `moved`),
+    // nunca no DOWN — senão todo clique simples fazia o clip
+    // desaparecer e o overlay nascer no mesmo lugar por um
+    // frame, o que aparecia como piscada/tremor.
+    //
+    // Latch: quem liga é o handler de MOVE (uma escrita só) e
+    // nunca desliga no meio do gesto, mesmo que o cursor volte
+    // para dentro do limiar.
+    in-out property <bool> active: false;
+
+    // Clip sendo arrastado (-1 = nenhum).
+    in-out property <int> clip-id: -1;
+
+
+    // ========================================================
+    // SNAPSHOT DO CLIP (capturado no DOWN)
+    // ========================================================
+
+    in-out property <string> name: "";
+
+    in-out property <float> orig-beat: 0.0;
+
+    in-out property <int> orig-track: 0;
+
+    in-out property <float> len-beats: 4.0;
+
+    in-out property <int> color-index: 0;
+
+    in-out property <bool> is-midi: true;
+
+    in-out property <[float]> waveform-peaks: [];
+
+
+    // ========================================================
+    // MÉTRICAS CAPTURADAS NO DOWN
+    // ========================================================
+
+    in-out property <length> px-per-beat: 40px;
+
+    in-out property <length> row-height: 64px;
+
+    in-out property <int> track-count: 1;
+
+    in-out property <bool> snap-enabled: true;
+
+
+    // ========================================================
+    // CURSOR EM COORDENADAS DA JANELA
+    //
+    // start-* permanece fixo durante todo o gesto;
+    // cursor-* é atualizado a cada move (barato: 2 floats).
+    // ========================================================
+
+    in-out property <length> start-cursor-x: 0px;
+
+    in-out property <length> start-cursor-y: 0px;
+
+    in-out property <length> cursor-x: 0px;
+
+    in-out property <length> cursor-y: 0px;
+
+
+    // ========================================================
+    // DERIVADOS (recalculados por frame, puro Slint)
+    // ========================================================
+
+    // Deslocamento do cursor desde o DOWN.
+    out property <length> dx:
+        self.cursor-x
+        - self.start-cursor-x;
+
+    out property <length> dy:
+        self.cursor-y
+        - self.start-cursor-y;
+
+
+    // |dx| e |dy| — Slint não tem abs() para length.
+    out property <length> abs-dx:
+        self.dx < 0px
+            ? -self.dx
+            : self.dx;
+
+    out property <length> abs-dy:
+        self.dy < 0px
+            ? -self.dy
+            : self.dy;
+
+
+    // Passou do limiar? Cliques simples nunca viram arrasto
+    // (nem overlay, nem fantasma, nem commit).
+    out property <bool> moved:
+        self.abs-dx > 3px
+        || self.abs-dy > 3px;
+
+
+    // Beat bruto (sem snap).
+    //
+    // Baseado no DELTA do cursor: o ponto de pega dentro do
+    // clip é preservado, o clip não salta para o cursor.
+    out property <float> raw-beat:
+        self.orig-beat
+        + (self.dx / 1px)
+            / (self.px-per-beat / 1px);
+
+
+    // Beat ao vivo: snap de 1 beat quando ligado.
+    //
+    // O grid do core é inteiro em beats, então o passo do snap
+    // é 1 beat de propósito — é o que o projeto sabe persistir.
+    out property <float> live-beat:
+        Math.max(
+            0.0,
+            self.snap-enabled
+                ? Math.round(self.raw-beat)
+                : self.raw-beat
+        );
+
+
+    // Quantas linhas o cursor andou (snap de linha inteira,
+    // como em qualquer DAW).
+    out property <float> row-delta:
+        Math.round(
+            (self.dy / 1px)
+                / (self.row-height / 1px)
+        );
+
+    out property <int> live-track:
+        Math.max(
+            0,
+            Math.min(
+                self.track-count - 1,
+                self.orig-track
+                + self.row-delta
+            )
+        );
+
+
+    // ========================================================
+    // RESET
+    //
+    // Zera o delta junto: sem isso `moved` continuaria true com
+    // o cursor do gesto anterior e o próximo DOWN já nasceria
+    // "movido".
+    // ========================================================
+
+    public function reset() {
+        self.active = false;
+        self.clip-id = -1;
+        self.name = "";
+        self.waveform-peaks = [];
+
+        self.cursor-x = self.start-cursor-x;
+        self.cursor-y = self.start-cursor-y;
+    }
+}
+
+
+// ------------------------------------------------------------
+// MÉTRICAS DA TIMELINE
+//
+// Publicadas pelo workspace (timer de bounds, 50ms) e
+// consumidas pelo handler drag-move em main.slint — substitui
+// o Timer DRAG de 16ms: o preview agora reage a cada evento
+// de mouse, não a cada tick.
+// ------------------------------------------------------------
+
+export global TimelineMetrics {
+
+    in-out property <length> timeline-abs-x: 0px;
+
+    // Y absoluto do início das tracks (abaixo da régua).
+    in-out property <length> content-top-abs-y: 0px;
+
+    in-out property <length> width: 0px;
+
+    in-out property <length> scroll-x: 0px;
+
+    in-out property <length> scroll-y: 0px;
+
+    in-out property <length> px-per-beat: 40px;
+
+    in-out property <length> row-height: 64px;
+
+    in-out property <int> track-count: 0;
+}

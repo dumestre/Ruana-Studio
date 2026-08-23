@@ -4,6 +4,7 @@
 
 import { Theme } from "theme.slint";
 import { ClipPalette } from "clip_palette.slint";
+import { BeatState } from "beat/beat_state.slint";
 import { ClipData } from "timeline/clip_data.slint";
 
 
@@ -357,18 +358,11 @@ export component ClipPool inherits Rectangle {
 
     // ========================================================
     // DADOS
+    //
+    // O pool é uma BIBLIOTECA GLOBAL: lista TODOS os clips
+    // importados/criados (audio e MIDI, de qualquer track)
+    // + os beat patterns do projeto. Sem filtro por track.
     // ========================================================
-
-    in-out property <int> selected-track:
-        0;
-
-    in property <[string]> track-names:
-        [
-            "Drums",
-            "Bass",
-            "Vocal",
-            "Synth"
-        ];
 
     in property <[ClipData]> clips:
         [];
@@ -377,10 +371,6 @@ export component ClipPool inherits Rectangle {
     // ========================================================
     // CALLBACKS
     // ========================================================
-
-    callback track-selected(
-        int
-    );
 
     callback clip-clicked(
         int
@@ -540,7 +530,7 @@ export component ClipPool inherits Rectangle {
 
 
         // ====================================================
-        // LISTA
+        // LISTA — TODOS OS CLIPS (audio + MIDI, sem filtro)
         // ====================================================
 
         clips-list := VerticalLayout {
@@ -550,11 +540,6 @@ export component ClipPool inherits Rectangle {
 
 
             for clip[i] in root.clips: ClipItem {
-
-                visible:
-                    clip.track-index
-                    == root.selected-track;
-
 
                 // ============================================
                 // DADOS
@@ -664,6 +649,104 @@ export component ClipPool inherits Rectangle {
 
 
         // ====================================================
+        // SEÇÃO — BEAT PATTERNS
+        // ====================================================
+
+        Text {
+
+            text:
+                "BEAT PATTERNS";
+
+            visible:
+                BeatState.pattern-names.length > 0;
+
+            color:
+                Theme.text-dim;
+
+            font-size:
+                9px;
+
+            font-weight:
+                700;
+        }
+
+
+        beats-list := VerticalLayout {
+
+            spacing:
+                4px;
+
+
+            for pattern-name[i] in BeatState.pattern-names: ClipItem {
+
+                // ============================================
+                // DADOS
+                // ============================================
+
+                name:
+                    pattern-name;
+
+                is-midi:
+                    true;
+
+                clip-color:
+                    Theme.accent;
+
+
+                // ============================================
+                // CLIQUE → seleciona o pattern no sequencer
+                // ============================================
+
+                clicked => {
+                    BeatState.pattern-changed(
+                        i
+                    );
+                }
+
+
+                // ============================================
+                // DRAG → cria clip MIDI ao soltar na timeline
+                // ============================================
+
+                drag-started(
+                    n,
+                    p,
+                    d,
+                    c,
+                    m
+                ) => {
+
+                    root.clip-drag-started(
+                        n,
+                        p,
+                        d,
+                        c,
+                        m
+                    );
+                }
+
+
+                drag-moved(
+                    x,
+                    y
+                ) => {
+
+                    root.clip-drag-moved(
+                        x,
+                        y
+                    );
+                }
+
+
+                drag-finished => {
+
+                    root.clip-drag-finished();
+                }
+            }
+        }
+
+
+        // ====================================================
         // ESPAÇADOR
         // ====================================================
 
@@ -674,29 +757,6 @@ export component ClipPool inherits Rectangle {
 
             background:
                 transparent;
-        }
-
-
-        // ====================================================
-        // STATUS
-        // ====================================================
-
-        Text {
-
-            text:
-                "Selection: "
-                + (
-                    root.selected-track + 1
-                );
-
-            color:
-                Theme.text-dim;
-
-            font-size:
-                10px;
-
-            horizontal-alignment:
-                left;
         }
     }
 }

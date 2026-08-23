@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { ClipPalette } from "../clip_palette.slint";
 import { TrackHeaderRow } from "track_header.slint";
 import { TrackTypeItem } from "new_track.slint";
 import { ColorPicker } from "../components/color_picker.slint";
@@ -6,6 +7,9 @@ import { ColorPicker } from "../components/color_picker.slint";
 export component TimelineHeader inherits Rectangle {
 
     in property <[string]> track-names: [];
+
+    // Índice de cor da paleta por track (0 = padrão por tipo).
+    in property <[int]> track-colors: [];
     in property <int> selected-track: 0;
     in property <length> ruler-height: 30px;
     in property <float> zoom-y: 1.0;
@@ -121,8 +125,8 @@ export component TimelineHeader inherits Rectangle {
                 source:
                     @image-url("../icons/palette.svg");
 
-                width: 14px;
-                height: 14px;
+                width: 20px;
+                height: 20px;
 
                 x:
                     (parent.width - self.width) / 2;
@@ -171,8 +175,8 @@ export component TimelineHeader inherits Rectangle {
                 source:
                     @image-url("../icons/add.svg");
 
-                width: 14px;
-                height: 14px;
+                width: 20px;
+                height: 20px;
 
                 x:
                     (parent.width - self.width) / 2;
@@ -231,9 +235,19 @@ export component TimelineHeader inherits Rectangle {
                 i;
 
             track-color:
-                i == 2
-                    ? Theme.clip-audio
-                    : Theme.clip-midi;
+                // Cor escolhida na paleta (índice > 0) ou
+                // padrão por tipo de track (placeholder).
+                i < root.track-colors.length
+                && root.track-colors[i] != 0
+                    ? ClipPalette.colors[
+                        Math.mod(
+                            root.track-colors[i],
+                            ClipPalette.colors.length
+                        )
+                    ]
+                    : i == 2
+                        ? Theme.clip-audio
+                        : Theme.clip-midi;
 
             selected:
                 root.selected-track == i;

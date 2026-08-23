@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { TrackClip } from "track_clip.slint";
 import { ClipData } from "clip_data.slint";
+import { ClipDragState } from "clip_drag/clip_drag_state.slint";
 
 export component TrackRow inherits Rectangle {
 
@@ -43,9 +44,8 @@ export component TrackRow inherits Rectangle {
 
     in property <int> active-tool: 0;
 
-    in property <int> drag-clip-id: -1;
-
-    in property <int> drag-track-offset: 0;
+    // Total de tracks (para clamp do arrasto).
+    in property <int> track-count: 1;
 
 
     // =====================================================
@@ -56,17 +56,18 @@ export component TrackRow inherits Rectangle {
 
     callback slice-requested(int, float);
 
-    callback clip-move-started(int, float);
+    callback clip-move-committed(
+        int,
+        int,
+        float
+    );
 
-    callback clip-move-delta(int, float, int);
-
-    callback clip-move-finished(int);
-
-    callback clip-resize-started(int, int);
-
-    callback clip-resize-delta(int, int, float);
-
-    callback clip-resize-finished(int);
+    callback clip-resize-committed(
+        int,
+        int,
+        float,
+        float
+    );
 
     callback clip-delete-requested(int);
 
@@ -157,9 +158,21 @@ export component TrackRow inherits Rectangle {
 
     for clip in root.clips: TrackClip {
 
+        // Só o teste de linha.
+        //
+        // IMPORTANTE: o clip em arrasto NÃO pode ser escondido
+        // com `visible: false`. Em Slint isso é compilado para
+        // um `Clip` de tamanho ZERO em volta do elemento — ou
+        // seja, apagaria a TouchArea que está sustentando o
+        // gesto. Ele fica no lugar como fantasma (`ghost`) e o
+        // overlay desenha a cópia que segue o mouse.
         visible:
             clip.track-index
             == root.track-index;
+
+        ghost:
+            ClipDragState.active
+            && ClipDragState.clip-id == clip.id;
 
 
         // =============================================
@@ -216,6 +229,9 @@ export component TrackRow inherits Rectangle {
         row-height:
             root.row-height;
 
+        track-count:
+            root.track-count;
+
 
         // =============================================
         // SELEÇÃO
@@ -232,12 +248,6 @@ export component TrackRow inherits Rectangle {
 
         active-tool:
             root.active-tool;
-
-        drag-clip-id:
-            root.drag-clip-id;
-
-        drag-track-offset:
-            root.drag-track-offset;
 
 
         // =============================================
@@ -269,81 +279,35 @@ export component TrackRow inherits Rectangle {
 
 
         // =============================================
-        // MOVE
+        // MOVE / RESIZE — commit único
         // =============================================
 
-        clip-move-started(
+        clip-move-committed(
             id,
+            track,
             beat
         ) => {
 
-            root.clip-move-started(
+            root.clip-move-committed(
                 id,
+                track,
                 beat
             );
         }
 
 
-        clip-move-delta(
-            id,
-            delta_beats,
-            delta_tracks
-        ) => {
-
-            root.clip-move-delta(
-                id,
-                delta_beats,
-                delta_tracks
-            );
-        }
-
-
-        clip-move-finished(
-            id
-        ) => {
-
-            root.clip-move-finished(
-                id
-            );
-        }
-
-
-        // =============================================
-        // RESIZE
-        // =============================================
-
-        clip-resize-started(
-            id,
-            side
-        ) => {
-
-            root.clip-resize-started(
-                id,
-                side
-            );
-        }
-
-
-        clip-resize-delta(
+        clip-resize-committed(
             id,
             side,
-            delta
+            len,
+            beat
         ) => {
 
-            root.clip-resize-delta(
+            root.clip-resize-committed(
                 id,
                 side,
-                delta
-            );
-        }
-
-
-        clip-resize-finished(
-            id
-        ) => {
-
-            root.clip-resize-finished(
-                id
+                len,
+                beat
             );
         }
 

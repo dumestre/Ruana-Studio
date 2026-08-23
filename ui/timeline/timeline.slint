@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { TimelineRuler } from "../components/ruler.slint";
 import { TrackRow } from "track_row.slint";
+import { ClipDragOverlay } from "clip_drag/clip_drag_overlay.slint";
 import { ClipData } from "clip_data.slint";
 import { PlayheadOverlay } from "playhead.slint";
 
@@ -70,10 +71,6 @@ export component Timeline inherits Rectangle {
 
     in property <[ClipData]> clips: [];
 
-    in property <int> drag-clip-id: -1;
-
-    in property <int> drag-track-offset: 0;
-
 
     // =====================================================
     // PREVIEW DE DROP
@@ -104,17 +101,18 @@ export component Timeline inherits Rectangle {
 
     callback glue-clip-at(float, length, length, length) -> int;
 
-    callback clip-move-started(int, float);
+    callback clip-move-committed(
+        int,
+        int,
+        float
+    );
 
-    callback clip-move-delta(int, float, int);
-
-    callback clip-move-finished(int);
-
-    callback clip-resize-started(int, int);
-
-    callback clip-resize-delta(int, int, float);
-
-    callback clip-resize-finished(int);
+    callback clip-resize-committed(
+        int,
+        int,
+        float,
+        float
+    );
 
     callback clip-delete-requested(int);
 
@@ -881,6 +879,9 @@ export component Timeline inherits Rectangle {
                     row-height:
                         root.row-height;
 
+                    track-count:
+                        root.track-names.length;
+
                     total-bars:
                         root.total-bars;
 
@@ -889,12 +890,6 @@ export component Timeline inherits Rectangle {
 
                     active-tool:
                         root.active-tool;
-
-                    drag-clip-id:
-                        root.drag-clip-id;
-
-                    drag-track-offset:
-                        root.drag-track-offset;
 
 
                     // =====================================
@@ -932,77 +927,35 @@ export component Timeline inherits Rectangle {
 
 
                     // =====================================
-                    // MOVE
+                    // MOVE / RESIZE — commit único
                     // =====================================
 
-                    clip-move-started(
+                    clip-move-committed(
                         id,
+                        track,
                         beat
                     ) => {
 
-                        root.clip-move-started(
+                        root.clip-move-committed(
                             id,
+                            track,
                             beat
                         );
                     }
 
 
-                    clip-move-delta(
-                        id,
-                        delta_beats,
-                        delta_tracks
-                    ) => {
-
-                        root.clip-move-delta(
-                            id,
-                            delta_beats,
-                            delta_tracks
-                        );
-                    }
-
-
-                    clip-move-finished(id) => {
-
-                        root.clip-move-finished(
-                            id
-                        );
-                    }
-
-
-                    // =====================================
-                    // RESIZE
-                    // =====================================
-
-                    clip-resize-started(
-                        id,
-                        side
-                    ) => {
-
-                        root.clip-resize-started(
-                            id,
-                            side
-                        );
-                    }
-
-
-                    clip-resize-delta(
+                    clip-resize-committed(
                         id,
                         side,
-                        delta
+                        len,
+                        beat
                     ) => {
 
-                        root.clip-resize-delta(
+                        root.clip-resize-committed(
                             id,
                             side,
-                            delta
-                        );
-                    }
-
-
-                    clip-resize-finished(id) => {
-
-                        root.clip-resize-finished(
-                            id
+                            len,
+                            beat
                         );
                     }
 
@@ -1107,6 +1060,29 @@ export component Timeline inherits Rectangle {
 
                     z: 1;
                 }
+            }
+
+
+            // =============================================
+            // OVERLAY DO ARRASTO DE CLIP
+            //
+            // Renderiza o clip sendo arrastado no espaço
+            // de conteúdo, seguindo o mouse a cada frame
+            // (bindings puros sobre ClipDragState).
+            // =============================================
+
+            ClipDragOverlay {
+
+                px-per-beat:
+                    root.px-per-beat;
+
+                row-height:
+                    root.row-height;
+
+                ruler-height:
+                    root.ruler-height;
+
+                z: 60;
             }
 
 

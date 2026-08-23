@@ -12,7 +12,7 @@ import { ClipData } from "../timeline/clip_data.slint";
 import { Explorer } from "../explorer/explorer.slint";
 import { BrowserFileEntry } from "../explorer/file_browser.slint";
 import { Mixer } from "../mixer/mixer.slint";
-import { SamplerArea } from "../sampler/sampler_area.slint";
+import { SamplerArea } from "../components/sampler_area.slint";
 import { PianoRollArea } from "../piano_roll/piano_roll.slint";
 import {
     SplitterVerticalGrowLeft,
@@ -29,6 +29,7 @@ import {
 } from "../components/scrollbar.slint";
 import { TrackPanel } from "../timeline/TrackPanel.slint";
 import { BottomToolbar } from "../components/bottom_toolbar.slint";
+import { ClipDragState, TimelineMetrics } from "../timeline/clip_drag/clip_drag_state.slint";
 
 
 export component Workspace inherits Rectangle {
@@ -105,6 +106,14 @@ export component Workspace inherits Rectangle {
         "Synth"
     ];
 
+    // Índice de cor da paleta por track (0 = padrão por tipo).
+    in-out property <[int]> track-colors: [
+        0,
+        0,
+        0,
+        0
+    ];
+
     in-out property <[ClipData]> clips: [
         {
             id: 0,
@@ -136,10 +145,6 @@ export component Workspace inherits Rectangle {
     // ========================================================
     // DRAG
     // ========================================================
-
-    in-out property <int> drag-clip-id: -1;
-
-    in-out property <int> drag-track-offset: 0;
 
     in-out property <float> zoom-y-level: 1.0;
 
@@ -292,17 +297,18 @@ export component Workspace inherits Rectangle {
         length
     ) -> int;
 
-    callback clip-move-started(int, float);
+    callback clip-move-committed(
+        int,
+        int,
+        float
+    );
 
-    callback clip-move-delta(int, float, int);
-
-    callback clip-move-finished(int);
-
-    callback clip-resize-started(int, int);
-
-    callback clip-resize-delta(int, int, float);
-
-    callback clip-resize-finished(int);
+    callback clip-resize-committed(
+        int,
+        int,
+        float,
+        float
+    );
 
     callback clip-delete-requested(int);
 
@@ -515,12 +521,6 @@ export component Workspace inherits Rectangle {
                 visible:
                     root.clip-pool-open
                     && !root.clip-pool-floating;
-
-                selected-track <=>
-                    root.selected-track;
-
-                track-names:
-                    root.track-names;
 
                 clips:
                     root.clips;
@@ -775,12 +775,6 @@ export component Workspace inherits Rectangle {
                     height:
                         parent.height - 34px;
 
-                    selected-track <=>
-                        root.selected-track;
-
-                    track-names:
-                        root.track-names;
-
                     clips:
                         root.clips;
 
@@ -912,6 +906,9 @@ export component Workspace inherits Rectangle {
                             track-names:
                                 root.track-names;
 
+                            track-colors:
+                                root.track-colors;
+
                             zoom-y:
                                 root.zoom-y-level;
 
@@ -980,12 +977,6 @@ export component Workspace inherits Rectangle {
                             clips:
                                 root.clips;
 
-                            drag-clip-id:
-                                root.drag-clip-id;
-
-                            drag-track-offset:
-                                root.drag-track-offset;
-
                             drop-visible:
                                 root.drag-active
                                 && root.drag-inited
@@ -1032,8 +1023,12 @@ export component Workspace inherits Rectangle {
 
                             clip-selected(index) => {
 
-                                root.selected-track =
-                                    index;
+                                // `index` é o ID DO CLIP.
+                                // Gravá-lo em selected-track
+                                // embaralhava a track ativa a
+                                // cada DOWN — inclusive no
+                                // primeiro frame de todo
+                                // arrasto.
 
                                 root.selected-clip =
                                     index;
@@ -1089,93 +1084,35 @@ export component Workspace inherits Rectangle {
 
 
                             // ---------------------------------
-                            // MOVE START
+                            // MOVE / RESIZE — commit único
                             // ---------------------------------
 
-                            clip-move-started(
+                            clip-move-committed(
                                 id,
+                                track,
                                 beat
                             ) => {
 
-                                root.clip-move-started(
+                                root.clip-move-committed(
                                     id,
+                                    track,
                                     beat
                                 );
                             }
 
 
-                            // ---------------------------------
-                            // MOVE DELTA
-                            // ---------------------------------
-
-                            clip-move-delta(
-                                id,
-                                delta-beats,
-                                delta-tracks
-                            ) => {
-
-                                root.clip-move-delta(
-                                    id,
-                                    delta-beats,
-                                    delta-tracks
-                                );
-                            }
-
-
-                            // ---------------------------------
-                            // MOVE FINISH
-                            // ---------------------------------
-
-                            clip-move-finished(id) => {
-
-                                root.clip-move-finished(
-                                    id
-                                );
-                            }
-
-
-                            // ---------------------------------
-                            // RESIZE START
-                            // ---------------------------------
-
-                            clip-resize-started(
-                                id,
-                                side
-                            ) => {
-
-                                root.clip-resize-started(
-                                    id,
-                                    side
-                                );
-                            }
-
-
-                            // ---------------------------------
-                            // RESIZE DELTA
-                            // ---------------------------------
-
-                            clip-resize-delta(
+                            clip-resize-committed(
                                 id,
                                 side,
-                                delta
+                                len,
+                                beat
                             ) => {
 
-                                root.clip-resize-delta(
+                                root.clip-resize-committed(
                                     id,
                                     side,
-                                    delta
-                                );
-                            }
-
-
-                            // ---------------------------------
-                            // RESIZE FINISH
-                            // ---------------------------------
-
-                            clip-resize-finished(id) => {
-
-                                root.clip-resize-finished(
-                                    id
+                                    len,
+                                    beat
                                 );
                             }
 
@@ -2118,88 +2055,12 @@ export component Workspace inherits Rectangle {
 
 
         // ====================================================
-        // TIMER DRAG
-        // ====================================================
-
-        Timer {
-
-            interval:
-                16ms;
-
-            running:
-                root.drag-active
-                && root.drag-inited;
-
-
-            triggered() => {
-
-                // --------------------------------------------
-                // DETECTA SE O MOUSE ESTÁ SOBRE A TIMELINE
-                // --------------------------------------------
-
-                root.drag-over-timeline =
-                    root.drag-x
-                        >= timeline.absolute-position.x
-                    && root.drag-x
-                        <= timeline.absolute-position.x
-                            + timeline.width
-                    && root.drag-y
-                        >= timeline.absolute-position.y
-                            + timeline.ruler-height;
-
-
-                // --------------------------------------------
-                // CALCULA BEAT DO DROP
-                //
-                // Snap de 1/2 beat.
-                // --------------------------------------------
-
-                root.drag-snap-beat =
-                    max(
-                        0.0,
-                        round(
-                            (
-                                (
-                                    root.drag-x
-                                    - timeline.absolute-position.x
-                                    + timeline.scroll-x
-                                )
-                                / timeline.px-per-beat
-                            )
-                            * 2.0
-                        ) / 2.0
-                    );
-
-
-                // --------------------------------------------
-                // CALCULA TRACK DO DROP
-                // --------------------------------------------
-
-                root.drag-drop-track =
-                    max(
-                        0,
-                        min(
-                            floor(
-                                (
-                                    root.drag-y
-                                    - timeline.absolute-position.y
-                                    + timeline.scroll-y
-                                    - timeline.ruler-height
-                                )
-                                / timeline.row-height
-                            ),
-                            max(
-                                0,
-                                root.track-names.length - 1
-                            )
-                        )
-                    );
-            }
-        }
-
-
-        // ====================================================
         // TIMER BOUNDS
+        //
+        // Publica as métricas da timeline para o global
+        // TimelineMetrics (usado pelo drag-move em main.slint
+        // para calcular preview de drop SEM timer próprio) e
+        // mantém o gerenciador de cursores do Rust atualizado.
         // ====================================================
 
         Timer {
@@ -2212,6 +2073,36 @@ export component Workspace inherits Rectangle {
 
 
             triggered() => {
+
+                TimelineMetrics.timeline-abs-x =
+                    timeline.absolute-position.x;
+
+                TimelineMetrics.content-top-abs-y =
+                    timeline.absolute-position.y
+                    + timeline.ruler-height;
+
+                TimelineMetrics.width =
+                    timeline.width;
+
+                TimelineMetrics.scroll-x =
+                    timeline.scroll-x;
+
+                TimelineMetrics.scroll-y =
+                    timeline.scroll-y;
+
+                TimelineMetrics.px-per-beat =
+                    timeline.px-per-beat;
+
+                TimelineMetrics.row-height =
+                    timeline.row-height;
+
+                TimelineMetrics.track-count =
+                    root.track-names.length;
+
+                // Snap compartilhado com o motor de arrasto
+                // (resize local e preview usam o mesmo flag).
+                ClipDragState.snap-enabled =
+                    root.snap-enabled;
 
                 root.timeline-bounds-changed(
                     timeline.absolute-position.x / 1px,

@@ -1,0 +1,133 @@
+// ============================================================
+// CLIP DRAG OVERLAY
+//
+// Renderiza o clip em arrasto DENTRO do espaço de conteúdo da
+// timeline (mesmo sistema de coordenadas das rows), posicionado
+// por bindings puros a partir de ClipDragState — segue o mouse
+// a cada frame, sem callbacks e sem tocar no modelo.
+//
+// Deve ser instanciado dentro do container scrollável da
+// Timeline, acima das rows.
+// ============================================================
+
+import { TrackClip } from "../track_clip.slint";
+import { ClipDragState } from "./clip_drag_state.slint";
+
+export component ClipDragOverlay inherits Rectangle {
+
+    // =====================================================
+    // MÉTRICAS (espelhadas da Timeline dona)
+    // =====================================================
+
+    in property <length> px-per-beat: 40px;
+
+    in property <length> row-height: 64px;
+
+    in property <length> ruler-height: 30px;
+
+
+    // =====================================================
+    // FUNDO
+    //
+    // Transparente: este componente é apenas o host da
+    // instância flutuante do clip em arrasto.
+    // =====================================================
+
+    background:
+        #00000000;
+
+    x: 0px;
+
+    y: 0px;
+
+    width:
+        100%;
+
+    height:
+        100%;
+
+
+    if ClipDragState.active: TrackClip {
+
+        // ==============================================
+        // SÓ DESENHO
+        //
+        // Sem TouchArea: esta instância fica exatamente
+        // embaixo do cursor e acima das rows. Com input
+        // habilitado ela roubaria hit-test e hover do
+        // clip de origem, que é quem detém o grab e
+        // alimenta o gesto.
+        // ==============================================
+
+        interactive:
+            false;
+
+
+        // ==============================================
+        // POSIÇÃO AO VIVO
+        //
+        // X é derivado internamente pelo TrackClip
+        // (beat * px-per-beat); Y posiciona a linha alvo.
+        // ==============================================
+
+        y:
+            root.ruler-height
+            + ClipDragState.live-track
+                * root.row-height
+            + 2px;
+
+        z:
+            90;
+
+
+        // ==============================================
+        // SNAPSHOT DO CLIP
+        // ==============================================
+
+        name:
+            ClipDragState.name;
+
+        clip-id:
+            ClipDragState.clip-id;
+
+        beat:
+            ClipDragState.live-beat;
+
+        len:
+            ClipDragState.len-beats;
+
+        track-index:
+            ClipDragState.live-track;
+
+        color-index:
+            ClipDragState.color-index;
+
+        is-midi:
+            ClipDragState.is-midi;
+
+        waveform-peaks:
+            ClipDragState.waveform-peaks;
+
+
+        // ==============================================
+        // ESCALA
+        // ==============================================
+
+        px-per-beat:
+            root.px-per-beat;
+
+        row-height:
+            root.row-height;
+
+
+        // ==============================================
+        // DESTAQUE
+        // ==============================================
+
+        selected:
+            true;
+
+        active-tool:
+            0;
+    }
+}

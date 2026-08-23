@@ -40,6 +40,14 @@ fn refresh_beat(ui: &MainWindow, project: &Project) {
         .collect();
     st.set_patterns(Rc::new(VecModel::from(rows)).into());
 
+    // Nomes dos patterns para o Clip Pool.
+    let pattern_names: Vec<SharedString> = bp
+        .patterns
+        .iter()
+        .map(|p| p.name.clone().into())
+        .collect();
+    st.set_pattern_names(Rc::new(VecModel::from(pattern_names)).into());
+
     let Some(current) = bp.current_pattern() else {
         return;
     };

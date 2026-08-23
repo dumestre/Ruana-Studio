@@ -7,6 +7,7 @@ import { BrowserFileEntry } from "explorer/file_browser.slint";
 import { FloatPanel } from "windows/float_panel.slint";
 import { PianoRollData, PianoRollActions } from "piano_roll/piano_roll_state.slint";
 import { ContextMenu, ClipContextMenuState } from "components/context_menu.slint";
+import { TimelineMetrics } from "timeline/clip_drag/clip_drag_state.slint";
 
 export { FloatPanel }
 export { PianoRollData, PianoRollActions }
@@ -184,9 +185,6 @@ export component MainWindow inherits Window {
         
     in-out property <int> selected-clip <=> workspace.selected-clip;
 
-    in property <int> drag-clip-id: -1;
-    in property <int> drag-track-offset: 0;
-
     in-out property <[ClipData]> clips:
         [
             { id: 0, track-index: 0, name: "Drums A", beat: 0.0, len: 4.0, is-midi: true },
@@ -200,6 +198,15 @@ export component MainWindow inherits Window {
             "Bass",
             "Vocal",
             "Synth"
+        ];
+
+    // Índice de cor da paleta por track (0 = padrão por tipo).
+    in-out property <[int]> track-colors:
+        [
+            0,
+            0,
+            0,
+            0
         ];
 
 
@@ -229,13 +236,8 @@ export component MainWindow inherits Window {
 
     callback glue-clip-at(float, length, length, length) -> int;
 
-    callback clip-move-started(int, float);
-    callback clip-move-delta(int, float, int);
-    callback clip-move-finished(int);
-
-    callback clip-resize-started(int, int);
-    callback clip-resize-delta(int, int, float);
-    callback clip-resize-finished(int);
+    callback clip-move-committed(int, int, float);
+    callback clip-resize-committed(int, int, float, float);
     callback clip-delete-requested(int);
     callback clip-rename-requested(int, string);
     callback clip-color-cycle-requested(int);
@@ -419,6 +421,63 @@ export component MainWindow inherits Window {
 
         root.drag-last-x = x;
         root.drag-inited = true;
+
+
+        // =================================================
+        // PREVIEW DE DROP EM TEMPO REAL
+        //
+        // Calculado a CADA evento de mouse (antes: Timer de
+        // 16ms). Métricas da timeline vêm do global
+        // TimelineMetrics, publicado pelo workspace.
+        // =================================================
+
+        root.drag-over-timeline =
+            x >= TimelineMetrics.timeline-abs-x
+            && x <= TimelineMetrics.timeline-abs-x
+                + TimelineMetrics.width
+            && y >= TimelineMetrics.content-top-abs-y;
+
+        root.drag-snap-beat =
+            Math.max(
+                0.0,
+                Math.round(
+                    (
+                        (
+                            x
+                            - TimelineMetrics.timeline-abs-x
+                            + TimelineMetrics.scroll-x
+                        )
+                        / 1px
+                    )
+                        / (
+                            TimelineMetrics.px-per-beat / 1px
+                        )
+                    * 2.0
+                ) / 2.0
+            );
+
+        root.drag-drop-track =
+            Math.max(
+                0,
+                Math.min(
+                    Math.floor(
+                        (
+                            (
+                                y
+                                - TimelineMetrics.content-top-abs-y
+                                + TimelineMetrics.scroll-y
+                            ) / 1px
+                        )
+                            / (
+                                TimelineMetrics.row-height / 1px
+                            )
+                    ),
+                    Math.max(
+                        0,
+                        TimelineMetrics.track-count - 1
+                    )
+                )
+            );
     }
 
 
@@ -543,6 +602,7 @@ export component MainWindow inherits Window {
         bottom-panel-height <=> root.bottom-panel-height;
         floated <=> root.floated;
         track-names <=> root.track-names;
+        track-colors <=> root.track-colors;
         clips <=> root.clips;
         zoom-y-level <=> root.zoom-y-level;
         drag-active <=> root.drag-active;
@@ -582,12 +642,8 @@ export component MainWindow inherits Window {
         clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
         clip-glue-requested(id) => { root.clip-glue-requested(id); }
         glue-clip-at(row, x, sx, ppb) => { root.glue-clip-at(row, x, sx, ppb) }
-        clip-move-started(id, beat) => { root.clip-move-started(id, beat); }
-        clip-move-delta(id, delta_beats, delta_tracks) => { root.clip-move-delta(id, delta_beats, delta_tracks); }
-        clip-move-finished(id) => { root.clip-move-finished(id); }
-        clip-resize-started(id, side) => { root.clip-resize-started(id, side); }
-        clip-resize-delta(id, side, delta) => { root.clip-resize-delta(id, side, delta); }
-        clip-resize-finished(id) => { root.clip-resize-finished(id); }
+clip-move-committed(id, track, beat) => { root.clip-move-committed(id, track, beat); }
+clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, side, len, beat); }
         clip-delete-requested(id) => { root.clip-delete-requested(id); }
         clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
         clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
