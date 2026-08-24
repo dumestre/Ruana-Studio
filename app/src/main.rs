@@ -1278,36 +1278,65 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     // Re-renderiza a waveform de um clip na resolução exata de
-    // exibição (zoom/resize mudaram a largura em px). É isto que
-    // mantém a curva perfeita em qualquer zoom, como nas DAWs.
+    // exibição (zoom/resize mudaram a largura em px).
+    //
+    // DEBOUNCE: escrever no modelo dentro do próprio `changed
+    // width` reconstrói a linha e redispara o handler (loop).
+    // Guardamos o pedido e aplicamos num timer de 120 ms; se um
+    // novo pedido chegar, reiniciamos o timer. Também ignoramos
+    // larguras iguais à última renderizada.
     {
-        let project = project.clone();
+        use std::collections::HashMap;
         let waveforms = waveforms.clone();
         let clips_model = clips_model.clone();
+        let pending: Rc<RefCell<HashMap<i32, u32>>> = Rc::new(RefCell::new(HashMap::new()));
+        let done_width: Rc<RefCell<HashMap<u64, u32>>> = Rc::new(RefCell::new(HashMap::new()));
+        let timer: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
+
         ui.global::<TimelineMetrics>().on_waveform_resolution_requested(move |id, width_px| {
             let id_u = id.max(0) as u64;
             let w = (width_px.round() as u32).clamp(16, 8192);
 
-            // Picos do cache (ou do core, se ainda sem cache).
-            let peaks: Vec<f32> = {
-                let wf = waveforms.borrow();
-                if let Some((p, _)) = wf.get(&id_u) {
-                    p.clone()
-                } else {
-                    Vec::new()
-                }
-            };
-            if peaks.is_empty() {
+            // Já está nessa resolução? Nada a fazer.
+            if done_width.borrow().get(&id_u) == Some(&w) {
                 return;
             }
+            pending.borrow_mut().insert(id, w);
 
-            if let Some(img) = render_waveform_at(&peaks, w) {
-                if let Some(i) = clip_row(&clips_model, id) {
-                    if let Some(mut data) = clips_model.row_data(i) {
-                        data.waveform_image = img;
-                        clips_model.set_row_data(i, data);
-                    }
-                }
+            // Reinicia o timer (debounce do gesto de zoom).
+            let t = slint::Timer::default();
+            *timer.borrow_mut() = Some(t);
+            if let Some(t) = timer.borrow().as_ref() {
+                let pending = pending.clone();
+                let done_width = done_width.clone();
+                let waveforms = waveforms.clone();
+                let clips_model = clips_model.clone();
+                t.start(
+                    slint::TimerMode::SingleShot,
+                    std::time::Duration::from_millis(120),
+                    move || {
+                        let jobs: Vec<(i32, u32)> = pending.borrow_mut().drain().collect();
+                        for (id, w) in jobs {
+                            let id_u = id.max(0) as u64;
+                            let peaks: Vec<f32> = {
+                                let wf = waveforms.borrow();
+                                wf.get(&id_u).map(|(p, _)| p.clone()).unwrap_or_default()
+                            };
+                            if peaks.is_empty() {
+                                continue;
+                            }
+                            if let Some(img) = render_waveform_at(&peaks, w) {
+                                if let Some(i) = clip_row(&clips_model, id) {
+                                    if let Some(mut data) = clips_model.row_data(i) {
+                                        data.waveform_image = img;
+                                        clips_model.set_row_data(i, data);
+                                        done_width.borrow_mut().insert(id_u, w);
+                                    }
+                                }
+                            }
+                        }
+                    },
+                );
             }
         });
     }
