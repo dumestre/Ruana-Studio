@@ -87,7 +87,7 @@ pub fn waveform_image_to_slint(rgba: Option<Vec<u8>>) -> slint::Image {
             let buf = slint::SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
                 &data,
                 daw_media::waveform_image::WAVEFORM_IMG_WIDTH as u32,
-                256,
+                512,
             );
             slint::Image::from_rgba8(buf)
         }
@@ -179,7 +179,7 @@ fn import_audio_file(
     // Resolução alta: com poucos pontos, um take denso virava
     // um tijolo cheio sem forma. O teto existe porque cada
     // ponto é um retângulo no desenho do clip.
-    let points = ((length * 24.0) as usize).clamp(128, 1024);
+    let points = ((length * 24.0) as usize).clamp(256, 2048);
     let peaks = waveform_points(&decoded, points);
     // Pré-renderiza a waveform em RGBA (cor padrão de áudio) uma
     // única vez; a UI desenha um Image em vez de ~1000 retângulos.
@@ -1683,24 +1683,38 @@ fn main() -> Result<(), slint::PlatformError> {
         let project = project.clone();
         let waveforms = waveforms.clone();
         let clips_model = clips_model.clone();
-        
-        // Rastreia a última posição física do cursor
-        let last_phys_pos = Rc::new(RefCell::new((0.0, 0.0)));
-        let pos_tracker = last_phys_pos.clone();
-        
+
         ui.window().on_winit_window_event(move |_win, event| {
             use i_slint_backend_winit::winit::event::WindowEvent;
             match event {
-                WindowEvent::CursorMoved { position, .. } => {
-                    *pos_tracker.borrow_mut() = (position.x, position.y);
-                }
                 WindowEvent::DroppedFile(path) => {
                     if let Some(ui) = ui_weak.upgrade() {
                         if is_audio_path(&path) {
-                            let (phys_x, phys_y) = *last_phys_pos.borrow();
+                            // Pergunta ao sistema onde o cursor ESTÁ
+                            // agora. Durante um drag OLE do Windows os
+                            // eventos CursorMoved não chegam, então a
+                            // última posição rastreada ficava velha e o
+                            // clip caía em outra track.
+                            #[cfg(windows)]
+                            let (phys_x, phys_y) = {
+                                use windows::Win32::Foundation::POINT;
+                                use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+                                let mut pt = POINT { x: 0, y: 0 };
+                                unsafe { let _ = GetCursorPos(&mut pt); }
+                                (pt.x as f64, pt.y as f64)
+                            };
+                            #[cfg(not(windows))]
+                            let (phys_x, phys_y) = (0.0, 0.0);
+
+                            // Coordenadas físicas de TELA → lógicas da
+                            // janela: desconta a origem da janela antes
+                            // do scale factor.
                             let scale_factor = ui.window().scale_factor();
-                            let logical_x = phys_x as f32 / scale_factor;
-                            let logical_y = phys_y as f32 / scale_factor;
+                            let win_pos = ui.window().position();
+                            let logical_x =
+                                ((phys_x - win_pos.x as f64) / scale_factor as f64) as f32;
+                            let logical_y =
+                                ((phys_y - win_pos.y as f64) / scale_factor as f64) as f32;
 
                             let coords = ui.invoke_map_window_coords_to_timeline(logical_x, logical_y);
 

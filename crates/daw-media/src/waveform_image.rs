@@ -1,101 +1,77 @@
-//! Renderização da waveform em imagem (PNG em memória).
+//! Renderização da waveform em imagem (RGBA em memória).
 //!
-//! Em vez de desenhar 1 retângulo por pico no Slint (até 1024
+//! Em vez de desenhar 1 retângulo por pico no Slint (até 2048
 //! por clip, todo frame), o Rust rasteriza a waveform UMA vez
-//! com tiny-skia e a UI só desenha um `Image`. Repaint da
-//! timeline fica praticamente gratuito.
+//! com tiny-skia e a UI desenha um único `Image`.
 //!
-//! A imagem é desenhada na cor do clip: como a cor muda via
-//! ciclo de paleta, re-renderizamos quando `color_index` difere.
+//! QUALIDADE: para cada COLUNA DE PIXEL da imagem agregamos os
+//! picos que caem nela e desenhamos o envelope completo
+//! (simétrico em volta do centro). A resolução horizontal é
+//! então a própria largura da imagem — zoom não serrilha e
+//! nada vira "tijolo quadrado". Anti-alias suaviza as bordas.
 
 use tiny_skia::*;
 
-/// Largura fixa do cache (px). A UI estica para a largura real
-/// do clip — 1024 cobre clips largos sem serrilhar.
-pub const WAVEFORM_IMG_WIDTH: usize = 1024;
-const WAVEFORM_IMG_HEIGHT: usize = 256;
+/// Largura do cache (px). Cada coluna é um sample visual do
+/// envelope — 2048 colunas cobrem qualquer zoom com folga.
+pub const WAVEFORM_IMG_WIDTH: usize = 2048;
 
-/// Converte um índice de cor da paleta em RGBA. Deve refletir
-/// ClipPalette.colors + os padrões MIDI/áudio da UI.
+/// Altura do cache (px). A UI estica para a altura do corpo do
+/// clip; 512 mantém o arquivo pequeno e a curva suave.
+const H: u32 = 512;
+
+/// Rasteriza os picos numa imagem RGBA (premultiplied, layout
+/// BGRA em memória — formato nativo do tiny-skia).
 ///
-/// Mantido em sincronia com ui/clip_palette.slint.
-pub fn palette_rgba(color_index: i32, is_midi: bool) -> [u8; 4] {
-    // Padrões (índice 0): verde áudio / roxo MIDI — mesmos da UI.
-    const PALETTE: [[u8; 3]; 20] = [
-        [0x00, 0xC8, 0x53], // 0 = padrão
-        [0xFF, 0x52, 0x52],
-        [0x4E, 0x9A, 0xFF],
-        [0xFF, 0xB8, 0x30],
-        [0xB4, 0x6B, 0xFF],
-        [0x2E, 0xD6, 0xCA],
-        [0xFF, 0x7A, 0xB2],
-        [0xA5, 0xD6, 0x39],
-        [0x63, 0x7B, 0xFF],
-        [0xE8, 0x54, 0x37],
-        [0x00, 0xBC, 0xD4],
-        [0xC0, 0xCA, 0x33],
-        [0xAB, 0x47, 0xBC],
-        [0x26, 0xA6, 0x9A],
-        [0xEF, 0x6C, 0x00],
-        [0x42, 0xA5, 0xF5],
-        [0xEC, 0x40, 0x7A],
-        [0x9C, 0xCC, 0x65],
-        [0x5C, 0x6B, 0xC0],
-        [0x8D, 0x6E, 0x63],
-    ];
-    let idx = if color_index == 0 {
-        if is_midi {
-            return [0x9C, 0x64, 0xFF, 255]; // roxo MIDI padrão
-        }
-        0
-    } else {
-        (color_index as usize) % PALETTE.len()
-    };
-    let c = PALETTE[idx];
-    [c[0], c[1], c[2], 255]
-}
-
-/// Rasteriza os picos numa waveform RGBA (corpo RMS já embutido
-/// nos valores, mesma escala 1:1 do renderer de fallback).
-pub fn waveform_image_rgba(
-    peaks: &[f32],
-    color_index: i32,
-    is_midi: bool,
-) -> Option<Vec<u8>> {
+/// Os valores já chegam como amplitude real 0..1 (RMS + crista,
+/// sem normalização por arquivo): áudio baixo desenha baixo.
+pub fn waveform_image_rgba(peaks: &[f32], _color_index: i32, _is_midi: bool) -> Option<Vec<u8>> {
     if peaks.is_empty() {
         return None;
     }
 
     let w = WAVEFORM_IMG_WIDTH as u32;
-    let h = WAVEFORM_IMG_HEIGHT as u32;
-    let mut pixmap = Pixmap::new(w, h)?;
+    let mut pixmap = Pixmap::new(w, H)?;
+    let center = H as f32 / 2.0;
 
-    // Waveform sempre PRETA (#0A0A0A) sobre o corpo translúcido
-    // do clip — padrão de DAW. O índice de cor não afeta mais o
-    // traço da waveform, só o header/borda.
     let mut paint = Paint::default();
     paint.set_color_rgba8(0x0A, 0x0A, 0x0A, 255);
-    paint.anti_alias = false;
+    paint.anti_alias = true;
 
-    let n = peaks.len();
-    let bar_w = w as f32 / n as f32;
+    let n = peaks.len() as f32;
+    let mut pb = PathBuilder::new();
 
-    for (i, &p) in peaks.iter().enumerate() {
-        if p <= 0.004 {
-            continue; // silêncio não desenha nada (fiel ao áudio)
+    // Contorno superior do envelope, esquerda → direita.
+    for x in 0..w as usize {
+        // Faixa de picos que esta coluna representa.
+        let i0 = ((x as f32 / w as f32) * n).floor() as usize;
+        let i1 = ((((x + 1) as f32 / w as f32) * n).ceil() as usize).max(i0 + 1);
+        let amp = peaks[i0.min(peaks.len() - 1)..i1.min(peaks.len())]
+            .iter()
+            .fold(0.0f32, |a, &p| a.max(p));
+
+        let half = (amp.clamp(0.0, 1.0) * center).max(1.0);
+        let y = center - half;
+        if x == 0 {
+            pb.move_to(0.0, y);
+        } else {
+            pb.line_to(x as f32, y);
         }
-        let bar_h = (p * h as f32).round().max(1.0);
-        let y = ((h as f32 - bar_h) / 2.0).floor();
-        let x = (i as f32 * bar_w).floor();
+    }
+    // Contorno inferior, direita → esquerda (espelho).
+    for x in (0..w as usize).rev() {
+        let i0 = ((x as f32 / w as f32) * n).floor() as usize;
+        let i1 = ((((x + 1) as f32 / w as f32) * n).ceil() as usize).max(i0 + 1);
+        let amp = peaks[i0.min(peaks.len() - 1)..i1.min(peaks.len())]
+            .iter()
+            .fold(0.0f32, |a, &p| a.max(p));
+        let half = (amp.clamp(0.0, 1.0) * center).max(1.0);
+        pb.line_to(x as f32, center + half);
+    }
+    pb.close();
 
-        let rect = Rect::from_xywh(
-            x,
-            y,
-            bar_w.ceil().max(1.0),
-            bar_h,
-        )?;
-
-        pixmap.fill_rect(rect, &paint, Transform::identity(), None);
+    if let Some(path) = pb.finish() {
+        pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
     }
 
     Some(pixmap.data().to_vec())

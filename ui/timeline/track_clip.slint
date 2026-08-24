@@ -369,6 +369,11 @@ export component TrackClip inherits Rectangle {
                 width: parent.width - 4px;
                 height: parent.height;
                 source: clip-waveform-image;
+                // Estica para preencher TODO o corpo: sem
+                // letterbox (que empurrava a imagem pro rodapé
+                // e cortava o lobo de baixo).
+                image-fit: fill;
+                image-rendering: smooth;
             }
 
         if !root.is-midi

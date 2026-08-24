@@ -232,11 +232,12 @@ pub fn waveform_points(data: &WaveformData, points: usize) -> Vec<f32> {
         let sum_sq: f32 = chunk.iter().map(|&s| s * s).sum();
         let rms = (sum_sq / chunk.len() as f32).sqrt();
 
-        // Corpo RMS + brilho do pico por cima: fiel ao áudio e
-        // ainda mostra as transientes. Piso mínimo só para o
-        // traço não sumir completamente no silêncio digital.
-        let value = (rms + peak * 0.35).min(1.0);
-        result.push(value.max(0.004));
+        // Corpo RMS PURO (amplitude linear = nível real do áudio,
+        // equivalente visual ao dB) + uma pitada do pico só para
+        // marcar transientes. Sem inflar: arquivo baixo desenha
+        // baixo, arquivo alto desenha alto.
+        let value = (rms + (peak - rms) * 0.25).min(1.0);
+        result.push(value.max(0.002));
     }
 
     result
@@ -263,7 +264,7 @@ mod tests {
         let expected = |chunk: &[f32]| -> f32 {
             let peak = chunk.iter().fold(0.0f32, |a, &s| a.max(s.abs()));
             let rms = (chunk.iter().map(|&s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
-            ((rms + peak * 0.35).min(1.0)).max(0.004)
+            ((rms + (peak - rms) * 0.25).min(1.0)).max(0.002)
         };
         assert_eq!(pts[0], expected(&data.samples[0..2]));
         assert_eq!(pts[1], expected(&data.samples[2..4]));
@@ -292,8 +293,10 @@ mod tests {
         };
         let loud_pts = waveform_points(&loud, 10);
         let quiet_pts = waveform_points(&quiet, 10);
+        // RMS de constante c = c; +25% do (pico-RMS) → loud=1.0,
+        // quiet=0.2. Níveis visivelmente diferentes.
         assert!(loud_pts.iter().all(|&p| (p - 1.0).abs() < 1e-6));
-        assert!(quiet_pts.iter().all(|&p| (p - 0.27).abs() < 1e-6));
+        assert!(quiet_pts.iter().all(|&p| (p - 0.2).abs() < 1e-6));
         assert!(loud_pts[0] > quiet_pts[0] * 3.0);
     }
 
