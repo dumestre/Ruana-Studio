@@ -578,7 +578,10 @@ export component MainWindow inherits Window {
 
     map-window-coords-to-timeline(wx, wy) => {
         let rx = wx - workspace.timeline-abs-x + workspace.timeline-scroll-x;
-        let ry = wy - workspace.timeline-abs-y + workspace.timeline-scroll-y;
+        // O início das tracks fica ABAIXO da régua: usar o topo
+        // do conteúdo (e não o topo do timeline), senão a linha
+        // calculada sai deslocada e o drop ignora o mouse.
+        let ry = wy - workspace.timeline-content-top-abs-y + workspace.timeline-scroll-y;
         
         let beat = rx / workspace.timeline-px-per-beat;
         let track = Math.floor(ry / workspace.timeline-row-height);

@@ -6,5 +6,8 @@ export struct ClipData {
     len: float,
     is-midi: bool,
     color: int,
-    waveform-points: [float]
+    waveform-points: [float],
+    // Waveform pré-renderizada (Rust, uma vez por import).
+    // Largura 0 = sem imagem → o clip cai no fallback de retângulos.
+    waveform-image: image,
 }

@@ -195,7 +195,16 @@ pub fn decode_wav(path: impl AsRef<Path>) -> Result<WaveformData, Box<dyn std::e
     decode_wav_file(path.as_ref())
 }
 
-/// Gera pontos de waveform para rendering (downsample para N picos normalizados 0.0–1.0).
+/// Gera pontos de waveform para rendering.
+///
+/// FIEL AO ÁUDIO: cada valor combina RMS (energia audível do
+/// trecho) com o pico absoluto, SEM normalizar por arquivo —
+/// um sample gravado baixo DEVE desenhar baixo. É o mesmo
+/// padrão de DAWs profissionais (corpo RMS + crista de pico):
+/// arquivos com volumes diferentes produzem waveforms com
+/// alturas visivelmente diferentes.
+///
+/// Retorna N valores em 0.0–1.0 (amplitude real, teto 1.0).
 pub fn waveform_points(data: &WaveformData, points: usize) -> Vec<f32> {
     if data.samples.is_empty() || points == 0 {
         return vec![0.0; points];
@@ -212,8 +221,22 @@ pub fn waveform_points(data: &WaveformData, points: usize) -> Vec<f32> {
             continue;
         }
         let chunk = &data.samples[start..end];
+
+        // Pico absoluto do trecho (crista).
         let peak = chunk.iter().fold(0.0f32, |acc, &s| acc.max(s.abs()));
-        result.push(peak);
+
+        // RMS do trecho (energia média — o "corpo" da waveform).
+        // Um trecho denso tem RMS próximo do pico; um trecho
+        // esparso tem RMS bem menor — é isto que diferencia os
+        // desenhos de arquivos com níveis diferentes.
+        let sum_sq: f32 = chunk.iter().map(|&s| s * s).sum();
+        let rms = (sum_sq / chunk.len() as f32).sqrt();
+
+        // Corpo RMS + brilho do pico por cima: fiel ao áudio e
+        // ainda mostra as transientes. Piso mínimo só para o
+        // traço não sumir completamente no silêncio digital.
+        let value = (rms + peak * 0.35).min(1.0);
+        result.push(value.max(0.004));
     }
 
     result
@@ -234,11 +257,44 @@ mod tests {
         };
         let pts = waveform_points(&data, 4);
         assert_eq!(pts.len(), 4);
-        // Chunks de 2: [0,0.5]→0.5, [-0.5,1]→1.0, [-1,0]→1.0, [0,0]→0.0
-        assert_eq!(pts[0], 0.5);
-        assert_eq!(pts[1], 1.0);
-        assert_eq!(pts[2], 1.0);
-        assert_eq!(pts[3], 0.0);
+        // Chunks de 2: [0,0.5]→RMS+peak, [-0.5,1]→..., etc.
+        // RMS + 35% do pico: chunk denso fica mais alto que
+        // chunk esparso com o mesmo pico.
+        let expected = |chunk: &[f32]| -> f32 {
+            let peak = chunk.iter().fold(0.0f32, |a, &s| a.max(s.abs()));
+            let rms = (chunk.iter().map(|&s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
+            ((rms + peak * 0.35).min(1.0)).max(0.004)
+        };
+        assert_eq!(pts[0], expected(&data.samples[0..2]));
+        assert_eq!(pts[1], expected(&data.samples[2..4]));
+        assert_eq!(pts[2], expected(&data.samples[4..6]));
+        assert_eq!(pts[3], expected(&data.samples[6..8]));
+    }
+
+    #[test]
+    fn waveform_respects_file_level() {
+        // Arquivo alto vs arquivo baixo com o MESMO formato: o
+        // desenho do baixo tem que ser visivelmente mais baixo —
+        // nada de normalizar por arquivo.
+        let loud = WaveformData {
+            samples: vec![1.0; 100],
+            interleaved: vec![1.0; 100],
+            sample_rate: 44100,
+            channels: 1,
+            duration_seconds: 0.0,
+        };
+        let quiet = WaveformData {
+            samples: vec![0.2; 100],
+            interleaved: vec![0.2; 100],
+            sample_rate: 44100,
+            channels: 1,
+            duration_seconds: 0.0,
+        };
+        let loud_pts = waveform_points(&loud, 10);
+        let quiet_pts = waveform_points(&quiet, 10);
+        assert!(loud_pts.iter().all(|&p| (p - 1.0).abs() < 1e-6));
+        assert!(quiet_pts.iter().all(|&p| (p - 0.27).abs() < 1e-6));
+        assert!(loud_pts[0] > quiet_pts[0] * 3.0);
     }
 
     #[test]

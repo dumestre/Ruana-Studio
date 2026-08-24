@@ -34,6 +34,9 @@ export component TrackClip inherits Rectangle {
 
     in property <[float]> waveform-peaks: [];
 
+    // Waveform pré-renderizada (Rust). width 0 = sem imagem.
+    in property <image> clip-waveform-image;
+
     // Total de tracks do projeto (clamp vertical do arrasto).
     in property <int> track-count: 1;
 
@@ -338,8 +341,8 @@ export component TrackClip inherits Rectangle {
                     : 0.12
             ).with-alpha(
                 root.hovered
-                    ? 0.36
-                    : 0.30
+                    ? 0.85
+                    : 0.75
             );
 
         opacity:
@@ -352,11 +355,24 @@ export component TrackClip inherits Rectangle {
         // =================================================
         // WAVEFORM
         //
-        // OPACA.
-        // Não herda o alpha do corpo.
+        // Caminho rápido: imagem pré-renderizada no Rust (1
+        // elemento). Fallback: retângulos por pico — usado pelo
+        // fantasma do drag e quando não há imagem.
         // =================================================
 
         if !root.is-midi
+            && clip-waveform-image.width > 0:
+
+            Image {
+                x: 2px;
+                y: 0px;
+                width: parent.width - 4px;
+                height: parent.height;
+                source: clip-waveform-image;
+            }
+
+        if !root.is-midi
+            && clip-waveform-image.width == 0
             && root.waveform-peaks.length > 0:
 
             AudioWaveform {

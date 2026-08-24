@@ -5,8 +5,8 @@ export component AudioWaveform inherits Rectangle {
     // PROPRIEDADES
     // =====================================================
 
-    // Waveform escura e nítida, idêntica ao padrão do Ableton Live
-    in property <color> waveform-color: #111111; // Quase preto para contrastar com clips coloridos
+    // Waveform escura (preta), padrão de DAW sobre clip claro
+    in property <color> waveform-color: #0A0A0A;
 
     in property <bool> hovered: false;
 
@@ -31,6 +31,14 @@ export component AudioWaveform inherits Rectangle {
 
     // =====================================================
     // WAVEFORM
+    //
+    // ESCALA 1:1 — SEM ACHATAMENTO.
+    //
+    // Cada barra é desenhada com a amplitude REAL do áudio
+    // (o Rust já manda RMS + pico por trecho, sem normalizar
+    // por arquivo). Nada de multiplicador fixo nem piso de
+    // 1px que transformava arquivo baixo em bloco cheio:
+    // sample baixo desenha baixo, sample alto desenha alto.
     // =====================================================
 
     Rectangle {
@@ -44,23 +52,24 @@ export component AudioWaveform inherits Rectangle {
         for peak[i] in root.peaks: Rectangle {
             x: i * (parent.width / Math.max(1, root.peaks.length));
 
-            // Expandido para 90% para preencher melhor o clip
-            y: (parent.height - peak * parent.height * 0.90) / 2;
+            // Amplitude real, centrada na linha do meio.
+            y: (parent.height - peak * parent.height) / 2;
 
-            // Largura ajustada para remover o gap (-1px) e formar um desenho contínuo
+            // Largura sem gap para formar desenho contínuo.
             width: max(
                 1px,
                 parent.width / Math.max(1, root.peaks.length)
             );
 
+            // Sem esticamento artificial: o silêncio fica
+            // invisível (altura mínima só evita retângulo de
+            // altura zero, que alguns backends ignoram).
             height: max(
-                1px,
-                peak * parent.height * 0.90
+                0.5px,
+                peak * parent.height
             );
 
             background: root.waveform-color;
-
-             
 
             // border-radius removido! O Ableton usa renderização de áudio afiada e retangular.
         }

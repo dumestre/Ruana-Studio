@@ -1113,6 +1113,7 @@ dependencies = [
  "dirs",
  "hound",
  "symphonia",
+ "tiny-skia 0.8.4",
 ]
 
 [[package]]

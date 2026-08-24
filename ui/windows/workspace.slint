@@ -261,6 +261,15 @@ export component Workspace inherits Rectangle {
     out property <length> timeline-abs-y:
         timeline.absolute-position.y;
 
+    // Y absoluto do INÍCIO DAS TRACKS (abaixo da régua).
+    //
+    // Quem converte coordenadas de janela → linha da track
+    // (drop do SO) precisa descontar a régua, senão o índice
+    // sai deslocado e o clip cai na track errada.
+    out property <length> timeline-content-top-abs-y:
+        timeline.absolute-position.y
+        + timeline.ruler-height;
+
     out property <length> timeline-scroll-x:
         timeline.scroll-x;
 

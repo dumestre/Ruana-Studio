@@ -21,6 +21,7 @@ use daw_core::track::TrackKind;
 use daw_core::transport::Transport;
 use daw_media::{filesystem::default_samples_dir, filesystem::list_directory};
 use daw_media::waveform::{decode_audio, waveform_points};
+use daw_media::waveform_image::waveform_image_rgba;
 use daw_midi::{Note, NoteEditor};
 use slint::Model;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -28,8 +29,11 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 /// Máximo de slots de insert renderizados por canal no mixer.
 const MAX_INSERTS: usize = 8;
 
-/// Cache de waveform: clip_id → picos normalizados.
-type WaveformCache = std::collections::HashMap<u64, Vec<f32>>;
+/// Cache de waveform: clip_id → (picos, imagem RGBA pré-renderizada).
+///
+/// A imagem é gerada UMA vez por import (tiny-skia) e a UI desenha
+/// um único `Image` em vez de ~1000 retângulos por clip.
+type WaveformCache = std::collections::HashMap<u64, (Vec<f32>, Option<Vec<u8>>)>;
 
 /// Compassos necessários para caber até `end_beat`: teto em
 /// compassos + 8 de folga, mínimo 32. Cresce monotonicamente
@@ -57,6 +61,10 @@ fn event_max_end_beat(event: &DocumentEvent) -> Option<f64> {
 
 /// Mapeia um clip do core para o DTO da camada Slint.
 fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
+    let (peaks, img) = match waveforms.get(&clip.id) {
+        Some((p, i)) => (p.clone(), i.clone()),
+        None => (Vec::new(), None),
+    };
     ClipData {
         id: clip.id as i32,
         name: clip.name.clone().into(),
@@ -65,18 +73,34 @@ fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
         len: clip.length_beats,
         is_midi: clip.is_midi(),
         color: clip.color as i32,
-        waveform_points: {
-            let empty: Vec<f32> = Vec::new();
-            let peaks = waveforms.get(&clip.id).unwrap_or(&empty);
-            Rc::new(slint::VecModel::from(peaks.clone())).into()
-        },
+        waveform_points: Rc::new(slint::VecModel::from(peaks)).into(),
+        waveform_image: waveform_image_to_slint(img),
     }
 }
 
-/// Atualiza apenas os waveform_points de um ClipData existente a partir do cache.
+/// Converte o RGBA cru do cache num `slint::Image`.
+/// Largura 0 = sem imagem (fallback de retângulos na UI).
+pub fn waveform_image_to_slint(rgba: Option<Vec<u8>>) -> slint::Image {
+    use slint::Rgba8Pixel;
+    match rgba {
+        Some(data) => {
+            let buf = slint::SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+                &data,
+                daw_media::waveform_image::WAVEFORM_IMG_WIDTH as u32,
+                256,
+            );
+            slint::Image::from_rgba8(buf)
+        }
+        None => slint::Image::default(),
+    }
+}
+
+/// Atualiza apenas os pontos/imagem de um ClipData existente a partir do cache.
 fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache) -> ClipData {
-    let empty: Vec<f32> = Vec::new();
-    let peaks = waveforms.get(&id).unwrap_or(&empty);
+    let (peaks, img) = match waveforms.get(&id) {
+        Some((p, i)) => (p.clone(), i.clone()),
+        None => (Vec::new(), None),
+    };
     ClipData {
         id: base.id,
         name: base.name.clone(),
@@ -85,7 +109,8 @@ fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache) -> 
         len: base.len,
         is_midi: base.is_midi,
         color: base.color,
-        waveform_points: Rc::new(slint::VecModel::from(peaks.clone())).into(),
+        waveform_points: Rc::new(slint::VecModel::from(peaks)).into(),
+        waveform_image: waveform_image_to_slint(img),
     }
 }
 
@@ -151,8 +176,16 @@ fn import_audio_file(
     // Resolução proporcional à duração: com um número fixo de pontos,
     // um loop de 1 s e um take de 3 min viravam o mesmo borrão. O teto
     // existe porque cada ponto é um retângulo no desenho do clip.
-    let points = ((length * 24.0) as usize).clamp(64, 512);
+    // Resolução alta: com poucos pontos, um take denso virava
+    // um tijolo cheio sem forma. O teto existe porque cada
+    // ponto é um retângulo no desenho do clip.
+    let points = ((length * 24.0) as usize).clamp(128, 1024);
     let peaks = waveform_points(&decoded, points);
+    // Pré-renderiza a waveform em RGBA (cor padrão de áudio) uma
+    // única vez; a UI desenha um Image em vez de ~1000 retângulos.
+    // Se o usuário trocar a cor do clip, re-renderizamos adiante
+    // (ver on_clip_color_cycle_requested).
+    let img = waveform_image_rgba(&peaks, 0, false);
 
     let clip_id = {
         let mut proj = project.borrow_mut();
@@ -176,9 +209,10 @@ fn import_audio_file(
     };
 
     // `ClipAdded` já disparou e leu o cache ainda vazio; preenche
-    // agora e reprojeta só a linha desse clip.
+    // agora (picos + imagem pré-renderizada) e reprojeta só a
+    // linha desse clip.
     if !peaks.is_empty() {
-        waveforms.borrow_mut().insert(clip_id, peaks);
+        waveforms.borrow_mut().insert(clip_id, (peaks, img));
         let wf = waveforms.borrow();
         if let Some(i) = clip_row(clips_model, clip_id as i32) {
             if let Some(data) = clips_model.row_data(i) {
