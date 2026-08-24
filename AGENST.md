@@ -1,1237 +1,545 @@
-# Ruana Studio  Windows > Linux > MacOS
+//! Renderização profissional de waveform em imagem RGBA.
+//!
+//! A waveform é rasterizada no Rust e entregue ao Slint como
+//! uma única Image.
+//!
+//! Cada coluna de pixel representa um intervalo do áudio e
+//! preserva:
+//!
+//! - pico positivo
+//! - pico negativo
+//! - RMS
+//!
+//! O envelope principal usa MIN/MAX real do áudio.
+//! O RMS é usado para dar corpo visual à waveform sem
+//! destruir os transientes.
+//!
+//! A resolução é adaptada à largura real da timeline,
+//! evitando que a UI tenha que desenhar milhares de objetos.
 
+use tiny_skia::*;
 
-DAW (Digital Audio Workstation) nativa desenvolvida em **Rust**, com **Slint** para a interface gráfica.
+/// Largura usada no primeiro cache.
+pub const WAVEFORM_IMG_WIDTH: usize = 2048;
 
-## ⚠️ REGRA PRINCIPAL DE DESENVOLVIMENTO
+/// Altura interna da waveform.
+///
+/// 512px oferece bastante resolução vertical e permite
+/// reduzir depois sem destruir os detalhes.
+const H: u32 = 512;
 
-### A DAW será construída primeiro pela interface.
+/// Intensidade do RMS dentro do envelope visual.
+///
+/// 0.0 = somente pico.
+/// 1.0 = RMS domina completamente.
+///
+/// 0.35 costuma produzir um desenho parecido com DAWs:
+/// transientes continuam definidos, mas o corpo do áudio
+/// permanece visível.
+const RMS_WEIGHT: f32 = 0.35;
 
-O desenvolvimento inicial deve ser focado **exclusivamente na UI/UX e no design visual da DAW**.
+/// Espessura mínima do desenho em pixels.
+///
+/// Evita que trechos extremamente baixos desapareçam
+/// completamente devido ao rasterizador.
+const MIN_HALF_HEIGHT: f32 = 0.75;
 
-A ordem intencional do projeto é:
+/// Limita uma amplitude para o domínio válido.
+#[inline]
+fn clamp_sample(value: f32) -> f32 {
+    value.clamp(-1.0, 1.0)
+}
 
-```text
-FASE 1
-UI / UX
-   ↓
-FASE 2
-Integração com o modelo de dados
-   ↓
-FASE 3
-Audio Engine
-   ↓
-FASE 4
-MIDI / Piano Roll
-   ↓
-FASE 5
-Plugin Host
-   ↓
-FASE 6
-Recursos avançados
-```
+/// Estatísticas de um trecho de áudio.
+#[derive(Clone, Copy, Debug)]
+struct ColumnStats {
+    min: f32,
+    max: f32,
+    rms: f32,
+}
 
-### Durante a Fase 1
+/// Calcula MIN/MAX/RMS de um intervalo de samples.
+#[inline]
+fn column_stats(samples: &[f32], start: usize, end: usize) -> ColumnStats {
+    if start >= samples.len() || start >= end {
+        return ColumnStats {
+            min: 0.0,
+            max: 0.0,
+            rms: 0.0,
+        };
+    }
 
-O agente deve **priorizar o design da interface**, incluindo:
+    let end = end.min(samples.len());
+    let slice = &samples[start..end];
 
-- layout geral
-- Arrange View
-- Timeline
-- Track Headers
-- Mixer
-- Piano Roll
-- Browser
-- Inspector
-- Transport
-- Faders
-- Knobs
-- Buttons
-- Meters
-- Menus
-- Toolbars
-- Panels
-- Splitters
-- seleção
-- drag & drop visual
-- zoom
-- scroll
-- estados visuais
-- animações necessárias
-- feedback visual
-- responsividade dos componentes
+    let mut min = 0.0f32;
+    let mut max = 0.0f32;
+    let mut sum_sq = 0.0f32;
 
-A interface deve ser construída com **dados mockados** quando necessário.
+    for &sample in slice {
+        let s = clamp_sample(sample);
 
-Exemplo:
+        min = min.min(s);
+        max = max.max(s);
 
-```text
-Track 1 → Drums
-Track 2 → Bass
-Track 3 → Vocal
-```
+        sum_sq += s * s;
+    }
 
-Os clips podem ser objetos fictícios:
+    let rms = (sum_sq / slice.len() as f32).sqrt();
 
-```text
-Drums
-████████████
+    ColumnStats { min, max, rms }
+}
 
-Bass
-      ███████████
+/// Rasteriza uma waveform diretamente a partir dos samples.
+///
+/// Esta é a versão ideal quando o áudio original ainda está
+/// disponível.
+///
+/// Cada pixel horizontal representa um intervalo real do áudio.
+pub fn waveform_image_from_samples(
+    samples: &[f32],
+    w: u32,
+) -> Option<Vec<u8>> {
+    if samples.is_empty() || w == 0 {
+        return None;
+    }
 
-Vocal
-             █████████
-```
+    let h = H;
 
-O Piano Roll pode utilizar notas fictícias:
+    let mut pixmap = Pixmap::new(w, h)?;
 
-```text
-C5       █████
-B4           ████
-A4      █████████
-G4                █████
-```
+    let center = h as f32 * 0.5;
+    let width = w as usize;
+    let sample_count = samples.len();
 
-O Mixer pode utilizar valores fictícios de volume, pan e meters.
+    let mut paint = Paint::default();
 
----
+    paint.set_color_rgba8(
+        0x0A,
+        0x0A,
+        0x0A,
+        255,
+    );
 
-## O que NÃO fazer durante a Fase 1
+    paint.anti_alias = true;
 
-Não implementar prematuramente:
+    let mut top: Vec<f32> = Vec::with_capacity(width);
+    let mut bottom: Vec<f32> = Vec::with_capacity(width);
 
-- processamento real de áudio
-- gravação de áudio
-- reprodução real
-- drivers de áudio
-- VST3
-- CLAP
-- MIDI real
-- comunicação com dispositivos MIDI
-- persistência definitiva do projeto
-- decoder de áudio
-- Audio Graph
-- processamento DSP
-- otimizações de real-time audio
+    for x in 0..width {
+        let start = (
+            x as f32
+            / width as f32
+            * sample_count as f32
+        )
+            .floor() as usize;
 
-Esses sistemas serão implementados posteriormente.
+        let end = (
+            (x + 1) as f32
+            / width as f32
+            * sample_count as f32
+        )
+            .ceil()
+            as usize;
 
-### Exceção
+        let end = end.max(start + 1).min(sample_count);
 
-Pode existir **lógica mínima necessária para a própria interação da UI**.
+        let stats = column_stats(
+            samples,
+            start,
+            end,
+        );
 
-Exemplos:
+        //
+        // Envelope físico.
+        //
+        // O pico positivo determina a parte superior.
+        // O pico negativo determina a parte inferior.
+        //
+        let positive_peak = stats.max.max(0.0);
+        let negative_peak = stats.min.min(0.0);
 
-- arrastar um clip visualmente
-- redimensionar um clip
-- selecionar uma track
-- alterar zoom
-- mover a timeline
-- abrir/fechar painel
-- alterar um fader visualmente
-- selecionar notas no Piano Roll
-- alterar valores exibidos
+        //
+        // Corpo RMS.
+        //
+        // Mantemos o sinal do envelope original e usamos
+        // RMS apenas para preencher o corpo.
+        //
+        let rms = stats.rms * RMS_WEIGHT;
 
-Essa lógica deve existir apenas para tornar o protótipo da interface funcional.
+        let upper = positive_peak.max(rms);
+        let lower = negative_peak.min(-rms);
 
----
+        let upper = upper.clamp(0.0, 1.0);
+        let lower = lower.clamp(-1.0, 0.0);
 
-# Objetivo da Fase 1
+        let half_top = (
+            upper * center
+        )
+            .max(MIN_HALF_HEIGHT);
 
-O objetivo é conseguir abrir a aplicação e visualizar uma **DAW visualmente completa**, mesmo que os dados ainda sejam fictícios.
+        let half_bottom = (
+            -lower * center
+        )
+            .max(MIN_HALF_HEIGHT);
 
-Exemplo:
+        top.push(
+            center - half_top
+        );
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│ TRANSPORT                                                    │
-├──────────────┬───────────────────────────────────────────────┤
-│ TRACKS       │ ARRANGE / TIMELINE                            │
-│              │                                               │
-│ Drums        │ ███████████                                   │
-│ Bass         │       ███████████                             │
-│ Vocal        │              █████████████                    │
-│ Synth        │                    █████████                  │
-│              │                                               │
-├──────────────┴───────────────────────────────────────────────┤
-│ MIXER                                                        │
-│                                                              │
-│ Drums      Bass       Vocal       Synth       Master         │
-│   │          │          │           │           │            │
-│   │          │          │           │           │            │
-│   ▼          ▼          ▼           ▼           ▼            │
-└──────────────────────────────────────────────────────────────┘
-```
+        bottom.push(
+            center + half_bottom
+        );
+    }
 
-O visual deve ser tratado como um **protótipo real da DAW**, não como uma tela descartável.
+    //
+    // Suavização horizontal mínima.
+    //
+    // Não fazemos blur.
+    // Apenas conectamos os pontos para formar um envelope
+    // contínuo.
+    //
+    let mut path = PathBuilder::new();
 
----
+    if width == 1 {
+        let y_top = top[0];
+        let y_bottom = bottom[0];
 
-# Arquitetura futura
+        path.move_to(
+            0.0,
+            y_top,
+        );
 
-Mesmo começando pela UI, a arquitetura final deverá separar:
+        path.line_to(
+            0.0,
+            y_bottom,
+        );
 
-```text
-                    ┌──────────────────┐
-                    │     Slint UI     │
-                    └────────┬─────────┘
-                             │
-                       Commands / Events
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │    DAW Core      │
-                    └────────┬─────────┘
-                             │
-                    ┌────────┴─────────┐
-                    ▼                  ▼
-             ┌──────────────┐   ┌──────────────┐
-             │ Audio Engine │   │ Plugin Host  │
-             └──────────────┘   └──────────────┘
-```
+        path.close();
+    } else {
+        //
+        // SUPERIOR
+        //
+        path.move_to(
+            0.0,
+            top[0],
+        );
 
-Porém, **essa arquitetura será implementada progressivamente**.
+        for x in 1..width {
+            path.line_to(
+                x as f32,
+                top[x],
+            );
+        }
 
-Não antecipar a implementação do backend apenas porque a arquitetura futura já está definida.
+        //
+        // INFERIOR
+        //
+        for x in (0..width).rev() {
+            path.line_to(
+                x as f32,
+                bottom[x],
+            );
+        }
 
----
+        path.close();
+    }
 
-# Regra para o agente
+    if let Some(path) = path.finish() {
+        pixmap.fill_path(
+            &path,
+            &paint,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
+    }
 
-Quando uma tarefa envolver a interface durante a Fase 1:
+    Some(
+        pixmap.data().to_vec()
+    )
+}
 
-> **Construa primeiro a experiência visual. Não substitua o trabalho de UI por implementação de backend.**
+/// Rasteriza uma waveform a partir dos pontos de amplitude.
+///
+/// Mantida para compatibilidade com o sistema atual.
+///
+/// Os pontos representam amplitude simétrica 0..1.
+/// Para máxima fidelidade, prefira
+/// `waveform_image_from_samples()`.
+pub fn waveform_image_rgba_at(
+    peaks: &[f32],
+    w: u32,
+) -> Option<Vec<u8>> {
+    if peaks.is_empty() || w == 0 {
+        return None;
+    }
 
-Se uma funcionalidade normalmente dependeria de áudio, MIDI ou plugins, use dados mockados para representar o comportamento visual.
+    let h = H;
 
-Exemplo:
+    let mut pixmap = Pixmap::new(
+        w,
+        h,
+    )?;
 
-```text
-Pedido:
-"Adicionar medidor de volume"
+    let center = h as f32 * 0.5;
 
-Fase 1:
-→ criar o meter visual
-→ usar valores simulados
-→ criar animação visual
-→ testar aparência e comportamento
+    let width = w as usize;
+    let point_count = peaks.len();
 
-Não fazer:
-→ implementar processamento real de áudio
-→ conectar ao dispositivo de áudio
-```
+    let mut paint = Paint::default();
 
-Outro exemplo:
+    paint.set_color_rgba8(
+        0x0A,
+        0x0A,
+        0x0A,
+        255,
+    );
 
-```text
-Pedido:
-"Criar Piano Roll"
+    paint.anti_alias = true;
 
-Fase 1:
-→ desenhar teclado
-→ grid
-→ notas
-→ seleção
-→ drag
-→ resize
-→ velocity
-→ zoom
-→ scroll
+    let mut top = Vec::with_capacity(width);
+    let mut bottom = Vec::with_capacity(width);
 
-Não fazer:
-→ MIDI real
-→ MIDI input
-→ MIDI output
-```
+    for x in 0..width {
+        let start = (
+            x as f32
+            / width as f32
+            * point_count as f32
+        )
+            .floor() as usize;
 
----
+        let end = (
+            (x + 1) as f32
+            / width as f32
+            * point_count as f32
+        )
+            .ceil()
+            as usize;
 
-# Critério para sair da Fase 1
+        let end = end
+            .max(start + 1)
+            .min(point_count);
 
-A Fase 1 termina quando a interface principal da DAW estiver visualmente definida e funcional como protótipo.
+        let amplitude = peaks[start.min(point_count - 1)..end]
+            .iter()
+            .fold(
+                0.0f32,
+                |max, &value| {
+                    max.max(
+                        value.abs()
+                    )
+                },
+            )
+            .clamp(0.0, 1.0);
 
-Somente então começar a conectar:
+        let half = (
+            amplitude * center
+        )
+            .max(MIN_HALF_HEIGHT);
 
-```text
-UI
+        top.push(
+            center - half
+        );
+
+        bottom.push(
+            center + half
+        );
+    }
+
+    let mut path = PathBuilder::new();
+
+    path.move_to(
+        0.0,
+        top[0],
+    );
+
+    for x in 1..width {
+        path.line_to(
+            x as f32,
+            top[x],
+        );
+    }
+
+    for x in (0..width).rev() {
+        path.line_to(
+            x as f32,
+            bottom[x],
+        );
+    }
+
+    path.close();
+
+    if let Some(path) = path.finish() {
+        pixmap.fill_path(
+            &path,
+            &paint,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
+    }
+
+    Some(
+        pixmap.data().to_vec()
+    )
+}
+
+/// Compatibilidade com o código atual.
+///
+/// Renderiza usando a resolução padrão.
+pub fn waveform_image_rgba(
+    peaks: &[f32],
+    _color_index: i32,
+    _is_midi: bool,
+) -> Option<Vec<u8>> {
+    waveform_image_rgba_at(
+        peaks,
+        WAVEFORM_IMG_WIDTH as u32,
+    )
+}
+Porém tem uma decisão arquitetural importante
+
+O seu decoder já guarda:
+
+pub samples: Vec<f32>,
+pub interleaved: Vec<f32>,
+
+e deixa claro que samples é o downmix mono usado somente para waveform, enquanto interleaved preserva o áudio original para reprodução.
+
+Isso é exatamente o que precisamos.
+
+Então, em vez de:
+
+samples
  ↓
-DAW Core
+waveform_points()
  ↓
-Audio Engine
+Vec<f32>
  ↓
-MIDI
+waveform_image_rgba_at()
+
+eu faria:
+
+samples
  ↓
-Plugin Host
-```
+waveform_image_from_samples()
+ ↓
+RGBA
+ ↓
+Slint Image
 
-A arquitetura deve permitir que a UI desenvolvida na Fase 1 seja mantida enquanto a lógica real é gradualmente conectada.
+O waveform_points() pode continuar existindo para compatibilidade, testes ou fallback, mas não precisa ser o caminho principal.
 
+E tem outra coisa que eu corrigiria
 
-# RustDAW
+Seu waveform_points() atualmente usa chunks calculados assim:
 
-DAW (Digital Audio Workstation) nativa desenvolvida em **Rust**, com **Slint** para a interface gráfica.
+let chunk_size =
+    (data.samples.len() as f32 / points as f32)
+        .max(1.0) as usize;
 
-O objetivo é construir uma DAW modular, performática e extensível, com arquitetura semelhante às DAWs tradicionais, mas com um núcleo moderno e independente da interface.
+Isso pode deixar o último trecho mal distribuído e, em determinadas relações entre número de samples e pontos, a resolução espacial não fica exatamente uniforme.
 
----
+Para DAW profissional, prefiro:
 
-## 1. Princípios do projeto
+pixel 0 → samples [0 .......... 123]
+pixel 1 → samples [124 ........ 247]
+pixel 2 → samples [248 ........ 371]
+...
 
-### 1.1 Separação rígida entre UI, Core e Audio Engine
+com início/fim calculados pela posição relativa, como no renderer acima.
 
-A arquitetura deve seguir:
+Stereo
 
-```text
-                    ┌──────────────────┐
-                    │     Slint UI     │
-                    └────────┬─────────┘
-                             │
-                       Commands / Events
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │    DAW Core      │
-                    │                  │
-                    │ Project Model    │
-                    │ Commands         │
-                    │ Undo / Redo      │
-                    │ Timeline         │
-                    │ MIDI             │
-                    │ Automation       │
-                    └────────┬─────────┘
-                             │
-                    ┌────────┴─────────┐
-                    ▼                  ▼
-             ┌──────────────┐   ┌──────────────┐
-             │ Audio Engine │   │ Plugin Host  │
-             └──────┬───────┘   └──────────────┘
+Aqui tem uma questão que eu considero obrigatória para a Ruana.
+
+Seu decoder atualmente transforma stereo em mono para a waveform:
+
+.map(|c| if c.len() == 2 {
+    (c[0] + c[1]) * 0.5
+})
+
+Isso é aceitável para uma waveform simples, mas não é o ideal para uma DAW profissional.
+
+Imagine:
+
+L = +1
+R = -1
+
+O downmix dá:
+
+(+1 + -1) / 2 = 0
+
+Visualmente:
+
+silêncio
+
+quando na realidade temos dois canais completamente ativos.
+
+E seu próprio teste demonstra exatamente esse caso: o downmix resulta em zero enquanto os canais originais continuam intactos.
+
+O renderer definitivo deveria ser stereo
+
+Para um clip estéreo:
+
+┌──────────────────────────────────────────────┐
+│              LEFT CHANNEL                    │
+│       ╭──╮      ╭────╮       ╭──╮            │
+│───────╯  ╰──────╯    ╰───────╯  ╰──────       │
+├──────────────────────────────────────────────┤
+│              RIGHT CHANNEL                   │
+│────╮      ╭──────╮       ╭────────╮           │
+│    ╰──────╯      ╰───────╯        ╰────       │
+└──────────────────────────────────────────────┘
+
+Esse é o tipo de representação que eu colocaria na Ruana Studio, não apenas um mono centralizado.
+
+E você já tem channel(index) preparado para extrair L/R do buffer intercalado.
+
+Minha recomendação para a Ruana
+
+Eu estruturaria o sistema em quatro níveis:
+
+AudioDecoder
+     │
+     ├── interleaved ───────► Audio Engine
+     │
+     └── waveform data
+             │
+             ├── Mono
+             │
+             └── Stereo
                     │
                     ▼
-              Audio Device
-```
+             Waveform Renderer
+                    │
+                    ▼
+              tiny-skia RGBA
+                    │
+                    ▼
+                Slint Image
 
-**Regras obrigatórias:**
+E depois:
 
-- O Core não pode depender de Slint.
-- O Audio Engine não pode depender de Slint.
-- O Plugin Host não pode depender de Slint.
-- A UI não deve implementar regras de negócio.
-- A UI deve enviar comandos e receber estado.
-- O callback de áudio nunca deve depender da UI.
-- O thread de áudio deve ser real-time safe.
-- Não fazer I/O de disco dentro do callback de áudio.
-- Evitar alocações, locks pesados e operações imprevisíveis no callback de áudio.
+Zoom 25%
+    ↓
+render 300 px
 
----
+Zoom 50%
+    ↓
+render 600 px
 
-# 2. Workspace
+Zoom 100%
+    ↓
+render 1200 px
 
-O projeto deve ser organizado como um Cargo Workspace.
+Zoom 200%
+    ↓
+render 2400 px
 
-```text
-rust-daw/
-│
-├── Cargo.toml
-│
-├── crates/
-│   │
-│   ├── daw-core/
-│   ├── daw-audio/
-│   ├── daw-media/
-│   ├── daw-midi/
-│   ├── daw-plugins/
-│   ├── daw-project/
-│   └── daw-ui/
-│
-├── app/
-│   └── src/
-│       └── main.rs
-│
-├── ui/
-│   ├── main.slint
-│   ├── arrange/
-│   ├── piano_roll/
-│   ├── mixer/
-│   ├── browser/
-│   └── components/
-│
-└── README.md
-```
+Ou seja: não esticar uma imagem de 2048 px indefinidamente.
 
-A estrutura pode evoluir, mas o agente deve preservar a separação de responsabilidades.
+Seu código atual já tem a ideia certa de renderizar novamente conforme a largura. O que eu mudaria agora é a qualidade do envelope e, principalmente, preservar L/R no desenho.
 
-Não criar um `main.rs` monolítico.
-
-Não colocar toda a lógica dentro dos arquivos `.slint`.
-
----
-
-# 3. DAW Core
-
-O `daw-core` é o núcleo independente da interface.
-
-Ele contém o modelo conceitual da DAW.
-
-```text
-daw-core/
-├── project/
-├── track/
-├── clip/
-├── timeline/
-├── tempo/
-├── automation/
-├── commands/
-├── selection/
-└── history/
-```
-
----
-
-# 4. Project Model
-
-O projeto representa tudo que deve ser salvo em um projeto da DAW.
-
-```text
-Project
-├── metadata
-├── tempo_map
-├── time_signature
-├── tracks
-├── buses
-├── markers
-├── routing
-└── settings
-```
-
-O projeto não deve conhecer:
-
-- Slint
-- widgets
-- janelas
-- pixels
-- eventos de mouse
-- teclado da UI
-
----
-
-# 5. Tracks
-
-Uma Track representa um canal da DAW.
-
-Uma track pode conter:
-
-```text
-Track
-├── identity
-├── type
-├── clips
-├── volume
-├── pan
-├── mute
-├── solo
-├── inserts
-├── sends
-├── routing
-└── automation
-```
-
-Tipos possíveis:
-
-```text
-Audio
-MIDI
-Instrument
-Bus
-Aux
-Master
-```
-
-A implementação pode começar apenas com Audio e MIDI.
-
----
-
-# 6. Clips
-
-Um clip representa um objeto colocado na timeline.
-
-Existem principalmente:
-
-```text
-AudioClip
-MidiClip
-```
-
-### AudioClip
-
-```text
-AudioClip
-├── source
-├── timeline_position
-├── duration
-├── source_offset
-├── gain
-├── fade_in
-├── fade_out
-└── playback_mode
-```
-
-### MidiClip
-
-```text
-MidiClip
-├── timeline_position
-├── duration
-└── events
-```
-
----
-
-# 7. MIDI
-
-MIDI e Piano Roll não são a mesma coisa.
-
-MIDI é o sistema de eventos.
-
-O Piano Roll é um editor visual desses eventos.
-
-```text
-MIDI
-├── Note
-├── Control Change
-├── Pitch Bend
-├── Aftertouch
-├── Program Change
-└── outros eventos
-```
-
-Uma nota deve possuir, no mínimo:
-
-```text
-Note
-├── pitch
-├── velocity
-├── start
-└── duration
-```
-
-O Piano Roll deve apenas editar e visualizar esses dados.
-
----
-
-# 8. Timeline
-
-A DAW deve possuir um sistema centralizado de tempo.
-
-Não usar segundos como única representação de posição.
-
-A timeline precisa permitir conversões entre:
-
-```text
-Bars / Beats
-       ↕
-Musical Time
-       ↕
-Seconds
-       ↕
-Samples
-```
-
-O sistema deve possuir:
-
-```text
-Position
-Duration
-Tempo
-TempoMap
-TimeSignature
-```
-
-Isso será utilizado por:
-
-- MIDI
-- Audio
-- Automation
-- Quantization
-- Loop
-- Recording
-- Playback
-- Grid
-- Snap
-
-O tempo musical deve continuar correto mesmo quando o BPM mudar.
-
----
-
-# 9. Transport
-
-O Transport controla o estado global de reprodução.
-
-```text
-Transport
-├── play
-├── stop
-├── pause
-├── record
-├── position
-├── loop
-├── bpm
-├── time_signature
-└── playback_state
-```
-
-Estados:
-
-```text
-Stopped
-Playing
-Paused
-Recording
-```
-
----
-
-# 10. Commands
-
-Alterações no projeto devem ocorrer através de Commands.
-
-Exemplos:
-
-```text
-CreateTrack
-DeleteTrack
-MoveTrack
-RenameTrack
-
-CreateAudioClip
-DeleteAudioClip
-MoveAudioClip
-SplitAudioClip
-
-CreateMidiClip
-AddMidiNote
-DeleteMidiNote
-MoveMidiNote
-ResizeMidiNote
-
-SetTrackVolume
-SetTrackPan
-SetMute
-SetSolo
-
-AddPlugin
-RemovePlugin
-
-AddAutomation
-ModifyAutomation
-```
-
-A UI não deve modificar diretamente estruturas internas do projeto quando a alteração precisar ser persistida ou desfeita.
-
-Fluxo:
-
-```text
-UI
- ↓
-Command
- ↓
-DAW Core
- ↓
-Project
- ↓
-History
-```
-
----
-
-# 11. Undo / Redo
-
-Todo Command que modifica o projeto deve ser capaz de ser desfeito.
-
-```text
-Command
-├── execute()
-└── undo()
-```
-
-Histórico:
-
-```text
-Command
-Command
-Command
-Command
-   ↑
- current
-```
-
-Implementar:
-
-```text
-Undo
-Redo
-```
-
-desde cedo.
-
-Não deixar Undo/Redo para o final do projeto.
-
----
-
-# 12. Audio Engine
-
-O Audio Engine é independente da UI.
-
-Responsabilidades:
-
-```text
-Audio Engine
-├── Audio Device
-├── Audio Buffer
-├── Transport synchronization
-├── Audio Graph
-├── Track processing
-├── Mixer
-├── Bus processing
-├── Sends
-├── Master
-└── Plugin processing
-```
-
-Fluxo:
-
-```text
-Audio Clip
-     ↓
-Clip Player
-     ↓
-Track Inserts
-     ↓
-Track Volume / Pan
-     ↓
-Bus
-     ↓
-Master
-     ↓
-Output Device
-```
-
----
-
-# 13. Real-Time Audio
-
-O callback de áudio é uma área crítica.
-
-Dentro do callback:
-
-### Evitar
-
-```text
-Heap allocation
-File I/O
-Logging pesado
-Mutex bloqueante
-Network
-UI operations
-Slint operations
-Operações imprevisíveis
-```
-
-O callback deve trabalhar com dados previamente preparados.
-
-Comunicação entre UI/Core e Audio Engine deve utilizar mecanismos apropriados para real-time audio, como:
-
-```text
-lock-free queues
-atomics
-preallocated buffers
-```
-
-quando necessário.
-
-A estabilidade do áudio tem prioridade sobre atualizações visuais.
-
----
-
-# 14. Audio Graph
-
-O processamento deve ser baseado em um grafo de áudio.
-
-Exemplo:
-
-```text
-Track 1 ────────┐
-                │
-Track 2 ────────┼──→ Bus ──→ Master ──→ Output
-                │
-Track 3 ────────┘
-```
-
-Uma track pode possuir plugins:
-
-```text
-Audio
- ↓
-EQ
- ↓
-Compressor
- ↓
-Saturation
- ↓
-Volume
- ↓
-Bus
-```
-
-O sistema deve permitir futuramente:
-
-- Inserts
-- Sends
-- Returns
-- Buses
-- Sidechain
-- Parallel processing
-- Master chain
-
----
-
-# 15. Plugin Host
-
-O sistema de plugins deve ser independente da UI.
-
-Objetivos:
-
-```text
-VST3
-CLAP
-```
-
-Arquitetura:
-
-```text
-Plugin Host
-├── Scanner
-├── Plugin Metadata
-├── Plugin Instance
-├── Parameters
-├── State
-├── Audio Processing
-└── Editor
-```
-
-O host deve conseguir processar plugins mesmo que a UI do plugin não esteja aberta.
-
----
-
-# 16. Media System
-
-Responsável pelos arquivos de mídia.
-
-```text
-daw-media/
-├── decoder
-├── audio_file
-├── waveform
-├── cache
-└── sample_manager
-```
-
-Responsabilidades:
-
-- carregar arquivos de áudio
-- decodificar áudio
-- gerar waveform
-- cache de waveform
-- gerenciar referências aos arquivos
-- detectar arquivos ausentes
-
-O áudio usado durante o processamento deve ser preparado fora do callback real-time.
-
----
-
-# 17. Project Format
-
-O projeto deve possuir formato próprio.
-
-Exemplo:
-
-```text
-MySong/
-├── project.daw
-├── Audio/
-├── Waveforms/
-└── Cache/
-```
-
-`project.daw` deve armazenar o estado do projeto.
-
-O projeto deve referenciar arquivos de áudio, em vez de necessariamente copiar todos os arquivos para dentro do projeto.
-
-Futuramente pode existir:
-
-```text
-Save
-Save As
-Autosave
-Backup
-Collect and Save
-```
-
----
-
-# 18. UI / Slint
-
-Slint é responsável exclusivamente pela apresentação e interação.
-
-Principais áreas:
-
-```text
-MainWindow
-├── Transport
-├── Browser
-├── ArrangeView
-├── Mixer
-├── Inspector
-└── StatusBar
-```
-
-Editor:
-
-```text
-ArrangeView
-├── Timeline Ruler
-├── Track Headers
-├── Audio Clips
-├── MIDI Clips
-├── Automation
-└── Playhead
-```
-
-Piano Roll:
-
-```text
-PianoRoll
-├── Piano Keyboard
-├── Grid
-├── Notes
-├── Velocity
-├── Controllers
-└── Playhead
-```
-
-Mixer:
-
-```text
-Mixer
-├── Channel Strips
-├── Inserts
-├── Sends
-├── Fader
-├── Pan
-├── Meter
-├── Mute
-└── Solo
-```
-
----
-
-# 19. UI State
-
-Diferenciar:
-
-```text
-Project State
-```
-
-de:
-
-```text
-UI State
-```
-
-Project State:
-
-```text
-Tracks
-Clips
-MIDI
-Automation
-Mixer
-Routing
-```
-
-UI State:
-
-```text
-Selected Track
-Selected Clip
-Zoom
-Scroll
-Open Panel
-Focused Editor
-Browser State
-```
-
-UI State não deve ser salvo no projeto, exceto quando houver uma razão explícita para isso.
-
----
-
-# 20. Comunicação
-
-A comunicação deve seguir:
-
-```text
-Slint
-  │
-  │ Command
-  ▼
-Application
-  │
-  ▼
-Core
-  │
-  ├──── Project
-  │
-  └──── Audio Engine
-```
-
-Eventos do Core podem retornar para a UI:
-
-```text
-ProjectChanged
-TransportChanged
-SelectionChanged
-TrackChanged
-PluginChanged
-AudioMeterUpdated
-```
-
-A UI não deve acessar diretamente estruturas internas do Audio Engine.
-
----
-
-# 21. Performance
-
-Prioridades:
-
-```text
-1. Audio stability
-2. Correctness
-3. Deterministic behavior
-4. Low latency
-5. UI responsiveness
-6. Visual effects
-```
-
-Não sacrificar estabilidade do áudio para atualizar a UI a cada sample.
-
-Meters e visualizações podem usar uma taxa menor, por exemplo:
-
-```text
-30–60 FPS
-```
-
-enquanto o áudio roda em sua própria taxa de processamento.
-
----
-
-# 22. Desenvolvimento incremental
-
-Não implementar tudo de uma vez.
-
-Ordem recomendada:
-
-### Fase 1 — Core
-
-```text
-Project
-Track
-Clip
-Timeline
-Transport
-Commands
-Undo/Redo
-```
-
-### Fase 2 — Audio
-
-```text
-Audio Device
-Audio Buffer
-Audio File
-Track Playback
-Master Output
-```
-
-### Fase 3 — UI
-
-```text
-Main Window
-Transport
-Track List
-Timeline
-Audio Clips
-Playhead
-```
-
-### Fase 4 — MIDI
-
-```text
-MIDI Events
-MIDI Clip
-Piano Roll
-MIDI Recording
-MIDI Playback
-```
-
-### Fase 5 — Mixer
-
-```text
-Volume
-Pan
-Mute
-Solo
-Meters
-Bus
-Sends
-```
-
-### Fase 6 — Plugins
-
-```text
-Plugin Scanner
-VST3
-CLAP
-Plugin Parameters
-Plugin State
-Plugin Editor
-```
-
-### Fase 7 — Automation
-
-```text
-Automation Lane
-Automation Points
-Read
-Write
-Touch
-Latch
-```
-
-### Fase 8 — Produção
-
-```text
-Recording
-Comping
-Fades
-Crossfades
-Time Stretch
-Freeze
-Bounce
-Export
-```
-
----
-
-# 23. Regras para o agente
-
-Antes de implementar qualquer funcionalidade:
-
-1. Verificar em qual camada ela pertence.
-2. Não colocar lógica de negócio na UI.
-3. Não criar dependências circulares entre crates.
-4. Não duplicar estado entre UI e Core sem necessidade.
-5. Não colocar processamento de áudio no thread da UI.
-6. Não bloquear o thread de áudio.
-7. Preferir tipos fortes em vez de `f32`/`String` espalhados pelo sistema.
-8. Criar testes para lógica do Core.
-9. Manter APIs pequenas e explícitas.
-10. Não adicionar abstrações complexas sem necessidade.
-11. Não implementar funcionalidades futuras prematuramente.
-12. Não quebrar a arquitetura existente para resolver rapidamente um problema local.
-13. Antes de criar um novo módulo, verificar se a responsabilidade já existe.
-14. Manter o projeto compilando após cada etapa significativa.
-
----
-
-# 24. Filosofia
-
-A DAW deve ser construída como um **motor de áudio com uma interface**, e não como uma interface que toca áudio.
-
-A arquitetura deve permitir trocar a UI futuramente sem reescrever o Core.
-
-Também deve ser possível testar:
-
-```text
-daw-core
-```
-
-sem iniciar Slint ou dispositivo de áudio.
-
-E testar:
-
-```text
-audio-engine
-```
-
-sem iniciar a interface gráfica.
-
-O objetivo é ter uma base sólida antes de adicionar funcionalidades.
-
----
-
-# 25. Estado inicial desejado
-
-A primeira versão funcional deve conseguir:
-
-```text
-Abrir DAW
-   ↓
-Criar Track
-   ↓
-Importar WAV
-   ↓
-Colocar AudioClip na Timeline
-   ↓
-Pressionar Play
-   ↓
-Ouvir áudio
-   ↓
-Mover Clip
-   ↓
-Salvar projeto
-   ↓
-Reabrir projeto
-```
-
-Depois:
-
-```text
-Criar MIDI Track
-   ↓
-Criar MIDI Clip
-   ↓
-Abrir Piano Roll
-   ↓
-Criar notas
-   ↓
-Reproduzir MIDI
-```
-
-Depois:
-
-```text
-Track
- ↓
-Plugin
- ↓
-Mixer
- ↓
-Master
- ↓
-Output
-```
-
-Esse é o núcleo da DAW.
-
-**Não começar pelo visual. Começar pelo modelo de dados, timeline e engine.**
+Isso deixa a arquitetura muito mais próxima de uma DAW de verdade, em vez de apenas "uma waveform bonita".
