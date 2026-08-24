@@ -2,7 +2,7 @@ import { Theme } from "../theme.slint";
 import { ClipPalette } from "../clip_palette.slint";
 import { AudioWaveform } from "audio_waveform.slint";
 import { ClipContextMenuState } from "../components/context_menu.slint";
-import { ClipDragState } from "clip_drag/clip_drag_state.slint";
+import { ClipDragState, TimelineMetrics } from "clip_drag/clip_drag_state.slint";
 
 export component TrackClip inherits Rectangle {
 
@@ -36,6 +36,22 @@ export component TrackClip inherits Rectangle {
 
     // Waveform pré-renderizada (Rust). width 0 = sem imagem.
     in property <image> clip-waveform-image;
+
+    // Pede ao Rust uma nova imagem na resolução exata de exibição
+    // (dispara quando a largura muda: zoom da timeline ou resize).
+    // Vive no global TimelineMetrics: o handler está no Rust.
+
+    changed width => {
+        if !root.is-midi
+            && root.waveform-peaks.length > 0
+            && self.width > 4px {
+
+            TimelineMetrics.waveform-resolution-requested(
+                root.clip-id,
+                (self.width - 4px) / 1px
+            );
+        }
+    }
 
     // Total de tracks do projeto (clamp vertical do arrasto).
     in property <int> track-count: 1;

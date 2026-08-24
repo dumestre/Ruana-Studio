@@ -35,6 +35,16 @@ const MAX_INSERTS: usize = 8;
 /// um único `Image` em vez de ~1000 retângulos por clip.
 type WaveformCache = std::collections::HashMap<u64, (Vec<f32>, Option<Vec<u8>>)>;
 
+/// Renderiza uma waveform no tamanho EXATO pedido (px de tela).
+///
+/// É o que as DAWs fazem no zoom: re-rasterizar para a resolução
+/// real de exibição, nunca esticar um bitmap pequeno.
+fn render_waveform_at(peaks: &[f32], width_px: u32) -> Option<slint::Image> {
+    use daw_media::waveform_image::waveform_image_rgba_at;
+    let rgba = waveform_image_rgba_at(peaks, width_px)?;
+    Some(waveform_image_to_slint(Some(rgba)))
+}
+
 /// Compassos necessários para caber até `end_beat`: teto em
 /// compassos + 8 de folga, mínimo 32. Cresce monotonicamente
 /// (undo não encolhe a timeline — comportamento padrão de DAW).
@@ -1263,6 +1273,41 @@ fn main() -> Result<(), slint::PlatformError> {
                 // encosta depois do vizinho em vez de sumir embaixo dele.
                 let start = proj.find_free_slot(track_id, beat.max(0.0), 4.0);
                 proj.add_clip(track_id, kind, name.as_str(), start, 4.0);
+            }
+        });
+    }
+
+    // Re-renderiza a waveform de um clip na resolução exata de
+    // exibição (zoom/resize mudaram a largura em px). É isto que
+    // mantém a curva perfeita em qualquer zoom, como nas DAWs.
+    {
+        let project = project.clone();
+        let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
+        ui.global::<TimelineMetrics>().on_waveform_resolution_requested(move |id, width_px| {
+            let id_u = id.max(0) as u64;
+            let w = (width_px.round() as u32).clamp(16, 8192);
+
+            // Picos do cache (ou do core, se ainda sem cache).
+            let peaks: Vec<f32> = {
+                let wf = waveforms.borrow();
+                if let Some((p, _)) = wf.get(&id_u) {
+                    p.clone()
+                } else {
+                    Vec::new()
+                }
+            };
+            if peaks.is_empty() {
+                return;
+            }
+
+            if let Some(img) = render_waveform_at(&peaks, w) {
+                if let Some(i) = clip_row(&clips_model, id) {
+                    if let Some(mut data) = clips_model.row_data(i) {
+                        data.waveform_image = img;
+                        clips_model.set_row_data(i, data);
+                    }
+                }
             }
         });
     }
