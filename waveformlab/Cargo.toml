@@ -1,0 +1,20 @@
+[package]
+name = "waveformlab"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "waveformlab"
+path = "src/main.rs"
+
+[dependencies]
+slint = { version = "1.17.1", default-features = false, features = [
+    "std",
+    "renderer-femtovg",
+    "compat-1-2", "backend-winit", "raw-window-handle-06",
+] }
+tiny-skia = "0.8"
+hound = "3.5"
+
+[build-dependencies]
+slint-build = "1.17.1"

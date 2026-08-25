@@ -28,6 +28,15 @@ export component TrackRow inherits Rectangle {
 
     in property <length> row-height: 64px;
 
+    // Viewport horizontal (culling): início e largura visíveis.
+    in property <length> view-scroll-x: 0px;
+
+    in property <length> view-width: 800px;
+
+    // Margem de folga pra cada lado (evita pop nas bordas).
+    property <length> cull-margin:
+        self.view-width * 0.25;
+
 
     // =====================================================
     // MÉTRICA MUSICAL
@@ -167,8 +176,14 @@ export component TrackRow inherits Rectangle {
         // gesto. Ele fica no lugar como fantasma (`ghost`) e o
         // overlay desenha a cópia que segue o mouse.
         visible:
-            clip.track-index
-            == root.track-index;
+            clip.track-index == root.track-index
+            // CULLING horizontal: clip fora da viewport (com
+            // folga) não é instanciado visualmente. O custo da
+            // timeline vira constante no número de clips.
+            && (clip.beat * px-per-beat)
+                < view-scroll-x + view-width + cull-margin
+            && ((clip.beat + clip.len) * px-per-beat)
+                > view-scroll-x - cull-margin;
 
         ghost:
             ClipDragState.active

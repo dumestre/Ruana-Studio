@@ -186,8 +186,15 @@ export component Timeline inherits Rectangle {
     // LARGURA
     // =====================================================
 
+        // Largura da timeline: SEMPRE pelo menos 200 compassos de
+    // "chão" (o espaço vazio rolável que DAWs mostram à direita),
+    // crescendo além disso se total-bars pedir mais. O custo é
+    // zero: área vazia não gera elementos.
     property <length> timeline-width:
-        self.total-bars * self.px-per-bar;
+        max(
+            200 * 1px * self.px-per-bar / 1px,
+            self.total-bars * self.px-per-bar
+);
 
 
     property <length> content-width:
@@ -441,17 +448,26 @@ export component Timeline inherits Rectangle {
                     let old-zoom =
                         root.zoom;
 
+                    // Fator proporcional ao delta do dispositivo:
+                    // mouses de roda, trackpads e mouses free-spin
+                    // produzem deltas muito diferentes — um fator
+                    // fixo fazia o zoom "pular" numas e rastejar
+                    // noutras. Multiplicativo + clamp suave = fluido.
+                    let strength =
+                        min(
+                            6.0,
+                            abs(dz / 1px) / 60.0
+                        );
                     let factor =
-                        dz > 0px
-                            ? 0.96
-                            : 1.04;
+                        1.0 - strength * 0.06;
 
                     let new-zoom =
                         max(
-                            0.5,
+                            0.25,
                             min(
-                                4.0,
-                                old-zoom * factor
+                                64.0,
+                                old-zoom
+                                * (dz > 0px ? factor : 1.0 / factor)
                             )
                         );
 
@@ -502,7 +518,7 @@ export component Timeline inherits Rectangle {
                             min(
                                 root.max-scroll-x,
                                 root.scroll-x
-                                - event.delta-y
+                                - event.delta-y * 2.5
                             )
                         );
                 }
@@ -514,17 +530,23 @@ export component Timeline inherits Rectangle {
 
                 else if event.modifiers.alt {
 
+                    // Zoom vertical: mesmo tratamento do horizontal
+                    // (fator proporcional ao delta, range maior).
+                    let strength =
+                        min(
+                            6.0,
+                            abs(dz / 1px) / 60.0
+                        );
+                    let factor =
+                        1.0 - strength * 0.06;
+
                     root.zoom-y =
                         max(
-                            0.4,
+                            0.25,
                             min(
-                                3.0,
+                                6.0,
                                 root.zoom-y
-                                * (
-                                    dz > 0px
-                                        ? 0.96
-                                        : 1.04
-                                )
+                                * (dz > 0px ? factor : 1.0 / factor)
                             )
                         );
 
@@ -546,6 +568,11 @@ export component Timeline inherits Rectangle {
 
                 // =============================================
                 // SCROLL NORMAL
+                //
+                // Multiplicador no delta: o valor cru do winit é
+                // curto demais (linhas de roda ~3 "notches" por
+                // gesto), o que dava a sensação de scroll pesado
+                // com micro-saltos. 2.5x + clamp = deslize contínuo.
                 // =============================================
 
                 else {
@@ -556,7 +583,7 @@ export component Timeline inherits Rectangle {
                             min(
                                 root.max-scroll-x,
                                 root.scroll-x
-                                - event.delta-x
+                                - event.delta-x * 2.5
                             )
                         );
 
@@ -567,7 +594,7 @@ export component Timeline inherits Rectangle {
                             min(
                                 root.max-scroll-y,
                                 root.scroll-y
-                                - event.delta-y
+                                - event.delta-y * 2.5
                             )
                         );
                 }
@@ -612,18 +639,26 @@ export component Timeline inherits Rectangle {
 
             TimelineRuler {
 
-                x: 0;
+                // A régua agora é um "visor" fixo na tela: anda
+                // JUNTO com o scroll (x = scroll-x compensa o
+                // deslocamento do container rolado) e só desenha
+                // os compassos visíveis.
+                x:
+                    root.scroll-x;
 
                 y: 0;
 
                 width:
-                    root.timeline-width;
+                    root.width;
 
                 height:
                     root.ruler-height;
 
                 ruler-height:
                     root.ruler-height;
+
+                viewport-width:
+                    parent.width;
 
                 total-bars:
                     root.total-bars;
@@ -860,6 +895,15 @@ export component Timeline inherits Rectangle {
 
                     track-index:
                         index;
+
+                    // Viewport pro culling de clips (só desenha
+                    // os que intersectam a área visível).
+                    view-scroll-x:
+                        root.scroll-x
+                        - root.timeline-left-padding;
+
+                    view-width:
+                        root.width;
 
                     selected-track:
                         index == root.selected-track;

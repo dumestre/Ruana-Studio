@@ -9,7 +9,7 @@ use std::cell::RefCell;
 
 use crate::models::clip_row;
 use slint::Model;
-use crate::waveform::{to_clip_data_from_id, WaveformCache};
+use crate::waveform::{to_clip_data_from_id, CachedWave, WaveformCache};
 use daw_media::waveform::{decode_audio, waveform_points};
 use daw_media::waveform_image::waveform_image_rgba;
 use crate::ClipData;
@@ -112,7 +112,7 @@ pub fn import_audio_file(
     // agora (picos + imagem pré-renderizada) e reprojeta só a
     // linha desse clip.
     if !peaks.is_empty() {
-        waveforms.borrow_mut().insert(clip_id, (peaks, img));
+        waveforms.borrow_mut().insert(clip_id, CachedWave { peaks, mono: decoded.samples, image: img });
         let wf = waveforms.borrow();
         if let Some(i) = clip_row(clips_model, clip_id as i32) {
             if let Some(data) = clips_model.row_data(i) {

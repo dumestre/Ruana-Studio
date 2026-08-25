@@ -1,5 +1,6 @@
 [package]
 name = "ruana-studio"
+default-run = "ruana-studio"
 version.workspace = true
 edition.workspace = true
 

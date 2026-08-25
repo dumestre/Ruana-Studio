@@ -10,17 +10,47 @@ use std::rc::Rc;
 use daw_core::clip::Clip;
 use crate::ClipData;
 
-/// Cache de waveform: clip_id → (picos, imagem RGBA pré-renderizada).
-pub type WaveformCache = std::collections::HashMap<u64, (Vec<f32>, Option<Vec<u8>>)>;
+/// Dados de waveform em cache por clip.
+pub struct CachedWave {
+    /// Picos agregados (fallback / compatibilidade).
+    pub peaks: Vec<f32>,
+    /// Downmix mono dos samples (fonte do re-render por zoom,
+    /// incluindo o modo osciloscópio).
+    pub mono: Vec<f32>,
+    /// Imagem pré-renderizada na resolução do último pedido.
+    pub image: Option<Vec<u8>>,
+}
+
+/// Cache de waveform: clip_id → dados completos.
+pub type WaveformCache = std::collections::HashMap<u64, CachedWave>;
 
 /// Renderiza uma waveform no tamanho EXATO pedido (px de tela).
 ///
-/// É o que as DAWs fazem no zoom: re-rasterizar para a resolução
-/// real de exibição, nunca esticar um bitmap pequeno.
-pub fn render_waveform_at(peaks: &[f32], width_px: u32) -> Option<slint::Image> {
+/// Rota nova: rasteriza direto dos samples mono com a fatia
+/// `view` visível — o modo osciloscópio entra sozinho quando o
+/// zoom está muito fundo (< 2 samples/px). Igual ao lab.
+pub fn render_waveform_at_samples(
+    mono: &[f32],
+    width_px: u32,
+    view: (usize, usize),
+) -> Option<slint::Image> {
+    let rgba =
+        daw_media::waveform_image::waveform_image_rgba_at_samples(mono, mono, width_px, view)?;
+    Some(image_from_rgba(&rgba, width_px, daw_media::waveform_image::IMAGE_HEIGHT))
+}
+
+/// Fallback pela rota antiga (picos agregados).
+fn render_waveform_at(peaks: &[f32], width_px: u32) -> Option<slint::Image> {
     use daw_media::waveform_image::waveform_image_rgba_at;
     let rgba = waveform_image_rgba_at(peaks, width_px)?;
     Some(waveform_image_to_slint(Some(rgba)))
+}
+
+/// Converte RGBA cru + dimensões num `slint::Image`.
+fn image_from_rgba(rgba: &[u8], w: u32, h: u32) -> slint::Image {
+    use slint::Rgba8Pixel;
+    let buf = slint::SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba, w, h);
+    slint::Image::from_rgba8(buf)
 }
 
 /// Converte o RGBA cru do cache num `slint::Image`.
@@ -43,7 +73,7 @@ pub fn waveform_image_to_slint(rgba: Option<Vec<u8>>) -> slint::Image {
 /// Atualiza apenas os pontos/imagem de um ClipData existente a partir do cache.
 pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache) -> ClipData {
     let (peaks, img) = match waveforms.get(&id) {
-        Some((p, i)) => (p.clone(), i.clone()),
+        Some(c) => (c.peaks.clone(), c.image.clone()),
         None => (Vec::new(), None),
     };
     ClipData {
@@ -119,14 +149,22 @@ pub fn wire_resolution_requests(
                             let jobs: Vec<(i32, u32)> = pending.borrow_mut().drain().collect();
                             for (id, w) in jobs {
                                 let id_u = id.max(0) as u64;
-                                let peaks: Vec<f32> = {
+                                let img_new = {
                                     let wf = waveforms.borrow();
-                                    wf.get(&id_u).map(|(p, _)| p.clone()).unwrap_or_default()
+                                    match wf.get(&id_u) {
+                                        // Rota nova: samples mono direto —
+                                        // osciloscópio automático no zoom fundo.
+                                        Some(c) if !c.mono.is_empty() => {
+                                            let view = (0usize, c.mono.len());
+                                            render_waveform_at_samples(&c.mono, w, view)
+                                        }
+                                        Some(c) if !c.peaks.is_empty() => {
+                                            render_waveform_at(&c.peaks, w)
+                                        }
+                                        _ => None,
+                                    }
                                 };
-                                if peaks.is_empty() {
-                                    continue;
-                                }
-                                if let Some(img) = render_waveform_at(&peaks, w) {
+                                if let Some(img) = img_new {
                                     if let Some(i) = clip_row(&clips_model, id) {
                                         if let Some(mut data) = clips_model.row_data(i) {
                                             data.waveform_image = img;
@@ -147,7 +185,7 @@ pub fn wire_resolution_requests(
 /// Mapeia um clip do core para o DTO da camada Slint.
 pub fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
     let (peaks, img) = match waveforms.get(&clip.id) {
-        Some((p, i)) => (p.clone(), i.clone()),
+        Some(c) => (c.peaks.clone(), c.image.clone()),
         None => (Vec::new(), None),
     };
     ClipData {

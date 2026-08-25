@@ -1,5 +1,22 @@
 import { Theme } from "../theme.slint";
 
+// ============================================================
+// TimelineRuler — régua com CULLING e métrica adaptativa.
+//
+// Em vez de instanciar total-bars elementos (que explode no
+// zoom alto), só os compassos VISÍVEIS na viewport existem.
+// A densidade de subdivisões segue a largura de um compasso
+// em px, como nas DAWs:
+//
+//   < 40px/compasso  → só linhas de compasso
+//   ≥ 40px           → + batidas
+//   ≥ 120px          → + subdivisões 1/8
+//   ≥ 240px          → + subdivisões 1/16
+//
+// O índice global do compasso é `first-bar + i`, então os
+// números permanecem corretos em qualquer scroll.
+// ============================================================
+
 export component TimelineRuler inherits Rectangle {
 
     // =====================================================
@@ -15,6 +32,9 @@ export component TimelineRuler inherits Rectangle {
     in property <length> ruler-height: 30px;
 
     in property <length> scroll-x: 0px;
+
+    // Largura da área visível (para o culling).
+    in property <length> viewport-width: 800px;
 
 
     // =====================================================
@@ -34,8 +54,6 @@ export component TimelineRuler inherits Rectangle {
 
     // =====================================================
     // COR DA RÉGUA
-    //
-    // A régua fica mais escura que a área da timeline.
     // =====================================================
 
     background:
@@ -52,13 +70,41 @@ export component TimelineRuler inherits Rectangle {
 
 
     // =====================================================
-    // COMPASSOS
+    // CULLING: primeiro/último compasso visíveis
+    //
+    // Margem de 1 compasso pra cada lado (evita "pop" nas
+    // bordas durante o scroll).
     // =====================================================
 
-    for i in root.total-bars: Rectangle {
+    property <int> first-bar:
+        max(
+            0,
+            Math.floor(
+                root.scroll-x / root.px-per-bar
+            ) - 1
+        );
 
+    property <int> visible-bars:
+        Math.ceil(
+            root.viewport-width / root.px-per-bar
+        ) + 2;
+
+
+    // =====================================================
+    // COMPASSOS VISÍVEIS
+    // =====================================================
+
+    for i in root.visible-bars: bar-rect := Rectangle {
+
+        // Índice GLOBAL do compasso (mantém a numeração certa).
+        property <int> bar-index:
+            root.first-bar + i;
+
+        // Posição local: origem do visor está em scroll-x no
+        // conteúdo, então subtraímos para alinhar com a tela.
         x:
-            i * root.px-per-bar;
+            self.bar-index * root.px-per-bar
+            - root.scroll-x;
 
         y:
             0px;
@@ -72,12 +118,17 @@ export component TimelineRuler inherits Rectangle {
         z: -1;
 
 
+        visible:
+            bar-rect.bar-index >= 0
+            && bar-rect.bar-index < root.total-bars;
+
+
         // =============================================
         // FUNDO DO COMPASSO
         // =============================================
 
         background:
-            Math.mod(i, 2) == 1
+            Math.mod(bar-rect.bar-index, 2) == 1
                 ? Theme.surface
                 : Theme.base;
 
@@ -96,9 +147,8 @@ export component TimelineRuler inherits Rectangle {
 
             height:
                 parent.height - 1px;
-
             background:
-                Math.mod(i, 2) == 1
+                Math.mod(bar-rect.bar-index, 2) == 1
                     ? Theme.border
                     : Theme.border.transparentize(
                         0.45
@@ -121,22 +171,21 @@ export component TimelineRuler inherits Rectangle {
 
             height:
                 parent.height;
-
             text:
-                "" + (i + 1);
+                "" + (bar-rect.bar-index + 1);
 
             color:
-                Math.mod(i, 2) == 1
+                Math.mod(bar-rect.bar-index, 2) == 1
                     ? Theme.text-primary
                     : Theme.text-dim;
 
             font-size:
-                Math.mod(i, 2) == 1
+                Math.mod(bar-rect.bar-index, 2) == 1
                     ? 10px
                     : 9px;
 
             font-weight:
-                Math.mod(i, 2) == 1
+                Math.mod(bar-rect.bar-index, 2) == 1
                     ? 700
                     : 500;
 
@@ -172,7 +221,6 @@ export component TimelineRuler inherits Rectangle {
 
             height:
                 parent.height - 1px;
-
             background:
                 Theme.border.transparentize(
                     0.60
@@ -284,7 +332,6 @@ export component TimelineRuler inherits Rectangle {
 
         height:
             1px;
-
         background:
             Theme.border;
 
@@ -307,7 +354,6 @@ export component TimelineRuler inherits Rectangle {
 
         height:
             parent.height;
-
 
         clicked => {
 
