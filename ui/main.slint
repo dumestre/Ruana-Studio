@@ -23,6 +23,8 @@ export struct TimelineCoords {
 
 export component MainWindow inherits Window {
 
+    forward-focus: undo-scope;
+
     // =====================================================
     // JANELA
     // =====================================================
@@ -88,6 +90,10 @@ export component MainWindow inherits Window {
 
     in-out property <bool> playing:
         false;
+
+    in-out property <bool> loop-enabled: false;
+    in-out property <float> loop-start-beat: 0.0;
+    in-out property <float> loop-end-beat: 16.0;
 
     in-out property <bool> metronome-enabled:
         false;
@@ -290,6 +296,8 @@ export component MainWindow inherits Window {
     callback float-toggle(int);
 
     callback tool-changed(int);
+    callback loop-state-changed(bool);
+    callback loop-range-changed(float, float);
     callback timeline-bounds-changed(float, float, float, float);
 
     callback track-recolor-requested(int, int);
@@ -628,6 +636,12 @@ export component MainWindow inherits Window {
         snap-enabled <=> root.snap-enabled;
         follow-playhead <=> root.follow-playhead;
         zoom-level <=> root.zoom-level;
+        zoom-y-level <=> root.zoom-y-level;
+        loop-enabled <=> root.loop-enabled;
+        loop-start-beat <=> root.loop-start-beat;
+        loop-end-beat <=> root.loop-end-beat;
+        loop-state-changed(state) => { root.loop-state-changed(state); }
+        loop-range-changed(a, b) => { root.loop-range-changed(a, b); }
         playing <=> root.playing;
         metronome-enabled <=> root.metronome-enabled;
         metronome-sound <=> root.metronome-sound;
@@ -660,7 +674,6 @@ export component MainWindow inherits Window {
         track-colors <=> root.track-colors;
         clips <=> root.clips;
 
-        zoom-y-level <=> root.zoom-y-level;
         drag-active <=> root.drag-active;
         drag-inited <=> root.drag-inited;
         drag-over-timeline <=> root.drag-over-timeline;

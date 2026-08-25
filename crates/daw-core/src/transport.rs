@@ -25,6 +25,9 @@ pub struct Transport {
     pub metronome_sound: u8,
     /// Volume do metrônomo (0..1).
     pub metronome_volume: f32,
+    pub loop_enabled: bool,
+    pub loop_start_ticks: u64,
+    pub loop_end_ticks: u64,
 }
 
 impl Default for Transport {
@@ -39,6 +42,9 @@ impl Default for Transport {
             metronome_enabled: false,
             metronome_sound: 0,
             metronome_volume: 0.7,
+            loop_enabled: false,
+            loop_start_ticks: 0,
+            loop_end_ticks: 15360,
         }
     }
 }

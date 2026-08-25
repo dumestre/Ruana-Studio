@@ -44,6 +44,15 @@ export component Workspace inherits Rectangle {
 
     in-out property <bool> playing: false;
 
+    in-out property <bool> loop-enabled: false;
+    in-out property <float> loop-start-beat: 0.0;
+    in-out property <float> loop-end-beat: 16.0;
+    callback loop-state-changed(bool);
+    callback loop-range-changed(float, float);
+
+    changed loop-start-beat => { root.loop-range-changed(root.loop-start-beat, root.loop-end-beat); }
+    changed loop-end-beat => { root.loop-range-changed(root.loop-start-beat, root.loop-end-beat); }
+
     in-out property <int> transport-position: 0;
 
     in-out property <float> transport-time-seconds: 0;
@@ -469,6 +478,8 @@ export component Workspace inherits Rectangle {
             playing <=>
                 root.playing;
 
+            loop-enabled <=> root.loop-enabled;
+
             position <=>
                 root.transport-position;
 
@@ -491,6 +502,8 @@ export component Workspace inherits Rectangle {
                     state
                 );
             }
+
+            loop-state-changed(state) => { root.loop-enabled = state; root.loop-state-changed(state); }
 
             set-bpm(value) => {
                 root.set-bpm(
@@ -958,7 +971,6 @@ export component Workspace inherits Rectangle {
                             zoom-y:
                                 root.zoom-y-level;
 
-
                             track-clicked(index) => {
                                 root.selected-track =
                                     index;
@@ -1013,6 +1025,10 @@ export component Workspace inherits Rectangle {
 
                             zoom-y:
                                 root.zoom-y-level;
+
+                            loop-enabled: root.loop-enabled;
+                            loop-start-beat: root.loop-start-beat;
+                            loop-end-beat: root.loop-end-beat;
 
                             track-names:
                                 root.track-names;
@@ -1440,7 +1456,7 @@ export component Workspace inherits Rectangle {
                     height:
                         parent.height - 30px;
 
-                    value:
+                    value <=>
                         root.zoom-y-level;
 
                     min-value:

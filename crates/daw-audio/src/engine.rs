@@ -724,8 +724,15 @@ impl AudioEngine {
             let ticks_per_frame = bpm * ppq / (60.0 * sample_rate as f64);
             let ticks = (rt.pos_frames * ticks_per_frame).max(0.0) as u64;
             if let Ok(mut t) = transport.try_lock() {
-                t.position_ticks = ticks;
-                rt.ticks_written = ticks;
+                let written_ticks = if t.loop_enabled && t.loop_end_ticks > t.loop_start_ticks && ticks >= t.loop_end_ticks {
+                    let span = t.loop_end_ticks - t.loop_start_ticks;
+                    t.loop_start_ticks + (ticks - t.loop_start_ticks) % span
+                } else { ticks };
+                t.position_ticks = written_ticks;
+                rt.ticks_written = written_ticks;
+                if written_ticks != ticks {
+                    rt.pos_frames = written_ticks as f64 / ticks_per_frame;
+                }
             }
             // Se o lock falhou, `ticks_written` continua o de antes e
             // o próximo callback NÃO confunde isso com um seek: a

@@ -48,7 +48,7 @@ export component TimelineVolume inherits Rectangle {
             color: Theme.text-primary;
             font-size: 10px;
             font-weight: 700;
-            horizontal-alignment: right;
+            horizontal-alignment: TextHorizontalAlignment.center;
             vertical-alignment: center;
             width: 44px;
 
@@ -117,14 +117,10 @@ export component TimelineVolume inherits Rectangle {
             }
 
             // MARCAÇÕES VISUAIS DA ESCALA
-            Rectangle { x: parent.width * 0.45; y: -2px; width: 1px; height: 10px; background: Theme.text-dim; opacity: 0.35; } // -24 dB
-            Rectangle { x: parent.width * 0.60; y: -3px; width: 1px; height: 12px; background: Theme.text-dim; opacity: 0.50; } // -12 dB
-            Rectangle { x: parent.width * 0.675; y: -4px; width: 1px; height: 14px; background: Theme.text-dim; opacity: 0.65; } // -6 dB
-            
+        
             // Marca 0 dB (Destaque Principal)
-            Rectangle { x: parent.width * 0.75 - 1px; y: -6px; width: 2px; height: 18px; background: Theme.text-primary; border-radius: 1px; } 
+            Rectangle { x: parent.width * 0.75 - 1px; y: -6px; width: 2px; height: 18px; background: Theme.surface-high; border-radius: 1px; } 
             
-            Rectangle { x: parent.width * 0.875; y: -4px; width: 1px; height: 14px; background: Theme.text-dim; opacity: 0.65; } // +3 dB
             Rectangle { x: parent.width - 1px; y: -4px; width: 1px; height: 14px; background: Theme.text-dim; opacity: 0.65; } // +6 dB
 
             // TEXTOS DA ESCALA
@@ -182,14 +178,7 @@ export component TimelineVolume inherits Rectangle {
             border-width: 2px;
             border-color: Theme.accent;
 
-            Rectangle {
-                width: 4px;
-                height: 4px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                border-radius: 2px;
-                background: Theme.accent;
-            }
+            
         }
     }
 

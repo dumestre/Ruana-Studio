@@ -49,6 +49,10 @@ export component Timeline inherits Rectangle {
 
     in-out property <float> zoom-y: 1.0;
 
+    in-out property <bool> loop-enabled: false;
+    in-out property <float> loop-start-beat: 0.0;
+    in-out property <float> loop-end-beat: 16.0;
+
     callback zoom-to(float, length);
 
 
@@ -818,6 +822,11 @@ export component Timeline inherits Rectangle {
                 scroll-x:
                     root.scroll-x;
 
+                loop-enabled: root.loop-enabled;
+                loop-start-beat: root.loop-start-beat;
+                loop-end-beat: root.loop-end-beat;
+                loop-range-changed(a, b) => { root.loop-start-beat = a; root.loop-end-beat = b; }
+
 
                 seek-to-beat(beat) => {
 
@@ -1287,10 +1296,10 @@ export component Timeline inherits Rectangle {
             if root.marquee-active: Rectangle {
 
                 x:
-                    min(root.marquee-x0, root.marquee-x1);
+                    min(root.marquee-x0, root.marquee-x1) - root.scroll-x;
 
                 y:
-                    min(root.marquee-y0, root.marquee-y1);
+                    min(root.marquee-y0, root.marquee-y1) - root.scroll-y;
 
                 width:
                     abs(root.marquee-x1 - root.marquee-x0);

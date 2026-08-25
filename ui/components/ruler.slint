@@ -36,6 +36,11 @@ export component TimelineRuler inherits Rectangle {
     // Largura da área visível (para o culling).
     in property <length> viewport-width: 800px;
 
+    in-out property <bool> loop-enabled: false;
+    in-out property <float> loop-start-beat: 0.0;
+    in-out property <float> loop-end-beat: 16.0;
+    callback loop-range-changed(float, float);
+
 
     // =====================================================
     // CALLBACK
@@ -66,6 +71,36 @@ export component TimelineRuler inherits Rectangle {
 
     background:
         Theme.base;
+
+    if root.loop-enabled: Rectangle {
+        x: root.loop-start-beat * root.px-per-beat - root.scroll-x;
+        y: 0px;
+        width: max(2px, (root.loop-end-beat - root.loop-start-beat) * root.px-per-beat);
+        height: root.ruler-height;
+        background: Theme.accent.transparentize(0.72);
+        border-width: 1px;
+        border-color: Theme.accent;
+        z: 20;
+
+        TouchArea {
+            width: 100%; height: 100%; mouse-cursor: pointer;
+            property <float> anchor: 0.0;
+            property <int> mode: 0;
+            pointer-event(event) => {
+                let f = max(0.0, (self.mouse-x + parent.x + root.scroll-x) / root.px-per-beat);
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    let edge = 5px / root.px-per-beat;
+                    mode = abs(f - root.loop-start-beat) <= edge ? 1 : abs(f - root.loop-end-beat) <= edge ? 2 : 3;
+                    anchor = f;
+                } else if event.kind == PointerEventKind.move && mode != 0 {
+                    let d = f - anchor;
+                    if mode == 1 { root.loop-range-changed(max(0.0, min(root.loop-end-beat - 0.01, f)), root.loop-end-beat); }
+                    else if mode == 2 { root.loop-range-changed(root.loop-start-beat, max(root.loop-start-beat + 0.01, f)); }
+                    else { let w = root.loop-end-beat - root.loop-start-beat; let s = max(0.0, min(root.total-bars * root.beats-per-bar - w, root.loop-start-beat + d)); root.loop-range-changed(s, s + w); anchor = f; }
+                } else if event.kind == PointerEventKind.up { mode = 0; }
+            }
+        }
+    }
 
 
     // =====================================================

@@ -366,6 +366,24 @@ fn main() -> Result<(), slint::PlatformError> {
         let _ = set_cursor_for_tool(tool);
     });
 
+    {
+        let transport = transport.clone();
+        ui.on_loop_state_changed(move |enabled| {
+            if let Ok(mut t) = transport.lock() {
+                t.loop_enabled = enabled;
+            }
+        });
+    }
+    {
+        let transport = transport.clone();
+        ui.on_loop_range_changed(move |start, end| {
+            if let Ok(mut t) = transport.lock() {
+                t.loop_start_ticks = (start.max(0.0) * t.ppq as f32) as u64;
+                t.loop_end_ticks = (end.max(start + 0.01) * t.ppq as f32) as u64;
+            }
+        });
+    }
+
     // F: foco/zoom do clip selecionado; F novamente restaura a viewport.
     let focus_restore: Rc<RefCell<Option<(f32, f32, f32)>>> = Rc::new(RefCell::new(None));
     let clips_for_focus = clips_model.clone();
