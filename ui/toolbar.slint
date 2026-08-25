@@ -106,16 +106,6 @@ export component Toolbar inherits Rectangle {
                 height: 20px; width: 20px;
                 icon: @image-url("icons/redo.svg"); icon-size: 16px; icon-color: #9a9a9a; borderless: true; clicked => {} 
             }
-            
-            Button {
-                icon: @image-url("icons/snap.svg"); filled-icon: @image-url("icons/snap_filled.svg");
-                icon-size: 16px; icon-color: Theme.text-dim; height: 22px; width: 22px;
-                toggled: root.snap-enabled; toggled-bg: Theme.accent; toggled-fg: Theme.on-accent; borderless: true;
-                clicked => {
-                    root.snap-enabled = !root.snap-enabled;
-                    root.snap-toggled(root.snap-enabled);
-                }
-            }
             Button {
                 icon: @image-url("icons/follow.svg"); filled-icon: @image-url("icons/follow_filled.svg");
                 icon-size: 16px; icon-color: Theme.text-dim; height: 22px; width: 22px;
@@ -125,15 +115,50 @@ export component Toolbar inherits Rectangle {
                     root.follow-toggled(root.follow-enabled);
                 }
             }
-            Button {
-                text: "GRID"; borderless: false; enabled: true; height: 14px; icon-size: 12px; width: 32px; preferred-width: 0px;
-                toggled: true; toggled-bg: Theme.accent; toggled-fg: Theme.base; subtle-toggled: true;
-                clicked => {
-                    root.grid-enabled = !root.grid-enabled;
-                    root.grid-toggled(root.grid-enabled);
-                    root.page-toggled(root.jump-to-pattern);
-                }
+
+            Rectangle {
+    horizontal-stretch: 1;
+
+    HorizontalLayout {
+        Button {
+            horizontal-stretch: 1;
+            icon: @image-url("icons/snap.svg");
+            filled-icon: @image-url("icons/snap_filled.svg");
+            icon-size: 16px;
+            icon-color: Theme.text-dim;
+            height: 22px;
+            toggled: root.snap-enabled;
+            toggled-bg: Theme.accent;
+            toggled-fg: Theme.on-accent;
+            borderless: true;
+
+            clicked => {
+                root.snap-enabled = !root.snap-enabled;
+                root.snap-toggled(root.snap-enabled);
             }
+        }
+
+        Button {
+            horizontal-stretch: 1;
+            text: "GRID";
+            borderless: false;
+            enabled: true;
+            height: 14px;
+            icon-size: 12px;
+            preferred-width: 0px;
+            toggled: true;
+            toggled-bg: Theme.accent;
+            toggled-fg: Theme.base;
+            subtle-toggled: true;
+
+            clicked => {
+                root.grid-enabled = !root.grid-enabled;
+                root.grid-toggled(root.grid-enabled);
+                root.page-toggled(root.jump-to-pattern);
+            }
+        }
+    }
+}
             ProjectKey { }
         }
 
