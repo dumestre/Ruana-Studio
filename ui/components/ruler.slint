@@ -43,6 +43,14 @@ export component TimelineRuler inherits Rectangle {
 
     callback seek-to-beat(float);
 
+    // Flag de arrasto na régua e posição ao vivo do mouse —
+    // a timeline usa pra fazer o playhead seguir o cursor
+    // em tempo real (binding direto, sem roundtrip).
+    out property <bool> scrubbing: false;
+
+    out property <length> live-mouse-x:
+        scrub-touch.mouse-x;
+
 
     // =====================================================
     // DIMENSÃO
@@ -343,7 +351,7 @@ export component TimelineRuler inherits Rectangle {
     // CLICK / SEEK
     // =====================================================
 
-    TouchArea {
+    scrub-touch := TouchArea {
 
         x: 0px;
 
@@ -355,46 +363,47 @@ export component TimelineRuler inherits Rectangle {
         height:
             parent.height;
 
-        clicked => {
-
-            let beat =
-                (
-                    self.mouse-x
-                    + root.scroll-x
-                )
-                / root.px-per-bar
-                * root.beats-per-bar;
-
-            root.seek-to-beat(
-                max(
-                    0.0,
-                    beat
-                )
-            );
-        }
-
+        // =================================================
+        // SCRUB CONTÍNUO
+        //
+        // O seek dispara no DOWN e a cada MOVE enquanto o botão
+        // está preso — o playhead cola no mouse em tempo real,
+        // sem "pular só depois do clique". Sem `clicked`: ele
+        // só disparava no release, daí o atraso percebido.
+        // =================================================
 
         pointer-event(event) => {
 
-            if event.kind
-                    == PointerEventKind.down
-                && event.button
+            if event.button
                     == PointerEventButton.left {
 
-                let beat =
-                    (
-                        self.mouse-x
-                        + root.scroll-x
-                    )
-                    / root.px-per-bar
-                    * root.beats-per-bar;
+                if event.kind == PointerEventKind.down {
+                    root.scrubbing = true;
+                }
 
-                root.seek-to-beat(
-                    max(
-                        0.0,
-                        beat
-                    )
-                );
+                if event.kind == PointerEventKind.up
+                    || event.kind == PointerEventKind.cancel {
+                    root.scrubbing = false;
+                }
+
+                if event.kind == PointerEventKind.down
+                    || event.kind == PointerEventKind.move {
+
+                    let beat =
+                        (
+                            self.mouse-x
+                            + root.scroll-x
+                        )
+                        / root.px-per-bar
+                        * root.beats-per-bar;
+
+                    root.seek-to-beat(
+                        max(
+                            0.0,
+                            beat
+                        )
+                    );
+                }
             }
         }
     }

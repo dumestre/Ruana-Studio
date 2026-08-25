@@ -231,6 +231,35 @@ export component Timeline inherits Rectangle {
         + root.current-time-seconds
         * root.pixels-per-second;
 
+    // =====================================================
+    // SCRUB (arrasto na régua)
+    //
+    // Durante o arrasto, o playhead visual usa uma posição
+    // LOCAL atualizada no próprio evento de mouse (0ms de
+    // latência). O seek ao motor de áudio é feito pela régua
+    // em paralelo; quando o arrasto termina, o visual volta
+    // a seguir `current-time-seconds` — que nesse ponto já
+    // é igual à posição arrastada.
+    // =====================================================
+
+    // X local do mouse durante o scrub (-1 = inativo).
+    //
+    // Ligado DIRETO à posição do mouse na régua: enquanto
+    // `scrubbing`, cada frame reflete o cursor sem roundtrip.
+    property <length> scrub-x:
+        scrub-source.scrubbing
+            ? scrub-source.live-mouse-x
+              - root.timeline-left-padding
+              + root.scroll-x
+            : -1px;
+
+    // Playhead efetivo: durante o scrub segue o mouse 1:1;
+    // fora dele, segue o transporte.
+    property <length> effective-playhead-x:
+        root.scrub-x >= 0px
+            ? root.scrub-x
+            : root.playhead-x;
+
 
     // =====================================================
     // FUNDO PRINCIPAL
@@ -637,7 +666,7 @@ export component Timeline inherits Rectangle {
             // RÉGUA
             // =============================================
 
-            TimelineRuler {
+            scrub-source := TimelineRuler {
 
                 // A régua agora é um "visor" fixo na tela: anda
                 // JUNTO com o scroll (x = scroll-x compensa o
@@ -1137,7 +1166,7 @@ export component Timeline inherits Rectangle {
             PlayheadOverlay {
 
                 head-x:
-                    root.playhead-x;
+                    root.effective-playhead-x;
 
                 ruler-h:
                     root.ruler-height;
