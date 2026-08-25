@@ -366,11 +366,13 @@ export component TimelineRuler inherits Rectangle {
         // =================================================
         // SCRUB CONTÍNUO
         //
-        // O seek dispara no DOWN e a cada MOVE enquanto o botão
-        // está preso — o playhead cola no mouse em tempo real,
-        // sem "pular só depois do clique". Sem `clicked`: ele
-        // só disparava no release, daí o atraso percebido.
+        // O VISUAL é local (a timeline lê `live-mouse-x` direto).
+        // O SEEK ao motor de áudio é THROTTLED a ~30 Hz: um seek
+        // síncrono por evento de mouse trava a thread da UI
+        // (mutex + recálculo) e dava a sensação de "ímã/travada".
         // =================================================
+
+        property <bool> seek-pending: false;
 
         pointer-event(event) => {
 
@@ -389,22 +391,41 @@ export component TimelineRuler inherits Rectangle {
                 if event.kind == PointerEventKind.down
                     || event.kind == PointerEventKind.move {
 
-                    let beat =
-                        (
-                            self.mouse-x
-                            + root.scroll-x
-                        )
-                        / root.px-per-bar
-                        * root.beats-per-bar;
-
-                    root.seek-to-beat(
-                        max(
-                            0.0,
-                            beat
-                        )
-                    );
+                    // Seek imediato só no primeiro clique; nos
+                    // movimentos seguintes agenda via timer.
+                    if !self.seek-pending {
+                        self.seek-pending = true;
+                        no-delay-timer.running = true;
+                    }
                 }
             }
+        }
+    }
+
+    // Timer de 33ms (~30 Hz): agrupa os MOVES do arrasto num
+    // único seek por frame — o motor acompanha sem travar a UI.
+    no-delay-timer := Timer {
+        interval: 33ms;
+        running: false;
+
+        triggered => {
+            self.running = false;
+            scrub-touch.seek-pending = false;
+
+            let beat =
+                (
+                    scrub-touch.mouse-x
+                    + root.scroll-x
+                )
+                / root.px-per-bar
+                * root.beats-per-bar;
+
+            root.seek-to-beat(
+                max(
+                    0.0,
+                    beat
+                )
+            );
         }
     }
 }
