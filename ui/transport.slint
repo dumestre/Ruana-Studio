@@ -11,6 +11,8 @@ export component Transport inherits Rectangle {
     in-out property <bool> recording: false;
     in-out property <bool> loop-enabled: false;
     in-out property <bool> metronome-enabled: false;
+    in-out property <int> metronome-sound: 0;
+    in-out property <float> metronome-volume: 0.7;
 
     in-out property <int> position: 0;
 
@@ -27,6 +29,8 @@ export component Transport inherits Rectangle {
     callback record-state-changed(bool);
     callback loop-state-changed(bool);
     callback metronome-state-changed(bool);
+    callback metronome-sound-changed(int);
+    callback metronome-volume-changed(float);
     callback set-bpm(float);
 
 
@@ -734,6 +738,13 @@ export component Transport inherits Rectangle {
                             root.metronome-enabled
                         );
                     }
+
+                    pointer-event(ev) => {
+                        if ev.kind == PointerEventKind.down
+                            && ev.button == PointerEventButton.right {
+                            metronome-popup.show();
+                        }
+                    }
                 }
             }
 
@@ -756,22 +767,18 @@ export component Transport inherits Rectangle {
             // BPM VALUE
             // ====================================================
 
-            Text {
-
-                text:
-                    "" + root.bpm;
-
-                color:
-                    Theme.accent;
-
-                font-size:
-                    12px;
-
-                horizontal-alignment:
-                    TextHorizontalAlignment.center;
-
-                vertical-alignment:
-                    center;
+            Rectangle {
+                width: 38px;
+                height: 22px;
+                background: Theme.surface-high;
+                border-radius: 3px;
+                TextInput {
+                    width: 100%; height: 100%;
+                    text: "" + root.bpm;
+                    color: Theme.accent; font-size: 12px; font-weight: 700;
+                    horizontal-alignment: center; vertical-alignment: center;
+                    accepted => { root.set-bpm(self.text.to-float()); self.clear-focus(); }
+                }
             }
 
 
@@ -947,5 +954,56 @@ export component Transport inherits Rectangle {
 
         background:
             Theme.border;
+    }
+
+    metronome-popup := PopupWindow {
+        x: parent.width - 245px;
+        y: parent.height + 4px;
+        width: 220px;
+        height: 126px;
+        close-policy: close-on-click-outside;
+        Rectangle {
+            width: 100%; height: 100%;
+            background: Theme.surface-high;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: Theme.border;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+                Text { text: "METRONOME"; color: Theme.text-primary; font-size: 10px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 4px;
+                    for name[i] in ["CLICK", "WOOD", "BEEP", "SOFT", "HIGH"]: Rectangle {
+                        width: 36px; height: 24px;
+                        background: i == root.metronome-sound ? Theme.accent : Theme.surface;
+                        border-radius: 3px;
+                        Text { text: name; color: i == root.metronome-sound ? Theme.base : Theme.text-primary; font-size: 7px; horizontal-alignment: center; vertical-alignment: center; }
+                        TouchArea { mouse-cursor: pointer; clicked => { root.metronome-sound = i; root.metronome-sound-changed(i); } }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text { text: "VOLUME"; color: Theme.text-dim; font-size: 9px; vertical-alignment: center; }
+                    Rectangle {
+                        horizontal-stretch: 1; height: 5px; background: Theme.surface;
+                        Rectangle { width: parent.width * root.metronome-volume; height: 100%; background: Theme.accent; }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.metronome-volume = max(0.0, min(1.0, self.mouse-x / self.width));
+                                root.metronome-volume-changed(root.metronome-volume);
+                            }
+                            moved => {
+                                if self.pressed {
+                                    root.metronome-volume = max(0.0, min(1.0, self.mouse-x / self.width));
+                                    root.metronome-volume-changed(root.metronome-volume);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

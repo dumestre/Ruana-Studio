@@ -51,6 +51,30 @@ use daw_core::transport::Transport;
 use daw_midi::NoteEditor;
 use slint::Model;
 
+#[cfg(windows)]
+fn choose_audio_file() -> Option<String> {
+    use std::mem::size_of;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Controls::Dialogs::{GetOpenFileNameW, OPENFILENAMEW, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST};
+    let filter: Vec<u16> = "Audio Files\0*.wav;*.mp3;*.flac;*.ogg;*.oga\0All Files\0*.*\0\0".encode_utf16().collect();
+    let mut path = vec![0u16; 32768];
+    let mut dialog = OPENFILENAMEW::default();
+    dialog.lStructSize = size_of::<OPENFILENAMEW>() as u32;
+    dialog.hwndOwner = HWND::default();
+    dialog.lpstrFilter = PCWSTR(filter.as_ptr());
+    dialog.lpstrFile = windows::core::PWSTR(path.as_mut_ptr());
+    dialog.nMaxFile = path.len() as u32;
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    if unsafe { GetOpenFileNameW(&mut dialog) }.as_bool() {
+        let len = path.iter().position(|c| *c == 0).unwrap_or(0);
+        Some(String::from_utf16_lossy(&path[..len]))
+    } else { None }
+}
+
+#[cfg(not(windows))]
+fn choose_audio_file() -> Option<String> { None }
+
 fn main() -> Result<(), slint::PlatformError> {
     let ui = MainWindow::new()?;
 
@@ -93,7 +117,7 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     // Estado autoritativo da DAW: vive no core, nunca na UI.
-    let project = Rc::new(RefCell::new(Project::demo()));
+    let project = Rc::new(RefCell::new(Project::startup()));
     let transport = Arc::new(Mutex::new(Transport::default()));
 
     // Motor de áudio: abre UMA vez e fica aberto pela vida do app.
@@ -188,6 +212,40 @@ fn main() -> Result<(), slint::PlatformError> {
         beat::wire_beat(&ui, project, audio.clone());
     }
 
+    {
+        let project = project.clone();
+        let audio = audio.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_sampler_load_requested(move |track| {
+            let Some(path) = choose_audio_file() else { return; };
+            let path_buf = std::path::PathBuf::from(&path);
+            let Ok(decoded) = daw_media::waveform::decode_audio(&path_buf) else { return; };
+            let peaks = daw_media::waveform::waveform_points(&decoded, 512);
+            let Some(ui) = ui_weak.upgrade() else { return; };
+            let name = path_buf.file_stem().and_then(|n| n.to_str()).unwrap_or("Sample");
+            let format = path_buf.extension().and_then(|e| e.to_str()).unwrap_or("").to_uppercase();
+            ui.set_sampler_sample_name(name.into());
+            ui.set_sampler_sample_loaded(true);
+            ui.set_sampler_sample_format(format.into());
+            ui.set_sampler_sample_duration(format!("{:.2}s", decoded.duration_seconds).into());
+            ui.set_sampler_sample_peaks(Rc::new(slint::VecModel::from(peaks)).into());
+
+            let mut proj = project.borrow_mut();
+            if let Some(pattern) = proj.current_beat_pattern_mut() {
+                let index = track.max(0) as usize;
+                if let Some(params) = pattern.track_params.get_mut(index) {
+                    params.sample_path = Some(path.clone());
+                    params.name = name.to_string();
+                }
+            }
+            audio.preload(&path);
+            audio.mark_dirty();
+            beat::refresh_beat(&ui, &proj);
+            drop(proj);
+            audio.preview(&path, 0.9, 0.0);
+        });
+    }
+
     // Janelas flutuantes (mixer/sampler/piano roll): wiring dedicado.
     let handles = floats::install(
         &ui,
@@ -249,11 +307,36 @@ fn main() -> Result<(), slint::PlatformError> {
         });
         let project_tg = project.clone();
         let apply_mixer = handles.apply_mixer_state.clone();
-        ui.on_mixer_insert_toggled(move |channel, slot| {
+    ui.on_mixer_insert_toggled(move |channel, slot| {
             project_tg
                 .borrow_mut()
                 .toggle_mixer_insert(channel as usize, slot as usize);
             apply_mixer();
+        });
+    }
+
+    {
+        let transport = transport.clone();
+        ui.on_metronome_state_changed(move |enabled| {
+            if let Ok(mut t) = transport.lock() {
+                t.metronome_enabled = enabled;
+            }
+        });
+    }
+    {
+        let transport = transport.clone();
+        ui.on_metronome_sound_changed(move |sound| {
+            if let Ok(mut t) = transport.lock() {
+                t.metronome_sound = sound.clamp(0, 4) as u8;
+            }
+        });
+    }
+    {
+        let transport = transport.clone();
+        ui.on_metronome_volume_changed(move |value| {
+            if let Ok(mut t) = transport.lock() {
+                t.metronome_volume = value.clamp(0.0, 1.0);
+            }
         });
     }
 
@@ -322,7 +405,7 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     // Drag & drop de arquivos direto do Sistema Operacional.
-    os_drop::install(&ui, project.clone(), waveforms.clone(), clips_model.clone());
+    os_drop::install(&ui, project.clone(), waveforms.clone(), clips_model.clone(), track_colors_model.clone());
 
     ui.run()
 }

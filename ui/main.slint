@@ -89,6 +89,11 @@ export component MainWindow inherits Window {
     in-out property <bool> playing:
         false;
 
+    in-out property <bool> metronome-enabled:
+        false;
+    in-out property <int> metronome-sound: 0;
+    in-out property <float> metronome-volume: 0.7;
+
     in-out property <int> selected-track:
         0;
 
@@ -119,6 +124,12 @@ export component MainWindow inherits Window {
 
     in-out property <bool> explorer-visible:
         true;
+    in-out property <string> sampler-sample-name: "No Sample";
+    in-out property <bool> sampler-sample-loaded: false;
+    in-out property <string> sampler-sample-format: "";
+    in-out property <string> sampler-sample-duration: "";
+    in-out property <[float]> sampler-sample-peaks: [];
+    in-out property <int> beat-selected-track: 0;
 
 
     // Filesystem properties (forwarded to Explorer)
@@ -230,6 +241,9 @@ export component MainWindow inherits Window {
     // BPM novo (inteiro). O backend atualiza o Transport e
     // re-ancora o clock visual do playhead com a nova taxa.
     callback set-bpm(float);
+    callback metronome-state-changed(bool);
+    callback metronome-sound-changed(int);
+    callback metronome-volume-changed(float);
 
     callback window-close;
 
@@ -279,6 +293,7 @@ export component MainWindow inherits Window {
     callback timeline-bounds-changed(float, float, float, float);
 
     callback track-recolor-requested(int, int);
+    callback sampler-load-requested(int);
 
 
     // =====================================================
@@ -614,16 +629,28 @@ export component MainWindow inherits Window {
         follow-playhead <=> root.follow-playhead;
         zoom-level <=> root.zoom-level;
         playing <=> root.playing;
+        metronome-enabled <=> root.metronome-enabled;
+        metronome-sound <=> root.metronome-sound;
+        metronome-volume <=> root.metronome-volume;
         transport-position <=> root.transport-position;
         transport-time-seconds <=> root.transport-time-seconds;
         ppq <=> root.ppq;
         beats-per-bar <=> root.beats-per-bar;
         total-bars <=> root.total-bars;
         bpm <=> root.bpm;
+        metronome-state-changed(enabled) => { root.metronome-state-changed(enabled); }
+        metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
+        metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
         selected-track <=> root.selected-track;
         active-tool <=> root.active-tool;
         beat-open <=> root.beat-open;
         explorer-visible <=> root.explorer-visible;
+        sampler-sample-name <=> root.sampler-sample-name;
+        sampler-sample-loaded <=> root.sampler-sample-loaded;
+        sampler-sample-format <=> root.sampler-sample-format;
+        sampler-sample-duration <=> root.sampler-sample-duration;
+        sampler-sample-peaks <=> root.sampler-sample-peaks;
+        sampler-load-requested() => { root.sampler-load-requested(root.beat-selected-track); }
         left-panel-width <=> root.left-panel-width;
         tracks-header-width <=> root.tracks-header-width;
         explorer-width <=> root.explorer-width;
@@ -706,6 +733,7 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
     // são ponteados ao global BeatState, consumido pelo Rust.
     // =====================================================
     beat_popup := BeatPopup {
+        selected-track <=> root.beat-selected-track;
 
         open <=>
             root.beat-open;

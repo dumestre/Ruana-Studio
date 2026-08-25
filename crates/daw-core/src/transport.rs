@@ -19,6 +19,12 @@ pub struct Transport {
     pub ppq: u32,
     /// Batidas por compasso.
     pub beats_per_bar: u32,
+    /// Metrônomo do transporte.
+    pub metronome_enabled: bool,
+    /// Timbre do metrônomo (0..4).
+    pub metronome_sound: u8,
+    /// Volume do metrônomo (0..1).
+    pub metronome_volume: f32,
 }
 
 impl Default for Transport {
@@ -30,6 +36,9 @@ impl Default for Transport {
             bpm: 120,
             ppq: 960,
             beats_per_bar: 4,
+            metronome_enabled: false,
+            metronome_sound: 0,
+            metronome_volume: 0.7,
         }
     }
 }

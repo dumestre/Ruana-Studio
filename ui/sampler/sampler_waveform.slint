@@ -337,11 +337,12 @@ export component SamplerWaveform inherits Rectangle {
 
     if !root.sample-loaded: VerticalLayout {
         alignment: center;
+        cross-axis-alignment: CrossAxisAlignment.center;
         spacing: root.compact ? 1px : 4px;
 
         Image {
             source: @image-url("../icons/audio.svg");
-            width: root.compact ? 14px : 20px;
+            width: root.compact ? 21px : 40px;
             height: self.width;
             colorize: SamplerStyle.rail-hi;
             horizontal-alignment: center;

@@ -324,6 +324,9 @@ struct RtState {
     /// Cursor de round-robin para roubo de voz.
     voice_cursor: usize,
     was_playing: bool,
+    metronome_beat: i64,
+    metronome_remaining: u32,
+    metronome_phase: f32,
 }
 
 impl RtState {
@@ -336,6 +339,9 @@ impl RtState {
             voices: (0..MAX_VOICES).map(|_| Voice::silent()).collect(),
             voice_cursor: 0,
             was_playing: false,
+            metronome_beat: -1,
+            metronome_remaining: 0,
+            metronome_phase: 0.0,
         }
     }
 
@@ -533,6 +539,21 @@ impl AudioEngine {
 
         let start_frames = rt.pos_frames;
 
+        let (metronome_enabled, metronome_sound, metronome_volume) = transport
+            .try_lock()
+            .map(|t| (t.metronome_enabled, t.metronome_sound.min(4), t.metronome_volume.clamp(0.0, 1.0)))
+            .unwrap_or((false, 0, 0.7));
+        if playing && metronome_enabled {
+            let beat = (start_frames / frames_per_beat).floor() as i64;
+            if beat != rt.metronome_beat {
+                rt.metronome_beat = beat;
+                rt.metronome_remaining = (sample_rate / 12).max(1);
+                rt.metronome_phase = 0.0;
+            }
+        } else {
+            rt.metronome_remaining = 0;
+        }
+
         // ---- agendamento dos passos do beat --------------------
         // Feito ANTES do mix, com o offset exato de cada disparo
         // dentro deste buffer.
@@ -660,6 +681,24 @@ impl AudioEngine {
                 let (sl, sr) = buffer.read(voice.pos);
                 mix_stereo_source(sl, sr, voice.gain_l, voice.gain_r, &mut left, &mut right);
                 voice.pos += 1.0;
+            }
+
+            // Clique sintetizado no próprio engine: não depende de arquivos
+            // externos e oferece cinco timbres por frequência.
+            if metronome_enabled && rt.metronome_remaining > 0 {
+                let frequencies = [880.0f32, 660.0, 1100.0, 520.0, 1320.0];
+                let freq = frequencies[metronome_sound as usize];
+                let t = rt.metronome_phase / sample_rate as f32;
+                let duration = (sample_rate as f32 / 12.0).max(1.0);
+                let envelope = rt.metronome_remaining as f32 / duration;
+                let click = (t * freq * std::f32::consts::TAU).sin()
+                    * envelope
+                    * metronome_volume
+                    * 0.18;
+                left += click;
+                right += click;
+                rt.metronome_phase += 1.0;
+                rt.metronome_remaining -= 1;
             }
 
             let (l, r) = limit_stereo(left, right);

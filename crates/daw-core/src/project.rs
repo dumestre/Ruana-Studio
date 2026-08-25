@@ -99,6 +99,15 @@ impl Default for Project {
 }
 
 impl Project {
+    /// Projeto inicial da aplicação: dez trilhas vazias, prontas para uso.
+    pub fn startup() -> Self {
+        let mut project = Self::default();
+        for i in 0..10u64 {
+            project.tracks.push(Track::new(i, format!("Track {}", i + 1), TrackKind::Audio));
+        }
+        project
+    }
+
     /// Projeto placeholder com dados fictícios.
     ///
     /// Representa o arranjo mockado usado para testar o fluxo:

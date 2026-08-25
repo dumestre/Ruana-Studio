@@ -30,6 +30,7 @@ pub fn install(
             let project = project.clone();
             let waveforms = waveforms.clone();
             let clips_model = clips_model.clone();
+            let drop_track_colors = track_colors_model.clone();
             let ui_weak = ui.as_weak();
             ui.on_clip_dropped(move |track, beat, name, is_midi, path| {
                 let bpm = ui_weak.upgrade().map(|u| u.get_bpm() as f32).unwrap_or(120.0);
@@ -47,6 +48,7 @@ pub fn install(
                             &project,
                             &waveforms,
                             &clips_model,
+                            &drop_track_colors,
                         );
                         return;
                     }
@@ -232,6 +234,7 @@ pub fn install(
         {
             let project = project.clone();
             let colors_model = track_colors_model.clone();
+            let ui_weak = ui.as_weak();
             ui.on_track_recolor_requested(move |track_index, color| {
                 let mut proj = project.borrow_mut();
                 if proj.tracks.is_empty() {
@@ -240,6 +243,16 @@ pub fn install(
                 let idx = (track_index.max(0) as usize).min(proj.tracks.len() - 1);
                 let track_id = proj.tracks[idx].id;
                 let color = color.clamp(0, 255) as u8;
+
+                // Com um clip selecionado, a paleta do Track Panel atua
+                // somente nele. Sem seleção, continua colorindo a track.
+                if let Some(ui) = ui_weak.upgrade() {
+                    let selected = ui.get_selected_clip();
+                    if selected >= 0 {
+                        proj.set_clip_color(selected as u64, color);
+                        return;
+                    }
+                }
 
                 // A cor da track em si (indicador do cabeçalho).
                 proj.tracks[idx].color = color;

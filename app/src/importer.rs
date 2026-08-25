@@ -54,6 +54,7 @@ pub fn import_audio_file(
     project: &RefCell<Project>,
     waveforms: &RefCell<WaveformCache>,
     clips_model: &slint::VecModel<ClipData>,
+    track_colors_model: &slint::VecModel<i32>,
 ) -> Option<u64> {
     let name = path
         .file_stem()
@@ -98,14 +99,23 @@ pub fn import_audio_file(
             .track_with_room(preferred, beat_hint.max(0.0), length)
             .or_else(|| proj.track(preferred).map(|t| t.id))?;
         let start = proj.find_free_slot(track_id, beat_hint.max(0.0), length);
-        proj.add_clip_with_path(
+        let id = proj.add_clip_with_path(
             track_id,
             ClipKind::Audio,
             name.as_str(),
             start,
             length,
             Some(path.to_string_lossy().to_string()),
-        )?
+        )?;
+        let color = ((id % 19) + 1) as u8;
+        proj.set_clip_color(id, color);
+        if let Some(track_index) = proj.tracks.iter().position(|t| t.id == track_id) {
+            proj.tracks[track_index].color = color;
+            if track_index < track_colors_model.row_count() {
+                track_colors_model.set_row_data(track_index, color as i32);
+            }
+        }
+        id
     };
 
     // `ClipAdded` já disparou e leu o cache ainda vazio; preenche

@@ -47,7 +47,7 @@ fn commit(
 }
 
 /// Re-projeta o estado do beat sequencer (core) nos models da UI.
-fn refresh_beat(ui: &MainWindow, project: &Project) {
+pub fn refresh_beat(ui: &MainWindow, project: &Project) {
     let st = BeatState::get(ui);
     let bp = &project.beat_patterns;
 

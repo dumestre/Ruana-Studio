@@ -44,6 +44,7 @@ export component SamplerTabs inherits Rectangle {
         for t[i] in root.tabs: Rectangle {
             width: root.compact ? 52px : 64px;
             background: i == root.current ? SamplerStyle.card : transparent;
+            border-radius: 8px;
 
             HorizontalLayout {
                 alignment: LayoutAlignment.center;

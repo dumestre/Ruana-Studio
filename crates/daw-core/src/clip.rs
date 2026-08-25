@@ -66,7 +66,7 @@ impl Clip {
             start_beat,
             length_beats,
             source_start_beats: 0.0,
-            color: 0,
+            color: ((id % 19) + 1) as u8,
             file_path: None,
         }
     }

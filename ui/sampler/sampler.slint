@@ -58,6 +58,7 @@ export component Sampler inherits Rectangle {
     in-out property <string> sample-duration: "";
 
     in-out property <[float]> peaks: [];
+    callback load-sample-requested();
 
     // ============================================================
     // TRANSPORT
@@ -172,6 +173,14 @@ export component Sampler inherits Rectangle {
 
             sample-format: root.sample-format;
             sample-duration: root.sample-duration;
+            load-clicked => { root.load-sample-requested(); }
+            clear-clicked => {
+                root.sample-name = "No Sample";
+                root.sample-loaded = false;
+                root.sample-format = "";
+                root.sample-duration = "";
+                root.peaks = [];
+            }
         }
 
         // ========================================================

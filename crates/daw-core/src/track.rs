@@ -60,7 +60,7 @@ impl Track {
             id,
             name: name.into(),
             kind,
-            color: 0,
+            color: ((id % 19) + 1) as u8,
             mixer: MixerChannel::default(),
         }
     }

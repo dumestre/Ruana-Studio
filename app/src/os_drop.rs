@@ -15,6 +15,7 @@ pub fn install(
     project: Rc<RefCell<Project>>,
     waveforms: Rc<RefCell<WaveformCache>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
+    track_colors_model: Rc<slint::VecModel<i32>>,
 ) {
         // Suporte a arrastar e soltar arquivos do Sistema Operacional (OS Drag & Drop)
         {
@@ -23,6 +24,7 @@ pub fn install(
             let project = project.clone();
             let waveforms = waveforms.clone();
             let clips_model = clips_model.clone();
+            let track_colors_model = track_colors_model.clone();
 
             ui.window().on_winit_window_event(move |_win, event| {
                 use i_slint_backend_winit::winit::event::WindowEvent;
@@ -66,6 +68,7 @@ pub fn install(
                                     &project,
                                     &waveforms,
                                     &clips_model,
+                                    &track_colors_model,
                                 );
                             }
                         }

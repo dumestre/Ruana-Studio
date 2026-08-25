@@ -49,6 +49,9 @@ export component Workspace inherits Rectangle {
     in-out property <float> transport-time-seconds: 0;
 
     in-out property <int> bpm: 120;
+    in-out property <bool> metronome-enabled: false;
+    in-out property <int> metronome-sound: 0;
+    in-out property <float> metronome-volume: 0.7;
 
     in-out property <int> ppq: 960;
 
@@ -63,6 +66,11 @@ export component Workspace inherits Rectangle {
     in-out property <bool> beat-open: false;
 
     in-out property <bool> explorer-visible: true;
+    in-out property <string> sampler-sample-name: "No Sample";
+    in-out property <bool> sampler-sample-loaded: false;
+    in-out property <string> sampler-sample-format: "";
+    in-out property <string> sampler-sample-duration: "";
+    in-out property <[float]> sampler-sample-peaks: [];
 
     private property <bool> clip-focus-active: false;
     private property <float> clip-focus-zoom: 1.0;
@@ -301,6 +309,9 @@ export component Workspace inherits Rectangle {
     callback seek-to(float);
 
     callback set-bpm(float);
+    callback metronome-state-changed(bool);
+    callback metronome-sound-changed(int);
+    callback metronome-volume-changed(float);
 
     callback add-track-requested(string);
 
@@ -388,6 +399,7 @@ export component Workspace inherits Rectangle {
         float,
         float
     );
+    callback sampler-load-requested();
 
 
     // ========================================================
@@ -469,6 +481,10 @@ export component Workspace inherits Rectangle {
             beats-per-bar:
                 root.beats-per-bar;
 
+            metronome-enabled <=> root.metronome-enabled;
+            metronome-sound <=> root.metronome-sound;
+            metronome-volume <=> root.metronome-volume;
+
 
             play-state-changed(state) => {
                 root.play-state-changed(
@@ -481,6 +497,12 @@ export component Workspace inherits Rectangle {
                     value
                 );
             }
+
+            metronome-state-changed(enabled) => {
+                root.metronome-state-changed(enabled);
+            }
+            metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
+            metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
         }
 
 
@@ -1636,6 +1658,13 @@ export component Workspace inherits Rectangle {
 
                         floating:
                             root.floated[1];
+
+                        sample-name <=> root.sampler-sample-name;
+                        sample-loaded <=> root.sampler-sample-loaded;
+                        sample-format <=> root.sampler-sample-format;
+                        sample-duration <=> root.sampler-sample-duration;
+                        sample-peaks <=> root.sampler-sample-peaks;
+                        load-sample-requested => { root.sampler-load-requested(); }
 
                         float-toggle => {
                             root.float-toggle(
