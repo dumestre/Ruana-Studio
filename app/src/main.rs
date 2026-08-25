@@ -282,6 +282,28 @@ fn main() -> Result<(), slint::PlatformError> {
         let _ = set_cursor_for_tool(tool);
     });
 
+    // F: foco/zoom do clip selecionado; F novamente restaura a viewport.
+    let focus_restore: Rc<RefCell<Option<(f32, f32, f32)>>> = Rc::new(RefCell::new(None));
+    let clips_for_focus = clips_model.clone();
+    let ui_weak_focus = ui.as_weak();
+    ui.on_focus_selected_clip_requested(move |id, old_zoom, old_scroll_x, old_scroll_y, view_width| {
+        let Some(ui) = ui_weak_focus.upgrade() else { return; };
+        let mut restore = focus_restore.borrow_mut();
+        if let Some((zoom, sx, sy)) = restore.take() {
+            ui.set_zoom_level(zoom);
+            ui.set_timeline_scroll_x(sx);
+            ui.set_timeline_scroll_y(sy);
+            return;
+        }
+        let Some(row) = (0..clips_for_focus.row_count()).find_map(|i| clips_for_focus.row_data(i).filter(|c| c.id == id)) else { return; };
+        *restore = Some((old_zoom, old_scroll_x, old_scroll_y));
+        let zoom = old_zoom.max(2.5);
+        let center = (row.beat + row.len * 0.5) * 40.0 * zoom;
+        ui.set_zoom_level(zoom);
+        ui.set_timeline_scroll_x((center - view_width * 0.5).max(0.0));
+        ui.set_timeline_scroll_y(old_scroll_y);
+    });
+
     ui.on_timeline_bounds_changed(move |x, y, w, h| {
         set_timeline_bounds(x, y, w, h);
     });

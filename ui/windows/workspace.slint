@@ -64,6 +64,13 @@ export component Workspace inherits Rectangle {
 
     in-out property <bool> explorer-visible: true;
 
+    private property <bool> clip-focus-active: false;
+    private property <float> clip-focus-zoom: 1.0;
+    private property <length> clip-focus-scroll-x: 0px;
+    private property <length> clip-focus-scroll-y: 0px;
+
+    out property <length> timeline-view-width: timeline.width;
+
 
     // ========================================================
     // CLIP POOL
@@ -270,11 +277,9 @@ export component Workspace inherits Rectangle {
         timeline.absolute-position.y
         + timeline.ruler-height;
 
-    out property <length> timeline-scroll-x:
-        timeline.scroll-x;
+    in-out property <length> timeline-scroll-x <=> timeline.scroll-x;
 
-    out property <length> timeline-scroll-y:
-        timeline.scroll-y;
+    in-out property <length> timeline-scroll-y <=> timeline.scroll-y;
 
     out property <length> timeline-px-per-beat:
         timeline.px-per-beat;

@@ -189,6 +189,10 @@ export component MainWindow inherits Window {
         8;
         
     in-out property <int> selected-clip <=> workspace.selected-clip;
+    in-out property <length> timeline-scroll-x <=> workspace.timeline-scroll-x;
+    in-out property <length> timeline-scroll-y <=> workspace.timeline-scroll-y;
+    in property <length> timeline-view-width: workspace.timeline-view-width;
+    callback focus-selected-clip-requested(int, float, length, length, length);
 
     in-out property <[ClipData]> clips:
         [
@@ -567,6 +571,16 @@ export component MainWindow inherits Window {
                 root.play-state-changed(root.playing);
                 accept
 
+            } else if event.text == "f" || event.text == "F" {
+                root.focus-selected-clip-requested(
+                    root.selected-clip,
+                    root.zoom-level,
+                    root.timeline-scroll-x,
+                    root.timeline-scroll-y,
+                    root.timeline-view-width
+                );
+                accept
+
             } else {
 
                 reject;
@@ -618,6 +632,7 @@ export component MainWindow inherits Window {
         track-names <=> root.track-names;
         track-colors <=> root.track-colors;
         clips <=> root.clips;
+
         zoom-y-level <=> root.zoom-y-level;
         drag-active <=> root.drag-active;
         drag-inited <=> root.drag-inited;
