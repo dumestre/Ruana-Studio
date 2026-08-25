@@ -39,14 +39,17 @@ export component SamplerTabs inherits Rectangle {
     HorizontalLayout {
         spacing: 0px;
         alignment: start;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
 
         for t[i] in root.tabs: Rectangle {
             width: root.compact ? 52px : 64px;
             background: i == root.current ? SamplerStyle.card : transparent;
 
             HorizontalLayout {
-                alignment: center;
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
                 spacing: 3px;
+                vertical-stretch: 1;
 
                 Text {
                     text: t;
@@ -64,17 +67,23 @@ export component SamplerTabs inherits Rectangle {
                 if i < root.active.length && root.active[i]: Rectangle {
                     width: 3px;
                     height: 3px;
-                    y: (parent.height - self.height) / 2;
+                    
                     border-radius: 1.5px;
                     background: SamplerStyle.sec-amp;
                     horizontal-stretch: 0;
                 }
             }
 
-            // Indicador da aba atual: 2px no topo, como aba de DAW.
+            // Indicador da aba atual: fica abaixo do nome, ancorado no fim
+            // da aba para não deslocar o label nem competir com o ponto de
+            // estado ativo.
             if i == root.current: Rectangle {
-                height: 2px;
+                x: (parent.width - self.width) / 2;
+                y: parent.height - self.height - 1px;
+                height: 3px;
+                width: 25px;
                 background: SamplerStyle.sec-sample;
+                border-radius: 10px;
             }
 
             // Tampa a régua de baixo na aba ativa, para a página

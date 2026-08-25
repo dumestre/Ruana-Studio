@@ -49,6 +49,7 @@ use daw_core::project::Project;
 use raw_window_handle::HasWindowHandle;
 use daw_core::transport::Transport;
 use daw_midi::NoteEditor;
+use slint::Model;
 
 fn main() -> Result<(), slint::PlatformError> {
     let ui = MainWindow::new()?;
