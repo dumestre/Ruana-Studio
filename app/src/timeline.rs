@@ -273,6 +273,8 @@ pub fn install(
         {
             let project = project.clone();
             let clipboard = clip_clipboard.clone();
+            let waveforms = waveforms.clone();
+            let clips_model = clips_model.clone();
             let ui_paste = ui.as_weak();
             ui.on_clip_paste_requested(move |beat, track| {
                 let Some(src) = clipboard.borrow().clone() else {
@@ -285,7 +287,7 @@ pub fn install(
                 let track_id = (track.max(0) as usize).min(track_count - 1) as u64;
                 let desired = if snap { beat.floor() } else { beat }.max(0.0);
                 let start = proj.find_free_slot(track_id, desired, src.length_beats);
-                proj.add_clip_with_path(
+                let new_id = proj.add_clip_with_path(
                     track_id,
                     src.kind,
                     src.name.as_str(),
@@ -293,12 +295,23 @@ pub fn install(
                     src.length_beats,
                     src.file_path.clone(),
                 );
+
+                // Waveform da cópia: mesmo arquivo do clipboard →
+                // copia a entrada do cache e reprojeta a linha.
+                // (Clona FORA do borrow para não segurar o RefCell.)
+                let src_wf = waveforms.borrow().get(&src.id).cloned();
+                if let (Some(new_id), Some(cw)) = (new_id, src_wf) {
+                    waveforms.borrow_mut().insert(new_id, cw);
+                    crate::waveform::reproject_clip(&clips_model, &waveforms.borrow(), new_id);
+                }
             });
         }
 
         // Duplicate de clip (menu de contexto) → cópia na mesma posição.
         {
             let project = project.clone();
+            let waveforms = waveforms.clone();
+            let clips_model = clips_model.clone();
             ui.on_clip_duplicate_requested(move |id| {
                 let Some(src) = project
                     .borrow()
@@ -313,7 +326,7 @@ pub fn install(
                 // Duplicar coloca a cópia DEPOIS do original, encostada.
                 // Na mesma posição ela ficaria invisível e inaudível.
                 let start = proj.find_free_slot(src.track_id, src.end_beat(), src.length_beats);
-                proj.add_clip_with_path(
+                let new_id = proj.add_clip_with_path(
                     src.track_id,
                     src.kind,
                     src.name.as_str(),
@@ -321,7 +334,40 @@ pub fn install(
                     src.length_beats,
                     src.file_path.clone(),
                 );
+
+                // Waveform: a duplicata aponta pro MESMO arquivo →
+                // copia a entrada do cache (picos + samples + raster)
+                // do clip de origem e reprojeta a linha da cópia.
+                if let Some(new_id) = new_id {
+                    let cached = waveforms.borrow().get(&src.id).cloned();
+                    if let Some(cw) = cached {
+                        waveforms.borrow_mut().insert(new_id, cw);
+                        crate::waveform::reproject_clip(&clips_model, &waveforms.borrow(), new_id);
+                    }
+                }
             });
+        }
+
+        // Marquee (Ctrl+arrasto): marca multi-selected nos clips
+        // que intersectam o retângulo (beats × trilhas).
+        {
+            let clips_model = clips_model.clone();
+            ui.on_marquee_select(
+                move |beat0: f32, beat1: f32, track0: i32, track1: i32| {
+                    for i in 0..clips_model.row_count() {
+                        if let Some(mut d) = clips_model.row_data(i) {
+                            let hit = d.beat < beat1
+                                && (d.beat + d.len) > beat0
+                                && d.track_index >= track0
+                                && d.track_index <= track1;
+                            if d.multi_selected != hit {
+                                d.multi_selected = hit;
+                                clips_model.set_row_data(i, d);
+                            }
+                        }
+                    }
+                },
+            );
         }
 
         // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.

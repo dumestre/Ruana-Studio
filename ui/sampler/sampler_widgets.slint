@@ -1,0 +1,649 @@
+// ============================================================
+// WIDGETS DO SAMPLER
+// ============================================================
+//
+// Camada que FALTAVA. Nada aqui substitui componente
+// compartilhado — `ui/components/button.slint`, `meter.slint` e
+// `knob.slint` são usados por mixer / beat / timeline e ficam
+// intocados.
+//
+// POR QUE UM KNOB LOCAL
+//
+// `ui/components/knob.slint:28` desenha o arco com 48 pontos que
+// têm `visible: self.active`. Em valor 0 o knob fica VAZIO —
+// parece bug, não parece zero. Também não tem shift-fino, nem
+// reset por duplo-clique, nem scroll. Como aquele knob é
+// compartilhado, a correção mora aqui.
+//
+// POR QUE UM SEGMENTED LOCAL
+//
+// O `Button` do projeto tem `height: 26px` fixo. No bottom-panel
+// de 215px isso não cabe numa linha de seletor. O `Button` segue
+// usado onde a altura serve (transport).
+//
+// SEM `animate` EM LUGAR NENHUM: `ui/components/meter.slint`
+// documenta que animação de Slint mantém o renderer sob carga e
+// engasga o playhead durante o play. Estado é `states`, que é
+// instantâneo.
+// ============================================================
+
+import { Theme } from "../theme.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCurves } from "sampler_curves.slint";
+
+// ============================================================
+// TOGGLE — pílula ON/OFF
+//
+// Mostra a palavra em vez de só mudar de cor: o sampler antigo
+// não tinha como saber se o filtro estava ligado.
+// ============================================================
+
+export component SamplerToggle inherits Rectangle {
+    in property <bool> on: false;
+    in property <bool> compact: false;
+    in property <bool> enabled: true;
+    in property <string> text: "";
+    in property <color> accent: Theme.accent;
+    callback clicked();
+
+    height: root.compact ? 12px : 14px;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: root.on ? root.accent : SamplerStyle.hairline;
+    background: root.on ? root.accent.with-alpha(0.18) : SamplerStyle.inset;
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        alignment: center;
+
+        Text {
+            text: root.text == "" ? (root.on ? "ON" : "OFF") : root.text;
+            font-size: SamplerStyle.label-size(root.compact);
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            color: root.on ? root.accent : SamplerStyle.text-faint;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    states [
+        disabled when !root.enabled: {
+            opacity: 0.40;
+        }
+        hovered when ta.has-hover: {
+            border-color: root.on ? root.accent.brighter(0.3) : SamplerStyle.rail-hi;
+            background: root.on ? root.accent.with-alpha(0.26) : SamplerStyle.card-hi;
+        }
+    ]
+}
+
+// ============================================================
+// CARD — moldura de seção
+//
+// Dá a hierarquia que não existia: faixa de accent da seção,
+// título, toggle opcional e um fundo distinto do painel. Card
+// desligado fica visivelmente desligado.
+// ============================================================
+
+export component SamplerCard inherits Rectangle {
+    in property <string> title;
+    in property <color> accent: Theme.accent;
+    in property <bool> compact: false;
+    in property <bool> has-toggle: false;
+    in property <bool> on: true;
+    // Trailing text no canto do header (ex.: valor resumido).
+    in property <string> badge: "";
+    callback toggled();
+
+    background: SamplerStyle.card;
+    border-radius: 3px;
+    border-width: 1px;
+    border-color: root.on ? SamplerStyle.hairline : SamplerStyle.hairline-soft;
+
+    VerticalLayout {
+        padding: SamplerStyle.card-pad(root.compact);
+        spacing: root.compact ? 3px : 5px;
+
+        HorizontalLayout {
+            spacing: 5px;
+            height: root.compact ? 12px : 14px;
+
+            // Faixa da seção: acesa = ligado, trilho = desligado.
+            Rectangle {
+                width: 2px;
+                border-radius: 1px;
+                background: root.on ? root.accent : SamplerStyle.rail;
+            }
+
+            Text {
+                text: root.title;
+                font-size: SamplerStyle.title-size(root.compact);
+                font-weight: 700;
+                letter-spacing: 0.7px;
+                color: root.on ? SamplerStyle.text-mid : SamplerStyle.text-faint;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+
+            if root.badge != "": Text {
+                text: root.badge;
+                font-size: SamplerStyle.label-size(root.compact);
+                color: SamplerStyle.text-faint;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
+
+            if root.has-toggle: SamplerToggle {
+                on: root.on;
+                compact: root.compact;
+                accent: root.accent;
+                horizontal-stretch: 0;
+                clicked => {
+                    root.toggled();
+                }
+            }
+        }
+
+        @children
+    }
+}
+
+// ============================================================
+// CURVA — poço com um Path de verdade
+//
+// Substitui os 32 Rectangle desconectados. Ver
+// sampler_curves.slint para o porquê.
+// ============================================================
+
+export component SamplerCurve inherits Rectangle {
+    in property <string> commands;
+    // Mesma curva fechada, para o preenchimento sob o traço.
+    in property <string> fill-commands: "";
+    in property <color> stroke: Theme.accent;
+    in property <float> vb-w: 1000;
+    in property <float> vb-h: 1000;
+    in property <length> line-width: 1.5px;
+    in property <bool> dim: false;
+    in property <bool> grid: true;
+    in property <bool> compact: false;
+    // Linha horizontal de referência (unity do filtro, centro do
+    // LFO). Em unidades do viewbox; negativo = não desenha.
+    in property <float> guide-y: -1;
+
+    background: SamplerStyle.inset;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: SamplerStyle.inset-line;
+    clip: true;
+
+    // Grade: some no modo compacto para não virar sujeira.
+    if root.grid && !root.compact: Rectangle {
+        for f in [0.25, 0.5, 0.75]: Rectangle {
+            x: parent.width * f;
+            width: 1px;
+            background: SamplerStyle.inset-line-soft;
+        }
+    }
+
+    if root.guide-y >= 0: Rectangle {
+        y: parent.height * (root.guide-y / root.vb-h);
+        height: 1px;
+        background: SamplerStyle.inset-line;
+    }
+
+    if root.fill-commands != "": Path {
+        commands: root.fill-commands;
+        viewbox-width: root.vb-w;
+        viewbox-height: root.vb-h;
+        fit: fill;
+        fill: root.stroke;
+        opacity: root.dim ? 0.05 : 0.13;
+    }
+
+    Path {
+        commands: root.commands;
+        viewbox-width: root.vb-w;
+        viewbox-height: root.vb-h;
+        fit: fill;
+        fill: transparent;
+        stroke: root.dim ? SamplerStyle.rail-hi : root.stroke;
+        stroke-width: root.line-width;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+    }
+
+    @children
+}
+
+// ============================================================
+// KNOB
+//
+// Pista sempre visível, arco de valor por cima, ponteiro no
+// miolo. Drag vertical, shift = fino, duplo-clique = default,
+// scroll = passo.
+// ============================================================
+
+export component SamplerKnob inherits Rectangle {
+    in property <string> label;
+    // Texto já formatado (vem do SamplerStyle no chamador).
+    in property <string> value-text;
+    in property <float> value: 0.5;
+    in property <float> default-value: 0.5;
+    in property <bool> bipolar: false;
+    in property <bool> enabled: true;
+    in property <bool> compact: false;
+    in property <color> accent: Theme.accent;
+    callback changed(float);
+
+    // Valor no instante do press: o drag é relativo a ele, então
+    // o cursor nunca "pula" para o valor absoluto.
+    private property <float> press-value: 0.5;
+    private property <bool> fine: false;
+
+    private property <length> dial: SamplerStyle.knob(root.compact);
+    private property <color> arc-color: root.enabled ? root.accent : SamplerStyle.rail-hi;
+
+    horizontal-stretch: 1;
+
+    VerticalLayout {
+        spacing: 1px;
+        alignment: center;
+
+        Text {
+            text: root.label;
+            font-size: SamplerStyle.label-size(root.compact);
+            letter-spacing: 0.5px;
+            color: root.enabled ? SamplerStyle.text-faint : SamplerStyle.text-faint.darker(0.3);
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+
+        // O corpo precisa ser quadrado; a coluna pode ser larga.
+        Rectangle {
+            height: root.dial;
+
+            body := Rectangle {
+                width: root.dial;
+                height: root.dial;
+                x: (parent.width - self.width) / 2;
+
+                // Pista: SEMPRE desenhada, inclusive em valor 0.
+                Path {
+                    commands: SamplerCurves.knob-track();
+                    viewbox-width: SamplerCurves.knob-vb;
+                    viewbox-height: SamplerCurves.knob-vb;
+                    fill: transparent;
+                    stroke: SamplerStyle.rail;
+                    stroke-width: root.compact ? 2.5px : 3px;
+                    stroke-line-cap: round;
+                }
+
+                Path {
+                    commands: root.bipolar
+                        ? SamplerCurves.knob-value-bipolar(root.value)
+                        : SamplerCurves.knob-value(root.value);
+                    viewbox-width: SamplerCurves.knob-vb;
+                    viewbox-height: SamplerCurves.knob-vb;
+                    fill: transparent;
+                    stroke: root.arc-color;
+                    stroke-width: root.compact ? 2.5px : 3px;
+                    stroke-line-cap: round;
+                }
+
+                // Detent das 12 horas nos knobs bipolares.
+                if root.bipolar: Path {
+                    commands: SamplerCurves.knob-detent();
+                    viewbox-width: SamplerCurves.knob-vb;
+                    viewbox-height: SamplerCurves.knob-vb;
+                    fill: transparent;
+                    stroke: SamplerStyle.rail-hi;
+                    stroke-width: 1px;
+                }
+
+                // Miolo.
+                cap := Rectangle {
+                    width: parent.width * 0.60;
+                    height: self.width;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: self.width / 2;
+                    background: SamplerStyle.card-hi;
+                    border-width: 1px;
+                    border-color: SamplerStyle.hairline;
+                }
+
+                Path {
+                    commands: SamplerCurves.knob-pointer(root.value);
+                    viewbox-width: SamplerCurves.knob-vb;
+                    viewbox-height: SamplerCurves.knob-vb;
+                    fill: transparent;
+                    stroke: root.enabled ? SamplerStyle.text : SamplerStyle.text-faint;
+                    stroke-width: 1.5px;
+                    stroke-line-cap: round;
+                }
+
+                ta := TouchArea {
+                    enabled: root.enabled;
+                    mouse-cursor: ns-resize;
+
+                    pointer-event(ev) => {
+                        // `modifiers` chega também no kind `move`,
+                        // então shift entra e sai no meio do drag.
+                        root.fine = ev.modifiers.shift;
+                        if ev.kind == PointerEventKind.down {
+                            root.press-value = root.value;
+                        }
+                    }
+
+                    moved => {
+                        // 1px = 1% (shift: 0,25%). Relativo ao
+                        // valor do press.
+                        let dy = (self.pressed-y - self.mouse-y) / 1px;
+                        root.changed(Math.clamp(
+                            root.press-value + dy * (root.fine ? 0.0025 : 0.01), 0, 1));
+                    }
+
+                    double-clicked => {
+                        root.changed(root.default-value);
+                    }
+
+                    scroll-event(ev) => {
+                        let step = ev.modifiers.shift ? 0.005 : 0.02;
+                        if ev.delta-y > 0 {
+                            root.changed(Math.clamp(root.value + step, 0, 1));
+                            return EventResult.accept;
+                        }
+                        if ev.delta-y < 0 {
+                            root.changed(Math.clamp(root.value - step, 0, 1));
+                            return EventResult.accept;
+                        }
+                        return EventResult.reject;
+                    }
+                }
+
+                states [
+                    pressed when ta.pressed: {
+                        cap.background: SamplerStyle.card-on;
+                        cap.border-color: root.accent;
+                    }
+                    hovered when ta.has-hover: {
+                        cap.border-color: SamplerStyle.rail-hi;
+                    }
+                ]
+            }
+        }
+
+        Text {
+            // Durante o drag o valor é o protagonista.
+            text: root.value-text;
+            font-size: SamplerStyle.value-size(root.compact);
+            font-weight: ta.pressed ? 700 : 500;
+            color: root.enabled
+                ? (ta.pressed || ta.has-hover ? root.accent : SamplerStyle.text)
+                : SamplerStyle.text-faint;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    states [
+        disabled when !root.enabled: {
+            opacity: 0.55;
+        }
+    ]
+}
+
+// ============================================================
+// SEGMENTED — seletor de tipo (LP/HP/BP/NOTCH, SINE/TRI/...)
+//
+// Seleção por TEXTO porque é assim que os módulos guardam o
+// estado (`filter-type: "LP"`).
+// ============================================================
+
+export component SamplerSegments inherits Rectangle {
+    in property <[string]> options: [];
+    in property <string> value: "";
+    in property <bool> enabled: true;
+    in property <bool> compact: false;
+    in property <color> accent: Theme.accent;
+    callback picked(string);
+
+    height: root.compact ? 15px : 18px;
+    background: SamplerStyle.inset;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: SamplerStyle.hairline-soft;
+    clip: true;
+
+    HorizontalLayout {
+        padding: 1px;
+        spacing: 1px;
+
+        for opt in root.options: Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 1px;
+            background: opt == root.value
+                ? root.accent.with-alpha(0.22)
+                : (seg.has-hover ? SamplerStyle.card-hi : transparent);
+
+            Text {
+                text: opt;
+                font-size: SamplerStyle.label-size(root.compact);
+                font-weight: opt == root.value ? 700 : 500;
+                letter-spacing: 0.3px;
+                color: opt == root.value
+                    ? (root.enabled ? root.accent : SamplerStyle.text-mid)
+                    : SamplerStyle.text-faint;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            // Sublinhado da opção ativa: cor sozinha é fraca
+            // demais nesse tamanho de fonte.
+            if opt == root.value: Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: root.enabled ? root.accent : SamplerStyle.rail-hi;
+            }
+
+            seg := TouchArea {
+                enabled: root.enabled;
+                mouse-cursor: pointer;
+                clicked => {
+                    root.picked(opt);
+                }
+            }
+        }
+    }
+
+    states [
+        disabled when !root.enabled: {
+            opacity: 0.45;
+        }
+    ]
+}
+
+// ============================================================
+// SLIDER horizontal — para linhas onde knob não cabe
+// (start/end, fades, ranges)
+// ============================================================
+
+export component SamplerSlider inherits Rectangle {
+    in property <float> value: 0;
+    in property <float> default-value: 0;
+    in property <bool> enabled: true;
+    in property <bool> compact: false;
+    in property <color> accent: Theme.accent;
+    callback changed(float);
+
+    height: root.compact ? 10px : 12px;
+    horizontal-stretch: 1;
+
+    // Trilha sempre visível.
+    Rectangle {
+        y: (parent.height - self.height) / 2;
+        height: root.compact ? 3px : 4px;
+        border-radius: self.height / 2;
+        background: SamplerStyle.inset;
+        border-width: 1px;
+        border-color: SamplerStyle.inset-line;
+
+        Rectangle {
+            width: parent.width * Math.clamp(root.value, 0, 1);
+            border-radius: parent.border-radius;
+            background: root.enabled ? root.accent.with-alpha(0.75) : SamplerStyle.rail-hi;
+        }
+    }
+
+    // Punho.
+    Rectangle {
+        width: root.compact ? 6px : 8px;
+        height: self.width;
+        x: Math.clamp(root.value, 0, 1) * (parent.width - self.width);
+        y: (parent.height - self.height) / 2;
+        border-radius: self.width / 2;
+        background: root.enabled ? SamplerStyle.text : SamplerStyle.text-faint;
+        border-width: 1px;
+        border-color: SamplerStyle.panel;
+    }
+
+    sta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: ew-resize;
+
+        // Posição absoluta: clicar já leva o valor pra lá.
+        clicked => {
+            root.changed(Math.clamp(self.mouse-x / root.width, 0, 1));
+        }
+
+        moved => {
+            root.changed(Math.clamp(self.mouse-x / root.width, 0, 1));
+        }
+
+        double-clicked => {
+            root.changed(root.default-value);
+        }
+
+        scroll-event(ev) => {
+            let step = ev.modifiers.shift ? 0.005 : 0.02;
+            if ev.delta-y > 0 {
+                root.changed(Math.clamp(root.value + step, 0, 1));
+                return EventResult.accept;
+            }
+            if ev.delta-y < 0 {
+                root.changed(Math.clamp(root.value - step, 0, 1));
+                return EventResult.accept;
+            }
+            return EventResult.reject;
+        }
+    }
+
+    states [
+        disabled when !root.enabled: {
+            opacity: 0.50;
+        }
+    ]
+}
+
+// ============================================================
+// READOUT — par label/valor
+// ============================================================
+
+export component SamplerReadout inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> compact: false;
+    in property <color> value-color: SamplerStyle.text;
+
+    height: root.compact ? 12px : 14px;
+
+    HorizontalLayout {
+        spacing: 5px;
+
+        Text {
+            text: root.label;
+            font-size: SamplerStyle.label-size(root.compact);
+            letter-spacing: 0.4px;
+            color: SamplerStyle.text-faint;
+            vertical-alignment: center;
+            horizontal-stretch: 0;
+        }
+
+        Text {
+            text: root.value;
+            font-size: SamplerStyle.label-size(root.compact);
+            font-weight: 600;
+            color: root.value-color;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+}
+
+// ============================================================
+// LINHA COM SLIDER — label, slider e valor numa linha só
+// ============================================================
+
+export component SamplerSliderRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value-text;
+    in property <float> value: 0;
+    in property <float> default-value: 0;
+    in property <bool> enabled: true;
+    in property <bool> compact: false;
+    in property <color> accent: Theme.accent;
+    in property <length> label-width: 34px;
+    in property <length> value-width: 46px;
+    callback changed(float);
+
+    height: SamplerStyle.row-h(root.compact);
+
+    HorizontalLayout {
+        spacing: 5px;
+
+        Text {
+            text: root.label;
+            width: root.label-width;
+            font-size: SamplerStyle.label-size(root.compact);
+            letter-spacing: 0.4px;
+            color: SamplerStyle.text-faint;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        SamplerSlider {
+            value: root.value;
+            default-value: root.default-value;
+            enabled: root.enabled;
+            compact: root.compact;
+            accent: root.accent;
+            changed(v) => {
+                root.changed(v);
+            }
+        }
+
+        Text {
+            text: root.value-text;
+            width: root.value-width;
+            font-size: SamplerStyle.label-size(root.compact);
+            font-weight: 600;
+            color: root.enabled ? SamplerStyle.text : SamplerStyle.text-faint;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            overflow: elide;
+        }
+    }
+}

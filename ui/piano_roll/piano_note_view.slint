@@ -160,12 +160,6 @@ export component PianoNoteView inherits Rectangle {
                 ? ew-resize
                 : pointer;
 
-        clicked => {
-            PianoRollActions.note-selected(
-                root.note-id
-            );
-        }
-
         pointer-event(event) => {
 
             // ====================================================
@@ -185,35 +179,27 @@ export component PianoNoteView inherits Rectangle {
 
                 // Arrastar pela extremidade direita = resize
                 else if root.on-right-edge {
-
-                    self.drag-resizing = true;
-
-                    self.drag-start-x =
-                        self.mouse-x;
-
-                    self.drag-start-len =
-                        root.length;
-
-                    PianoRollActions.note-selected(
-                        root.note-id
-                    );
+                    if event.modifiers.control {
+                        PianoRollActions.note-selection-toggled(root.note-id);
+                    } else {
+                        self.drag-resizing = true;
+                        self.drag-start-x = self.mouse-x;
+                        self.drag-start-len = root.length;
+                        PianoRollActions.note-selected(root.note-id);
+                    }
 
                 }
 
                 // Arrastar pelo corpo = mover
                 else {
-
-                    self.drag-moving = true;
-
-                    self.drag-start-x =
-                        self.mouse-x;
-
-                    self.drag-start-beat =
-                        root.start;
-
-                    PianoRollActions.note-selected(
-                        root.note-id
-                    );
+                    if event.modifiers.control {
+                        PianoRollActions.note-selection-toggled(root.note-id);
+                    } else {
+                        self.drag-moving = true;
+                        self.drag-start-x = self.mouse-x;
+                        self.drag-start-beat = root.start;
+                        PianoRollActions.note-selected(root.note-id);
+                    }
                 }
             }
 

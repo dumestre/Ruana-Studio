@@ -248,6 +248,7 @@ export component MainWindow inherits Window {
     callback clip-color-cycle-requested(int);
     callback clip-copy-requested(int);
     callback clip-paste-requested(float, int);
+    callback marquee-select(float, float, int, int);
     callback clip-duplicate-requested(int);
 
     callback undo-requested;
@@ -664,6 +665,7 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
         clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
         clip-copy-requested(id) => { root.clip-copy-requested(id); }
         clip-paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }
+        marquee-select(b0, b1, t0, t1) => { root.marquee-select(b0, b1, t0, t1); }
         mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
         mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
         mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }

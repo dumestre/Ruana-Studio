@@ -1,246 +1,430 @@
+// ============================================================
+// WAVEFORM DO SAMPLER
+// ============================================================
+//
+// REUSO, NÃO REIMPLEMENTAÇÃO
+//
+// O desenho da onda vem da timeline: `AudioWaveform`
+// (ui/timeline/audio_waveform.slint), importado, não copiado. O
+// laço que existia aqui multiplicava cada pico por 0.90 e usava
+// piso de 1px, o que achatava a onda e engrossava o silêncio; o da
+// timeline é 1:1 e tem piso de 0.5px.
+//
+// DUAS ROTAS, MESMO PADRÃO DO CLIP
+//
+// Igual a ui/timeline/track_clip.slint:372-424:
+//   1. `waveform-image.width > 0` -> imagem rasterizada no Rust
+//      (rota rápida e bonita).
+//   2. senão -> `AudioWaveform` com os picos (fallback).
+//
+// O rasterizador Rust limpa o pixmap transparente e pinta o
+// envelope opaco em #0A0A0A
+// (crates/daw-media/src/waveform_image.rs), então `colorize`
+// tinge a forma para o fundo escuro daqui — sem precisar de uma
+// segunda imagem.
+//
+// PRODUZIR a imagem é território do outro agente (Rust). O
+// contrato já está exposto com default vazio: hoje roda no
+// fallback de picos e a rota por imagem acende sozinha quando
+// alguém ligar `app/src/waveform.rs::render_waveform_at_samples`
+// no callback `waveform-resolution-requested` — o debounce de
+// 120 ms já existe em `wire_resolution_requests`.
+//
+// O QUE ESTE ARQUIVO ACRESCENTA (o que diferencia de um clip)
+//
+// Poço, grade, linha de zero, região de seleção com handles que
+// REALMENTE arrastam (antes eram Rectangle decorativos), banda de
+// loop, cunhas de fade, playhead e scrub com leitura de tempo.
+//
+// UM ÚNICO TouchArea
+//
+// Handle com TouchArea próprio dá drag instável: a área se move
+// junto com o cursor, então `mouse-x` muda de referência no meio
+// do gesto. Aqui existe UM TouchArea fixo cobrindo o poço; no
+// `down` ele decide o que foi agarrado (verificado em
+// i-slint-core-1.17.1/items/input_items.rs:124-137 — `pressed-x/y`
+// são gravados ANTES do `pointer-event`), e no `moved` usa posição
+// absoluta. Coordenada estável, drag exato.
+//
+// A faixa de cima pega START/END, a de baixo pega o LOOP e o meio
+// faz scrub — separar por banda evita handles disputando o mesmo
+// pixel.
+// ============================================================
+
 import { Theme } from "../theme.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { AudioWaveform } from "../timeline/audio_waveform.slint";
 
 export component SamplerWaveform inherits Rectangle {
 
+    // --- dados ---
     in property <[float]> peaks: [];
+    // width 0 = sem imagem -> cai no fallback de picos.
+    in property <image> waveform-image;
     in property <color> waveform-color: Theme.clip-audio;
+    in property <bool> sample-loaded: false;
+    // Duração total, para a leitura de tempo do scrub.
+    in property <float> total-ms: 0;
 
+    // --- região ---
     in-out property <float> start-position: 0.0;
     in-out property <float> end-position: 1.0;
     in-out property <float> playhead-position: 0.0;
 
+    in property <bool> loop-enabled: false;
+    in-out property <float> loop-start: 0.0;
+    in-out property <float> loop-end: 1.0;
+
+    in property <float> fade-in: 0.0;
+    in property <float> fade-out: 0.0;
+
     in property <bool> playing: false;
     in property <bool> hovered: false;
-    in property <bool> sample-loaded: false;
+    in property <bool> compact: false;
 
-    private property <float> waveform-height: 0.90;
+    callback start-changed(float);
+    callback end-changed(float);
+    callback loop-start-changed(float);
+    callback loop-end-changed(float);
+    callback scrubbed(float);
+    // Pede re-render na largura exata (mesmo contrato do clip).
+    callback waveform-resolution-requested(float);
 
-    background: Theme.base;
+    // Altura das faixas de agarre.
+    private property <length> band: root.compact ? 8px : 10px;
+    // O que está sendo arrastado: 0 scrub, 1 start, 2 end,
+    // 3 loop-start, 4 loop-end.
+    private property <int> grab: 0;
+
+    background: SamplerStyle.inset;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: SamplerStyle.inset-line;
     clip: true;
 
-    // ============================================================
-    // GRID
-    // ============================================================
-
-    Rectangle {
-        x: 0;
-        y: parent.height * 0.25;
-        width: parent.width;
-        height: 1px;
-        background: Theme.grid-sub;
-    }
-
-    Rectangle {
-        x: 0;
-        y: parent.height * 0.50;
-        width: parent.width;
-        height: 1px;
-        background: Theme.grid-line;
-    }
-
-    Rectangle {
-        x: 0;
-        y: parent.height * 0.75;
-        width: parent.width;
-        height: 1px;
-        background: Theme.grid-sub;
-    }
-
-    // ============================================================
-    // LINHA CENTRAL
-    // ============================================================
-
-    Rectangle {
-        x: 0;
-        y: (parent.height - 1px) / 2;
-        width: parent.width;
-        height: 1px;
-        background: root.waveform-color;
-        opacity: 0.30;
-    }
-
-    // ============================================================
-    // WAVEFORM
-    // ============================================================
-
-    Rectangle {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: parent.height;
-        background: transparent;
-        clip: true;
-
-        if root.sample-loaded : Rectangle {
-            x: 0;
-            y: 0;
-            width: parent.width;
-            height: parent.height;
-            background: transparent;
-
-            for peak[i] in root.peaks : Rectangle {
-                x: i * (
-                    parent.width /
-                    Math.max(1, root.peaks.length)
-                );
-
-                y: (
-                    parent.height -
-                    peak *
-                    parent.height *
-                    root.waveform-height
-                ) / 2;
-
-                width: max(
-                    1px,
-                    parent.width /
-                    Math.max(1, root.peaks.length)
-                );
-
-                height: max(
-                    1px,
-                    peak *
-                    parent.height *
-                    root.waveform-height
-                );
-
-                background: root.waveform-color;
-            }
+    // Mesmo contrato do clip: pede rasterização na largura real.
+    changed width => {
+        if root.sample-loaded && self.width > 4px {
+            root.waveform-resolution-requested(self.width / 1px);
         }
     }
 
     // ============================================================
-    // ÁREA FORA DA SELEÇÃO - ESQUERDA
+    // GRADE + LINHA DE ZERO
     // ============================================================
 
-    if root.sample-loaded : Rectangle {
-        x: 0;
-        y: 0;
+    if root.sample-loaded: Rectangle {
+        for f in [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]: Rectangle {
+            x: parent.width * f;
+            width: 1px;
+            background: SamplerStyle.inset-line-soft;
+        }
+    }
+
+    Rectangle {
+        y: (parent.height - 1px) / 2;
+        height: 1px;
+        background: SamplerStyle.inset-line;
+    }
+
+    // ============================================================
+    // ONDA — rota por imagem, senão fallback de picos
+    // ============================================================
+
+    if root.sample-loaded && root.waveform-image.width > 0: Image {
+        source: root.waveform-image;
+        image-fit: fill;
+        image-rendering: smooth;
+        // A forma é opaca sobre fundo transparente, então tingir
+        // basta — não precisa de outra imagem por cor.
+        colorize: root.waveform-color;
+    }
+
+    if root.sample-loaded && root.waveform-image.width == 0 && root.peaks.length > 0: AudioWaveform {
+        waveform-color: root.waveform-color;
+        peaks: root.peaks;
+    }
+
+    // ============================================================
+    // FORA DA SELEÇÃO
+    // ============================================================
+
+    if root.sample-loaded && root.start-position > 0: Rectangle {
         width: parent.width * root.start-position;
-        height: parent.height;
-        background: Theme.base;
-        opacity: 0.55;
+        background: SamplerStyle.panel;
+        opacity: 0.62;
     }
 
-    // ============================================================
-    // ÁREA FORA DA SELEÇÃO - DIREITA
-    // ============================================================
-
-    if root.sample-loaded : Rectangle {
+    if root.sample-loaded && root.end-position < 1: Rectangle {
         x: parent.width * root.end-position;
-        y: 0;
         width: parent.width * (1.0 - root.end-position);
+        background: SamplerStyle.panel;
+        opacity: 0.62;
+    }
+
+    // ============================================================
+    // CUNHAS DE FADE
+    //
+    // Diagonal sobre a região do fade. Coordenadas inteiras num
+    // viewbox 100x100 — nada de float interpolado em `commands`,
+    // que em pt-BR viraria vírgula e quebraria o parser SVG.
+    // ============================================================
+
+    if root.sample-loaded && root.fade-in > 0.001: Path {
+        x: parent.width * root.start-position;
+        width: parent.width * Math.min(root.fade-in, root.end-position - root.start-position);
         height: parent.height;
-        background: Theme.base;
+        commands: "M 0,100 L 100,0";
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fit: fill;
+        fill: transparent;
+        stroke: SamplerStyle.text-mid;
+        stroke-width: 1px;
+        opacity: 0.55;
+    }
+
+    if root.sample-loaded && root.fade-out > 0.001: Path {
+        width: parent.width * Math.min(root.fade-out, root.end-position - root.start-position);
+        x: parent.width * root.end-position - self.width;
+        height: parent.height;
+        commands: "M 0,0 L 100,100";
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fit: fill;
+        fill: transparent;
+        stroke: SamplerStyle.text-mid;
+        stroke-width: 1px;
         opacity: 0.55;
     }
 
     // ============================================================
-    // MARCADOR START
+    // BANDA DE LOOP (embaixo)
     // ============================================================
 
-    if root.sample-loaded : Rectangle {
-        x: parent.width * root.start-position - 1px;
-        y: 0;
-        width: 2px;
-        height: parent.height;
-        background: Theme.accent;
+    if root.sample-loaded && root.loop-enabled: Rectangle {
+        y: parent.height - root.band;
+        height: root.band;
+        background: SamplerStyle.panel;
+        opacity: 0.75;
+
+        Rectangle {
+            x: parent.width * root.loop-start;
+            width: parent.width * Math.max(0, root.loop-end - root.loop-start);
+            background: SamplerStyle.sec-play;
+            opacity: 0.35;
+        }
+
+        // Pinos do loop.
+        Rectangle {
+            x: parent.width * root.loop-start;
+            width: 2px;
+            background: SamplerStyle.sec-play;
+        }
+
+        Rectangle {
+            x: parent.width * root.loop-end - 2px;
+            width: 2px;
+            background: SamplerStyle.sec-play;
+        }
     }
 
     // ============================================================
-    // HANDLE START
+    // MARCADORES START / END
+    //
+    // Linha em toda a altura + aba de agarre na faixa de cima, do
+    // lado de DENTRO da região (assim o par nunca se cobre quando
+    // start e end se aproximam).
     // ============================================================
 
-    if root.sample-loaded : Rectangle {
-        x: parent.width * root.start-position - 4px;
-        y: 0;
-        width: 8px;
-        height: 10px;
-        background: Theme.accent;
-        border-radius: 2px;
+    if root.sample-loaded: Rectangle {
+        x: parent.width * root.start-position;
+        width: 1px;
+        background: SamplerStyle.sec-sample;
     }
 
-    // ============================================================
-    // MARCADOR END
-    // ============================================================
+    if root.sample-loaded: Rectangle {
+        x: parent.width * root.start-position;
+        y: 0;
+        width: root.compact ? 6px : 7px;
+        height: root.band;
+        background: SamplerStyle.sec-sample;
+        border-bottom-right-radius: 2px;
+    }
 
-    if root.sample-loaded : Rectangle {
+    if root.sample-loaded: Rectangle {
         x: parent.width * root.end-position - 1px;
-        y: 0;
-        width: 2px;
-        height: parent.height;
-        background: Theme.accent;
+        width: 1px;
+        background: SamplerStyle.sec-sample;
     }
 
-    // ============================================================
-    // HANDLE END
-    // ============================================================
-
-    if root.sample-loaded : Rectangle {
-        x: parent.width * root.end-position - 4px;
+    if root.sample-loaded: Rectangle {
+        width: root.compact ? 6px : 7px;
+        x: parent.width * root.end-position - self.width;
         y: 0;
-        width: 8px;
-        height: 10px;
-        background: Theme.accent;
-        border-radius: 2px;
+        height: root.band;
+        background: SamplerStyle.sec-sample;
+        border-bottom-left-radius: 2px;
     }
 
     // ============================================================
     // PLAYHEAD
     // ============================================================
 
-    if root.sample-loaded : Rectangle {
-        x: parent.width * root.playhead-position - 1px;
-        y: 0;
-        width: 2px;
-        height: parent.height;
+    if root.sample-loaded: Rectangle {
+        x: parent.width * root.playhead-position;
+        width: 1px;
         background: Theme.playhead;
-        opacity: root.playing ? 1.0 : 0.65;
+        opacity: root.playing ? 1.0 : 0.45;
     }
 
-    // ============================================================
-    // PLAYHEAD HANDLE
-    // ============================================================
-
-    if root.sample-loaded : Rectangle {
-        x: parent.width * root.playhead-position - 4px;
+    if root.sample-loaded && root.playing: Rectangle {
+        x: parent.width * root.playhead-position - 2px;
         y: 0;
-        width: 8px;
-        height: 5px;
+        width: 5px;
+        height: 4px;
         background: Theme.playhead;
     }
 
     // ============================================================
-    // HOVER
+    // SCRUB — linha e leitura de tempo sob o cursor
     // ============================================================
 
-    if root.hovered : Rectangle {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: parent.height;
+    if root.sample-loaded && ta.has-hover: Rectangle {
+        x: ta.mouse-x;
+        width: 1px;
+        background: SamplerStyle.text;
+        opacity: 0.40;
+    }
+
+    if root.sample-loaded && ta.has-hover && root.total-ms > 0: Rectangle {
+        // Vira de lado perto da borda direita para não sair do poço.
+        x: Math.min(ta.mouse-x + 4px, parent.width - self.width - 2px);
+        y: parent.height - self.height - (root.loop-enabled ? root.band + 2px : 3px);
+        width: root.compact ? 52px : 58px;
+        height: root.compact ? 11px : 13px;
+        background: SamplerStyle.panel;
+        border-radius: 2px;
+        border-width: 1px;
+        border-color: SamplerStyle.hairline;
+
+        Text {
+            text: SamplerStyle.fmt-pos(ta.mouse-x / root.width, root.total-ms);
+            font-size: SamplerStyle.label-size(root.compact);
+            color: SamplerStyle.text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: parent.width;
+            height: parent.height;
+        }
+    }
+
+    // ============================================================
+    // HOVER GERAL (vem do card, igual ao clip)
+    // ============================================================
+
+    if root.hovered: Rectangle {
         background: #FFFFFF;
-        opacity: 0.06;
+        opacity: 0.05;
     }
 
     // ============================================================
-    // EMPTY
+    // VAZIO
+    //
+    // O antigo era um texto solto de 10px. Aqui é ícone + chamada
+    // + dica, centralizado.
     // ============================================================
 
-    if !root.sample-loaded : Text {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: parent.height;
+    if !root.sample-loaded: VerticalLayout {
+        alignment: center;
+        spacing: root.compact ? 1px : 4px;
 
-        text: "DROP SAMPLE HERE";
+        Image {
+            source: @image-url("../icons/audio.svg");
+            width: root.compact ? 14px : 20px;
+            height: self.width;
+            colorize: SamplerStyle.rail-hi;
+            horizontal-alignment: center;
+        }
 
-        color: Theme.text-dim;
+        Text {
+            text: "DROP A SAMPLE";
+            font-size: SamplerStyle.title-size(root.compact);
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: SamplerStyle.text-faint;
+            horizontal-alignment: center;
+        }
 
-        horizontal-alignment: center;
-        vertical-alignment: center;
+        if !root.compact: Text {
+            text: "or use LOAD in the header";
+            font-size: SamplerStyle.label-size(root.compact);
+            color: SamplerStyle.text-faint.darker(0.25);
+            horizontal-alignment: center;
+        }
+    }
 
-        font-size: 10px;
-        font-weight: 600;
+    // ============================================================
+    // INTERAÇÃO
+    // ============================================================
+
+    ta := TouchArea {
+        enabled: root.sample-loaded;
+
+        mouse-cursor: self.mouse-y <= root.band
+            ? MouseCursor.ew-resize
+            : (root.loop-enabled && self.mouse-y >= root.height - root.band
+                ? MouseCursor.ew-resize
+                : MouseCursor.crosshair);
+
+        pointer-event(ev) => {
+            if ev.kind == PointerEventKind.down {
+                let fx = self.pressed-x / root.width;
+                if self.pressed-y <= root.band {
+                    root.grab = Math.abs(fx - root.start-position)
+                        <= Math.abs(fx - root.end-position) ? 1 : 2;
+                } else if root.loop-enabled && self.pressed-y >= root.height - root.band {
+                    root.grab = Math.abs(fx - root.loop-start)
+                        <= Math.abs(fx - root.loop-end) ? 3 : 4;
+                } else {
+                    root.grab = 0;
+                }
+            }
+        }
+
+        moved => {
+            // TouchArea fixo: posição absoluta serve direto.
+            let f = Math.clamp(self.mouse-x / root.width, 0, 1);
+            if root.grab == 1 {
+                root.start-changed(Math.min(f, root.end-position - 0.002));
+            } else if root.grab == 2 {
+                root.end-changed(Math.max(f, root.start-position + 0.002));
+            } else if root.grab == 3 {
+                root.loop-start-changed(Math.min(f, root.loop-end - 0.002));
+            } else if root.grab == 4 {
+                root.loop-end-changed(Math.max(f, root.loop-start + 0.002));
+            } else {
+                root.scrubbed(f);
+            }
+        }
+
+        clicked => {
+            if root.grab == 0 {
+                root.scrubbed(Math.clamp(self.mouse-x / root.width, 0, 1));
+            }
+        }
+
+        // Duplo-clique num handle devolve o limite ao extremo.
+        double-clicked => {
+            if root.grab == 1 {
+                root.start-changed(0);
+            } else if root.grab == 2 {
+                root.end-changed(1);
+            } else if root.grab == 3 {
+                root.loop-start-changed(0);
+            } else if root.grab == 4 {
+                root.loop-end-changed(1);
+            }
+        }
     }
 }

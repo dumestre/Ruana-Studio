@@ -146,6 +146,9 @@ pub fn install(
                 {
                     let mut t = transport.lock().unwrap();
                     t.playing = true;
+                    // Lembra onde o play começou: SPACE (stop) devolve
+                    // a agulha pra cá (comportamento padrão de DAW).
+                    t.play_start_ticks = t.position_ticks;
                     // Âncora inicial do clock visual (segundos contínuos)
                     *visual_clock.borrow_mut() = Some(VisualClock {
                         anchor_secs: t.position_seconds(),
@@ -252,7 +255,14 @@ pub fn install(
                 rt_log("[STOP] stopping transport + timers");
                 playhead_timer.borrow().stop();
                 *visual_clock.borrow_mut() = None;
-                transport.lock().unwrap().playing = false;
+
+                // SPACE = STOP: agulha volta pra onde o play começou.
+                let (ret_ticks, ret_secs) = {
+                    let mut t = transport.lock().unwrap();
+                    t.playing = false;
+                    t.position_ticks = t.play_start_ticks;
+                    (t.position_ticks, t.position_seconds())
+                };
                 meter_timer.borrow().stop();
                 // O dispositivo de áudio NÃO fecha aqui: continua
                 // aberto para a pré-escuta de samples com o transporte
@@ -260,6 +270,8 @@ pub fn install(
                 if let Some(ui) = ui_weak.upgrade() {
                     let st = crate::BeatState::get(&ui);
                     st.set_playhead(-1);
+                    ui.set_transport_time_seconds(ret_secs as f32);
+                    ui.set_transport_position(ret_ticks.min(i32::MAX as u64) as i32);
                 }
             }
         });

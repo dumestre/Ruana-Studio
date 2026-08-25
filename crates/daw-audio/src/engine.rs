@@ -67,6 +67,7 @@ struct ClipSlot {
     track_id: u64,
     start_beat: f64,
     length_beats: f64,
+    source_start_beats: f64,
     buffer: Arc<AudioBuffer>,
 }
 
@@ -141,6 +142,7 @@ impl ProjectSnapshot {
                     track_id: c.track_id,
                     start_beat: c.start_beat as f64,
                     length_beats: c.length_beats as f64,
+                    source_start_beats: c.source_start_beats as f64,
                     buffer,
                 })
             })
@@ -616,7 +618,12 @@ impl AudioEngine {
                             continue;
                         }
 
-                        let (sl, sr) = clip.buffer.read(offset);
+                        // O clip pode ser um trecho fatiado do arquivo. A
+                        // leitura precisa começar no offset de origem, não
+                        // no frame zero do buffer compartilhado.
+                        let source_offset =
+                            (clip.source_start_beats * frames_per_beat + offset).max(0.0);
+                        let (sl, sr) = clip.buffer.read(source_offset);
 
                         // Rampa nas bordas: cortar o clip no meio de
                         // um ciclo é um degrau, e degrau é clique.

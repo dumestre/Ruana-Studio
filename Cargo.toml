@@ -9,6 +9,7 @@ members = [
     "crates/daw-plugins",
     "crates/daw-project",
     "waveformlab",
+    "playheadlab",
 ]
 
 [workspace.package]

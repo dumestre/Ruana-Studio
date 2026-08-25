@@ -10,15 +10,15 @@ export component PianoVelocity inherits Rectangle {
     callback velocity-edited(int, int);
 
     height: root.area-height * 1px;
-    background: Theme.surface;
+    background: Theme.base;
 
     // Largura total da área de velocidade (mesma do grid)
     property <length> world-width:
         root.px-per-beat * 4 * PianoRollData.bar-range.length;
 
     // Escala: velocidade 0 = topo, 127 = base
-    property <length> velocity-area-top: 16px;
-    property <length> velocity-area-bottom: 14px;
+    property <length> velocity-area-top: 20px;
+    property <length> velocity-area-bottom: 12px;
     property <length> velocity-usable-height:
         root.height - root.velocity-area-top - root.velocity-area-bottom;
 
@@ -32,9 +32,26 @@ export component PianoVelocity inherits Rectangle {
 
         clip: true;
 
-        // --------------------------------------------------------
-        // FUNDO: linhas horizontais de referência da velocidade
-        // --------------------------------------------------------
+        // Faixas de leitura para a escala 0..127.
+        Rectangle {
+            x: 0;
+            y: root.velocity-area-top;
+            width: parent.width;
+            height: root.velocity-usable-height * 0.25;
+            background: Theme.surface;
+            opacity: 0.28;
+        }
+
+        Rectangle {
+            x: 0;
+            y: root.velocity-area-top + root.velocity-usable-height * 0.5;
+            width: parent.width;
+            height: root.velocity-usable-height * 0.25;
+            background: Theme.surface;
+            opacity: 0.2;
+        }
+
+        // Linhas horizontais de referência da velocity.
 
         // Linha base (vel 0)
         Rectangle {
@@ -44,7 +61,7 @@ export component PianoVelocity inherits Rectangle {
             width: parent.width;
             height: 1px;
 
-            background: Theme.border;
+            background: Theme.text-dim;
 
             z: 5;
         }
@@ -60,7 +77,7 @@ export component PianoVelocity inherits Rectangle {
             width: parent.width;
             height: 1px;
 
-            background: Theme.grid-sub;
+            background: Theme.border;
 
             z: 4;
         }
@@ -76,7 +93,7 @@ export component PianoVelocity inherits Rectangle {
             width: parent.width;
             height: 1px;
 
-            background: Theme.grid-sub;
+            background: Theme.border;
 
             z: 4;
         }
@@ -92,17 +109,17 @@ export component PianoVelocity inherits Rectangle {
             width: root.world-width;
             height: parent.height;
 
-            // Barras de velocidade de CADA nota
+            // Uma barra por nota, no mesmo sistema de coordenadas do grid.
             for note in PianoRollData.notes: Rectangle {
 
                 // Posição X — igual ao PianoNoteView
                 x: note.start * root.px-per-beat;
 
                 // Posição Y: cresce de BAIXO para CIMA conforme velocidade
-                y:
-                    root.velocity-area-top
+                y: root.velocity-area-top
                     + root.velocity-usable-height
-                    - (note.velocity / 127.0) * root.velocity-usable-height;
+                    - Math.max(2px, (note.velocity / 127.0)
+                        * root.velocity-usable-height);
 
                 // Largura — igual ao PianoNoteView
                 width:
@@ -112,23 +129,22 @@ export component PianoVelocity inherits Rectangle {
                     );
 
                 // Altura — proporcional à velocidade
-                height:
-                    Math.max(
-                        (note.velocity / 127.0) * root.velocity-usable-height,
-                        2px
-                    );
+                height: Math.max(
+                    2px,
+                    (note.velocity / 127.0) * root.velocity-usable-height
+                );
 
                 // Cor: verde mais forte em velocity alta
                 background:
                     note.id == PianoRollData.selected-note
-                        ? Theme.accent
+                            ? Theme.accent
                         : note.velocity >= 96
                             ? Theme.ok.brighter(0.1)
                             : note.velocity >= 64
                                 ? Theme.ok
                                 : Theme.ok.darker(0.25);
 
-                // Borda superior (cabeça da barra)
+                // Cabeça da barra, sempre visível mesmo em velocity baixa.
                 Rectangle {
                     x: 0;
                     y: 0;
@@ -136,19 +152,28 @@ export component PianoVelocity inherits Rectangle {
                     width: parent.width;
                     height: 2px;
 
-                    background:
-                        note.id == PianoRollData.selected-note
-                            ? Theme.text-primary
-                            : Theme.text-primary.transparentize(0.35);
+                    background: note.id == PianoRollData.selected-note
+                        ? Theme.text-primary
+                        : Theme.text-primary.transparentize(0.45);
+                }
+
+                Rectangle {
+                    x: 0;
+                    y: 0;
+                    width: parent.width;
+                    height: parent.height;
+                    border-width: note.id == PianoRollData.selected-note ? 1px : 0px;
+                    border-color: Theme.text-primary;
+                    background: transparent;
                 }
 
                 // Área de interação (clicar/arrastar para mudar velocidade)
                 TouchArea {
                     x: 0;
-                    y: -10px;
+                    y: -4px;
 
                     width: parent.width;
-                    height: parent.height + 10px;
+                    height: parent.height + 4px;
 
                     mouse-cursor: ns-resize;
 
@@ -159,18 +184,12 @@ export component PianoVelocity inherits Rectangle {
 
                             self.editing = true;
                             PianoRollActions.note-selected(note.id);
-                            root.apply-velocity-at-pointer(
-                                note.id,
-                                self.mouse-y + 10px
-                            );
+                            root.apply-velocity-at-pointer(note.id, self.mouse-y + 4px);
 
                         } else if event.kind == PointerEventKind.move
                             && self.editing {
 
-                            root.apply-velocity-at-pointer(
-                                note.id,
-                                self.mouse-y + 10px
-                            );
+                            root.apply-velocity-at-pointer(note.id, self.mouse-y + 4px);
 
                         } else if event.kind == PointerEventKind.up {
                             self.editing = false;
@@ -187,13 +206,13 @@ export component PianoVelocity inherits Rectangle {
     // BARRA LATERAL ESQUERDA (escala)
     // ============================================================
 
-    // Título da área
+    // Cabeçalho compacto, alinhado ao rótulo na coluna do teclado.
     Rectangle {
         x: 0;
         y: 0;
 
         width: parent.width;
-        height: 16px;
+        height: root.velocity-area-top;
 
         background: Theme.surface-high;
 
@@ -225,12 +244,12 @@ export component PianoVelocity inherits Rectangle {
         }
     }
 
-    // Marcador 127 (máximo)
+    // Marcadores discretos da escala.
     Text {
         x: 4px;
-        y: root.velocity-area-top - 6px;
+        y: root.velocity-area-top - 5px;
 
-        width: 32px;
+        width: 28px;
         height: 12px;
 
         text: "127";
@@ -249,9 +268,9 @@ export component PianoVelocity inherits Rectangle {
             root.velocity-area-top
             + root.velocity-usable-height
             - (64.0 / 127.0) * root.velocity-usable-height
-            - 6px;
+            - 5px;
 
-        width: 32px;
+        width: 28px;
         height: 12px;
 
         text: "64";
@@ -266,9 +285,9 @@ export component PianoVelocity inherits Rectangle {
     // Marcador 0 (mínimo)
     Text {
         x: 4px;
-        y: root.height - root.velocity-area-bottom - 6px;
+        y: root.height - root.velocity-area-bottom - 5px;
 
-        width: 32px;
+        width: 28px;
         height: 12px;
 
         text: "0";

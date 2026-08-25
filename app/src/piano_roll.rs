@@ -124,6 +124,25 @@ where
         actions.on_note_selected(move |id| {
             if let Some(ui) = ui_weak.upgrade() {
                 PianoRollData::get(&ui).set_selected_note(id);
+                PianoRollData::get(&ui).set_selected_notes(
+                    Rc::new(slint::VecModel::from(vec![id])).into()
+                );
+            }
+        });
+    }
+    {
+        let ui_weak = ui.as_weak();
+        actions.on_note_selection_toggled(move |id| {
+            if let Some(ui) = ui_weak.upgrade() {
+                let data = PianoRollData::get(&ui);
+                let mut ids: Vec<i32> = data.get_selected_notes().iter().collect();
+                if let Some(pos) = ids.iter().position(|selected| *selected == id) {
+                    ids.remove(pos);
+                } else {
+                    ids.push(id);
+                }
+                data.set_selected_notes(Rc::new(slint::VecModel::from(ids.clone())).into());
+                data.set_selected_note(ids.first().copied().unwrap_or(-1));
             }
         });
     }

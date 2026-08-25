@@ -10,6 +10,40 @@ export component PianoGrid inherits Rectangle {
     in property <length> beat-width: 80px;
 
     in property <length> key-height: 20px;
+    in property <string> scale-root: "C";
+    in property <string> scale-name: "Maior (Jônio)";
+    in property <bool> highlight-scale: false;
+
+    function root-pitch() -> int {
+        root.scale-root == "C" ? 0
+        : root.scale-root == "C# / Db" ? 1
+        : root.scale-root == "D" ? 2
+        : root.scale-root == "D# / Eb" ? 3
+        : root.scale-root == "E" ? 4
+        : root.scale-root == "F" ? 5
+        : root.scale-root == "F# / Gb" ? 6
+        : root.scale-root == "G" ? 7
+        : root.scale-root == "G# / Ab" ? 8
+        : root.scale-root == "A" ? 9
+        : root.scale-root == "A# / Bb" ? 10 : 11;
+    }
+
+    function is-scale-note(note: int) -> bool {
+        let p = Math.mod(note - root.root-pitch() + 120, 12);
+        root.scale-name == "Cromática" ? true
+        : root.scale-name == "Pentatônica Maior" ? (p == 0 || p == 2 || p == 4 || p == 7 || p == 9)
+        : root.scale-name == "Pentatônica Menor" ? (p == 0 || p == 3 || p == 5 || p == 7 || p == 10)
+        : root.scale-name == "Escala de Blues" ? (p == 0 || p == 3 || p == 5 || p == 6 || p == 7 || p == 10)
+        : root.scale-name == "Menor Natural (Eólio)" ? (p == 0 || p == 2 || p == 3 || p == 5 || p == 7 || p == 8 || p == 10)
+        : root.scale-name == "Dórico" ? (p == 0 || p == 2 || p == 3 || p == 5 || p == 7 || p == 9 || p == 10)
+        : root.scale-name == "Frígio" ? (p == 0 || p == 1 || p == 3 || p == 5 || p == 7 || p == 8 || p == 10)
+        : root.scale-name == "Lídio" ? (p == 0 || p == 2 || p == 4 || p == 6 || p == 7 || p == 9 || p == 11)
+        : root.scale-name == "Mixolídio" ? (p == 0 || p == 2 || p == 4 || p == 5 || p == 7 || p == 9 || p == 10)
+        : root.scale-name == "Lócrio" ? (p == 0 || p == 1 || p == 3 || p == 5 || p == 6 || p == 8 || p == 10)
+        : root.scale-name == "Menor Harmônica" ? (p == 0 || p == 2 || p == 3 || p == 5 || p == 7 || p == 8 || p == 11)
+        : root.scale-name == "Menor Melódica" ? (p == 0 || p == 2 || p == 3 || p == 5 || p == 7 || p == 9 || p == 11)
+        : (p == 0 || p == 2 || p == 4 || p == 5 || p == 7 || p == 9 || p == 11);
+    }
 
     // ============================================================
     // DIMENSÕES DO GRID
@@ -50,7 +84,8 @@ export component PianoGrid inherits Rectangle {
             nota-na-oitava == 6 || nota-na-oitava == 8 || nota-na-oitava == 10;
 
         // Pinta o fundo da linha com surface se for tecla preta, transparente se for branca
-        background: is-tecla-preta ? Theme.surface : transparent;
+        background: is-tecla-preta ? Theme.surface : Theme.base;
+        opacity: root.highlight-scale && !root.is-scale-note(note) ? 0.42 : 1.0;
 
         // Borda superior da linha (aquela que antes era o retângulo principal)
         Rectangle {

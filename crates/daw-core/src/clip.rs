@@ -39,6 +39,9 @@ pub struct Clip {
     pub start_beat: f32,
     /// Duração em beats.
     pub length_beats: f32,
+    /// Posição inicial dentro do arquivo de áudio, em beats do projeto.
+    /// Clips MIDI ignoram este campo.
+    pub source_start_beats: f32,
     /// Índice de cor (paleta na UI). 0 = padrão MIDI/Audio.
     pub color: u8,
     /// Caminho do arquivo de áudio (apenas clips de áudio).
@@ -62,6 +65,7 @@ impl Clip {
             kind,
             start_beat,
             length_beats,
+            source_start_beats: 0.0,
             color: 0,
             file_path: None,
         }

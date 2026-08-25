@@ -10,4 +10,7 @@ export struct ClipData {
     // Waveform pré-renderizada (Rust, uma vez por import).
     // Largura 0 = sem imagem → o clip cai no fallback de retângulos.
     waveform-image: image,
+    // Seleção múltipla (Ctrl+arrasto / marquee). Independente da
+    // seleção simples (`selected-clip`).
+    multi-selected: bool,
 }

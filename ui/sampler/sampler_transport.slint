@@ -1,192 +1,119 @@
+// ============================================================
+// TRANSPORT DO SAMPLER
+// ============================================================
+//
+// Antes: `Rectangle` + `TouchArea` cru em x fixo (4/66/128/190),
+// SEM nenhum estado de hover ou press — clicar não dava retorno
+// nenhum, e a fileira estourava largura quando o painel encolhia.
+//
+// Agora usa o `Button` do projeto
+// (ui/components/button.slint), que já resolve
+// hover/press/toggled/disabled e mantém o transport do sampler
+// parecido com o transport global. Os liga/desliga de texto usam
+// `SamplerToggle` porque o Button de 26px é alto demais para
+// empilhar em três fileiras nos 215px do bottom-panel.
+// ============================================================
+
 import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerToggle, SamplerSegments } from "sampler_widgets.slint";
 
 export component SamplerTransport inherits Rectangle {
+    in property <bool> playing: false;
+    in property <bool> loop-enabled: false;
+    in property <bool> reverse-enabled: false;
+    in property <bool> one-shot: true;
+    in property <bool> enabled: true;
+    in property <bool> compact: false;
 
-    // ============================================================
-    // ESTADO
-    // ============================================================
+    callback play-clicked();
+    callback stop-clicked();
+    callback loop-toggled();
+    callback reverse-toggled();
+    callback one-shot-changed(bool);
 
-    in-out property <bool> playing: false;
-    in-out property <bool> loop-enabled: false;
-    in-out property <bool> reverse-enabled: false;
-    in-out property <bool> one-shot: true;
+    private property <length> btn-h: root.compact ? 22px : 26px;
 
-    // ============================================================
-    // DIMENSÕES
-    // ============================================================
+    background: transparent;
 
-    private property <length> control-height: 36px;
-    private property <length> button-gap: 4px;
+    VerticalLayout {
+        spacing: root.compact ? 3px : 5px;
+        alignment: start;
 
-    height: control-height;
+        // --- fileira 1: play / stop ---
+        HorizontalLayout {
+            spacing: root.compact ? 3px : 4px;
 
-    background: Theme.surface-high;
+            Button {
+                height: root.btn-h;
+                icon: root.playing
+                    ? @image-url("../icons/pause.svg")
+                    : @image-url("../icons/play.svg");
+                icon-size: root.compact ? 13px : 15px;
+                icon-color: SamplerStyle.text-mid;
+                toggled: root.playing;
+                toggled-bg: SamplerStyle.sec-play;
+                toggled-fg: Theme.on-accent;
+                enabled: root.enabled;
+                horizontal-stretch: 2;
+                clicked => {
+                    root.play-clicked();
+                }
+            }
 
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: 3px;
-
-    // ============================================================
-    // PLAY / STOP
-    // ============================================================
-
-    Rectangle {
-        x: 4px;
-        y: 4px;
-
-        width: 58px;
-        height: 28px;
-
-        background: root.playing
-            ? Theme.accent
-            : Theme.surface;
-
-        border-radius: 3px;
-
-        Text {
-            width: parent.width;
-            height: parent.height;
-
-            text: root.playing ? "STOP" : "PLAY";
-
-            color: root.playing
-                ? Theme.on-accent
-                : Theme.text-primary;
-
-            horizontal-alignment: center;
-            vertical-alignment: center;
-
-            font-size: 9px;
-            font-weight: 600;
-        }
-
-        TouchArea {
-            clicked => {
-                root.playing = !root.playing;
+            Button {
+                height: root.btn-h;
+                icon: @image-url("../icons/stop.svg");
+                icon-size: root.compact ? 13px : 15px;
+                icon-color: SamplerStyle.text-mid;
+                enabled: root.enabled;
+                horizontal-stretch: 1;
+                clicked => {
+                    root.stop-clicked();
+                }
             }
         }
-    }
 
-    // ============================================================
-    // LOOP
-    // ============================================================
+        // --- fileira 2: loop / reverse ---
+        HorizontalLayout {
+            spacing: root.compact ? 3px : 4px;
 
-    Rectangle {
-        x: 66px;
-        y: 4px;
+            SamplerToggle {
+                text: "LOOP";
+                on: root.loop-enabled;
+                compact: root.compact;
+                enabled: root.enabled;
+                accent: SamplerStyle.sec-play;
+                clicked => {
+                    root.loop-toggled();
+                }
+            }
 
-        width: 58px;
-        height: 28px;
-
-        background: root.loop-enabled
-            ? Theme.accent
-            : Theme.surface;
-
-        border-radius: 3px;
-
-        Text {
-            width: parent.width;
-            height: parent.height;
-
-            text: "LOOP";
-
-            color: root.loop-enabled
-                ? Theme.on-accent
-                : Theme.text-primary;
-
-            horizontal-alignment: center;
-            vertical-alignment: center;
-
-            font-size: 9px;
-            font-weight: 600;
-        }
-
-        TouchArea {
-            clicked => {
-                root.loop-enabled = !root.loop-enabled;
+            SamplerToggle {
+                text: "REV";
+                on: root.reverse-enabled;
+                compact: root.compact;
+                enabled: root.enabled;
+                accent: SamplerStyle.sec-play;
+                clicked => {
+                    root.reverse-toggled();
+                }
             }
         }
-    }
 
-    // ============================================================
-    // REVERSE
-    // ============================================================
-
-    Rectangle {
-        x: 128px;
-        y: 4px;
-
-        width: 58px;
-        height: 28px;
-
-        background: root.reverse-enabled
-            ? Theme.accent
-            : Theme.surface;
-
-        border-radius: 3px;
-
-        Text {
-            width: parent.width;
-            height: parent.height;
-
-            text: "REV";
-
-            color: root.reverse-enabled
-                ? Theme.on-accent
-                : Theme.text-primary;
-
-            horizontal-alignment: center;
-            vertical-alignment: center;
-
-            font-size: 9px;
-            font-weight: 600;
-        }
-
-        TouchArea {
-            clicked => {
-                root.reverse-enabled =
-                    !root.reverse-enabled;
-            }
-        }
-    }
-
-    // ============================================================
-    // ONE SHOT
-    // ============================================================
-
-    Rectangle {
-        x: 190px;
-        y: 4px;
-
-        width: 66px;
-        height: 28px;
-
-        background: root.one-shot
-            ? Theme.accent
-            : Theme.surface;
-
-        border-radius: 3px;
-
-        Text {
-            width: parent.width;
-            height: parent.height;
-
-            text: "ONE SHOT";
-
-            color: root.one-shot
-                ? Theme.on-accent
-                : Theme.text-primary;
-
-            horizontal-alignment: center;
-            vertical-alignment: center;
-
-            font-size: 9px;
-            font-weight: 600;
-        }
-
-        TouchArea {
-            clicked => {
-                root.one-shot = !root.one-shot;
+        // --- fileira 3: modo de disparo ---
+        //
+        // Era um par de booleanos sem rótulo; como só um dos dois
+        // pode valer, segmented control diz isso sozinho.
+        SamplerSegments {
+            options: ["ONE-SHOT", "GATE"];
+            value: root.one-shot ? "ONE-SHOT" : "GATE";
+            compact: root.compact;
+            enabled: root.enabled;
+            accent: SamplerStyle.sec-play;
+            picked(v) => {
+                root.one-shot-changed(v == "ONE-SHOT");
             }
         }
     }

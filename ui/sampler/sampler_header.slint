@@ -1,142 +1,150 @@
-import { Theme } from "../theme.slint";
+// ============================================================
+// HEADER DO SAMPLER
+// ============================================================
+//
+// Antes: posicionamento absoluto com altura fixa de 42px, que no
+// host de 215px come 20% da tela sem entregar informação.
+//
+// Agora é layout, colapsa para uma linha no modo compacto, e o
+// nome do sample é o elemento tipográfico dominante — é a única
+// coisa nesse painel que muda de projeto para projeto.
+//
+// LOAD/CLEAR usam `SamplerToggle` e não o `Button` compartilhado
+// porque `ui/components/button.slint:28` fixa `height: 26px`, o
+// que não cabe num header compacto de 24px.
+// ============================================================
+
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerToggle } from "sampler_widgets.slint";
 
 export component SamplerHeader inherits Rectangle {
-
-    // ============================================================
-    // PROPRIEDADES
-    // ============================================================
-
     in property <string> sample-name: "No Sample";
     in property <bool> sample-loaded: false;
     in property <string> sample-format: "";
     in property <string> sample-duration: "";
+    in property <bool> compact: false;
 
-    // ============================================================
-    // DIMENSÕES
-    // ============================================================
+    callback load-clicked();
+    callback clear-clicked();
 
-    private property <length> header-height: 42px;
+    height: SamplerStyle.header-h(root.compact);
+    background: SamplerStyle.panel;
 
-    height: header-height;
-    background: Theme.surface-high;
-
-    // ============================================================
-    // NOME DA AMOSTRA
-    // ============================================================
-
-    Text {
-        x: 12px;
-        y: 0;
-
-        width: parent.width - 270px;
-        height: parent.height;
-
-        text: root.sample-loaded
-            ? root.sample-name
-            : "Sampler";
-
-        color: Theme.text-primary;
-
-        vertical-alignment: center;
-
-        font-size: 13px;
-        font-weight: 600;
-    }
-
-    // ============================================================
-    // FORMATO
-    // ============================================================
-
-    if root.sample-loaded && root.sample-format != "" : Text {
-        x: parent.width - 250px;
-        y: 0;
-
-        width: 55px;
-        height: parent.height;
-
-        text: root.sample-format;
-
-        color: Theme.text-dim;
-
-        horizontal-alignment: center;
-        vertical-alignment: center;
-
-        font-size: 9px;
-        font-weight: 600;
-    }
-
-    // ============================================================
-    // DURAÇÃO
-    // ============================================================
-
-    if root.sample-loaded && root.sample-duration != "" : Text {
-        x: parent.width - 195px;
-        y: 0;
-
-        width: 75px;
-        height: parent.height;
-
-        text: root.sample-duration;
-
-        color: Theme.text-dim;
-
-        horizontal-alignment: center;
-        vertical-alignment: center;
-
-        font-size: 9px;
-        font-weight: 600;
-    }
-
-    // ============================================================
-    // STATUS
-    // ============================================================
-
+    // Régua de base: separa o header do conteúdo sem gastar altura.
     Rectangle {
-        x: parent.width - 108px;
-        y: 17px;
-
-        width: 8px;
-        height: 8px;
-
-        border-radius: 4px;
-
-        background: root.sample-loaded
-            ? Theme.activ
-            : Theme.border;
-    }
-
-    Text {
-        x: parent.width - 94px;
-        y: 0;
-
-        width: 70px;
-        height: parent.height;
-
-        text: root.sample-loaded
-            ? "LOADED"
-            : "EMPTY";
-
-        color: root.sample-loaded
-            ? Theme.text-primary
-            : Theme.text-dim;
-
-        vertical-alignment: center;
-
-        font-size: 9px;
-        font-weight: 600;
-    }
-
-    // ============================================================
-    // DIVISÓRIA
-    // ============================================================
-
-    Rectangle {
-        x: 0;
         y: parent.height - 1px;
-
-        width: parent.width;
         height: 1px;
+        background: SamplerStyle.hairline;
+    }
 
-        background: Theme.border;
+    HorizontalLayout {
+        padding-left: SamplerStyle.pad(root.compact);
+        padding-right: SamplerStyle.pad(root.compact);
+        spacing: root.compact ? 6px : 9px;
+        alignment: start;
+
+        // Faixa de identidade da seção.
+        Rectangle {
+            width: 2px;
+            y: root.compact ? 4px : 8px;
+            height: parent.height - (root.compact ? 9px : 17px);
+            border-radius: 1px;
+            background: root.sample-loaded ? SamplerStyle.sec-sample : SamplerStyle.rail;
+            horizontal-stretch: 0;
+        }
+
+        // Nome + rótulo. No compacto o rótulo sai.
+        VerticalLayout {
+            alignment: center;
+            spacing: 0px;
+            horizontal-stretch: 1;
+
+            if !root.compact: Text {
+                text: "SAMPLER";
+                font-size: SamplerStyle.label-size(root.compact);
+                font-weight: 700;
+                letter-spacing: 1.4px;
+                color: SamplerStyle.text-faint;
+            }
+
+            Text {
+                text: root.sample-name;
+                font-size: SamplerStyle.name-size(root.compact);
+                font-weight: 600;
+                color: root.sample-loaded ? SamplerStyle.text : SamplerStyle.text-faint;
+                overflow: elide;
+            }
+        }
+
+        // Chips de metadado: só aparecem quando têm conteúdo, então
+        // o header nunca mostra caixinha vazia.
+        if root.sample-format != "": Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: root.compact ? 12px : 15px;
+            background: SamplerStyle.card;
+            border-radius: 2px;
+            border-width: 1px;
+            border-color: SamplerStyle.hairline;
+            horizontal-stretch: 0;
+
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+
+                Text {
+                    text: root.sample-format;
+                    font-size: SamplerStyle.label-size(root.compact);
+                    font-weight: 600;
+                    letter-spacing: 0.5px;
+                    color: SamplerStyle.text-mid;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if root.sample-duration != "": Rectangle {
+            y: (parent.height - self.height) / 2;
+            height: root.compact ? 12px : 15px;
+            background: SamplerStyle.card;
+            border-radius: 2px;
+            border-width: 1px;
+            border-color: SamplerStyle.hairline;
+            horizontal-stretch: 0;
+
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+
+                Text {
+                    text: root.sample-duration;
+                    font-size: SamplerStyle.label-size(root.compact);
+                    font-weight: 600;
+                    color: SamplerStyle.text-mid;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        SamplerToggle {
+            y: (parent.height - self.height) / 2;
+            text: "LOAD";
+            compact: root.compact;
+            accent: SamplerStyle.sec-sample;
+            horizontal-stretch: 0;
+            clicked => {
+                root.load-clicked();
+            }
+        }
+
+        SamplerToggle {
+            y: (parent.height - self.height) / 2;
+            text: "CLEAR";
+            compact: root.compact;
+            enabled: root.sample-loaded;
+            horizontal-stretch: 0;
+            clicked => {
+                root.clear-clicked();
+            }
+        }
     }
 }

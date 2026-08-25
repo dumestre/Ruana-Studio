@@ -8,6 +8,7 @@ import { PianoNoteView } from "piano_note_view.slint";
 import { PianoVelocity } from "piano_velocity.slint";
 import { PianoNoteProperties } from "piano_note_properties.slint";
 import { PianoRollConfig } from "piano_roll_config.slint";
+import { ScaleAssistant } from "scale_assistant.slint";
 import { PianoRollData, PianoRollActions } from "piano_roll_state.slint";
 import { ComboBox } from "std-widgets.slint";
 
@@ -28,6 +29,20 @@ export component PianoRollArea inherits Rectangle {
     // Snap
     in-out property <bool> snap-enabled: config.snap-enabled;
     in-out property <int> snap-denominator: config.snap-denominator;
+
+    // Estado do assistente de escala. Ele fica local ao editor para que
+    // abrir/fechar o painel não altere a seleção nem o layout do piano roll.
+    property <bool> scale-assistant-open: false;
+    property <string> scale-root-note: "C";
+    property <string> scale-name: "Maior (Jônio)";
+    property <bool> scale-snap: false;
+    property <bool> scale-highlight: true;
+    property <bool> scale-fold: false;
+    property <string> committed-scale-root: "C";
+    property <string> committed-scale-name: "Maior (Jônio)";
+    property <bool> committed-scale-snap: false;
+    property <bool> committed-scale-highlight: true;
+    property <bool> committed-scale-fold: false;
 
     property <length> world-width:
         root.px-per-beat * 4 * PianoRollData.bar-range.length;
@@ -101,12 +116,58 @@ export component PianoRollArea inherits Rectangle {
         }
     }
 
+    function scale-root-pitch() -> int {
+        root.scale-root-note == "C" ? 0
+        : root.scale-root-note == "C# / Db" ? 1
+        : root.scale-root-note == "D" ? 2
+        : root.scale-root-note == "D# / Eb" ? 3
+        : root.scale-root-note == "E" ? 4
+        : root.scale-root-note == "F" ? 5
+        : root.scale-root-note == "F# / Gb" ? 6
+        : root.scale-root-note == "G" ? 7
+        : root.scale-root-note == "G# / Ab" ? 8
+        : root.scale-root-note == "A" ? 9
+        : root.scale-root-note == "A# / Bb" ? 10 : 11;
+    }
+
+    function scale-note(note: int) -> bool {
+        let p = Math.mod(note - root.scale-root-pitch() + 120, 12);
+        root.scale-name == "Cromática" ? true
+        : root.scale-name == "Pentatônica Maior" ? (p == 0 || p == 2 || p == 4 || p == 7 || p == 9)
+        : root.scale-name == "Pentatônica Menor" ? (p == 0 || p == 3 || p == 5 || p == 7 || p == 10)
+        : root.scale-name == "Escala de Blues" ? (p == 0 || p == 3 || p == 5 || p == 6 || p == 7 || p == 10)
+        : root.scale-name == "Menor Natural (Eólio)" ? (p == 0 || p == 2 || p == 3 || p == 5 || p == 7 || p == 8 || p == 10)
+        : root.scale-name == "Dórico" ? (p == 0 || p == 2 || p == 3 || p == 5 || p == 7 || p == 9 || p == 10)
+        : root.scale-name == "Frígio" ? (p == 0 || p == 1 || p == 3 || p == 5 || p == 7 || p == 8 || p == 10)
+        : root.scale-name == "Lídio" ? (p == 0 || p == 2 || p == 4 || p == 6 || p == 7 || p == 9 || p == 11)
+        : root.scale-name == "Mixolídio" ? (p == 0 || p == 2 || p == 4 || p == 5 || p == 7 || p == 9 || p == 10)
+        : root.scale-name == "Lócrio" ? (p == 0 || p == 1 || p == 3 || p == 5 || p == 6 || p == 8 || p == 10)
+        : (p == 0 || p == 2 || p == 4 || p == 5 || p == 7 || p == 9 || p == 11);
+    }
+
+    function snap-note-to-scale(note: int) -> int {
+        if !root.scale-snap { return note; }
+        root.scale-note(note) ? note
+        : root.scale-note(note - 1) ? note - 1
+        : root.scale-note(note + 1) ? note + 1
+        : root.scale-note(note - 2) ? note - 2
+        : root.scale-note(note + 2) ? note + 2
+        : root.scale-note(note - 3) ? note - 3
+        : root.scale-note(note + 3) ? note + 3
+        : root.scale-note(note - 4) ? note - 4
+        : root.scale-note(note + 4) ? note + 4
+        : root.scale-note(note - 5) ? note - 5
+        : root.scale-note(note + 5) ? note + 5
+        : root.scale-note(note - 6) ? note - 6
+        : note + 6;
+    }
+
     function paint-add() {
 
         let mx = interaction.mouse-x + root.scroll-x;
         let my = interaction.mouse-y + root.scroll-y;
 
-        let note =
+        let raw-note =
             Math.max(
                 PianoRollData.first-note,
                 Math.min(
@@ -115,6 +176,10 @@ export component PianoRollArea inherits Rectangle {
                         - Math.floor(my / root.note-height)
                 )
             );
+        let note = Math.max(
+            PianoRollData.first-note,
+            Math.min(PianoRollData.last-note, root.snap-note-to-scale(raw-note))
+        );
 
         let start = Math.max(0.0, root.snap-beat(mx / root.px-per-beat));
 
@@ -167,6 +232,17 @@ export component PianoRollArea inherits Rectangle {
             float-toggle => {
                 root.float-toggle();
             }
+
+            scale-assistant => {
+                if !root.scale-assistant-open {
+                    root.scale-root-note = root.committed-scale-root;
+                    root.scale-name = root.committed-scale-name;
+                    root.scale-snap = root.committed-scale-snap;
+                    root.scale-highlight = root.committed-scale-highlight;
+                    root.scale-fold = root.committed-scale-fold;
+                }
+                root.scale-assistant-open = !root.scale-assistant-open;
+            }
         }
 
         // ============================================================
@@ -174,19 +250,19 @@ export component PianoRollArea inherits Rectangle {
         // ============================================================
 
         Rectangle {
-            height: 30px;
+            height: 28px;
             background: Theme.surface;
 
             HorizontalLayout {
                 padding-left: 8px;
                 padding-right: 8px;
-                spacing: 6px;
+                spacing: 5px;
                 cross-axis-alignment: CrossAxisAlignment.center;
 
                 // Snap ON/OFF
                 Button {
-                    width: 28px;
-                    height: 24px;
+                    width: 26px;
+                    height: 22px;
                     icon: @image-url("../icons/snap.svg");
                     filled-icon: @image-url("../icons/snap_filled.svg");
                     icon-size: 16px;
@@ -202,8 +278,8 @@ export component PianoRollArea inherits Rectangle {
 
                 // Dropdown: granularidade do snap
                 Rectangle {
-                    width: 170px;
-                    height: 24px;
+                    width: 156px;
+                    height: 22px;
 
                     ComboBox {
                         width: parent.width;
@@ -226,8 +302,8 @@ export component PianoRollArea inherits Rectangle {
 
                 // Botão QUANTIZE
                 Button {
-                    width: 90px;
-                    height: 24px;
+                    width: 78px;
+                    height: 22px;
                     text: "Quantize";
                     icon-size: 14px;
 
@@ -240,22 +316,6 @@ export component PianoRollArea inherits Rectangle {
                 Rectangle { horizontal-stretch: 1; }
 
                 // Status: Snap
-                Text {
-                    text:
-                        root.snap-enabled
-                            ? "Snap: " + root.snap-labels[root.snap-index]
-                            : "Snap: OFF";
-
-                    color:
-                        root.snap-enabled
-                            ? Theme.accent
-                            : Theme.text-dim;
-
-                    font-size: 9px;
-                    font-weight: 700;
-
-                    vertical-alignment: center;
-                }
             }
 
             // Borda inferior
@@ -445,8 +505,8 @@ export component PianoRollArea inherits Rectangle {
                             if event.kind == PointerEventKind.down
                                 && event.button == PointerEventButton.left {
 
-                                // Shift = iniciar seleção múltipla (lasso)
-                                if event.modifiers.shift {
+                                // Ctrl (ou Shift) = iniciar seleção múltipla (lasso)
+                                if event.modifiers.control || event.modifiers.shift {
                                     self.lasso-active = true;
                                     self.lasso-start-x = self.mouse-x;
                                     self.lasso-start-y = self.mouse-y;
@@ -528,6 +588,9 @@ export component PianoRollArea inherits Rectangle {
                         PianoGrid {
                             beat-width: root.px-per-beat;
                             key-height: root.note-height;
+                            scale-root: root.scale-root-note;
+                            scale-name: root.scale-name;
+                            highlight-scale: root.scale-highlight;
                         }
 
                         // ----- Playhead: linha vertical pelo grid -----
@@ -641,7 +704,50 @@ export component PianoRollArea inherits Rectangle {
                 }
             }
             // ============ COLUNA 3: PAINEL DE PROPRIEDADES (nota selecionada) ============
-            PianoNoteProperties {}
+            PianoNoteProperties {
+                visible: PianoRollData.selected-note >= 0
+                    || PianoRollData.selected-notes.length > 1;
+                width:
+                    (PianoRollData.selected-note >= 0
+                        || PianoRollData.selected-notes.length > 1)
+                    ? 220px
+                    : 0px;
+            }
+        }
+    }
+
+    // Painel sobreposto: não participa do layout e não rouba espaço do grid.
+    assistant := ScaleAssistant {
+        visible: root.scale-assistant-open;
+        x: Math.max(8px, parent.width - self.width - 12px);
+        y: root.show-header ? 32px : 8px;
+        z: 1000;
+
+        root-note <=> root.scale-root-note;
+        scale <=> root.scale-name;
+        snap-to-scale <=> root.scale-snap;
+        highlight-notes <=> root.scale-highlight;
+        fold-piano-roll <=> root.scale-fold;
+
+        close => {
+            root.scale-root-note = root.committed-scale-root;
+            root.scale-name = root.committed-scale-name;
+            root.scale-snap = root.committed-scale-snap;
+            root.scale-highlight = root.committed-scale-highlight;
+            root.scale-fold = root.committed-scale-fold;
+            root.scale-assistant-open = false;
+        }
+
+        apply => {
+            // O snap do assistente acompanha diretamente o snap do editor;
+            // as demais opções controlam a visualização da escala.
+            root.snap-enabled = root.scale-snap;
+            root.committed-scale-root = root.scale-root-note;
+            root.committed-scale-name = root.scale-name;
+            root.committed-scale-snap = root.scale-snap;
+            root.committed-scale-highlight = root.scale-highlight;
+            root.committed-scale-fold = root.scale-fold;
+            root.scale-assistant-open = false;
         }
     }
 }

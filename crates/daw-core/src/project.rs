@@ -535,6 +535,8 @@ impl Project {
             original.end_beat() - at_beat,
         );
         right.file_path = original.file_path.clone();
+        right.source_start_beats = original.source_start_beats
+            + (at_beat - original.start_beat);
 
         self.clips[index] = left.clone();
         self.clips.push(right.clone());
@@ -633,6 +635,12 @@ impl Project {
         let old = self.clips[index].clone();
         self.clips[index].start_beat = new_start.max(0.0);
         self.clips[index].length_beats = new_length;
+        // Ao redimensionar pela borda esquerda, a janela visual e a janela
+        // de áudio devem avançar/recuar juntas. A borda direita só altera
+        // a duração e mantém o ponto de origem.
+        let delta_start = self.clips[index].start_beat - old.start_beat;
+        self.clips[index].source_start_beats =
+            (old.source_start_beats + delta_start).max(0.0);
         let new = self.clips[index].clone();
 
         let event = DocumentEvent::ClipResized { old, new };
@@ -975,11 +983,13 @@ mod tests {
         let left = project.clip(1).unwrap();
         assert_eq!(left.start_beat, 4.0);
         assert_eq!(left.length_beats, 2.0);
+        assert_eq!(left.source_start_beats, 0.0);
 
         let right = project.clip(new_id).unwrap();
         assert_eq!(right.start_beat, 6.0);
         assert_eq!(right.length_beats, 4.0);
         assert_eq!(right.track_id, 1);
+        assert_eq!(right.source_start_beats, 2.0);
     }
 
     #[test]

@@ -10,6 +10,9 @@ pub struct Transport {
     pub playing: bool,
     /// Posição do playhead em ticks (PPQ).
     pub position_ticks: u64,
+    /// Onde o último play começou. SPACE (stop) devolve a agulha
+    /// pra cá — comportamento padrão de DAW.
+    pub play_start_ticks: u64,
     /// Batidas por minuto.
     pub bpm: u32,
     /// Pulsos por batida (resolução).
@@ -23,6 +26,7 @@ impl Default for Transport {
         Self {
             playing: false,
             position_ticks: 0,
+            play_start_ticks: 0,
             bpm: 120,
             ppq: 960,
             beats_per_bar: 4,

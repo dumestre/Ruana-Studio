@@ -11,6 +11,7 @@ use daw_core::clip::Clip;
 use crate::ClipData;
 
 /// Dados de waveform em cache por clip.
+#[derive(Clone)]
 pub struct CachedWave {
     /// Picos agregados (fallback / compatibilidade).
     pub peaks: Vec<f32>,
@@ -86,6 +87,7 @@ pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache)
         color: base.color,
         waveform_points: Rc::new(slint::VecModel::from(peaks)).into(),
         waveform_image: waveform_image_to_slint(img),
+        multi_selected: base.multi_selected,
     }
 }
 
@@ -126,7 +128,7 @@ pub fn wire_resolution_requests(
 
             ui.global::<TimelineMetrics>().on_waveform_resolution_requested(move |id, width_px| {
                 let id_u = id.max(0) as u64;
-                let w = (width_px.round() as u32).clamp(16, 8192);
+                let w = (width_px.round() as u32).clamp(16, 16384);
 
                 // Já está nessa resolução? Nada a fazer.
                 if done_width.borrow().get(&id_u) == Some(&w) {
@@ -182,6 +184,31 @@ pub fn wire_resolution_requests(
 }
 
 
+/// Reprojeta a linha de UM clip após o cache ganhar/alterar sua
+/// entrada (duplicar, colar, re-render por zoom).
+///
+/// Arquitetura vetor-primeiro: `waveform_points` (dados) são a
+/// representação primária; `waveform_image` é só o raster CACHE
+/// na resolução do último pedido — pode ser regenerado a qualquer
+/// momento a partir dos samples.
+pub fn reproject_clip(
+    clips_model: &Rc<slint::VecModel<ClipData>>,
+    waveforms: &WaveformCache,
+    clip_id: u64,
+) {
+    let i = match crate::models::clip_row(clips_model, clip_id as i32) {
+        Some(i) => i,
+        None => return,
+    };
+    let Some(mut data) = clips_model.row_data(i) else {
+        return;
+    };
+    let updated = to_clip_data_from_id(clip_id, &data, waveforms);
+    data.waveform_points = updated.waveform_points;
+    data.waveform_image = updated.waveform_image;
+    clips_model.set_row_data(i, data);
+}
+
 /// Mapeia um clip do core para o DTO da camada Slint.
 pub fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
     let (peaks, img) = match waveforms.get(&clip.id) {
@@ -198,5 +225,6 @@ pub fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
         color: clip.color as i32,
         waveform_points: Rc::new(slint::VecModel::from(peaks)).into(),
         waveform_image: waveform_image_to_slint(img),
+        multi_selected: false,
     }
 }

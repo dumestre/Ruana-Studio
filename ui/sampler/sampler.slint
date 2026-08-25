@@ -1,4 +1,6 @@
 import { Theme } from "../theme.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCurves } from "sampler_curves.slint";
 import { SamplerHeader } from "sampler_header.slint";
 import { SamplerWaveform } from "sampler_waveform.slint";
 import { SamplerTransport } from "sampler_transport.slint";
@@ -9,6 +11,41 @@ import { SamplerAmp } from "sampler_amp.slint";
 import { SamplerModulation } from "sampler_modulation.slint";
 
 export component Sampler inherits Rectangle {
+
+    // SONDA TEMPORÁRIA — só para o cargo check validar os dois
+    // globais novos antes de reescrever o layout. Sai no próximo passo.
+    private property <string> probe-a: SamplerCurves.filter-curve("LP", root.cutoff, root.resonance, true)
+        + SamplerCurves.adsr(root.attack, root.decay, root.sustain, root.release, false)
+        + SamplerCurves.lfo-curve(root.lfo-waveform, root.lfo-depth)
+        + SamplerCurves.velocity-curve("EXP", true)
+        + SamplerCurves.knob-track()
+        + SamplerCurves.knob-value(root.volume)
+        + SamplerCurves.knob-value-bipolar(root.pan)
+        + SamplerCurves.knob-pointer(root.tune)
+        + SamplerCurves.knob-detent();
+    private property <string> probe-b: SamplerStyle.fmt-hz(root.cutoff)
+        + SamplerStyle.fmt-db(root.volume)
+        + SamplerStyle.fmt-gain-db(root.filter-drive)
+        + SamplerStyle.fmt-semis(root.tune)
+        + SamplerStyle.fmt-cents(root.fine)
+        + SamplerStyle.fmt-octaves(root.octave)
+        + SamplerStyle.fmt-time(root.attack)
+        + SamplerStyle.fmt-glide(root.glide)
+        + SamplerStyle.fmt-lfo-rate(root.lfo-rate)
+        + SamplerStyle.fmt-lfo-sync(root.lfo-rate)
+        + SamplerStyle.fmt-pct(root.resonance)
+        + SamplerStyle.fmt-pct-bi(root.stereo-width)
+        + SamplerStyle.fmt-pan(root.pan)
+        + SamplerStyle.fmt-phase(root.phase)
+        + SamplerStyle.fmt-q(root.resonance)
+        + SamplerStyle.fmt-key(root.tune)
+        + SamplerStyle.fmt-vel(root.volume)
+        + SamplerStyle.fmt-pos(0.5, 3000)
+        + SamplerStyle.note-name(60);
+    private property <length> probe-c: SamplerStyle.pad(true) + SamplerStyle.gap(false)
+        + SamplerStyle.card-pad(true) + SamplerStyle.header-h(false) + SamplerStyle.tab-h(true)
+        + SamplerStyle.knob(false) + SamplerStyle.row-h(true) + SamplerStyle.title-size(false)
+        + SamplerStyle.label-size(true) + SamplerStyle.value-size(false) + SamplerStyle.name-size(true);
 
     // ============================================================
     // SAMPLE

@@ -30,6 +30,9 @@ export component TrackClip inherits Rectangle {
 
     in property <bool> selected: false;
 
+    // Seleção múltipla via marquee (Ctrl+arrasto).
+    in property <bool> multi-selected: false;
+
     in property <int> active-tool: 0;
 
     in property <[float]> waveform-peaks: [];
@@ -248,7 +251,7 @@ export component TrackClip inherits Rectangle {
     // =====================================================
 
     private property <length> bw:
-        root.selected
+        (root.selected || root.multi-selected)
             ? 2px
             : 1px;
 
@@ -264,6 +267,9 @@ export component TrackClip inherits Rectangle {
 
         : root.selected
             ? #FFFFFF
+
+        : root.multi-selected
+            ? Colors.crimson
 
         : root.hovered
             ? root.clip-color.brighter(0.22)
@@ -389,7 +395,10 @@ export component TrackClip inherits Rectangle {
                 // letterbox (que empurrava a imagem pro rodapé
                 // e cortava o lobo de baixo).
                 image-fit: fill;
-                image-rendering: smooth;
+                // Crisp pra edição: a waveform é retilínea (linhas
+                // verticais); interpolação suave borrava os detalhes
+                // finos usados pra cortar/alinhar no grid.
+                image-rendering: pixelated;
             }
 
         if !root.is-midi

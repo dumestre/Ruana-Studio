@@ -333,6 +333,8 @@ export component Workspace inherits Rectangle {
 
     callback clip-paste-requested(float, int);
 
+    callback marquee-select(float, float, int, int);
+
     callback mixer-param-changed(int, string, float);
 
     callback mixer-insert-added(int);
@@ -1030,6 +1032,19 @@ export component Workspace inherits Rectangle {
                             seek-to(beat) => {
                                 root.seek-to(
                                     beat
+                                );
+                            }
+
+                            // ---------------------------------
+                            // MARQUEE (Ctrl+arrasto)
+                            // ---------------------------------
+
+                            marquee-select(b0, b1, t0, t1) => {
+                                root.marquee-select(
+                                    b0,
+                                    b1,
+                                    t0,
+                                    t1
                                 );
                             }
 
