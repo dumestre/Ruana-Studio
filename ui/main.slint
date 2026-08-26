@@ -268,6 +268,18 @@ export component MainWindow inherits Window {
     callback clip-move-committed(int, int, float);
     callback clip-resize-committed(int, int, float, float);
     callback clip-delete-requested(int);
+
+    // Delete sem clip de seleção única: apaga todos os clips
+    // marcados pela multi-seleção (marquee). Sem nada marcado,
+    // o handler no Rust simplesmente não faz nada.
+    callback multi-delete-requested();
+
+    // Clique na timeline → devolve o foco do teclado ao
+    // FocusScope global dos atalhos.
+    public function restore-keyboard-focus() {
+        undo-scope.focus();
+    }
+
     callback clip-rename-requested(int, string);
     callback clip-color-cycle-requested(int);
     callback clip-copy-requested(int);
@@ -565,27 +577,61 @@ export component MainWindow inherits Window {
 
     undo-scope := FocusScope {
 
+        // ---------------------------------------------------------
+        // ATALHOS GLOBAIS DE TECLADO
+        //
+        // O foco deste FocusScope se perde quando o usuário clica em
+        // campos editáveis (busca do Explorer, rename de clip, etc.).
+        // Ele é recuperado em dois pontos:
+        //   1) clique na área da timeline (ver timeline.slint →
+        //      request-keyboard-focus);
+        //   2) quando a janela volta a ter foco do SO (Rust →
+        //      restore-keyboard-focus, ver os_drop.rs).
+        // Sem isso os atalhos abaixo morriam "silenciosamente".
+        // ---------------------------------------------------------
         key-pressed(event) => {
 
             if event.modifiers.control
-                && event.text == "z" {
+                && !event.modifiers.shift
+                && (event.text == "z" || event.text == "\u{1a}") {
 
                 root.undo-requested();
                 accept
 
             } else if event.modifiers.control
-                && event.text == "y" {
+                && (event.text == "y"
+                    || event.text == "\u{19}"
+                    // Ctrl+Shift+Z: alguns backends entregam o texto
+                    // já em maiúscula por causa do Shift.
+                    || (event.modifiers.shift
+                        && (event.text == "Z" || event.text == "z"))) {
 
                 root.redo-requested();
                 accept
 
+            } else if event.modifiers.control
+                && (event.text == "d" || event.text == "D") {
+
+                // Ctrl+D = duplicate do clip selecionado (mesma rota
+                // do menu de contexto).
+                if root.selected-clip != -1 {
+                    root.clip-duplicate-requested(root.selected-clip);
+                    accept
+                } else {
+                    reject
+                }
+
             } else if event.text == Key.Delete || event.text == Key.Backspace {
 
+                // Apaga o clip selecionado; sem seleção única mas com
+                // multi-seleção (marquee), apaga todos os marcados
+                // (o Rust decide pela flag multi-selected).
                 if root.selected-clip != -1 {
                     root.clip-delete-requested(root.selected-clip);
                     accept
                 } else {
-                    reject
+                    root.multi-delete-requested();
+                    accept
                 }
 
             } else if event.text == " " {
@@ -633,6 +679,12 @@ export component MainWindow inherits Window {
 
     workspace := Workspace {
         full-screen <=> root.full-screen;
+
+        // Clique na timeline devolve o foco de teclado aos atalhos.
+        keyboard-focus-requested() => {
+            root.restore-keyboard-focus();
+        }
+
         snap-enabled <=> root.snap-enabled;
         follow-playhead <=> root.follow-playhead;
         zoom-level <=> root.zoom-level;

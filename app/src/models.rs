@@ -4,15 +4,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::explorer::load_directory_entries;
+use crate::ClipData;
 use crate::MainWindow;
-use slint::Model;
+use crate::explorer::load_directory_entries;
 use crate::mixer::mixer_inserts_state;
-use crate::waveform::{to_clip_data, WaveformCache};
+use crate::waveform::{WaveformCache, to_clip_data};
 use daw_core::clip::Clip;
 use daw_core::project::{ChangeKind, DocumentEvent, Project};
 use daw_media::filesystem::default_samples_dir;
-use crate::ClipData;
+use slint::Model;
 use std::path::PathBuf;
 
 /// Compassos necessários para caber até `end_beat`: teto em
@@ -31,9 +31,9 @@ fn event_max_end_beat(event: &DocumentEvent) -> Option<f64> {
         DocumentEvent::ClipAdded(c) => Some(end(c)),
         DocumentEvent::ClipSliced { left, right, .. } => Some(both(left, right)),
         DocumentEvent::ClipMoved { old, new } => Some(both(old, new)),
-        DocumentEvent::ClipsGlued { left_before, right, .. } => {
-            Some(both(left_before, right))
-        }
+        DocumentEvent::ClipsGlued {
+            left_before, right, ..
+        } => Some(both(left_before, right)),
         DocumentEvent::ClipResized { old, new } => Some(both(old, new)),
         _ => None,
     }
@@ -65,7 +65,11 @@ pub fn initial_bind(
     let track_colors_model = Rc::new(slint::VecModel::from(track_colors));
     ui.set_track_colors(track_colors_model.clone().into());
 
-    let clips: Vec<ClipData> = project.clips.iter().map(|c| to_clip_data(c, waveforms)).collect();
+    let clips: Vec<ClipData> = project
+        .clips
+        .iter()
+        .map(|c| to_clip_data(c, waveforms))
+        .collect();
     let clips_model = Rc::new(slint::VecModel::from(clips));
     ui.set_clips(clips_model.clone().into());
 
@@ -98,7 +102,6 @@ pub fn initial_bind(
 
     (tracks_model, clips_model, track_colors_model)
 }
-
 
 /// Índice da linha do modelo cujo clip tem o id informado.
 pub fn clip_row(model: &slint::VecModel<ClipData>, id: i32) -> Option<usize> {
@@ -233,7 +236,13 @@ pub fn bind_document_events(
 ) {
     project.subscribe(move |event, kind| {
         let wf = waveforms.borrow();
-        apply_change(&tracks_model, &clips_model, event, kind == ChangeKind::Undo, &wf);
+        apply_change(
+            &tracks_model,
+            &clips_model,
+            event,
+            kind == ChangeKind::Undo,
+            &wf,
+        );
         drop(wf);
         // Cresce a timeline se o clip passou do fim atual.
         if let Some(end) = event_max_end_beat(event) {

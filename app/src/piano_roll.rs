@@ -5,9 +5,9 @@ use slint::{Global, Model};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::{PianoNote, PianoRollActions, PianoRollData, RulerTick};
 use daw_core::timeline::Grid;
 use daw_midi::{Note, NoteEditor};
-use crate::{PianoNote, PianoRollActions, PianoRollData, RulerTick};
 
 /// Editor de notas do piano roll (sem suporte a clip ainda: lista global
 /// da janela). A fonte da verdade vive no core (`daw_midi::NoteEditor`);
@@ -124,9 +124,8 @@ where
         actions.on_note_selected(move |id| {
             if let Some(ui) = ui_weak.upgrade() {
                 PianoRollData::get(&ui).set_selected_note(id);
-                PianoRollData::get(&ui).set_selected_notes(
-                    Rc::new(slint::VecModel::from(vec![id])).into()
-                );
+                PianoRollData::get(&ui)
+                    .set_selected_notes(Rc::new(slint::VecModel::from(vec![id])).into());
             }
         });
     }
@@ -207,8 +206,9 @@ where
                 if single >= 0 {
                     editor.borrow_mut().delete(single);
                     PianoRollData::get(&ui).set_selected_note(-1);
-                    PianoRollData::get(&ui)
-                        .set_selected_notes(Rc::new(slint::VecModel::from(Vec::<i32>::new())).into());
+                    PianoRollData::get(&ui).set_selected_notes(
+                        Rc::new(slint::VecModel::from(Vec::<i32>::new())).into(),
+                    );
                     refresh_notes(&ui, &editor);
                 }
             }
@@ -217,20 +217,28 @@ where
     {
         let editor = editor.clone();
         let ui_weak = ui.as_weak();
-        actions.on_lasso_selection_requested(move |x1, y1, x2, y2, px_per_beat, note_height, last_note| {
-            let Some(ui) = ui_weak.upgrade() else {
-                return;
-            };
+        actions.on_lasso_selection_requested(
+            move |x1, y1, x2, y2, px_per_beat, note_height, last_note| {
+                let Some(ui) = ui_weak.upgrade() else {
+                    return;
+                };
 
-            // Hit-test de seleção: vive no core (testável), a UI só projeta.
-            let ids = editor
-                .borrow()
-                .notes_in_rect(x1, y1, x2, y2, px_per_beat, note_height, last_note);
-            let first = ids.first().copied().unwrap_or(-1);
+                // Hit-test de seleção: vive no core (testável), a UI só projeta.
+                let ids = editor.borrow().notes_in_rect(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    px_per_beat,
+                    note_height,
+                    last_note,
+                );
+                let first = ids.first().copied().unwrap_or(-1);
 
-            PianoRollData::get(&ui)
-                .set_selected_notes(Rc::new(slint::VecModel::from(ids)).into());
-            PianoRollData::get(&ui).set_selected_note(first);
-        });
+                PianoRollData::get(&ui)
+                    .set_selected_notes(Rc::new(slint::VecModel::from(ids)).into());
+                PianoRollData::get(&ui).set_selected_note(first);
+            },
+        );
     }
 }

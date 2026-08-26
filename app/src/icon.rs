@@ -1,4 +1,4 @@
-use i_slint_backend_winit::{winit, WinitWindowAccessor};
+use i_slint_backend_winit::{WinitWindowAccessor, winit};
 
 /// PNG 64x64 gerado no build (build.rs) a partir de assets/RuanaStudio.svg.
 const ICON_PNG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/app_icon_64.png"));

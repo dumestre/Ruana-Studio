@@ -36,6 +36,14 @@ export component Timeline inherits Rectangle {
     callback marquee-select(float, float, float, float);
         // (beat0, beat1, track0, track1)
 
+    // Clique em qualquer área da timeline → o FocusScope global
+    // recupera o foco do teclado (atalhos voltam a funcionar).
+    callback keyboard-focus-requested();
+
+    // Delete sem clip de seleção única: apaga todos os clips
+    // multi-selecionados (marquee).
+    callback multi-delete-requested();
+
 
     // =====================================================
     // TRANSPORTE / ZOOM
@@ -389,8 +397,17 @@ export component Timeline inherits Rectangle {
 
                         self.left-pressed = true;
 
-                        // CTRL → inicia marquee em vez de deselecionar.
-                        if event.modifiers.control {
+                        // Qualquer clique na timeline devolve o foco
+                        // ao FocusScope global — sem isso, depois de
+                        // clicar num campo de texto (busca/rename),
+                        // Delete, Ctrl+Z etc. morriam.
+                        root.keyboard-focus-requested();
+
+                        // CTRL ou SHIFT → inicia marquee em vez de
+                        // deselecionar. SHIFT+arrasto pinta vários
+                        // clips seguindo o grid, como em qualquer DAW.
+                        if event.modifiers.control
+                            || event.modifiers.shift {
                             root.marquee-active = true;
                             root.marquee-x0 =
                                 self.mouse-x + root.scroll-x;

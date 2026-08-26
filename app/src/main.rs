@@ -46,18 +46,22 @@ use crate::models::{bars_for_end_beat, bind_document_events, initial_bind};
 use crate::waveform::WaveformCache;
 use daw_core::mixer::MixerParam;
 use daw_core::project::Project;
-use raw_window_handle::HasWindowHandle;
 use daw_core::transport::Transport;
 use daw_midi::NoteEditor;
+use raw_window_handle::HasWindowHandle;
 use slint::Model;
 
 #[cfg(windows)]
 fn choose_audio_file() -> Option<String> {
     use std::mem::size_of;
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::Controls::Dialogs::{GetOpenFileNameW, OPENFILENAMEW, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST};
-    let filter: Vec<u16> = "Audio Files\0*.wav;*.mp3;*.flac;*.ogg;*.oga\0All Files\0*.*\0\0".encode_utf16().collect();
+    use windows::Win32::UI::Controls::Dialogs::{
+        GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST, OPENFILENAMEW,
+    };
+    use windows::core::PCWSTR;
+    let filter: Vec<u16> = "Audio Files\0*.wav;*.mp3;*.flac;*.ogg;*.oga\0All Files\0*.*\0\0"
+        .encode_utf16()
+        .collect();
     let mut path = vec![0u16; 32768];
     let mut dialog = OPENFILENAMEW::default();
     dialog.lStructSize = size_of::<OPENFILENAMEW>() as u32;
@@ -69,11 +73,15 @@ fn choose_audio_file() -> Option<String> {
     if unsafe { GetOpenFileNameW(&mut dialog) }.as_bool() {
         let len = path.iter().position(|c| *c == 0).unwrap_or(0);
         Some(String::from_utf16_lossy(&path[..len]))
-    } else { None }
+    } else {
+        None
+    }
 }
 
 #[cfg(not(windows))]
-fn choose_audio_file() -> Option<String> { None }
+fn choose_audio_file() -> Option<String> {
+    None
+}
 
 fn main() -> Result<(), slint::PlatformError> {
     let ui = MainWindow::new()?;
@@ -131,10 +139,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let audio_engine = match daw_audio::AudioEngine::start(transport.clone()) {
         Ok(engine) => {
             let cfg = engine.output_config();
-            eprintln!(
-                "[audio] {} Hz, {} canais",
-                cfg.sample_rate, cfg.channels
-            );
+            eprintln!("[audio] {} Hz, {} canais", cfg.sample_rate, cfg.channels);
             Some(engine)
         }
         Err(err) => {
@@ -198,7 +203,10 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Meters: modelo compartilhado + estado de decay (smoothing no Rust).
     let meter_model: Rc<slint::VecModel<f32>> =
-        Rc::new(slint::VecModel::from(vec![0.0; project.borrow().tracks.len() + 1]));
+        Rc::new(slint::VecModel::from(vec![
+            0.0;
+            project.borrow().tracks.len() + 1
+        ]));
     ui.set_mixer_meters(meter_model.clone().into());
     let meter_state: Rc<RefCell<Vec<f32>>> =
         Rc::new(RefCell::new(vec![0.0; project.borrow().tracks.len() + 1]));
@@ -217,13 +225,26 @@ fn main() -> Result<(), slint::PlatformError> {
         let audio = audio.clone();
         let ui_weak = ui.as_weak();
         ui.on_sampler_load_requested(move |track| {
-            let Some(path) = choose_audio_file() else { return; };
+            let Some(path) = choose_audio_file() else {
+                return;
+            };
             let path_buf = std::path::PathBuf::from(&path);
-            let Ok(decoded) = daw_media::waveform::decode_audio(&path_buf) else { return; };
+            let Ok(decoded) = daw_media::waveform::decode_audio(&path_buf) else {
+                return;
+            };
             let peaks = daw_media::waveform::waveform_points(&decoded, 512);
-            let Some(ui) = ui_weak.upgrade() else { return; };
-            let name = path_buf.file_stem().and_then(|n| n.to_str()).unwrap_or("Sample");
-            let format = path_buf.extension().and_then(|e| e.to_str()).unwrap_or("").to_uppercase();
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            let name = path_buf
+                .file_stem()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Sample");
+            let format = path_buf
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_uppercase();
             ui.set_sampler_sample_name(name.into());
             ui.set_sampler_sample_loaded(true);
             ui.set_sampler_sample_format(format.into());
@@ -307,7 +328,7 @@ fn main() -> Result<(), slint::PlatformError> {
         });
         let project_tg = project.clone();
         let apply_mixer = handles.apply_mixer_state.clone();
-    ui.on_mixer_insert_toggled(move |channel, slot| {
+        ui.on_mixer_insert_toggled(move |channel, slot| {
             project_tg
                 .borrow_mut()
                 .toggle_mixer_insert(channel as usize, slot as usize);
@@ -388,23 +409,31 @@ fn main() -> Result<(), slint::PlatformError> {
     let focus_restore: Rc<RefCell<Option<(f32, f32, f32)>>> = Rc::new(RefCell::new(None));
     let clips_for_focus = clips_model.clone();
     let ui_weak_focus = ui.as_weak();
-    ui.on_focus_selected_clip_requested(move |id, old_zoom, old_scroll_x, old_scroll_y, view_width| {
-        let Some(ui) = ui_weak_focus.upgrade() else { return; };
-        let mut restore = focus_restore.borrow_mut();
-        if let Some((zoom, sx, sy)) = restore.take() {
+    ui.on_focus_selected_clip_requested(
+        move |id, old_zoom, old_scroll_x, old_scroll_y, view_width| {
+            let Some(ui) = ui_weak_focus.upgrade() else {
+                return;
+            };
+            let mut restore = focus_restore.borrow_mut();
+            if let Some((zoom, sx, sy)) = restore.take() {
+                ui.set_zoom_level(zoom);
+                ui.set_timeline_scroll_x(sx);
+                ui.set_timeline_scroll_y(sy);
+                return;
+            }
+            let Some(row) = (0..clips_for_focus.row_count())
+                .find_map(|i| clips_for_focus.row_data(i).filter(|c| c.id == id))
+            else {
+                return;
+            };
+            *restore = Some((old_zoom, old_scroll_x, old_scroll_y));
+            let zoom = old_zoom.max(2.5);
+            let center = (row.beat + row.len * 0.5) * 40.0 * zoom;
             ui.set_zoom_level(zoom);
-            ui.set_timeline_scroll_x(sx);
-            ui.set_timeline_scroll_y(sy);
-            return;
-        }
-        let Some(row) = (0..clips_for_focus.row_count()).find_map(|i| clips_for_focus.row_data(i).filter(|c| c.id == id)) else { return; };
-        *restore = Some((old_zoom, old_scroll_x, old_scroll_y));
-        let zoom = old_zoom.max(2.5);
-        let center = (row.beat + row.len * 0.5) * 40.0 * zoom;
-        ui.set_zoom_level(zoom);
-        ui.set_timeline_scroll_x((center - view_width * 0.5).max(0.0));
-        ui.set_timeline_scroll_y(old_scroll_y);
-    });
+            ui.set_timeline_scroll_x((center - view_width * 0.5).max(0.0));
+            ui.set_timeline_scroll_y(old_scroll_y);
+        },
+    );
 
     ui.on_timeline_bounds_changed(move |x, y, w, h| {
         set_timeline_bounds(x, y, w, h);
@@ -423,7 +452,13 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     // Drag & drop de arquivos direto do Sistema Operacional.
-    os_drop::install(&ui, project.clone(), waveforms.clone(), clips_model.clone(), track_colors_model.clone());
+    os_drop::install(
+        &ui,
+        project.clone(),
+        waveforms.clone(),
+        clips_model.clone(),
+        track_colors_model.clone(),
+    );
 
     ui.run()
 }

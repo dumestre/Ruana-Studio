@@ -360,6 +360,12 @@ export component Workspace inherits Rectangle {
 
     callback marquee-select(float, float, int, int);
 
+    // Delete em massa: apaga todos os clips multi-selecionados.
+    callback multi-delete-requested();
+
+    // Clique na timeline → FocusScope global volta a ter foco.
+    callback keyboard-focus-requested();
+
     callback mixer-param-changed(int, string, float);
 
     callback mixer-insert-added(int);
@@ -1083,12 +1089,20 @@ export component Workspace inherits Rectangle {
                             // ---------------------------------
 
                             marquee-select(b0, b1, t0, t1) => {
-                                root.marquee-select(
-                                    b0,
-                                    b1,
-                                    t0,
-                                    t1
-                                );
+                                                    root.marquee-select(
+                                                        b0,
+                                                        b1,
+                                                        t0,
+                                                        t1
+                                                    );
+                                                }
+
+                                                multi-delete-requested() => {
+                                                    root.multi-delete-requested();
+                                                }
+
+                            keyboard-focus-requested() => {
+                                root.keyboard-focus-requested();
                             }
 
 

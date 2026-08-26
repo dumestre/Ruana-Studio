@@ -5,16 +5,16 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ClipData;
+use crate::MainWindow;
 use crate::importer::{import_audio_file, is_audio_path};
 use crate::models::clip_row;
 use crate::waveform::WaveformCache;
 use daw_core::clip::{Clip, ClipKind};
 use daw_core::project::Project;
 use daw_core::track::TrackKind;
-use crate::ClipData;
-use crate::MainWindow;
-use slint::Model;
 use slint::ComponentHandle;
+use slint::Model;
 
 pub fn install(
     ui: &MainWindow,
@@ -25,373 +25,411 @@ pub fn install(
     apply_mixer_state: Rc<dyn Fn()>,
     fit_float_mixer_windows: Rc<dyn Fn()>,
 ) {
-        // Drop de clip (ClipPool / Explorer) → core (evento reprojeta).
-        {
-            let project = project.clone();
-            let waveforms = waveforms.clone();
-            let clips_model = clips_model.clone();
-            let drop_track_colors = track_colors_model.clone();
-            let ui_weak = ui.as_weak();
-            ui.on_clip_dropped(move |track, beat, name, is_midi, path| {
-                let bpm = ui_weak.upgrade().map(|u| u.get_bpm() as f32).unwrap_or(120.0);
+    // Drop de clip (ClipPool / Explorer) → core (evento reprojeta).
+    {
+        let project = project.clone();
+        let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
+        let drop_track_colors = track_colors_model.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_clip_dropped(move |track, beat, name, is_midi, path| {
+            let bpm = ui_weak
+                .upgrade()
+                .map(|u| u.get_bpm() as f32)
+                .unwrap_or(120.0);
 
-                // Arquivo real de áudio → mesma rota do drop do Sistema
-                // Operacional: duração real, waveform e vaga livre.
-                if !is_midi && !path.is_empty() {
-                    let file = std::path::PathBuf::from(path.as_str());
-                    if is_audio_path(&file) && file.is_file() {
-                        import_audio_file(
-                            &file,
-                            track,
-                            beat,
-                            bpm,
-                            &project,
-                            &waveforms,
-                            &clips_model,
-                            &drop_track_colors,
-                        );
-                        return;
-                    }
-                }
-
-                // Sem arquivo (clip pool / MIDI): bloco padrão de 4 beats.
-                let kind = if is_midi {
-                    ClipKind::Midi
-                } else {
-                    ClipKind::Audio
-                };
-                let track_id = track.max(0) as u64;
-                let mut proj = project.borrow_mut();
-                if proj.track(track_id).is_some() {
-                    // Nunca empilha: se o beat pedido está ocupado, o clip
-                    // encosta depois do vizinho em vez de sumir embaixo dele.
-                    let start = proj.find_free_slot(track_id, beat.max(0.0), 4.0);
-                    proj.add_clip(track_id, kind, name.as_str(), start, 4.0);
-                }
-            });
-        }
-
-        // Adiciona tracks via botão "+" da timeline → core.
-        {
-            let project = project.clone();
-            let apply_mixer = apply_mixer_state.clone();
-            let fit_float_mixers = fit_float_mixer_windows.clone();
-            let colors_model = track_colors_model.clone();
-            ui.on_add_track_requested(move |kind| {
-                let kind = match kind.as_str() {
-                    "AUDIO" => TrackKind::Audio,
-                    "INSTRUMENT" => TrackKind::Instrument,
-                    "DRUM" => TrackKind::Drum,
-                    "FX" => TrackKind::Fx,
-                    "BUS" => TrackKind::Bus,
-                    "MASTER" => TrackKind::Master,
-                    _ => TrackKind::Midi,
-                };
-                {
-                    let mut proj = project.borrow_mut();
-                    let count = proj.tracks.len() + 1;
-                    proj.add_track(kind, format!("{} {count}", kind.base_name()));
-                }
-                colors_model.push(0);
-                apply_mixer();
-                fit_float_mixers();
-            });
-        }
-
-        // Slice de clip (ferramenta de corte) → core.
-        {
-            let project = project.clone();
-            ui.on_clip_slice_requested(move |id, position| {
-                let id = id as u64;
-                let mut proj = project.borrow_mut();
-                let Some(clip) = proj.clip(id).cloned() else {
-                    return;
-                };
-                let at = clip.start_beat + position.max(0.0);
-                proj.slice_clip(id, at);
-            });
-        }
-
-        // Glue de clip (ferramenta cola) → core: funde com o vizinho à direita.
-        {
-            let project = project.clone();
-            ui.on_clip_glue_requested(move |id| {
-                project.borrow_mut().glue_clip(id as u64);
-            });
-        }
-
-        // Hit-test da ferramenta cola: converte px→beat na UI e delega a
-        // busca do clip ao core (`Project::clip_at_beat`), ou -1 se nenhum.
-        {
-            let project = project.clone();
-            ui.on_glue_clip_at(move |row, x, scroll_x, px_per_beat| -> i32 {
-                let project = project.borrow();
-                let row = row.max(0.0) as i32;
-                let ppb = px_per_beat as f32;
-                if ppb <= 0.0 {
-                    return -1;
-                }
-                let beat = (x as f32 + scroll_x as f32).max(0.0) / ppb;
-                project
-                    .clip_at_beat(row as u64, beat)
-                    .map(|clip| clip.id as i32)
-                    .unwrap_or(-1)
-            });
-        }
-
-        // ========================================================
-        // MOVE / RESIZE DE CLIPS — COMMIT ÚNICO
-        //
-        // Todo o gesto acontece na UI (global ClipDragState em
-        // puro Slint, sem roundtrips). O core só recebe UMA
-        // mutação por gesto, aqui.
-        // ========================================================
-
-        // Mover clip: track e beat finais, aplicados uma única vez.
-        {
-            let project = project.clone();
-            let clips_model = clips_model.clone();
-            ui.on_clip_move_committed(move |id, new_track_index, new_beat| {
-                let num_tracks = project.borrow().tracks.len() as i32;
-                if num_tracks == 0 {
+            // Arquivo real de áudio → mesma rota do drop do Sistema
+            // Operacional: duração real, waveform e vaga livre.
+            if !is_midi && !path.is_empty() {
+                let file = std::path::PathBuf::from(path.as_str());
+                if is_audio_path(&file) && file.is_file() {
+                    import_audio_file(
+                        &file,
+                        track,
+                        beat,
+                        bpm,
+                        &project,
+                        &waveforms,
+                        &clips_model,
+                        &drop_track_colors,
+                    );
                     return;
                 }
+            }
 
-                // Track clampada ao número de tracks; beat exatamente como a
-                // UI calculou — o core guarda beats fracionários, então não
-                // existe mais divergência entre o visual e o documento.
-                let track_index = new_track_index.clamp(0, num_tracks - 1);
-                let beat = new_beat.max(0.0);
+            // Sem arquivo (clip pool / MIDI): bloco padrão de 4 beats.
+            let kind = if is_midi {
+                ClipKind::Midi
+            } else {
+                ClipKind::Audio
+            };
+            let track_id = track.max(0) as u64;
+            let mut proj = project.borrow_mut();
+            if proj.track(track_id).is_some() {
+                // Nunca empilha: se o beat pedido está ocupado, o clip
+                // encosta depois do vizinho em vez de sumir embaixo dele.
+                let start = proj.find_free_slot(track_id, beat.max(0.0), 4.0);
+                proj.add_clip(track_id, kind, name.as_str(), start, 4.0);
+            }
+        });
+    }
 
-                if let Some(i) = clip_row(&clips_model, id) {
-                    if let Some(mut clip) = clips_model.row_data(i) {
-                        clip.track_index = track_index;
+    // Adiciona tracks via botão "+" da timeline → core.
+    {
+        let project = project.clone();
+        let apply_mixer = apply_mixer_state.clone();
+        let fit_float_mixers = fit_float_mixer_windows.clone();
+        let colors_model = track_colors_model.clone();
+        ui.on_add_track_requested(move |kind| {
+            let kind = match kind.as_str() {
+                "AUDIO" => TrackKind::Audio,
+                "INSTRUMENT" => TrackKind::Instrument,
+                "DRUM" => TrackKind::Drum,
+                "FX" => TrackKind::Fx,
+                "BUS" => TrackKind::Bus,
+                "MASTER" => TrackKind::Master,
+                _ => TrackKind::Midi,
+            };
+            {
+                let mut proj = project.borrow_mut();
+                let count = proj.tracks.len() + 1;
+                proj.add_track(kind, format!("{} {count}", kind.base_name()));
+            }
+            colors_model.push(0);
+            apply_mixer();
+            fit_float_mixers();
+        });
+    }
+
+    // Slice de clip (ferramenta de corte) → core.
+    {
+        let project = project.clone();
+        ui.on_clip_slice_requested(move |id, position| {
+            let id = id as u64;
+            let mut proj = project.borrow_mut();
+            let Some(clip) = proj.clip(id).cloned() else {
+                return;
+            };
+            let at = clip.start_beat + position.max(0.0);
+            proj.slice_clip(id, at);
+        });
+    }
+
+    // Glue de clip (ferramenta cola) → core: funde com o vizinho à direita.
+    {
+        let project = project.clone();
+        ui.on_clip_glue_requested(move |id| {
+            project.borrow_mut().glue_clip(id as u64);
+        });
+    }
+
+    // Hit-test da ferramenta cola: converte px→beat na UI e delega a
+    // busca do clip ao core (`Project::clip_at_beat`), ou -1 se nenhum.
+    {
+        let project = project.clone();
+        ui.on_glue_clip_at(move |row, x, scroll_x, px_per_beat| -> i32 {
+            let project = project.borrow();
+            let row = row.max(0.0) as i32;
+            let ppb = px_per_beat as f32;
+            if ppb <= 0.0 {
+                return -1;
+            }
+            let beat = (x as f32 + scroll_x as f32).max(0.0) / ppb;
+            project
+                .clip_at_beat(row as u64, beat)
+                .map(|clip| clip.id as i32)
+                .unwrap_or(-1)
+        });
+    }
+
+    // ========================================================
+    // MOVE / RESIZE DE CLIPS — COMMIT ÚNICO
+    //
+    // Todo o gesto acontece na UI (global ClipDragState em
+    // puro Slint, sem roundtrips). O core só recebe UMA
+    // mutação por gesto, aqui.
+    // ========================================================
+
+    // Mover clip: track e beat finais, aplicados uma única vez.
+    {
+        let project = project.clone();
+        let clips_model = clips_model.clone();
+        ui.on_clip_move_committed(move |id, new_track_index, new_beat| {
+            let num_tracks = project.borrow().tracks.len() as i32;
+            if num_tracks == 0 {
+                return;
+            }
+
+            // Track clampada ao número de tracks; beat exatamente como a
+            // UI calculou — o core guarda beats fracionários, então não
+            // existe mais divergência entre o visual e o documento.
+            let track_index = new_track_index.clamp(0, num_tracks - 1);
+            let beat = new_beat.max(0.0);
+
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(mut clip) = clips_model.row_data(i) {
+                    clip.track_index = track_index;
+                    clip.beat = beat;
+                    clips_model.set_row_data(i, clip);
+                    project
+                        .borrow_mut()
+                        .move_clip(id as u64, track_index as u64, beat);
+                }
+            }
+        });
+    }
+
+    // Resize de clip: len (e beat, na borda esquerda) finais,
+    // aplicados uma única vez.
+    {
+        let project = project.clone();
+        let clips_model = clips_model.clone();
+        ui.on_clip_resize_committed(move |id, side, new_len, new_beat| {
+            let len = new_len.max(0.25);
+            let beat = new_beat.max(0.0);
+
+            if let Some(i) = clip_row(&clips_model, id) {
+                if let Some(mut clip) = clips_model.row_data(i) {
+                    let start = if side < 0 { beat } else { clip.beat };
+                    if side < 0 {
                         clip.beat = beat;
-                        clips_model.set_row_data(i, clip);
-                        project
-                            .borrow_mut()
-                            .move_clip(id as u64, track_index as u64, beat);
                     }
+                    clip.len = len;
+                    clips_model.set_row_data(i, clip);
+                    project.borrow_mut().resize_clip(id as u64, start, len);
                 }
-            });
-        }
+            }
+        });
+    }
 
-        // Resize de clip: len (e beat, na borda esquerda) finais,
-        // aplicados uma única vez.
-        {
-            let project = project.clone();
-            let clips_model = clips_model.clone();
-            ui.on_clip_resize_committed(move |id, side, new_len, new_beat| {
-                let len = new_len.max(0.25);
-                let beat = new_beat.max(0.0);
+    // Delete de clip → core.
+    {
+        let project = project.clone();
+        ui.on_clip_delete_requested(move |id| {
+            project.borrow_mut().delete_clip(id as u64);
+        });
+    }
 
-                if let Some(i) = clip_row(&clips_model, id) {
-                    if let Some(mut clip) = clips_model.row_data(i) {
-                        let start = if side < 0 { beat } else { clip.beat };
-                        if side < 0 {
-                            clip.beat = beat;
-                        }
-                        clip.len = len;
-                        clips_model.set_row_data(i, clip);
-                        project.borrow_mut().resize_clip(id as u64, start, len);
-                    }
-                }
-            });
-        }
+    // Delete em massa (Delete/Backspace sem seleção única):
+    // apaga todos os clips marcados pela multi-seleção (marquee).
+    // O core não conhece multi-seleção (estado visual da UI) —
+    // ler a flag direto do modelo de clips do Slint.
+    {
+        let project = project.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_multi_delete_requested(move || {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            let clips = ui.get_clips();
+            let ids: Vec<u64> = (0..clips.row_count())
+                .filter_map(|i| clips.row_data(i))
+                .filter(|d| d.multi_selected)
+                .map(|d| d.id as u64)
+                .collect();
+            if ids.is_empty() {
+                return;
+            }
+            let mut proj = project.borrow_mut();
+            for id in ids {
+                proj.delete_clip(id);
+            }
+        });
+    }
 
-        // Delete de clip → core.
-        {
-            let project = project.clone();
-            ui.on_clip_delete_requested(move |id| {
-                project.borrow_mut().delete_clip(id as u64);
-            });
-        }
+    // Rename de clip (double-click + edição inline) → core.
+    {
+        let project = project.clone();
+        ui.on_clip_rename_requested(move |id, new_name| {
+            project
+                .borrow_mut()
+                .rename_clip(id as u64, new_name.as_str());
+        });
+    }
 
-        // Rename de clip (double-click + edição inline) → core.
-        {
-            let project = project.clone();
-            ui.on_clip_rename_requested(move |id, new_name| {
-                project.borrow_mut().rename_clip(id as u64, new_name.as_str());
-            });
-        }
-
-        // Ciclo de cor do clip (swatch click) → core.
-        // Paleta de 20 cores (ver ui/clip_palette.slint).
-        {
-            let project = project.clone();
-            ui.on_clip_color_cycle_requested(move |id| {
-                let new_color = {
-                    let proj = project.borrow();
-                    let current = proj.clips.iter().find(|c| c.id as i32 == id).map(|c| c.color).unwrap_or(0);
-                    (current + 1) % 20
-                };
-                project.borrow_mut().set_clip_color(id as u64, new_color);
-            });
-        }
-
-        // Botão "add color" do cabeçalho TRACKS → aplica o índice de cor
-        // escolhido à track (cabeçalho) e a TODOS os seus clips.
-        {
-            let project = project.clone();
-            let colors_model = track_colors_model.clone();
-            let ui_weak = ui.as_weak();
-            ui.on_track_recolor_requested(move |track_index, color| {
-                let mut proj = project.borrow_mut();
-                if proj.tracks.is_empty() {
-                    return;
-                }
-                let idx = (track_index.max(0) as usize).min(proj.tracks.len() - 1);
-                let track_id = proj.tracks[idx].id;
-                let color = color.clamp(0, 255) as u8;
-
-                // Com um clip selecionado, a paleta do Track Panel atua
-                // somente nele. Sem seleção, continua colorindo a track.
-                if let Some(ui) = ui_weak.upgrade() {
-                    let selected = ui.get_selected_clip();
-                    if selected >= 0 {
-                        proj.set_clip_color(selected as u64, color);
-                        return;
-                    }
-                }
-
-                // A cor da track em si (indicador do cabeçalho).
-                proj.tracks[idx].color = color;
-                colors_model.set_row_data(idx, color as i32);
-
-                // E todos os clips dela.
-                let ids: Vec<u64> = proj
-                    .clips
-                    .iter()
-                    .filter(|c| c.track_id == track_id)
-                    .map(|c| c.id)
-                    .collect();
-                for id in ids {
-                    proj.set_clip_color(id, color);
-                }
-            });
-        }
-
-        // Clipboard interno de clips: clique esquerdo copia, clique em
-        // área vazia da timeline cola uma cópia na posição clicada.
-        let clip_clipboard: Rc<RefCell<Option<Clip>>> = Rc::new(RefCell::new(None));
-        {
-            let project = project.clone();
-            let clipboard = clip_clipboard.clone();
-            ui.on_clip_copy_requested(move |id| {
-                if let Some(clip) = project.borrow().clips.iter().find(|c| c.id as i32 == id) {
-                    *clipboard.borrow_mut() = Some(clip.clone());
-                }
-            });
-        }
-        {
-            let project = project.clone();
-            let clipboard = clip_clipboard.clone();
-            let waveforms = waveforms.clone();
-            let clips_model = clips_model.clone();
-            let ui_paste = ui.as_weak();
-            ui.on_clip_paste_requested(move |beat, track| {
-                let Some(src) = clipboard.borrow().clone() else {
-                    return;
-                };
-                // Snap ON → cola no início da célula; OFF → onde o mouse clicou.
-                let snap = ui_paste.upgrade().map(|u| u.get_snap_enabled()).unwrap_or(true);
-                let mut proj = project.borrow_mut();
-                let track_count = proj.tracks.len().max(1);
-                let track_id = (track.max(0) as usize).min(track_count - 1) as u64;
-                let desired = if snap { beat.floor() } else { beat }.max(0.0);
-                let start = proj.find_free_slot(track_id, desired, src.length_beats);
-                let new_id = proj.add_clip_with_path(
-                    track_id,
-                    src.kind,
-                    src.name.as_str(),
-                    start,
-                    src.length_beats,
-                    src.file_path.clone(),
-                );
-
-                // Waveform da cópia: mesmo arquivo do clipboard →
-                // copia a entrada do cache e reprojeta a linha.
-                // (Clona FORA do borrow para não segurar o RefCell.)
-                let src_wf = waveforms.borrow().get(&src.id).cloned();
-                if let (Some(new_id), Some(cw)) = (new_id, src_wf) {
-                    waveforms.borrow_mut().insert(new_id, cw);
-                    crate::waveform::reproject_clip(&clips_model, &waveforms.borrow(), new_id);
-                }
-            });
-        }
-
-        // Duplicate de clip (menu de contexto) → cópia na mesma posição.
-        {
-            let project = project.clone();
-            let waveforms = waveforms.clone();
-            let clips_model = clips_model.clone();
-            ui.on_clip_duplicate_requested(move |id| {
-                let Some(src) = project
-                    .borrow()
+    // Ciclo de cor do clip (swatch click) → core.
+    // Paleta de 20 cores (ver ui/clip_palette.slint).
+    {
+        let project = project.clone();
+        ui.on_clip_color_cycle_requested(move |id| {
+            let new_color = {
+                let proj = project.borrow();
+                let current = proj
                     .clips
                     .iter()
                     .find(|c| c.id as i32 == id)
-                    .cloned()
-                else {
-                    return;
-                };
-                let mut proj = project.borrow_mut();
-                // Duplicar coloca a cópia DEPOIS do original, encostada.
-                // Na mesma posição ela ficaria invisível e inaudível.
-                let start = proj.find_free_slot(src.track_id, src.end_beat(), src.length_beats);
-                let new_id = proj.add_clip_with_path(
-                    src.track_id,
-                    src.kind,
-                    src.name.as_str(),
-                    start,
-                    src.length_beats,
-                    src.file_path.clone(),
-                );
+                    .map(|c| c.color)
+                    .unwrap_or(0);
+                (current + 1) % 20
+            };
+            project.borrow_mut().set_clip_color(id as u64, new_color);
+        });
+    }
 
-                // Waveform: a duplicata aponta pro MESMO arquivo →
-                // copia a entrada do cache (picos + samples + raster)
-                // do clip de origem e reprojeta a linha da cópia.
-                if let Some(new_id) = new_id {
-                    let cached = waveforms.borrow().get(&src.id).cloned();
-                    if let Some(cw) = cached {
-                        waveforms.borrow_mut().insert(new_id, cw);
-                        crate::waveform::reproject_clip(&clips_model, &waveforms.borrow(), new_id);
+    // Botão "add color" do cabeçalho TRACKS → aplica o índice de cor
+    // escolhido à track (cabeçalho) e a TODOS os seus clips.
+    {
+        let project = project.clone();
+        let colors_model = track_colors_model.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_track_recolor_requested(move |track_index, color| {
+            let mut proj = project.borrow_mut();
+            if proj.tracks.is_empty() {
+                return;
+            }
+            let idx = (track_index.max(0) as usize).min(proj.tracks.len() - 1);
+            let track_id = proj.tracks[idx].id;
+            let color = color.clamp(0, 255) as u8;
+
+            // Com um clip selecionado, a paleta do Track Panel atua
+            // somente nele. Sem seleção, continua colorindo a track.
+            if let Some(ui) = ui_weak.upgrade() {
+                let selected = ui.get_selected_clip();
+                if selected >= 0 {
+                    proj.set_clip_color(selected as u64, color);
+                    return;
+                }
+            }
+
+            // A cor da track em si (indicador do cabeçalho).
+            proj.tracks[idx].color = color;
+            colors_model.set_row_data(idx, color as i32);
+
+            // E todos os clips dela.
+            let ids: Vec<u64> = proj
+                .clips
+                .iter()
+                .filter(|c| c.track_id == track_id)
+                .map(|c| c.id)
+                .collect();
+            for id in ids {
+                proj.set_clip_color(id, color);
+            }
+        });
+    }
+
+    // Clipboard interno de clips: clique esquerdo copia, clique em
+    // área vazia da timeline cola uma cópia na posição clicada.
+    let clip_clipboard: Rc<RefCell<Option<Clip>>> = Rc::new(RefCell::new(None));
+    {
+        let project = project.clone();
+        let clipboard = clip_clipboard.clone();
+        ui.on_clip_copy_requested(move |id| {
+            if let Some(clip) = project.borrow().clips.iter().find(|c| c.id as i32 == id) {
+                *clipboard.borrow_mut() = Some(clip.clone());
+            }
+        });
+    }
+    {
+        let project = project.clone();
+        let clipboard = clip_clipboard.clone();
+        let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
+        let ui_paste = ui.as_weak();
+        ui.on_clip_paste_requested(move |beat, track| {
+            let Some(src) = clipboard.borrow().clone() else {
+                return;
+            };
+            // Snap ON → cola no início da célula; OFF → onde o mouse clicou.
+            let snap = ui_paste
+                .upgrade()
+                .map(|u| u.get_snap_enabled())
+                .unwrap_or(true);
+            let mut proj = project.borrow_mut();
+            let track_count = proj.tracks.len().max(1);
+            let track_id = (track.max(0) as usize).min(track_count - 1) as u64;
+            let desired = if snap { beat.floor() } else { beat }.max(0.0);
+            let start = proj.find_free_slot(track_id, desired, src.length_beats);
+            let new_id = proj.add_clip_with_path(
+                track_id,
+                src.kind,
+                src.name.as_str(),
+                start,
+                src.length_beats,
+                src.file_path.clone(),
+            );
+
+            // Waveform da cópia: mesmo arquivo do clipboard →
+            // copia a entrada do cache e reprojeta a linha.
+            // (Clona FORA do borrow para não segurar o RefCell.)
+            let src_wf = waveforms.borrow().get(&src.id).cloned();
+            if let (Some(new_id), Some(cw)) = (new_id, src_wf) {
+                waveforms.borrow_mut().insert(new_id, cw);
+                crate::waveform::reproject_clip(&clips_model, &waveforms.borrow(), new_id);
+            }
+        });
+    }
+
+    // Duplicate de clip (menu de contexto) → cópia na mesma posição.
+    {
+        let project = project.clone();
+        let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
+        ui.on_clip_duplicate_requested(move |id| {
+            let Some(src) = project
+                .borrow()
+                .clips
+                .iter()
+                .find(|c| c.id as i32 == id)
+                .cloned()
+            else {
+                return;
+            };
+            let mut proj = project.borrow_mut();
+            // Duplicar coloca a cópia DEPOIS do original, encostada.
+            // Na mesma posição ela ficaria invisível e inaudível.
+            let start = proj.find_free_slot(src.track_id, src.end_beat(), src.length_beats);
+            let new_id = proj.add_clip_with_path(
+                src.track_id,
+                src.kind,
+                src.name.as_str(),
+                start,
+                src.length_beats,
+                src.file_path.clone(),
+            );
+
+            // Waveform: a duplicata aponta pro MESMO arquivo →
+            // copia a entrada do cache (picos + samples + raster)
+            // do clip de origem e reprojeta a linha da cópia.
+            if let Some(new_id) = new_id {
+                let cached = waveforms.borrow().get(&src.id).cloned();
+                if let Some(cw) = cached {
+                    waveforms.borrow_mut().insert(new_id, cw);
+                    crate::waveform::reproject_clip(&clips_model, &waveforms.borrow(), new_id);
+                }
+            }
+        });
+    }
+
+    // Marquee (Ctrl+arrasto): marca multi-selected nos clips
+    // que intersectam o retângulo (beats × trilhas).
+    {
+        let clips_model = clips_model.clone();
+        ui.on_marquee_select(move |beat0: f32, beat1: f32, track0: i32, track1: i32| {
+            for i in 0..clips_model.row_count() {
+                if let Some(mut d) = clips_model.row_data(i) {
+                    let hit = d.beat < beat1
+                        && (d.beat + d.len) > beat0
+                        && d.track_index >= track0
+                        && d.track_index <= track1;
+                    if d.multi_selected != hit {
+                        d.multi_selected = hit;
+                        clips_model.set_row_data(i, d);
                     }
                 }
-            });
-        }
+            }
+        });
+    }
 
-        // Marquee (Ctrl+arrasto): marca multi-selected nos clips
-        // que intersectam o retângulo (beats × trilhas).
-        {
-            let clips_model = clips_model.clone();
-            ui.on_marquee_select(
-                move |beat0: f32, beat1: f32, track0: i32, track1: i32| {
-                    for i in 0..clips_model.row_count() {
-                        if let Some(mut d) = clips_model.row_data(i) {
-                            let hit = d.beat < beat1
-                                && (d.beat + d.len) > beat0
-                                && d.track_index >= track0
-                                && d.track_index <= track1;
-                            if d.multi_selected != hit {
-                                d.multi_selected = hit;
-                                clips_model.set_row_data(i, d);
-                            }
-                        }
-                    }
-                },
-            );
-        }
-
-        // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.
-        {
-            let p = project.clone();
-            ui.on_undo_requested(move || {
-                p.borrow_mut().undo();
-            });
-            let p = project.clone();
-            ui.on_redo_requested(move || {
-                p.borrow_mut().redo();
-            });
-        }
+    // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.
+    {
+        let p = project.clone();
+        ui.on_undo_requested(move || {
+            p.borrow_mut().undo();
+        });
+        let p = project.clone();
+        ui.on_redo_requested(move || {
+            p.borrow_mut().redo();
+        });
+    }
 }

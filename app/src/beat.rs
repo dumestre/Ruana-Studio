@@ -61,11 +61,8 @@ pub fn refresh_beat(ui: &MainWindow, project: &Project) {
     st.set_patterns(Rc::new(VecModel::from(rows)).into());
 
     // Nomes dos patterns para o Clip Pool.
-    let pattern_names: Vec<SharedString> = bp
-        .patterns
-        .iter()
-        .map(|p| p.name.clone().into())
-        .collect();
+    let pattern_names: Vec<SharedString> =
+        bp.patterns.iter().map(|p| p.name.clone().into()).collect();
     st.set_pattern_names(Rc::new(VecModel::from(pattern_names)).into());
 
     let Some(current) = bp.current_pattern() else {
@@ -104,8 +101,11 @@ pub fn refresh_beat(ui: &MainWindow, project: &Project) {
     let solo: Vec<bool> = current.track_params.iter().map(|t| t.solo).collect();
     let pan: Vec<f32> = current.track_params.iter().map(|t| t.pan).collect();
     let volume: Vec<f32> = current.track_params.iter().map(|t| t.volume).collect();
-    let channels: Vec<i32> =
-        current.track_params.iter().map(|t| t.mixer_channel).collect();
+    let channels: Vec<i32> = current
+        .track_params
+        .iter()
+        .map(|t| t.mixer_channel)
+        .collect();
 
     st.set_track_active(Rc::new(VecModel::from(active)).into());
     st.set_track_solo(Rc::new(VecModel::from(solo)).into());
@@ -236,8 +236,7 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
         let clipboard = beat_clipboard.clone();
         let project = project.clone();
         st.on_copy_beat(move || {
-            *clipboard.borrow_mut() =
-                project.borrow().current_beat_pattern().cloned();
+            *clipboard.borrow_mut() = project.borrow().current_beat_pattern().cloned();
         });
     }
 
@@ -286,8 +285,7 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
             let i = track.max(0) as usize;
             if let Some(p) = proj.current_beat_pattern() {
                 if i < p.num_tracks() {
-                    *clipboard.borrow_mut() =
-                        Some((p.grid[i].clone(), p.track_params[i].clone()));
+                    *clipboard.borrow_mut() = Some((p.grid[i].clone(), p.track_params[i].clone()));
                 }
             }
         });
@@ -363,9 +361,7 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
             if track < 0 {
                 return;
             }
-            if let Some(t) =
-                project.borrow_mut().beat_track_params_mut(track as usize)
-            {
+            if let Some(t) = project.borrow_mut().beat_track_params_mut(track as usize) {
                 match param.as_str() {
                     "active" => t.active = value >= 0.5,
                     "solo" => t.solo = value >= 0.5,

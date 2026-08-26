@@ -21,8 +21,8 @@ use daw_core::project::Project;
 use daw_core::transport::Transport;
 use slint::{ComponentHandle, Global, Model};
 
-use crate::audio_bridge::AudioBridge;
 use crate::MainWindow;
+use crate::audio_bridge::AudioBridge;
 
 /// Log de runtime (playback) — só ativo com `RUANA_LOG` definido.
 fn rt_log(msg: &str) {
@@ -194,10 +194,8 @@ pub fn install(
                                 // LCD (bars:beat:ticks) — domínio musical,
                                 // derivado dos segundos com o BPM atual.
                                 lcd_ticks = Some(
-                                    (c.projected().max(0.0)
-                                        * t.bpm as f64
-                                        / 60.0
-                                        * t.ppq as f64) as i64,
+                                    (c.projected().max(0.0) * t.bpm as f64 / 60.0 * t.ppq as f64)
+                                        as i64,
                                 );
                             }
                             let secs = c.projected().max(0.0);

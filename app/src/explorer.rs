@@ -4,9 +4,10 @@ use slint::Model;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::BrowserFileEntry;
+use crate::MainWindow;
 use crate::importer::AUDIO_EXTS;
 use daw_media::filesystem::list_directory;
-use crate::BrowserFileEntry; use crate::MainWindow;
 use slint::ComponentHandle;
 
 /// Mostra um diretório no explorador.
@@ -55,9 +56,7 @@ pub fn load_directory_entries(path: &std::path::Path, filter: &str) -> Vec<Brows
     };
     entries
         .iter()
-        .filter(|e| {
-            needle.is_empty() || e.is_directory || e.name.to_lowercase().contains(&needle)
-        })
+        .filter(|e| needle.is_empty() || e.is_directory || e.name.to_lowercase().contains(&needle))
         .map(|e| {
             let entry_type = if e.is_directory {
                 "Folder".to_string()
@@ -86,78 +85,77 @@ pub fn load_directory_entries(path: &std::path::Path, filter: &str) -> Vec<Brows
         .collect()
 }
 
-
 /// Assina navegação/histórico/busca do explorador.
 pub fn wire_explorer(ui: &MainWindow) {
-        // Filesystem: navegação de diretórios
-        //
-        // Uma função só faz o trabalho ("mostre esta pasta"); o que muda
-        // entre os handlers é apenas se o histórico avança ou não.
-        {
-            let ui_weak = ui.as_weak();
-            ui.on_explorer_path_changed(move |path| {
-                if let Some(ui) = ui_weak.upgrade() {
-                    show_explorer_dir(&ui, &PathBuf::from(path.as_str()), true);
-                }
-            });
-        }
+    // Filesystem: navegação de diretórios
+    //
+    // Uma função só faz o trabalho ("mostre esta pasta"); o que muda
+    // entre os handlers é apenas se o histórico avança ou não.
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_path_changed(move |path| {
+            if let Some(ui) = ui_weak.upgrade() {
+                show_explorer_dir(&ui, &PathBuf::from(path.as_str()), true);
+            }
+        });
+    }
 
-        // Filesystem: entrar em diretório (duplo papel do path-changed,
-        // mantido separado porque a UI distingue clique em pasta de
-        // navegação por caminho).
-        {
-            let ui_weak = ui.as_weak();
-            ui.on_explorer_directory_entered(move |path| {
-                if let Some(ui) = ui_weak.upgrade() {
-                    show_explorer_dir(&ui, &PathBuf::from(path.as_str()), true);
-                }
-            });
-        }
+    // Filesystem: entrar em diretório (duplo papel do path-changed,
+    // mantido separado porque a UI distingue clique em pasta de
+    // navegação por caminho).
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_directory_entered(move |path| {
+            if let Some(ui) = ui_weak.upgrade() {
+                show_explorer_dir(&ui, &PathBuf::from(path.as_str()), true);
+            }
+        });
+    }
 
-        // Filesystem: subir um nível.
-        {
-            let ui_weak = ui.as_weak();
-            ui.on_explorer_go_up(move || {
-                if let Some(ui) = ui_weak.upgrade() {
-                    let current = PathBuf::from(ui.get_explorer_current_path().as_str());
-                    if let Some(parent) = current.parent() {
-                        show_explorer_dir(&ui, &parent.to_path_buf(), true);
-                    }
+    // Filesystem: subir um nível.
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_go_up(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let current = PathBuf::from(ui.get_explorer_current_path().as_str());
+                if let Some(parent) = current.parent() {
+                    show_explorer_dir(&ui, &parent.to_path_buf(), true);
                 }
-            });
-        }
+            }
+        });
+    }
 
-        // Filesystem: voltar / avançar.
-        //
-        // Anda NO histórico em vez de empurrar nele — empurrar era o que
-        // fazia o "voltar" virar um caminho novo e travar o botão.
-        {
-            let ui_weak = ui.as_weak();
-            ui.on_explorer_history_go(move |delta| {
-                if let Some(ui) = ui_weak.upgrade() {
-                    let history: Vec<slint::SharedString> =
-                        ui.get_explorer_path_history().iter().collect();
-                    let target = ui.get_explorer_history_index() + delta;
-                    if target < 0 || target as usize >= history.len() {
-                        return;
-                    }
-                    let path = PathBuf::from(history[target as usize].as_str());
-                    if show_explorer_dir(&ui, &path, false) {
-                        ui.set_explorer_history_index(target);
-                    }
+    // Filesystem: voltar / avançar.
+    //
+    // Anda NO histórico em vez de empurrar nele — empurrar era o que
+    // fazia o "voltar" virar um caminho novo e travar o botão.
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_history_go(move |delta| {
+            if let Some(ui) = ui_weak.upgrade() {
+                let history: Vec<slint::SharedString> =
+                    ui.get_explorer_path_history().iter().collect();
+                let target = ui.get_explorer_history_index() + delta;
+                if target < 0 || target as usize >= history.len() {
+                    return;
                 }
-            });
-        }
+                let path = PathBuf::from(history[target as usize].as_str());
+                if show_explorer_dir(&ui, &path, false) {
+                    ui.set_explorer_history_index(target);
+                }
+            }
+        });
+    }
 
-        // Filesystem: filtro de busca — relê a pasta atual.
-        {
-            let ui_weak = ui.as_weak();
-            ui.on_explorer_search_changed(move |term| {
-                if let Some(ui) = ui_weak.upgrade() {
-                    let current = PathBuf::from(ui.get_explorer_current_path().as_str());
-                    let entries = load_directory_entries(&current, term.as_str());
-                    ui.set_explorer_entries(Rc::new(slint::VecModel::from(entries)).into());
-                }
-            });
-        }
+    // Filesystem: filtro de busca — relê a pasta atual.
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_explorer_search_changed(move |term| {
+            if let Some(ui) = ui_weak.upgrade() {
+                let current = PathBuf::from(ui.get_explorer_current_path().as_str());
+                let entries = load_directory_entries(&current, term.as_str());
+                ui.set_explorer_entries(Rc::new(slint::VecModel::from(entries)).into());
+            }
+        });
+    }
 }

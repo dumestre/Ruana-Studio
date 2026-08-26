@@ -7,8 +7,8 @@ use crate::MainWindow;
 
 use std::rc::Rc;
 
-use daw_core::clip::Clip;
 use crate::ClipData;
+use daw_core::clip::Clip;
 
 /// Dados de waveform em cache por clip.
 #[derive(Clone)]
@@ -37,7 +37,11 @@ pub fn render_waveform_at_samples(
 ) -> Option<slint::Image> {
     let rgba =
         daw_media::waveform_image::waveform_image_rgba_at_samples(mono, mono, width_px, view)?;
-    Some(image_from_rgba(&rgba, width_px, daw_media::waveform_image::IMAGE_HEIGHT))
+    Some(image_from_rgba(
+        &rgba,
+        width_px,
+        daw_media::waveform_image::IMAGE_HEIGHT,
+    ))
 }
 
 /// Fallback pela rota antiga (picos agregados).
@@ -102,8 +106,8 @@ pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache)
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::models::clip_row;
 use crate::TimelineMetrics;
+use crate::models::clip_row;
 use slint::{ComponentHandle, Model};
 
 pub fn wire_resolution_requests(
@@ -111,22 +115,23 @@ pub fn wire_resolution_requests(
     waveforms: Rc<RefCell<WaveformCache>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
 ) {
-        // Re-renderiza a waveform de um clip na resolução exata de
-        // exibição (zoom/resize mudaram a largura em px).
-        //
-        // DEBOUNCE: escrever no modelo dentro do próprio `changed
-        // width` reconstrói a linha e redispara o handler (loop).
-        // Guardamos o pedido e aplicamos num timer de 120 ms; se um
-        // novo pedido chegar, reiniciamos o timer. Também ignoramos
-        // larguras iguais à última renderizada.
-        {
-                        let waveforms = waveforms.clone();
-            let clips_model = clips_model.clone();
-            let pending: Rc<RefCell<HashMap<i32, u32>>> = Rc::new(RefCell::new(HashMap::new()));
-            let done_width: Rc<RefCell<HashMap<u64, u32>>> = Rc::new(RefCell::new(HashMap::new()));
-            let timer: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
+    // Re-renderiza a waveform de um clip na resolução exata de
+    // exibição (zoom/resize mudaram a largura em px).
+    //
+    // DEBOUNCE: escrever no modelo dentro do próprio `changed
+    // width` reconstrói a linha e redispara o handler (loop).
+    // Guardamos o pedido e aplicamos num timer de 120 ms; se um
+    // novo pedido chegar, reiniciamos o timer. Também ignoramos
+    // larguras iguais à última renderizada.
+    {
+        let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
+        let pending: Rc<RefCell<HashMap<i32, u32>>> = Rc::new(RefCell::new(HashMap::new()));
+        let done_width: Rc<RefCell<HashMap<u64, u32>>> = Rc::new(RefCell::new(HashMap::new()));
+        let timer: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
 
-            ui.global::<TimelineMetrics>().on_waveform_resolution_requested(move |id, width_px| {
+        ui.global::<TimelineMetrics>()
+            .on_waveform_resolution_requested(move |id, width_px| {
                 let id_u = id.max(0) as u64;
                 let w = (width_px.round() as u32).clamp(16, 16384);
 
@@ -180,9 +185,8 @@ pub fn wire_resolution_requests(
                     );
                 }
             });
-        }
+    }
 }
-
 
 /// Reprojeta a linha de UM clip após o cache ganhar/alterar sua
 /// entrada (duplicar, colar, re-render por zoom).

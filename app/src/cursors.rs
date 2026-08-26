@@ -7,12 +7,12 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LRESULT, POINT};
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 #[cfg(windows)]
-use windows::Win32::UI::WindowsAndMessaging::{
-    LoadImageW, LoadCursorW, SetCursor, GetCursorPos,
-    IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, IDC_ARROW, HCURSOR, WM_SETCURSOR,
-};
+use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 #[cfg(windows)]
-use windows::Win32::UI::Shell::{SetWindowSubclass, DefSubclassProc};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetCursorPos, HCURSOR, IDC_ARROW, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, LoadCursorW,
+    LoadImageW, SetCursor, WM_SETCURSOR,
+};
 #[cfg(windows)]
 use windows::core::PCWSTR;
 
@@ -102,7 +102,12 @@ impl CursorManager {
                 };
 
                 if let Ok(h) = hcursor {
-                    cursors.insert(tool, CursorHandle { hcursor: HCURSOR(h.0) });
+                    cursors.insert(
+                        tool,
+                        CursorHandle {
+                            hcursor: HCURSOR(h.0),
+                        },
+                    );
                 }
             }
 
@@ -113,9 +118,7 @@ impl CursorManager {
         }
         #[cfg(not(windows))]
         {
-            Ok(Self {
-                current_tool: None,
-            })
+            Ok(Self { current_tool: None })
         }
     }
 
@@ -142,7 +145,9 @@ impl CursorManager {
                 if let Some(mut active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()) {
                     *active = Some(cursor_handle.hcursor.0 as isize);
                 }
-                unsafe { SetCursor(cursor_handle.hcursor); }
+                unsafe {
+                    SetCursor(cursor_handle.hcursor);
+                }
             }
         }
         self.current_tool = Some(tool);
@@ -169,7 +174,9 @@ impl CursorManager {
                 *active = None;
             }
             if let Ok(default) = unsafe { LoadCursorW(HINSTANCE::default(), IDC_ARROW) } {
-                unsafe { SetCursor(HCURSOR(default.0)); }
+                unsafe {
+                    SetCursor(HCURSOR(default.0));
+                }
             }
             self.current_tool = None;
         }
@@ -204,7 +211,13 @@ struct TimelineBounds {
 #[cfg(windows)]
 impl Default for TimelineBounds {
     fn default() -> Self {
-        Self { x: 0.0, y: 0.0, w: 0.0, h: 0.0, valid: false }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            w: 0.0,
+            h: 0.0,
+            valid: false,
+        }
     }
 }
 
@@ -245,7 +258,11 @@ unsafe extern "system" fn cursor_subclass_proc(
 ) -> LRESULT {
     if msg == WM_SETCURSOR && (lparam.0 & 0xFFFF) as u32 == 1 {
         if unsafe { is_cursor_over_timeline(hwnd) } {
-            if let Some(active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()).and_then(|c| *c) {
+            if let Some(active) = ACTIVE_CURSOR
+                .get()
+                .and_then(|m| m.lock().ok())
+                .and_then(|c| *c)
+            {
                 unsafe { SetCursor(HCURSOR(active as *mut core::ffi::c_void)) };
                 return LRESULT(1);
             }
@@ -255,7 +272,8 @@ unsafe extern "system" fn cursor_subclass_proc(
 }
 
 pub fn init_cursor_manager() -> Result<(), Box<dyn std::error::Error>> {
-    let _ = CURSOR_MANAGER.get_or_init(|| Mutex::new(CursorManager::new().expect("Failed to create CursorManager")));
+    let _ = CURSOR_MANAGER
+        .get_or_init(|| Mutex::new(CursorManager::new().expect("Failed to create CursorManager")));
     Ok(())
 }
 
