@@ -66,6 +66,27 @@ export global ClipDragState {
 
 
     // ========================================================
+    // MARQUEE (Ctrl+arrasto) — estado compartilhado
+    //
+    // O Ctrl+clique pode começar EM CIMA DE UM CLIP: nesse caso a
+    // TouchArea do clip captura o gesto e o zoom-pan-area da
+    // timeline nunca vê o DOWN. Guardando o estado aqui, o clip
+    // inicia o marquee no seu DOWN (com Ctrl) e o zoom-pan-area
+    // apenas CONTINUA o gesto nos move/up que chegam até ele.
+    // ========================================================
+
+    in-out property <bool> marquee-active: false;
+
+    in-out property <length> marquee-x0: 0px;
+
+    in-out property <length> marquee-y0: 0px;
+
+    in-out property <length> marquee-x1: 0px;
+
+    in-out property <length> marquee-y1: 0px;
+
+
+    // ========================================================
     // CURSOR EM COORDENADAS DA JANELA
     //
     // start-* permanece fixo durante todo o gesto;
@@ -189,10 +210,17 @@ export global TimelineMetrics {
 
     in-out property <length> timeline-abs-x: 0px;
 
+    // Y absoluto do TOPO DA TIMELINE (incluindo a régua).
+    in-out property <length> timeline-abs-y: 0px;
+
     // Y absoluto do início das tracks (abaixo da régua).
     in-out property <length> content-top-abs-y: 0px;
 
     in-out property <length> width: 0px;
+
+    // Altura da régua — quem converte coordenadas de janela →
+    // conteúdo a partir do topo DA TIMELINE precisa descontá-la.
+    in-out property <length> ruler-height: 0px;
 
     in-out property <length> scroll-x: 0px;
 

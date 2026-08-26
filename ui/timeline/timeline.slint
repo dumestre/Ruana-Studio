@@ -4,6 +4,7 @@ import { TrackRow } from "track_row.slint";
 import { ClipDragOverlay } from "clip_drag/clip_drag_overlay.slint";
 import { ClipData } from "clip_data.slint";
 import { PlayheadOverlay } from "playhead.slint";
+import { ClipDragState } from "clip_drag/clip_drag_state.slint";
 
 export component Timeline inherits Rectangle {
 
@@ -23,15 +24,7 @@ export component Timeline inherits Rectangle {
     // Coordenadas de CONTEÚDO (independem do scroll).
     // =====================================================
 
-    in-out property <bool> marquee-active: false;
 
-    in-out property <length> marquee-x0: 0px;
-
-    in-out property <length> marquee-y0: 0px;
-
-    in-out property <length> marquee-x1: 0px;
-
-    in-out property <length> marquee-y1: 0px;
 
     callback marquee-select(float, float, float, float);
         // (beat0, beat1, track0, track1)
@@ -410,15 +403,15 @@ export component Timeline inherits Rectangle {
                         // (igual ao lasso do piano roll). Shift fica
                         // reservado para o Shift+clique colar.
                         if event.modifiers.control {
-                            root.marquee-active = true;
-                            root.marquee-x0 =
+                            ClipDragState.marquee-active = true;
+                            ClipDragState.marquee-x0 =
                                 self.mouse-x + root.scroll-x;
-                            root.marquee-y0 =
+                            ClipDragState.marquee-y0 =
                                 self.mouse-y + root.scroll-y;
-                            root.marquee-x1 =
-                                root.marquee-x0;
-                            root.marquee-y1 =
-                                root.marquee-y0;
+                            ClipDragState.marquee-x1 =
+                                ClipDragState.marquee-x0;
+                            ClipDragState.marquee-y1 =
+                                ClipDragState.marquee-y0;
                         } else if root.active-tool == 0 {
 
                             root.selected-clip = -1;
@@ -427,11 +420,11 @@ export component Timeline inherits Rectangle {
 
                     else if event.kind
                                 == PointerEventKind.move
-                            && root.marquee-active {
+                            && ClipDragState.marquee-active {
 
-                        root.marquee-x1 =
+                        ClipDragState.marquee-x1 =
                             self.mouse-x + root.scroll-x;
-                        root.marquee-y1 =
+                        ClipDragState.marquee-y1 =
                             self.mouse-y + root.scroll-y;
                     }
 
@@ -449,26 +442,26 @@ export component Timeline inherits Rectangle {
                         // MAS só se houve arrasto de verdade. Clique
                         // com Shift parado (retângulo vazio) cai fora
                         // deste if e segue para o Shift+clique colar.
-                        if root.marquee-active
-                            && (root.marquee-x1 != root.marquee-x0
-                                || root.marquee-y1 != root.marquee-y0) {
-                            root.marquee-active = false;
+                        if ClipDragState.marquee-active
+                            && (ClipDragState.marquee-x1 != ClipDragState.marquee-x0
+                                || ClipDragState.marquee-y1 != ClipDragState.marquee-y0) {
+                            ClipDragState.marquee-active = false;
 
                             let bx0 = min(
-                                root.marquee-x0,
-                                root.marquee-x1,
+                                ClipDragState.marquee-x0,
+                                ClipDragState.marquee-x1,
                             ) / root.px-per-beat;
 
                             let bx1 = max(
-                                root.marquee-x0,
-                                root.marquee-x1,
+                                ClipDragState.marquee-x0,
+                                ClipDragState.marquee-x1,
                             ) / root.px-per-beat;
 
                             let ty0 = Math.floor(
                                 (
                                     min(
-                                        root.marquee-y0,
-                                        root.marquee-y1,
+                                        ClipDragState.marquee-y0,
+                                        ClipDragState.marquee-y1,
                                     )
                                     - root.ruler-height
                                 )
@@ -478,8 +471,8 @@ export component Timeline inherits Rectangle {
                             let ty1 = Math.floor(
                                 (
                                     max(
-                                        root.marquee-y0,
-                                        root.marquee-y1,
+                                        ClipDragState.marquee-y0,
+                                        ClipDragState.marquee-y1,
                                     )
                                     - root.ruler-height
                                 )
@@ -1326,19 +1319,19 @@ export component Timeline inherits Rectangle {
             // RETÂNGULO DO MARQUEE
             // =============================================
 
-            if root.marquee-active: Rectangle {
+            if ClipDragState.marquee-active: Rectangle {
 
                 x:
-                    min(root.marquee-x0, root.marquee-x1) - root.scroll-x;
+                    min(ClipDragState.marquee-x0, ClipDragState.marquee-x1) - root.scroll-x;
 
                 y:
-                    min(root.marquee-y0, root.marquee-y1) - root.scroll-y;
+                    min(ClipDragState.marquee-y0, ClipDragState.marquee-y1) - root.scroll-y;
 
                 width:
-                    abs(root.marquee-x1 - root.marquee-x0);
+                    abs(ClipDragState.marquee-x1 - ClipDragState.marquee-x0);
 
                 height:
-                    abs(root.marquee-y1 - root.marquee-y0);
+                    abs(ClipDragState.marquee-y1 - ClipDragState.marquee-y0);
 
                 border-width:
                     1px;

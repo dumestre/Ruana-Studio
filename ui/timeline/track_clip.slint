@@ -1092,6 +1092,36 @@ export component TrackClip inherits Rectangle {
                         == PointerEventButton.left {
 
 
+                    // Ctrl+DOWN sobre um clip → MARQUEE, não seleção.
+                    // A TouchArea do clip captura este gesto (o
+                    // zoom-pan-area da timeline nem vê), então é aqui
+                    // que a caixa de seleção nasce. Os move/up chegam
+                    // ao zoom-pan-area, que atualiza/finaliza.
+                    if event.modifiers.control {
+                        ClipDragState.marquee-active = true;
+                        // Coordenadas de CONTEÚDO da timeline, via
+                        // TimelineMetrics (mesma base usada pelo
+                        // zoom-pan-area): posição absoluta do mouse
+                        // menos a origem da timeline + scroll.
+                        let abs-x =
+                            self.absolute-position.x + self.mouse-x;
+                        let abs-y =
+                            self.absolute-position.y + self.mouse-y;
+                        ClipDragState.marquee-x0 =
+                            abs-x
+                            - TimelineMetrics.timeline-abs-x
+                            + TimelineMetrics.scroll-x;
+                        ClipDragState.marquee-y0 =
+                            abs-y
+                            - TimelineMetrics.timeline-abs-y
+                            + TimelineMetrics.scroll-y;
+                        ClipDragState.marquee-x1 =
+                            ClipDragState.marquee-x0;
+                        ClipDragState.marquee-y1 =
+                            ClipDragState.marquee-y0;
+                        return;
+                    }
+
                     root.clicked(
                         root.clip-id
                     );
