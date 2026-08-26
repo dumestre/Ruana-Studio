@@ -22,6 +22,7 @@ pub fn install(
     waveforms: Rc<RefCell<WaveformCache>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
     track_colors_model: Rc<slint::VecModel<i32>>,
+    sample_cache: Rc<RefCell<crate::clip_cache::SampleCache>>,
     apply_mixer_state: Rc<dyn Fn()>,
     fit_float_mixer_windows: Rc<dyn Fn()>,
 ) {
@@ -308,16 +309,42 @@ pub fn install(
         });
     }
 
-    // Clipboard interno de clips: clique esquerdo copia, clique em
-    // área vazia da timeline cola uma cópia na posição clicada.
+    // Clipboard interno de clips: Ctrl+C copia, Shift+clique em área
+    // vazia da timeline cola uma cópia na posição clicada.
+    //
+    // CACHE EM RAM: além dos metadados do Clip, o Ctrl+C também
+    // garante a waveform do clip no SampleCache — a colagem vira
+    // operação puramente de memória (sem re-decode, sem disco).
     let clip_clipboard: Rc<RefCell<Option<Clip>>> = Rc::new(RefCell::new(None));
     {
         let project = project.clone();
         let clipboard = clip_clipboard.clone();
+        let sample_cache = sample_cache.clone();
+        let ui_copy = ui.as_weak();
         ui.on_clip_copy_requested(move |id| {
-            if let Some(clip) = project.borrow().clips.iter().find(|c| c.id as i32 == id) {
-                *clipboard.borrow_mut() = Some(clip.clone());
+            let Some(src) = project
+                .borrow()
+                .clips
+                .iter()
+                .find(|c| c.id as i32 == id)
+                .cloned()
+            else {
+                return;
+            };
+            // Pré-carrega o sample do clip no cache (se for arquivo;
+            // já cacheado = no-op). Colagem instantânea depois.
+            if let Some(path_str) = src.file_path.clone() {
+                let bpm = ui_copy
+                    .upgrade()
+                    .map(|u| u.get_bpm() as f32)
+                    .unwrap_or(120.0);
+                crate::clip_cache::ensure_cached(
+                    &sample_cache,
+                    std::path::Path::new(&path_str),
+                    bpm,
+                );
             }
+            *clipboard.borrow_mut() = Some(src);
         });
     }
     {

@@ -19,6 +19,7 @@ use std::path::PathBuf;
 
 /// Entrada do cache: tudo o que uma cópia de um sample precisa.
 #[derive(Clone)]
+#[allow(dead_code)] // `path`/`decoded` ficam para uso futuro (recorte de fonte)
 pub struct CachedSample {
     /// Nome exibido (stem do arquivo).
     pub name: String,
@@ -31,7 +32,7 @@ pub struct CachedSample {
     /// Guardamos o mono dentro de CachedWave; o interleaved fica
     /// aqui porque a colagem pode precisar recortar a fonte quando
     /// o clip copiado estava com offset (`source_start_beats`).
-    pub decoded: std::rc::Rc<WaveformData>,
+    pub decoded: std::sync::Arc<WaveformData>,
     /// Waveform pronta para a UI (picos + mono + imagem RGBA).
     pub wave: CachedWave,
 }
@@ -76,19 +77,20 @@ pub fn ensure_cached(
         name,
         path: key.clone(),
         duration_seconds: duration,
-        decoded: std::rc::Rc::new(decoded_raw),
+        decoded: std::sync::Arc::new(decoded_raw),
         wave: CachedWave {
             peaks,
             mono: Vec::new(),
-            image: Some(img),
+            image: img,
         },
     };
     cache.borrow_mut().insert(key, entry.clone());
     Some(entry)
 }
-/// Consulta sem decodificar.
+/// Consulta sem decodificar (drena pendentes primeiro).
 pub fn get(cache: &RefCell<SampleCache>, path: &str) -> Option<CachedSample> {
-    cache.borrow().get(path).cloned()
+    drain_pending(cache);
+    cache.borrow().get(&path.to_lowercase()).cloned()
 }
 
 /// Copia a entrada de waveform de um clip para outro (paste/duplicate)
@@ -97,9 +99,8 @@ pub fn clone_wave(
     waveforms: &RefCell<WaveformCache>,
     src_id: u64,
     dst_id: u64,
-    clips_model: &slint::VecModel<crate::ClipData>,
+    clips_model: &std::rc::Rc<slint::VecModel<crate::ClipData>>,
 ) {
-    use slint::Model;
     let cached = waveforms.borrow().get(&src_id).cloned();
     if let Some(cw) = cached {
         waveforms.borrow_mut().insert(dst_id, cw);
@@ -151,7 +152,9 @@ pub fn spawn_prefetch(cache: &RefCell<SampleCache>, path: &std::path::Path, bpm:
     std::thread::spawn(move || {
         if let Some(entry) = decode_entry(&path_bg, bpm) {
             if let Ok(mut pending) = PENDING.lock() {
-                pending.get_or_insert_with(Default::default).insert(key, entry);
+                pending
+                    .get_or_insert_with(Default::default)
+                    .insert(key, entry);
             }
         }
     });
@@ -176,11 +179,11 @@ fn decode_entry(path: &std::path::Path, bpm: f32) -> Option<CachedSample> {
         name,
         path: path.to_string_lossy().to_string(),
         duration_seconds: duration,
-        decoded: std::rc::Rc::new(decoded_raw),
+        decoded: std::sync::Arc::new(decoded_raw),
         wave: CachedWave {
             peaks,
             mono: Vec::new(),
-            image: Some(img),
+            image: img,
         },
     })
 }

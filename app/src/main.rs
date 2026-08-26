@@ -170,8 +170,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Cache de samples em RAM (path → decodificado + waveform):
     // alimenta colagem instantânea (Ctrl+C / Shift+clique) e o
     // pré-decode durante o drag do SO.
-    let sample_cache: Rc<RefCell<clip_cache::SampleCache>> =
-        Rc::new(RefCell::new(HashMap::new()));
+    let sample_cache: Rc<RefCell<clip_cache::SampleCache>> = Rc::new(RefCell::new(HashMap::new()));
 
     let (tracks_model, clips_model, track_colors_model) =
         initial_bind(&ui, &project.borrow(), &waveforms.borrow());
@@ -235,6 +234,19 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(path) = choose_audio_file() else {
                 return;
             };
+            // NÃO reescrever o mesmo sample: se a track alvo já tem
+            // este MESMO arquivo carregado, ignora o pedido. Só uma
+            // carga com nome/arquivo diferente substitui.
+            {
+                let proj = project.borrow();
+                if let Some(pattern) = proj.current_beat_pattern() {
+                    if let Some(params) = pattern.track_params.get(track.max(0) as usize) {
+                        if params.sample_path.as_deref() == Some(path.as_str()) {
+                            return;
+                        }
+                    }
+                }
+            }
             let path_buf = std::path::PathBuf::from(&path);
             let Ok(decoded) = daw_media::waveform::decode_audio(&path_buf) else {
                 return;

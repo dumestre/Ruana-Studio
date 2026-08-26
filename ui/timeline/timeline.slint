@@ -406,9 +406,9 @@ export component Timeline inherits Rectangle {
                         // Delete, Ctrl+Z etc. morriam.
                         root.keyboard-focus-requested();
 
-                        // CTRL ou SHIFT → inicia marquee em vez de
-                        // deselecionar. SHIFT+arrasto pinta vários
-                        // clips seguindo o grid, como em qualquer DAW.
+                        // CTRL → inicia marquee em vez de deselecionar
+                        // (igual ao lasso do piano roll). Shift fica
+                        // reservado para o Shift+clique colar.
                         if event.modifiers.control {
                             root.marquee-active = true;
                             root.marquee-x0 =
@@ -445,8 +445,13 @@ export component Timeline inherits Rectangle {
                         // pressionado (Shift + clique em área vazia).
                         self.shift-pressed = event.modifiers.shift;
 
-                        // Marquee ativo? Seleciona e consome o UP.
-                        if root.marquee-active {
+                        // Marquee ativo? Seleciona e consome o UP —
+                        // MAS só se houve arrasto de verdade. Clique
+                        // com Shift parado (retângulo vazio) cai fora
+                        // deste if e segue para o Shift+clique colar.
+                        if root.marquee-active
+                            && (root.marquee-x1 != root.marquee-x0
+                                || root.marquee-y1 != root.marquee-y0) {
                             root.marquee-active = false;
 
                             let bx0 = min(

@@ -139,3 +139,106 @@ pub fn import_audio_file(
     }
     Some(clip_id)
 }
+
+/// Importa um arquivo de áudio usando o CACHE DE SAMPLES em RAM.
+///
+/// Rota do drop do Sistema Operacional: como o pré-decode começou no
+/// `HoveredFile` (cursor entrando na janela), normalmente a entrada
+/// já está no cache e NADA é relido do disco — a inserção é imediata.
+/// Se por acaso o decode em background ainda não terminou, cai no
+/// caminho síncrono original (nunca falha).
+pub fn import_audio_file_with_cache(
+    path: &std::path::Path,
+    track_hint: i32,
+    beat_hint: f32,
+    bpm: f32,
+    project: &RefCell<Project>,
+    waveforms: &RefCell<WaveformCache>,
+    clips_model: &slint::VecModel<ClipData>,
+    track_colors_model: &slint::VecModel<i32>,
+    sample_cache: &RefCell<crate::clip_cache::SampleCache>,
+) -> Option<u64> {
+    // Tenta pela rota cacheada (instantânea).
+    if let Some(entry) = crate::clip_cache::ensure_cached(sample_cache, path, bpm) {
+        return import_from_entry(
+            entry,
+            path,
+            track_hint,
+            beat_hint,
+            bpm,
+            project,
+            waveforms,
+            clips_model,
+            track_colors_model,
+        );
+    }
+    // Cache indisponível (arquivo quebrado): rota antiga para dar o
+    // erro adequado / não criar clip morto.
+    import_audio_file(
+        path,
+        track_hint,
+        beat_hint,
+        bpm,
+        project,
+        waveforms,
+        clips_model,
+        track_colors_model,
+    )
+}
+
+/// Cria o clip a partir de uma entrada JÁ decodificada do cache.
+/// Zero leitura de disco: metadados + waveform vêm da RAM.
+fn import_from_entry(
+    entry: crate::clip_cache::CachedSample,
+    path: &std::path::Path,
+    track_hint: i32,
+    beat_hint: f32,
+    bpm: f32,
+    project: &RefCell<Project>,
+    waveforms: &RefCell<WaveformCache>,
+    clips_model: &slint::VecModel<ClipData>,
+    track_colors_model: &slint::VecModel<i32>,
+) -> Option<u64> {
+    let name = entry.name.clone();
+    let bpm = if bpm > 0.0 { bpm } else { 120.0 };
+    let length = (entry.duration_seconds * bpm / 60.0).max(0.01);
+
+    let clip_id = {
+        let mut proj = project.borrow_mut();
+        let preferred = track_hint.max(0) as u64;
+        let track_id = proj
+            .track_with_room(preferred, beat_hint.max(0.0), length)
+            .or_else(|| proj.track(preferred).map(|t| t.id))?;
+        let start = proj.find_free_slot(track_id, beat_hint.max(0.0), length);
+        let id = proj.add_clip_with_path(
+            track_id,
+            ClipKind::Audio,
+            name.as_str(),
+            start,
+            length,
+            Some(path.to_string_lossy().to_string()),
+        )?;
+        let color = ((id % 19) + 1) as u8;
+        proj.set_clip_color(id, color);
+        if let Some(track_index) = proj.tracks.iter().position(|t| t.id == track_id) {
+            proj.tracks[track_index].color = color;
+            if track_index < track_colors_model.row_count() {
+                track_colors_model.set_row_data(track_index, color as i32);
+            }
+        }
+        id
+    };
+
+    // Waveform já pronta em RAM: só publica no cache de UI e
+    // reprojeta a linha desse clip.
+    if !entry.wave.peaks.is_empty() {
+        waveforms.borrow_mut().insert(clip_id, entry.wave.clone());
+        let wf = waveforms.borrow();
+        if let Some(i) = clip_row(clips_model, clip_id as i32) {
+            if let Some(data) = clips_model.row_data(i) {
+                clips_model.set_row_data(i, to_clip_data_from_id(clip_id, &data, &wf));
+            }
+        }
+    }
+    Some(clip_id)
+}
