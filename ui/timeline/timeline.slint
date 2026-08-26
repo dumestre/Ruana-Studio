@@ -382,6 +382,9 @@ export component Timeline inherits Rectangle {
 
             property <bool> left-pressed: false;
 
+            // Shift pressionado no UP? Shift+clique em área vazia cola.
+            property <bool> shift-pressed: false;
+
 
             pointer-event(event) => {
 
@@ -406,8 +409,7 @@ export component Timeline inherits Rectangle {
                         // CTRL ou SHIFT → inicia marquee em vez de
                         // deselecionar. SHIFT+arrasto pinta vários
                         // clips seguindo o grid, como em qualquer DAW.
-                        if event.modifiers.control
-                            || event.modifiers.shift {
+                        if event.modifiers.control {
                             root.marquee-active = true;
                             root.marquee-x0 =
                                 self.mouse-x + root.scroll-x;
@@ -438,6 +440,10 @@ export component Timeline inherits Rectangle {
                             && self.left-pressed {
 
                         self.left-pressed = false;
+
+                        // Snapshot do Shift no UP: cola só se estava
+                        // pressionado (Shift + clique em área vazia).
+                        self.shift-pressed = event.modifiers.shift;
 
                         // Marquee ativo? Seleciona e consome o UP.
                         if root.marquee-active {
@@ -510,10 +516,15 @@ export component Timeline inherits Rectangle {
                                     content-x
                                     / root.px-per-beat;
 
-                                root.paste-requested(
-                                    max(0.0, beat),
-                                    track
-                                );
+                                // Colar SÓ com Shift + clique em área
+                                // vazia (pedido do usuário). Clique sem
+                                // Shift apenas deseleciona.
+                                if self.shift-pressed {
+                                    root.paste-requested(
+                                        max(0.0, beat),
+                                        track
+                                    );
+                                }
                             }
                         }
                     }

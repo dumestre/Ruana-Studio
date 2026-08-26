@@ -18,6 +18,7 @@ slint::include_modules!();
 
 mod audio_bridge;
 mod beat;
+mod clip_cache;
 mod cursors;
 mod explorer;
 mod floats;
@@ -166,6 +167,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // Cache de waveforms: clip_id → (picos, imagem pré-renderizada).
     let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(HashMap::new()));
 
+    // Cache de samples em RAM (path → decodificado + waveform):
+    // alimenta colagem instantânea (Ctrl+C / Shift+clique) e o
+    // pré-decode durante o drag do SO.
+    let sample_cache: Rc<RefCell<clip_cache::SampleCache>> =
+        Rc::new(RefCell::new(HashMap::new()));
+
     let (tracks_model, clips_model, track_colors_model) =
         initial_bind(&ui, &project.borrow(), &waveforms.borrow());
     bind_document_events(
@@ -284,6 +291,7 @@ fn main() -> Result<(), slint::PlatformError> {
         waveforms.clone(),
         clips_model.clone(),
         track_colors_model.clone(),
+        sample_cache.clone(),
         handles.apply_mixer_state.clone(),
         handles.fit_float_mixer_windows.clone(),
     );
@@ -458,6 +466,7 @@ fn main() -> Result<(), slint::PlatformError> {
         waveforms.clone(),
         clips_model.clone(),
         track_colors_model.clone(),
+        sample_cache.clone(),
     );
 
     ui.run()

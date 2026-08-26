@@ -610,6 +610,19 @@ export component MainWindow inherits Window {
                 accept
 
             } else if event.modifiers.control
+                && !event.modifiers.shift
+                && (event.text == "c" || event.text == "C") {
+
+                // Ctrl+C = copia o clip selecionado para o clipboard
+                // interno (mesma rota do menu de contexto).
+                if root.selected-clip != -1 {
+                    root.clip-copy-requested(root.selected-clip);
+                    accept
+                } else {
+                    reject
+                }
+
+            } else if event.modifiers.control
                 && (event.text == "d" || event.text == "D") {
 
                 // Ctrl+D = duplicate do clip selecionado (mesma rota
