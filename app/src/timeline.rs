@@ -367,14 +367,8 @@ pub fn install(
             let track_id = (track.max(0) as usize).min(track_count - 1) as u64;
             let desired = if snap { beat.floor() } else { beat }.max(0.0);
             let start = proj.find_free_slot(track_id, desired, src.length_beats);
-            let new_id = proj.add_clip_with_path(
-                track_id,
-                src.kind,
-                src.name.as_str(),
-                start,
-                src.length_beats,
-                src.file_path.clone(),
-            );
+            // Cópia herda a cor (e o override) do clip de origem.
+            let new_id = proj.add_clip_from(&src, track_id, start);
 
             // Waveform da cópia: mesmo arquivo do clipboard →
             // copia a entrada do cache e reprojeta a linha.
@@ -406,14 +400,8 @@ pub fn install(
             // Duplicar coloca a cópia DEPOIS do original, encostada.
             // Na mesma posição ela ficaria invisível e inaudível.
             let start = proj.find_free_slot(src.track_id, src.end_beat(), src.length_beats);
-            let new_id = proj.add_clip_with_path(
-                src.track_id,
-                src.kind,
-                src.name.as_str(),
-                start,
-                src.length_beats,
-                src.file_path.clone(),
-            );
+            // Duplicata herda a cor (e o override) do original.
+            let new_id = proj.add_clip_from(&src, src.track_id, start);
 
             // Waveform: a duplicata aponta pro MESMO arquivo →
             // copia a entrada do cache (picos + samples + raster)

@@ -8,6 +8,22 @@
 /// abaixo de qualquer coisa audível ou clicável.
 pub const BEAT_EPSILON: f32 = 0.001;
 
+/// Cor primária de um sample (recurso de áudio).
+///
+/// Hash FNV-1a do caminho do arquivo (normalizado em lowercase — o
+/// Windows é case-insensitive). É DETERMINÍSTICA: qualquer instância
+/// do mesmo arquivo nasce com a mesma cor (1..=20, paleta da UI),
+/// estável entre projetos. A única forma de divergir é o usuário
+/// alterar manualmente a cor da instância (`Clip::color_override`).
+pub fn sample_color(path: &str) -> u8 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in path.to_lowercase().bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    1 + (hash % 20) as u8
+}
+
 /// Duas posições em beats são a mesma?
 #[inline]
 pub fn beats_eq(a: f32, b: f32) -> bool {
@@ -44,6 +60,11 @@ pub struct Clip {
     pub source_start_beats: f32,
     /// Índice de cor (paleta na UI). 0 = padrão MIDI/Audio.
     pub color: u8,
+    /// `true` = cor definida manualmente (override da instância, pelo
+    /// swatch/recolor). `false` = cor herdada do sample (áudio) ou a
+    /// padrão por id (MIDI) — novas instâncias do mesmo arquivo nascem
+    /// com a MESMA cor vinda do ClipPool.
+    pub color_override: bool,
     /// Caminho do arquivo de áudio (apenas clips de áudio).
     pub file_path: Option<String>,
 }
@@ -67,6 +88,7 @@ impl Clip {
             length_beats,
             source_start_beats: 0.0,
             color: ((id % 19) + 1) as u8,
+            color_override: false,
             file_path: None,
         }
     }
@@ -167,5 +189,18 @@ mod tests {
     fn beats_eq_tolerates_float_residue() {
         assert!(beats_eq(3.7, 3.7 + BEAT_EPSILON * 0.5));
         assert!(!beats_eq(3.7, 3.8));
+    }
+
+    #[test]
+    fn sample_color_is_deterministic_and_case_insensitive() {
+        // Mesmo caminho → mesma cor (estável entre projetos).
+        assert_eq!(sample_color("C:/Samples/HIP_Kick.wav"), sample_color("C:/Samples/HIP_Kick.wav"));
+        // Case-insensitive (Windows path).
+        assert_eq!(sample_color("C:/samples/hip_kick.wav"), sample_color("C:/SAMPLES/HIP_Kick.WAV"));
+        // Dentro da paleta (1..=20, 0 é reservado para "padrão por tipo").
+        for p in ["A", "B", "C", "D", "E"] {
+            let c = sample_color(&format!("X:/{p}.wav"));
+            assert!((1..=20).contains(&c), "cor {c} fora da paleta");
+        }
     }
 }

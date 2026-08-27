@@ -26,6 +26,8 @@ export component TrackClip inherits Rectangle {
 
     in property <length> row-height: 64px;
 
+    in property <length> ruler-height: 30px;
+
     in property <int> track-index: 0;
 
     in property <bool> selected: false;
@@ -146,6 +148,13 @@ export component TrackClip inherits Rectangle {
     callback clip-color-cycle-requested(int);
 
     callback clip-copy-requested(int);
+
+    callback marquee-commit(
+        float,
+        float,
+        float,
+        float
+    );
 
 
     // =====================================================
@@ -269,7 +278,7 @@ export component TrackClip inherits Rectangle {
             ? #FFFFFF
 
         : root.multi-selected
-            ? Colors.crimson
+            ? #FFFFFF
 
         : root.hovered
             ? root.clip-color.brighter(0.22)
@@ -965,6 +974,9 @@ export component TrackClip inherits Rectangle {
             if event.kind
                     == PointerEventKind.cancel {
 
+                ClipDragState.marquee-active =
+                    false;
+
                 if root.dragging {
 
                     root.dragging =
@@ -1390,6 +1402,60 @@ export component TrackClip inherits Rectangle {
 
                 else if event.kind
                             == PointerEventKind.up {
+
+
+                    if ClipDragState.marquee-active {
+
+                        let did-move =
+                            ClipDragState.marquee-x1 != ClipDragState.marquee-x0
+                            || ClipDragState.marquee-y1 != ClipDragState.marquee-y0;
+
+                        ClipDragState.marquee-active =
+                            false;
+
+                        if did-move {
+
+                            let bx0 = min(
+                                ClipDragState.marquee-x0,
+                                ClipDragState.marquee-x1,
+                            ) / root.px-per-beat;
+
+                            let bx1 = max(
+                                ClipDragState.marquee-x0,
+                                ClipDragState.marquee-x1,
+                            ) / root.px-per-beat;
+
+                            let ty0 = Math.floor(
+                                (
+                                    min(
+                                        ClipDragState.marquee-y0,
+                                        ClipDragState.marquee-y1,
+                                    )
+                                    - root.ruler-height
+                                )
+                                / root.row-height
+                            );
+
+                            let ty1 = Math.floor(
+                                (
+                                    max(
+                                        ClipDragState.marquee-y0,
+                                        ClipDragState.marquee-y1,
+                                    )
+                                    - root.ruler-height
+                                )
+                                / root.row-height
+                            );
+
+                            root.marquee-commit(
+                                max(0.0, bx0),
+                                bx1,
+                                max(0, ty0),
+                                ty1,
+                            );
+                            return;
+                        }
+                    }
 
 
                     if root.resizing {

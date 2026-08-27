@@ -28,6 +28,8 @@ export component TrackRow inherits Rectangle {
 
     in property <length> row-height: 64px;
 
+    in property <length> ruler-height: 30px;
+
     // Viewport horizontal (culling): início e largura visíveis.
     in property <length> view-scroll-x: 0px;
 
@@ -85,6 +87,13 @@ export component TrackRow inherits Rectangle {
     callback clip-color-cycle-requested(int);
 
     callback clip-copy-requested(int);
+
+    callback marquee-commit(
+        float,
+        float,
+        float,
+        float
+    );
 
 
     // =====================================================
@@ -247,6 +256,9 @@ export component TrackRow inherits Rectangle {
         row-height:
             root.row-height;
 
+        ruler-height:
+            root.ruler-height;
+
         track-count:
             root.track-count;
 
@@ -387,6 +399,26 @@ export component TrackRow inherits Rectangle {
 
             root.clip-copy-requested(
                 id
+            );
+        }
+
+
+        // =============================================
+        // MARQUEE COMMIT
+        // =============================================
+
+        marquee-commit(
+            b0,
+            b1,
+            t0,
+            t1
+        ) => {
+
+            root.marquee-commit(
+                b0,
+                b1,
+                t0,
+                t1
             );
         }
     }

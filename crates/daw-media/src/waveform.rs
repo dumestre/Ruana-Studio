@@ -44,7 +44,8 @@ impl WaveformData {
     }
 }
 
-/// Decodifica um arquivo WAV via hound (rápido e confiável).
+/// Decodifica um arquivo WAV via hound — rápido e confiável para
+/// arquivos bem-formados.
 fn decode_wav_file(path: &Path) -> Result<WaveformData, Box<dyn std::error::Error>> {
     let mut reader = hound::WavReader::open(path)?;
     let spec = reader.spec();
@@ -89,7 +90,14 @@ fn downmix_mono(interleaved: &[f32], channels: usize) -> Vec<f32> {
     }
 }
 
-/// Decodifica MP3/FLAC/OGG via symphonia.
+/// Decodifica MP3/FLAC/OGG/WAV via symphonia.
+///
+/// É o FALLBACK dos WAVs que o hound rejeita: hound recusa
+/// "Ill-formed WAVE file: sample bits exceeds size of sample" em
+/// arquivos com `block_align` inconsistente — muito comum em kits de
+/// bateria (ex.: packs "HIP_*"). O symphonia lê o `wBitsPerSample` e
+/// ignora o block-align quebrado, então esses samples passam a
+/// importar. Também é o decoder único dos formatos comprimidos.
 fn decode_symphonia(path: &Path) -> Result<WaveformData, Box<dyn std::error::Error>> {
     use symphonia::core::audio::{Channels, SampleBuffer};
     use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
@@ -174,7 +182,10 @@ fn decode_symphonia(path: &Path) -> Result<WaveformData, Box<dyn std::error::Err
 }
 
 /// Decodifica um arquivo de áudio (WAV, MP3, FLAC, OGG).
-/// Usa hound para WAV (mais rápido) e symphonia para o resto.
+///
+/// WAV: hound primeiro (rápido); se ele rejeitar o header (ex.:
+/// `block_align` inconsistente, comum em kits de bateria), cai para
+/// o symphonia, que é mais tolerante. MP3/FLAC/OGG: symphonia.
 pub fn decode_audio(path: impl AsRef<Path>) -> Result<WaveformData, Box<dyn std::error::Error>> {
     let path = path.as_ref();
     let ext = path
@@ -184,15 +195,10 @@ pub fn decode_audio(path: impl AsRef<Path>) -> Result<WaveformData, Box<dyn std:
         .to_uppercase();
 
     match ext.as_str() {
-        "WAV" => decode_wav_file(path),
+        "WAV" => decode_wav_file(path).or_else(|_| decode_symphonia(path)),
         "MP3" | "FLAC" | "OGG" | "OGA" => decode_symphonia(path),
         _ => Err(format!("unsupported audio format: {}", ext).into()),
     }
-}
-
-/// Decodifica um arquivo WAV (mantido para compatibilidade).
-pub fn decode_wav(path: impl AsRef<Path>) -> Result<WaveformData, Box<dyn std::error::Error>> {
-    decode_wav_file(path.as_ref())
 }
 
 /// Gera pontos de waveform para rendering.
@@ -328,5 +334,44 @@ mod tests {
         };
         assert_eq!(data.channel(0), vec![0.25, 0.5]);
         assert_eq!(data.channel(1), vec![0.25, 0.5]);
+    }
+
+    #[test]
+    fn wav_with_broken_block_align_decodes() {
+        // WAV PCM s16 mono com `block_align` ERRADO (1 byte em vez de 2).
+        // O hound recusava com "Ill-formed WAVE file: sample bits exceeds
+        // size of sample" — o exato erro dos packs "HIP_*". O symphonia
+        // ignora o block_align e deriva o byte-per-sample do wBitsPerSample.
+        use std::io::Write;
+
+        let dir = std::env::temp_dir().join("ruana_wav_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("broken_align.wav");
+
+        let mut f = std::fs::File::create(&path).unwrap();
+        // Chunk RIFF.
+        f.write_all(b"RIFF").unwrap();
+        f.write_all(&44u32.to_le_bytes()).unwrap();
+        f.write_all(b"WAVE").unwrap();
+        // Chunk fmt.
+        f.write_all(b"fmt ").unwrap();
+        f.write_all(&16u32.to_le_bytes()).unwrap();
+        f.write_all(&1u16.to_le_bytes()).unwrap(); // PCM
+        f.write_all(&1u16.to_le_bytes()).unwrap(); // mono
+        f.write_all(&44100u32.to_le_bytes()).unwrap();
+        f.write_all(&44100u32.to_le_bytes()).unwrap(); // byte_rate
+        f.write_all(&1u16.to_le_bytes()).unwrap(); // block_align (deveria ser 2)
+        f.write_all(&16u16.to_le_bytes()).unwrap(); // bits_per_sample
+        // Chunk data: 2 frames s16.
+        f.write_all(b"data").unwrap();
+        f.write_all(&4u32.to_le_bytes()).unwrap();
+        f.write_all(&0i16.to_le_bytes()).unwrap();
+        f.write_all(&i16::MAX.to_le_bytes()).unwrap();
+        drop(f);
+
+        let data = decode_audio(&path).expect("WAV com block_align quebrado deve decodificar");
+        assert_eq!(data.frames(), 2);
+        assert_eq!(data.channels, 1);
+        assert_eq!(data.sample_rate, 44100);
     }
 }

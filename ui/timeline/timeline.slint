@@ -382,6 +382,53 @@ export component Timeline inherits Rectangle {
             pointer-event(event) => {
 
                 // =========================================
+                // CANCEL
+                //
+                // Gesto interrompido (foco perdido, drag do
+                // sistema etc.): nunca deixa o marquee preso.
+                // =========================================
+
+                if event.kind
+                        == PointerEventKind.cancel {
+
+                    ClipDragState.marquee-active =
+                        false;
+
+                    self.left-pressed =
+                        false;
+
+                    self.middle-pressed =
+                        false;
+
+                    self.dragging =
+                        false;
+                }
+
+                // =========================================
+                // MOVE DO MARQUEE (Ctrl+arrasto começado NA
+                // ÁREA VAZIA)
+                //
+                // O Slint entrega `Moved` com button = Other
+                // (nunca Left), então este update precisa viver
+                // FORA do bloco `button == left` abaixo — era
+                // isso que fazia o lasso não desenhar/atualizar
+                // quando se começava fora de um clip: x1/y1
+                // nunca mudavam e o UP via x1==x0 (nada).
+                // =========================================
+
+                if event.kind == PointerEventKind.move
+                        && ClipDragState.marquee-active {
+
+                    ClipDragState.marquee-x1 =
+                        self.mouse-x + root.scroll-x;
+
+                    ClipDragState.marquee-y1 =
+                        self.mouse-y + root.scroll-y;
+
+                    return;
+                }
+
+                // =========================================
                 // LEFT CLICK EM ÁREA VAZIA
                 // =========================================
 
@@ -438,54 +485,56 @@ export component Timeline inherits Rectangle {
                         // pressionado (Shift + clique em área vazia).
                         self.shift-pressed = event.modifiers.shift;
 
-                        // Marquee ativo? Seleciona e consome o UP —
-                        // MAS só se houve arrasto de verdade. Clique
-                        // com Shift parado (retângulo vazio) cai fora
-                        // deste if e segue para o Shift+clique colar.
-                        if ClipDragState.marquee-active
-                            && (ClipDragState.marquee-x1 != ClipDragState.marquee-x0
-                                || ClipDragState.marquee-y1 != ClipDragState.marquee-y0) {
+                        // Marquee ativo? Seleciona e consome o UP.
+                        // Desliga SEMPRE (Ctrl+clique simples não pode
+                        // deixar a caixa pendurada); só seleciona se
+                        // houve arrasto de verdade.
+                        if ClipDragState.marquee-active {
                             ClipDragState.marquee-active = false;
 
-                            let bx0 = min(
-                                ClipDragState.marquee-x0,
-                                ClipDragState.marquee-x1,
-                            ) / root.px-per-beat;
+                            if (ClipDragState.marquee-x1 != ClipDragState.marquee-x0
+                                || ClipDragState.marquee-y1 != ClipDragState.marquee-y0) {
 
-                            let bx1 = max(
-                                ClipDragState.marquee-x0,
-                                ClipDragState.marquee-x1,
-                            ) / root.px-per-beat;
+                                let bx0 = min(
+                                    ClipDragState.marquee-x0,
+                                    ClipDragState.marquee-x1,
+                                ) / root.px-per-beat;
 
-                            let ty0 = Math.floor(
-                                (
-                                    min(
-                                        ClipDragState.marquee-y0,
-                                        ClipDragState.marquee-y1,
+                                let bx1 = max(
+                                    ClipDragState.marquee-x0,
+                                    ClipDragState.marquee-x1,
+                                ) / root.px-per-beat;
+
+                                let ty0 = Math.floor(
+                                    (
+                                        min(
+                                            ClipDragState.marquee-y0,
+                                            ClipDragState.marquee-y1,
+                                        )
+                                        - root.ruler-height
                                     )
-                                    - root.ruler-height
-                                )
-                                / root.row-height
-                            );
+                                    / root.row-height
+                                );
 
-                            let ty1 = Math.floor(
-                                (
-                                    max(
-                                        ClipDragState.marquee-y0,
-                                        ClipDragState.marquee-y1,
+                                let ty1 = Math.floor(
+                                    (
+                                        max(
+                                            ClipDragState.marquee-y0,
+                                            ClipDragState.marquee-y1,
+                                        )
+                                        - root.ruler-height
                                     )
-                                    - root.ruler-height
-                                )
-                                / root.row-height
-                            );
+                                    / root.row-height
+                                );
 
-                            root.marquee-select(
-                                max(0.0, bx0),
-                                bx1,
-                                max(0, ty0),
-                                ty1,
-                            );
-                            return;
+                                root.marquee-select(
+                                    max(0.0, bx0),
+                                    bx1,
+                                    max(0, ty0),
+                                    ty1,
+                                );
+                                return;
+                            }
                         }
 
                         if root.active-tool == 0 {
@@ -1104,6 +1153,9 @@ export component Timeline inherits Rectangle {
                     row-height:
                         root.row-height;
 
+                    ruler-height:
+                        root.ruler-height;
+
                     track-count:
                         root.track-names.length;
 
@@ -1234,6 +1286,20 @@ export component Timeline inherits Rectangle {
                         root.clip-copy-requested(
                             id
                         );
+                    }
+
+
+                    // =====================================
+                    // MARQUEE COMMIT
+                    //
+                    // O UP do marquee pode cair sobre um
+                    // clip (o Slint entrega ao item sob o
+                    // cursor): o TrackClip calcula e comita
+                    // por aqui.
+                    // =====================================
+
+                    marquee-commit(b0, b1, t0, t1) => {
+                        root.marquee-select(b0, b1, t0, t1);
                     }
                 }
             }

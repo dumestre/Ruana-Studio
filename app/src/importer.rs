@@ -107,8 +107,14 @@ pub fn import_audio_file(
             length,
             Some(path.to_string_lossy().to_string()),
         )?;
-        let color = ((id % 19) + 1) as u8;
-        proj.set_clip_color(id, color);
+        // Cor herdada do SAMPLE (definida no add_clip_with_path):
+        // sincroniza a cor da track com a cor primária do arquivo.
+        let color = proj
+            .clips
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.color)
+            .unwrap_or(0);
         if let Some(track_index) = proj.tracks.iter().position(|t| t.id == track_id) {
             proj.tracks[track_index].color = color;
             if track_index < track_colors_model.row_count() {
@@ -218,8 +224,14 @@ fn import_from_entry(
             length,
             Some(path.to_string_lossy().to_string()),
         )?;
-        let color = ((id % 19) + 1) as u8;
-        proj.set_clip_color(id, color);
+        // Cor herdada do SAMPLE (definida no add_clip_with_path):
+        // sincroniza a cor da track com a cor primária do arquivo.
+        let color = proj
+            .clips
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.color)
+            .unwrap_or(0);
         if let Some(track_index) = proj.tracks.iter().position(|t| t.id == track_id) {
             proj.tracks[track_index].color = color;
             if track_index < track_colors_model.row_count() {

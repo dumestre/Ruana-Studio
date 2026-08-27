@@ -482,6 +482,13 @@ impl Project {
     }
 
     /// Adiciona um clip na trilha informada, com caminho de arquivo opcional.
+    ///
+    /// Cor herdada: clip de ÁUDIO com arquivo nasce com a cor primária
+    /// do sample (`clip::sample_color`), determinística por caminho —
+    /// é isto que mantém todas as instâncias do mesmo sample com a
+    /// mesma cor vinda do ClipPool por padrão. MIDI segue o padrão por
+    /// id. `color_override` fica `false`; só `set_clip_color` marca
+    /// override numa instância específica.
     pub fn add_clip_with_path(
         &mut self,
         track_id: u64,
@@ -504,6 +511,45 @@ impl Project {
             length_beats,
         );
         clip.file_path = file_path;
+        if let Some(path) = clip.file_path.as_deref() {
+            clip.color = crate::clip::sample_color(path);
+            clip.color_override = false;
+        }
+        self.clips.push(clip.clone());
+
+        let event = DocumentEvent::ClipAdded(clip);
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        Some(id)
+    }
+
+    /// Adiciona uma CÓPIA de um clip existente (paste/duplicate),
+    /// herdando os dados de áudio E a cor (incluindo override).
+    ///
+    /// Tudo num único evento (`ClipAdded`), para não poluir o histórico
+    /// com um par add+recolor — uma colagem vira um passo de undo.
+    pub fn add_clip_from(
+        &mut self,
+        src: &Clip,
+        track_id: u64,
+        start_beat: f32,
+    ) -> Option<u64> {
+        if self.track(track_id).is_none() || src.length_beats <= crate::clip::BEAT_EPSILON {
+            return None;
+        }
+        let id = self.next_clip_id();
+        let mut clip = Clip::new(
+            id,
+            track_id,
+            src.name.clone(),
+            src.kind,
+            start_beat.max(0.0),
+            src.length_beats,
+        );
+        clip.file_path = src.file_path.clone();
+        clip.source_start_beats = src.source_start_beats;
+        clip.color = src.color;
+        clip.color_override = src.color_override;
         self.clips.push(clip.clone());
 
         let event = DocumentEvent::ClipAdded(clip);
@@ -546,6 +592,10 @@ impl Project {
         right.file_path = original.file_path.clone();
         right.source_start_beats = original.source_start_beats
             + (at_beat - original.start_beat);
+        // O lado direito mantém a cor do original (herdada OU override):
+        // para o mesmo arquivo, as metades não podem divergir de cor.
+        right.color = original.color;
+        right.color_override = original.color_override;
 
         self.clips[index] = left.clone();
         self.clips.push(right.clone());
@@ -674,12 +724,17 @@ impl Project {
     }
 
     /// Atualiza o índice de cor (paleta) de um clip. Retorna `false` se não existe.
+    ///
+    /// Qualquer chamada é uma alteração MANUAL: marca `color_override`
+    /// na instância. É assim que uma instância diverge da cor herdada
+    /// do sample sem afetar as demais.
     pub fn set_clip_color(&mut self, clip_id: u64, color: u8) -> bool {
         let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
             return false;
         };
         let old = self.clips[index].clone();
         self.clips[index].color = color;
+        self.clips[index].color_override = true;
         let new = self.clips[index].clone();
 
         let event = DocumentEvent::ClipColorChanged { old, new };
