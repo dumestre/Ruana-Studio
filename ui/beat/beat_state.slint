@@ -20,6 +20,11 @@ export global BeatState {
     // (exibidos no Clip Pool).
     in-out property <[string]> pattern-names: [];
 
+    // Duração de cada pattern em beats da timeline (N/4).
+    // Usada pelo Clip Pool para mostrar a duração correspondente
+    // e para o drop criar o clip com o comprimento certo.
+    in-out property <[float]> pattern-durations: [];
+
     in-out property <int> current-pattern: 0;
 
     in-out property <int> grid-resolution: 16;

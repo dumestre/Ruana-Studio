@@ -122,10 +122,13 @@ export component ClipItemVisual inherits Rectangle {
                     || root.duration != "";
 
                 text:
-                    "Pos "
-                    + root.position
-                    + "  ·  Len "
-                    + root.duration;
+                    root.position != ""
+                        ? "Pos "
+                            + root.position
+                            + "  ·  Len "
+                            + root.duration
+                        : "Len "
+                            + root.duration;
 
                 color:
                     Theme.text-dim;
@@ -691,6 +694,16 @@ export component ClipPool inherits Rectangle {
 
                 clip-color:
                     Theme.accent;
+
+                // Duração correspondente do padrão (resolução/4):
+                // o drag carrega este valor e o drop cria o clip
+                // com o comprimento real, não 4 beats fixos.
+                duration:
+                    BeatState.pattern-durations.length > i
+                        ? Math.round(
+                            BeatState.pattern-durations[i] * 10
+                        ) / 10
+                        : 4.0;
 
 
                 // ============================================

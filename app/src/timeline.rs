@@ -58,7 +58,9 @@ pub fn install(
                 }
             }
 
-            // Sem arquivo (clip pool / MIDI): bloco padrão de 4 beats.
+            // Sem arquivo (clip pool / MIDI): bloco padrão de 4 beats —
+            // ou a duração REAL quando o nome é de um padrão do beat
+            // sequencer (arrastado da seção BEAT PATTERNS do pool).
             let kind = if is_midi {
                 ClipKind::Midi
             } else {
@@ -69,8 +71,18 @@ pub fn install(
             if proj.track(track_id).is_some() {
                 // Nunca empilha: se o beat pedido está ocupado, o clip
                 // encosta depois do vizinho em vez de sumir embaixo dele.
-                let start = proj.find_free_slot(track_id, beat.max(0.0), 4.0);
-                proj.add_clip(track_id, kind, name.as_str(), start, 4.0);
+                let len = if kind == ClipKind::Midi {
+                    proj.beat_patterns
+                        .patterns
+                        .iter()
+                        .find(|p| p.name == name.as_str())
+                        .map(|p| p.length_beats())
+                        .unwrap_or(4.0)
+                } else {
+                    4.0
+                };
+                let start = proj.find_free_slot(track_id, beat.max(0.0), len);
+                proj.add_clip(track_id, kind, name.as_str(), start, len);
             }
         });
     }

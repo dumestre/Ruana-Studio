@@ -65,6 +65,12 @@ pub fn refresh_beat(ui: &MainWindow, project: &Project) {
         bp.patterns.iter().map(|p| p.name.clone().into()).collect();
     st.set_pattern_names(Rc::new(VecModel::from(pattern_names)).into());
 
+    // Durações em beats (para o Clip Pool criar o clip com o
+    // comprimento correspondente ao arrastar o padrão pra timeline).
+    let pattern_durations: Vec<f32> =
+        bp.patterns.iter().map(|p| p.length_beats()).collect();
+    st.set_pattern_durations(Rc::new(VecModel::from(pattern_durations)).into());
+
     let Some(current) = bp.current_pattern() else {
         return;
     };

@@ -98,6 +98,16 @@ impl DrumPattern {
         self.resolution as usize
     }
 
+    /// Duração do padrão em beats da timeline.
+    ///
+    /// `resolution` é passos por COMPASSO (16 = 1 compasso de 4/4,
+    /// como no channel rack do FL Studio). Um padrão de N passos dura
+    /// N/4 beats — é isto que dá a "duração correspondente" quando o
+    /// padrão é arrastado do Clip Pool para a timeline.
+    pub fn length_beats(&self) -> f32 {
+        (self.resolution as f32) / 4.0
+    }
+
     /// Alterna um passo (track, step).
     pub fn toggle_step(&mut self, track: usize, step: usize) -> bool {
         if track < self.grid.len() && step < self.grid[track].len() {
@@ -257,6 +267,15 @@ mod tests {
         let mut p = DrumPattern::new("Test", 2, 16);
         assert!(!p.toggle_step(5, 0));
         assert!(!p.toggle_step(0, 20));
+    }
+
+    #[test]
+    fn pattern_length_beats() {
+        // 16 passos por compasso = 1 compasso = 4 beats.
+        assert_eq!(DrumPattern::new("A", 2, 16).length_beats(), 4.0);
+        // Meio compasso (8) → 2 beats; duplo (32) → 8 beats.
+        assert_eq!(DrumPattern::new("B", 2, 8).length_beats(), 2.0);
+        assert_eq!(DrumPattern::new("C", 2, 32).length_beats(), 8.0);
     }
 
     #[test]
