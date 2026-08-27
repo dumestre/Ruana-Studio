@@ -1308,62 +1308,66 @@ export component Timeline inherits Rectangle {
                     root.ruler-height;
 
                 z: 60;
-            }
+                            }
 
 
-            // =============================================
-            // PLAYHEAD
-            // =============================================
+                            PlayheadOverlay {
 
-            // =============================================
-            // RETÂNGULO DO MARQUEE
-            // =============================================
+                                head-x:
+                                    root.effective-playhead-x;
 
-            if ClipDragState.marquee-active: Rectangle {
+                                ruler-h:
+                                    root.ruler-height;
 
-                x:
-                    min(ClipDragState.marquee-x0, ClipDragState.marquee-x1) - root.scroll-x;
+                                tracks-h:
+                                    root.tracks-height;
 
-                y:
-                    min(ClipDragState.marquee-y0, ClipDragState.marquee-y1) - root.scroll-y;
-
-                width:
-                    abs(ClipDragState.marquee-x1 - ClipDragState.marquee-x0);
-
-                height:
-                    abs(ClipDragState.marquee-y1 - ClipDragState.marquee-y0);
-
-                border-width:
-                    1px;
-
-                border-color:
-                    Colors.crimson;
-
-                background:
-                    Colors.crimson.transparentize(0.85);
-
-                z: 130;
-            }
-
-            PlayheadOverlay {
-
-                head-x:
-                    root.effective-playhead-x;
-
-                ruler-h:
-                    root.ruler-height;
-
-                tracks-h:
-                    root.tracks-height;
-
-                z: 120;
-            }
-        }
-    }
+                                z: 120;
+                            }
+                        }
+                    }
 
 
-    // =====================================================
-    // CURSOR ESPECIAL DAS FERRAMENTAS
+                    // ======================================================
+                    // RETÂNGULO DO MARQUEE (SELEÇÃO MÚLTIPLA)
+                    //
+                    // Desenhado no nível RAIZ do Timeline (irmão do
+                    // zoom-pan-area e da VerticalLayout das tracks),
+                    // DEPOIS das tracks para ficar POR CIMA de tudo.
+                    // Mesmo estilo do lasso do Piano Roll: Theme.accent.
+                    // ======================================================
+
+                    if ClipDragState.marquee-active: Rectangle {
+
+                        x:
+                            min(ClipDragState.marquee-x0, ClipDragState.marquee-x1)
+                            - root.scroll-x;
+
+                        y:
+                            min(ClipDragState.marquee-y0, ClipDragState.marquee-y1)
+                            - root.scroll-y;
+
+                        width:
+                            abs(ClipDragState.marquee-x1 - ClipDragState.marquee-x0);
+
+                        height:
+                            abs(ClipDragState.marquee-y1 - ClipDragState.marquee-y0);
+
+                        border-width:
+                            1px;
+
+                        border-color:
+                            Theme.accent;
+
+                        background:
+                            Theme.accent.transparentize(0.85);
+
+                        z: 200;
+                    }
+
+
+                    // =====================================================
+                    // CURSOR ESPECIAL DAS FERRAMENTAS
     // =====================================================
 
     tool-cursor := TouchArea {

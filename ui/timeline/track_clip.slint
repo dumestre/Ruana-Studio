@@ -1236,22 +1236,42 @@ export component TrackClip inherits Rectangle {
 
 
                 // =========================================
-                // MOVE
-                // =========================================
+                                // MOVE
+                                // =========================================
 
-                else if event.kind
-                            == PointerEventKind.move {
+                                else if event.kind
+                                            == PointerEventKind.move {
 
 
-                    // =====================================
-                    // RESIZE
-                    //
-                    // Matemática local: atualiza live-len /
-                    // live-beat. Nenhum callback, nenhum
-                    // acesso ao modelo.
-                    // =====================================
+                                    // Marquee ativo (Ctrl+arrasto começou sobre este clip):
+                                    // atualiza o canto oposto aqui, porque o mouse
+                                    // ainda está sobre o clip e o zoom-pan-area
+                                    // não recebe estes eventos.
+                                    if ClipDragState.marquee-active {
+                                        let abs-x =
+                                            self.absolute-position.x + self.mouse-x;
+                                        let abs-y =
+                                            self.absolute-position.y + self.mouse-y;
+                                        ClipDragState.marquee-x1 =
+                                            abs-x
+                                            - TimelineMetrics.timeline-abs-x
+                                            + TimelineMetrics.scroll-x;
+                                        ClipDragState.marquee-y1 =
+                                            abs-y
+                                            - TimelineMetrics.timeline-abs-y
+                                            + TimelineMetrics.scroll-y;
+                                        return;
+                                    }
 
-                    if root.resizing {
+                                    // =====================================
+                                    // RESIZE
+                                    //
+                                    // Matemática local: atualiza live-len /
+                                    // live-beat. Nenhum callback, nenhum
+                                    // acesso ao modelo.
+                                    // =====================================
+
+                                    if root.resizing {
 
                         let cursor-abs-x =
                             self.absolute-position.x

@@ -7,7 +7,7 @@ use std::rc::Rc;
 use crate::BrowserFileEntry;
 use crate::MainWindow;
 use crate::importer::AUDIO_EXTS;
-use daw_media::filesystem::list_directory;
+use daw_media::filesystem::{list_directory, list_drives};
 use slint::ComponentHandle;
 
 /// Mostra um diretório no explorador.
@@ -75,11 +75,39 @@ pub fn load_directory_entries(path: &std::path::Path, filter: &str) -> Vec<Brows
                     "File".to_string()
                 }
             };
+            // Formatar tamanho
+            let size_str = if e.is_directory {
+                String::new()
+            } else if e.size >= 1048576 {
+                format!("{:.1} MB", e.size as f64 / 1048576.0)
+            } else if e.size >= 1024 {
+                format!("{:.1} KB", e.size as f64 / 1024.0)
+            } else {
+                format!("{} B", e.size)
+            };
+            // Formatar data
+            let modified_str = e.modified
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| {
+                    let secs = d.as_secs();
+                    // Conversão simples sem chrono: dias/segundos.
+                    let total_secs = secs;
+                    let days = total_secs / 86400;
+                    let remaining = total_secs % 86400;
+                    let hours = remaining / 3600;
+                    let minutes = (remaining % 3600) / 60;
+                    // Offset simplificado (não leva timezone em conta).
+                    format!("{:02}/{:02}/1970 {:02}:{:02}", days % 31 + 1, (days / 31) % 12 + 1, hours, minutes)
+                })
+                .unwrap_or_default();
             BrowserFileEntry {
                 name: e.name.clone().into(),
                 entry_type: entry_type.into(),
                 path: e.path.to_string_lossy().to_string().into(),
                 is_directory: e.is_directory,
+                size: e.size as i32,
+                modified: modified_str.into(),
+                extension: e.extension.clone().into(),
             }
         })
         .collect()
@@ -148,14 +176,45 @@ pub fn wire_explorer(ui: &MainWindow) {
     }
 
     // Filesystem: filtro de busca — relê a pasta atual.
-    {
-        let ui_weak = ui.as_weak();
-        ui.on_explorer_search_changed(move |term| {
-            if let Some(ui) = ui_weak.upgrade() {
-                let current = PathBuf::from(ui.get_explorer_current_path().as_str());
-                let entries = load_directory_entries(&current, term.as_str());
-                ui.set_explorer_entries(Rc::new(slint::VecModel::from(entries)).into());
-            }
-        });
+        {
+            let ui_weak = ui.as_weak();
+            ui.on_explorer_search_changed(move |term| {
+                if let Some(ui) = ui_weak.upgrade() {
+                    let current = PathBuf::from(ui.get_explorer_current_path().as_str());
+                    let entries = load_directory_entries(&current, term.as_str());
+                    ui.set_explorer_entries(Rc::new(slint::VecModel::from(entries)).into());
+                }
+            });
+        }
+
+        // Filesystem: ir para a raiz "Este Computador" (lista drives).
+        {
+            let ui_weak = ui.as_weak();
+            ui.on_explorer_go_to_drives(move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    let drives = match list_drives() {
+                        Ok(d) => d,
+                        Err(_) => return,
+                    };
+                    let entries: Vec<BrowserFileEntry> = drives
+                        .into_iter()
+                        .map(|d| BrowserFileEntry {
+                            name: d.name.into(),
+                            entry_type: "Drive".into(),
+                            path: d.path.to_string_lossy().to_string().into(),
+                            is_directory: true,
+                            size: 0,
+                            modified: String::new().into(),
+                            extension: String::new().into(),
+                        })
+                        .collect();
+                    ui.set_explorer_entries(Rc::new(slint::VecModel::from(entries)).into());
+                    ui.set_explorer_current_path("Este Computador".into());
+                    ui.set_explorer_can_go_up(false);
+                    // Limpa histórico — a raiz não tem "voltar"
+                    ui.set_explorer_path_history(Rc::new(slint::VecModel::from(Vec::<slint::SharedString>::new())).into());
+                    ui.set_explorer_history_index(-1);
+                }
+            });
+        }
     }
-}

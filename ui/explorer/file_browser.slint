@@ -7,6 +7,9 @@ export struct BrowserFileEntry {
     entry-type: string,
     path: string,
     is-directory: bool,
+    size: int,
+    modified: string,
+    extension: string,
 }
 
 export component FileBrowser inherits Rectangle {
@@ -14,7 +17,6 @@ export component FileBrowser inherits Rectangle {
     in property <string> current-path: "";
     in property <[string]> path-history: [];
     in property <int> history-index: -1;
-    // O Rust sabe se existe pasta-pai; a UI só reflete.
     in property <bool> can-go-up: false;
 
     in-out property <int> selected-index: -1;
@@ -23,8 +25,8 @@ export component FileBrowser inherits Rectangle {
     callback file-selected(string, string, string); // name, type, path
     callback directory-entered(string); // path
     callback explorer-go-up();
-    // Andar no histórico: -1 = voltar, +1 = avançar.
     callback history-go(int);
+    callback explorer-go-to-drives(); // Raiz: lista drives
 
     callback audio-drag-started(string, string, string, color, bool); // name, path, type, color, is-midi
     callback audio-drag-moved(length, length);
@@ -42,7 +44,7 @@ export component FileBrowser inherits Rectangle {
 
         // NAVEGAÇÃO
         Rectangle {
-            height: 28px;
+            height: 32px;
             vertical-stretch: 0;
             background: Theme.base;
             border-width: 1px;
@@ -57,8 +59,8 @@ export component FileBrowser inherits Rectangle {
                 cross-axis-alignment: CrossAxisAlignment.center;
 
                 Rectangle {
-                    width: 24px;
-                    height: 24px;
+                    width: 28px;
+                    height: 28px;
                     background: back-touch.has-hover && root.can-back
                         ? Theme.surface-high
                         : transparent;
@@ -67,8 +69,8 @@ export component FileBrowser inherits Rectangle {
 
                     Image {
                         source: @image-url("../icons/arrow_back.svg");
-                        width: 14px;
-                        height: 14px;
+                        width: 16px;
+                        height: 16px;
                         colorize: Theme.text-dim;
                     }
 
@@ -86,8 +88,8 @@ export component FileBrowser inherits Rectangle {
                 }
 
                 Rectangle {
-                    width: 24px;
-                    height: 24px;
+                    width: 28px;
+                    height: 28px;
                     background: fwd-touch.has-hover && root.can-forward
                         ? Theme.surface-high
                         : transparent;
@@ -96,8 +98,8 @@ export component FileBrowser inherits Rectangle {
 
                     Image {
                         source: @image-url("../icons/arrow_fwd.svg");
-                        width: 14px;
-                        height: 14px;
+                        width: 16px;
+                        height: 16px;
                         colorize: Theme.text-dim;
                     }
 
@@ -115,8 +117,8 @@ export component FileBrowser inherits Rectangle {
                 }
 
                 Rectangle {
-                    width: 24px;
-                    height: 24px;
+                    width: 28px;
+                    height: 28px;
                     background: up-touch.has-hover && root.can-go-up
                         ? Theme.surface-high
                         : transparent;
@@ -125,8 +127,8 @@ export component FileBrowser inherits Rectangle {
 
                     Image {
                         source: @image-url("../icons/arrow_up.svg");
-                        width: 14px;
-                        height: 14px;
+                        width: 16px;
+                        height: 16px;
                         colorize: Theme.text-dim;
                     }
 
@@ -143,9 +145,34 @@ export component FileBrowser inherits Rectangle {
                     }
                 }
 
+                // Botão "Este Computador" (raiz drives)
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    background: drives-touch.has-hover
+                        ? Theme.surface-high
+                        : transparent;
+                    border-radius: 3px;
+                    opacity: 1.0;
+
+                    Image {
+                        source: @image-url("../icons/computer.svg");
+                        width: 16px;
+                        height: 16px;
+                        colorize: Theme.accent;
+                    }
+
+                    drives-touch := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => {
+                            root.explorer-go-to-drives();
+                        }
+                    }
+                }
+
                 Rectangle {
                     width: 1px;
-                    height: 16px;
+                    height: 20px;
                     background: Theme.border;
                 }
 
@@ -160,10 +187,75 @@ export component FileBrowser inherits Rectangle {
             }
         }
 
+        // CABEÇALHO DA TABELA
+        Rectangle {
+            height: 24px;
+            vertical-stretch: 0;
+            background: Theme.base;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: 3px;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 8px;
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                Text {
+                    text: "Nome";
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 4;
+                    overflow: elide;
+                }
+                Text {
+                    text: "Tipo";
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    horizontal-alignment: right;
+                    overflow: elide;
+                }
+                Text {
+                    text: "Ext";
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                }
+                Text {
+                    text: "Tamanho";
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1.5;
+                    horizontal-alignment: right;
+                    overflow: elide;
+                }
+                Text {
+                    text: "Modificado";
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 2;
+                    horizontal-alignment: right;
+                    overflow: elide;
+                }
+            }
+        }
+
         // LISTA DE ARQUIVOS
-        //
-        // Com ScrollView: uma pasta de samples tem centenas de
-        // arquivos, e sem rolagem os de baixo eram inalcançáveis.
         Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
@@ -193,6 +285,13 @@ export component FileBrowser inherits Rectangle {
                         drag-enabled:
                             !entry.is-directory
                             && entry.entry-type != "File";
+
+                        // Propriedades extras para exibição em colunas
+                        display-type: entry.entry-type;
+                        display-ext: entry.extension;
+                        display-size: entry.size;
+                        display-modified: entry.modified;
+                        is-drive: entry.entry-type == "Drive";
 
                         clicked => {
                             root.selected-index = index;

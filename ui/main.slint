@@ -7,13 +7,14 @@ import { BrowserFileEntry } from "explorer/file_browser.slint";
 import { FloatPanel } from "windows/float_panel.slint";
 import { PianoRollData, PianoRollActions } from "piano_roll/piano_roll_state.slint";
 import { ContextMenu, ClipContextMenuState } from "components/context_menu.slint";
-import { TimelineMetrics } from "timeline/clip_drag/clip_drag_state.slint";
+import { TimelineMetrics, SamplerMetrics } from "timeline/clip_drag/clip_drag_state.slint";
 
 export { FloatPanel }
 export { PianoRollData, PianoRollActions }
 export { BrowserFileEntry }
 export { BeatState }
 export { TimelineMetrics }
+export { SamplerMetrics }
 
 export struct TimelineCoords {
     track: int,
@@ -305,6 +306,8 @@ export component MainWindow inherits Window {
     callback explorer-history-go(int);
     callback explorer-search-changed(string);
 
+    callback explorer-go-to-drives();
+
     callback float-toggle(int);
 
     callback tool-changed(int);
@@ -314,6 +317,7 @@ export component MainWindow inherits Window {
 
     callback track-recolor-requested(int, int);
     callback sampler-load-requested(int);
+    callback sampler-sample-dropped(string, string);
 
 
     // =====================================================
@@ -376,6 +380,7 @@ export component MainWindow inherits Window {
 
     // Propriedades de drag computadas no Workspace e sincronizadas via binding
     property <bool> drag-over-timeline: false;
+    property <bool> drag-over-sampler: false;
     property <float> drag-snap-beat: 0.0;
     property <int> drag-drop-track: 0;
 
@@ -484,6 +489,15 @@ export component MainWindow inherits Window {
                 + TimelineMetrics.width
             && y >= TimelineMetrics.content-top-abs-y;
 
+        root.drag-over-sampler =
+            SamplerMetrics.visible
+            && x / 1px >= SamplerMetrics.abs-x
+            && x / 1px <= SamplerMetrics.abs-x
+                + SamplerMetrics.width
+            && y / 1px >= SamplerMetrics.abs-y
+            && y / 1px <= SamplerMetrics.abs-y
+                + SamplerMetrics.height;
+
         root.drag-snap-beat =
             Math.max(
                 0.0,
@@ -545,13 +559,17 @@ export component MainWindow inherits Window {
                     root.drag-path
                 );
 
+            } else if root.drag-over-sampler
+                && root.drag-path != "" {
+
+                root.sampler-sample-dropped(
+                    root.drag-name,
+                    root.drag-path
+                );
+
             } else if root.track-names.length > 0
                 && root.drag-over-timeline {
 
-                // O core é dono dos dados: a UI só emite a
-                // intenção; o bridge (Rust) cria o clip. O path
-                // vai junto — sem ele o Rust não sabe qual
-                // arquivo decodificar e o clip nasce mudo.
                 root.clip-dropped(
                     root.drag-drop-track,
                     root.drag-snap-beat,
@@ -730,6 +748,7 @@ export component MainWindow inherits Window {
         sampler-sample-duration <=> root.sampler-sample-duration;
         sampler-sample-peaks <=> root.sampler-sample-peaks;
         sampler-load-requested() => { root.sampler-load-requested(root.beat-selected-track); }
+        sampler-sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
         left-panel-width <=> root.left-panel-width;
         tracks-header-width <=> root.tracks-header-width;
         explorer-width <=> root.explorer-width;
@@ -795,6 +814,7 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
         explorer-go-up() => { root.explorer-go-up(); }
         explorer-history-go(delta) => { root.explorer-history-go(delta); }
         explorer-search-changed(term) => { root.explorer-search-changed(term); }
+        explorer-go-to-drives() => { root.explorer-go-to-drives(); }
         float-toggle(tab) => { root.float-toggle(tab); }
         tool-changed(tool) => { root.tool-changed(tool); }
         track-recolor-requested(track, color) => { root.track-recolor-requested(track, color); }

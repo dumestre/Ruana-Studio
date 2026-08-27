@@ -8,6 +8,13 @@ export component BrowserItem inherits Rectangle {
     in property <bool> selected: false;
     in property <bool> drag-enabled: false;
 
+    // Propriedades extras para layout em colunas
+    in property <string> display-type: "";
+    in property <string> display-ext: "";
+    in property <int> display-size: 0;
+    in property <string> display-modified: "";
+    in property <bool> is-drive: false;
+
     callback clicked();
     callback drag-started();
     callback drag-moved(length, length);
@@ -36,57 +43,82 @@ export component BrowserItem inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 3px;
-        padding-right: 7px;
-        spacing: 3px;
-        alignment: LayoutAlignment.start;
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
 
-        // Nome
-        Text {
-            text: root.name;
+        // Nome + ícone
+        HorizontalLayout {
+            spacing: 6px;
+            horizontal-stretch: 4;
 
-            color: root.selected
-                ? Theme.text-primary
+            Image {
+                source: root.icon-image;
+                width: 16px;
+                height: 16px;
+                colorize: root.selected
+                    ? Theme.accent
+                    : Theme.text-dim;
+            }
+
+            Text {
+                text: root.name;
+
+                color: root.selected
+                    ? Theme.text-primary
+                    : Theme.text-dim;
+
+                font-size: 10px;
+
+                vertical-alignment: center;
+
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+        }
+
+        // Tipo
+        Text {
+            text: root.display-type;
+
+            color: root.is-drive
+                ? Theme.accent
                 : Theme.text-dim;
 
-            font-size: 10px;
+            font-size: 8px;
+            font-weight: 500;
 
             vertical-alignment: center;
-
+            horizontal-alignment: right;
             horizontal-stretch: 1;
             overflow: elide;
         }
 
-        // Ícone (à direita, não empurra o texto)
+        // Extensão
         Text {
-            text: root.icon;
-            visible: root.icon-image.width == 0;
+            text: root.display-ext.to_uppercase();
 
-            color: root.selected
-                ? Theme.accent
-                : Theme.text-dim;
+            color: Theme.text-dim;
 
-            font-size: 10px;
+            font-size: 8px;
 
             vertical-alignment: center;
+            horizontal-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
         }
 
-        Image {
-            source: root.icon-image;
-            visible: root.icon-image.width > 0;
-
-            width: 12px;
-            height: 12px;
-
-            colorize: root.selected
-                ? Theme.accent
-                : Theme.text-dim;
-        }
-
-        // Tipo / informação
+        // Tamanho
         Text {
-            text: root.type;
+            text: root.display-size > 0
+                ? (root.display-size >= 1048576
+                    ? "{root.display-size / 1048576} MB"
+                    : root.display-size >= 1024
+                        ? "{root.display-size / 1024} KB"
+                        : "{root.display-size} B")
+                : (root.is-drive ? "Drive" : "—");
 
             color: Theme.text-dim;
 
@@ -94,6 +126,22 @@ export component BrowserItem inherits Rectangle {
 
             vertical-alignment: center;
             horizontal-alignment: right;
+            horizontal-stretch: 1.5;
+            overflow: elide;
+        }
+
+        // Data modificada
+        Text {
+            text: root.display-modified;
+
+            color: Theme.text-dim;
+
+            font-size: 8px;
+
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            horizontal-stretch: 2;
+            overflow: elide;
         }
     }
 

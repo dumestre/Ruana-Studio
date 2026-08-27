@@ -11,6 +11,7 @@
 
 use crate::ClipData;
 use crate::MainWindow;
+use crate::SamplerMetrics;
 use crate::clip_cache;
 use crate::importer::{import_audio_file_with_cache, is_audio_path};
 use crate::waveform::WaveformCache;
@@ -94,11 +95,6 @@ pub fn install(
                 WindowEvent::DroppedFile(path) => {
                     if let Some(ui) = ui_weak.upgrade() {
                         if is_audio_path(&path) {
-                            // Pergunta ao sistema onde o cursor ESTÁ
-                            // agora. Durante um drag OLE do Windows os
-                            // eventos CursorMoved não chegam, então a
-                            // última posição rastreada ficava velha e o
-                            // clip caía em outra track.
                             #[cfg(windows)]
                             let (phys_x, phys_y) = {
                                 use windows::Win32::Foundation::POINT;
@@ -112,9 +108,6 @@ pub fn install(
                             #[cfg(not(windows))]
                             let (phys_x, phys_y) = (0.0, 0.0);
 
-                            // Coordenadas físicas de TELA → lógicas da
-                            // janela: desconta a origem da janela antes
-                            // do scale factor.
                             let scale_factor = ui.window().scale_factor();
                             let win_pos = ui.window().position();
                             let logical_x =
@@ -122,23 +115,40 @@ pub fn install(
                             let logical_y =
                                 ((phys_y - win_pos.y as f64) / scale_factor as f64) as f32;
 
-                            let coords =
-                                ui.invoke_map_window_coords_to_timeline(logical_x, logical_y);
+                            let sampler = ui.global::<SamplerMetrics>();
+                            let over_sampler = sampler.get_visible()
+                                && logical_x >= sampler.get_abs_x()
+                                && logical_x <= sampler.get_abs_x() + sampler.get_width()
+                                && logical_y >= sampler.get_abs_y()
+                                && logical_y <= sampler.get_abs_y() + sampler.get_height();
 
-                            import_audio_file_with_cache(
-                                &path,
-                                coords.track,
-                                coords.beat,
-                                ui.get_bpm() as f32,
-                                &project,
-                                &waveforms,
-                                &clips_model,
-                                &track_colors_model,
-                                &sample_cache,
-                            );
+                            if over_sampler {
+                                let name = path
+                                    .file_stem()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("Audio")
+                                    .to_string();
+                                ui.invoke_sampler_sample_dropped(
+                                    name.into(),
+                                    path.to_string_lossy().to_string().into(),
+                                );
+                            } else {
+                                let coords =
+                                    ui.invoke_map_window_coords_to_timeline(logical_x, logical_y);
 
-                            // Fecha o overlay do drag (o drop
-                            // consumiu o gesto visual).
+                                import_audio_file_with_cache(
+                                    &path,
+                                    coords.track,
+                                    coords.beat,
+                                    ui.get_bpm() as f32,
+                                    &project,
+                                    &waveforms,
+                                    &clips_model,
+                                    &track_colors_model,
+                                    &sample_cache,
+                                );
+                            }
+
                             ui.invoke_drag_end();
                         }
                     }

@@ -29,7 +29,7 @@ import {
 } from "../components/scrollbar.slint";
 import { TrackPanel } from "../timeline/TrackPanel.slint";
 import { BottomToolbar } from "../components/bottom_toolbar.slint";
-import { ClipDragState, TimelineMetrics } from "../timeline/clip_drag/clip_drag_state.slint";
+import { ClipDragState, TimelineMetrics, SamplerMetrics } from "../timeline/clip_drag/clip_drag_state.slint";
 
 
 export component Workspace inherits Rectangle {
@@ -384,6 +384,8 @@ export component Workspace inherits Rectangle {
 
     callback explorer-search-changed(string);
 
+    callback explorer-go-to-drives();
+
     callback drag-begin(
         string,
         string,
@@ -415,6 +417,7 @@ export component Workspace inherits Rectangle {
         float
     );
     callback sampler-load-requested();
+    callback sampler-sample-dropped(string, string);
 
 
     // ========================================================
@@ -1689,12 +1692,19 @@ export component Workspace inherits Rectangle {
                         floating:
                             root.floated[1];
 
+                        drop-hover:
+                            root.drag-active
+                            && root.drag-inited
+                            && SamplerMetrics.visible;
+
                         sample-name <=> root.sampler-sample-name;
                         sample-loaded <=> root.sampler-sample-loaded;
                         sample-format <=> root.sampler-sample-format;
                         sample-duration <=> root.sampler-sample-duration;
                         sample-peaks <=> root.sampler-sample-peaks;
                         load-sample-requested => { root.sampler-load-requested(); }
+
+                        sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
 
                         float-toggle => {
                             root.float-toggle(
@@ -1898,12 +1908,16 @@ export component Workspace inherits Rectangle {
 
 
                     explorer-search-changed(term) => {
-                        root.explorer-search-changed(
-                            term
-                        );
-                    }
-                }
-            }
+                                            root.explorer-search-changed(
+                                                term
+                                            );
+                                        }
+
+                                        explorer-go-to-drives() => {
+                                            root.explorer-go-to-drives();
+                                        }
+                                    }
+                                }
 
 
             // =================================================
@@ -2225,6 +2239,22 @@ export component Workspace inherits Rectangle {
                 // (resize local e preview usam o mesmo flag).
                 ClipDragState.snap-enabled =
                     root.snap-enabled;
+
+                SamplerMetrics.abs-x =
+                    bottom-panel.absolute-position.x / 1px;
+
+                SamplerMetrics.abs-y =
+                    bottom-panel.absolute-position.y / 1px;
+
+                SamplerMetrics.width =
+                    bottom-panel.width / 1px;
+
+                SamplerMetrics.height =
+                    bottom-panel.height / 1px;
+
+                SamplerMetrics.visible =
+                    root.bottom-panel-visible
+                    && bottom-panel.current-tab == 1;
 
                 root.timeline-bounds-changed(
                     timeline.absolute-position.x / 1px,

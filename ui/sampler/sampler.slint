@@ -12,8 +12,6 @@ import { SamplerModulation } from "sampler_modulation.slint";
 
 export component Sampler inherits Rectangle {
 
-    // SONDA TEMPORÁRIA — só para o cargo check validar os dois
-    // globais novos antes de reescrever o layout. Sai no próximo passo.
     private property <string> probe-a: SamplerCurves.filter-curve("LP", root.cutoff, root.resonance, true)
         + SamplerCurves.adsr(root.attack, root.decay, root.sustain, root.release, false)
         + SamplerCurves.lfo-curve(root.lfo-waveform, root.lfo-depth)
@@ -161,7 +159,7 @@ export component Sampler inherits Rectangle {
         // HEADER
         // ========================================================
 
-        SamplerHeader {
+SamplerHeader {
             x: 0;
             y: 0;
 

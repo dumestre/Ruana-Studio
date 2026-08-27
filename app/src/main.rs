@@ -286,6 +286,58 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // Drop de áudio no sampler (explorer → sampler ou SO → sampler).
+    {
+        let project = project.clone();
+        let audio = audio.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_sampler_sample_dropped(move |name, path| {
+            if path.is_empty() {
+                return;
+            }
+            let path_buf = std::path::PathBuf::from(&path);
+            let Ok(decoded) = daw_media::waveform::decode_audio(&path_buf) else {
+                return;
+            };
+            let peaks = daw_media::waveform::waveform_points(&decoded, 512);
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            let display_name = if name.is_empty() {
+                path_buf
+                    .file_stem()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Sample")
+                    .to_string()
+            } else {
+                name.to_string()
+            };
+            let format = path_buf
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_uppercase();
+            ui.set_sampler_sample_name(display_name.clone().into());
+            ui.set_sampler_sample_loaded(true);
+            ui.set_sampler_sample_format(format.into());
+            ui.set_sampler_sample_duration(format!("{:.2}s", decoded.duration_seconds).into());
+            ui.set_sampler_sample_peaks(Rc::new(slint::VecModel::from(peaks)).into());
+
+            let mut proj = project.borrow_mut();
+            if let Some(pattern) = proj.current_beat_pattern_mut() {
+                if let Some(params) = pattern.track_params.get_mut(0) {
+                    params.sample_path = Some(path.to_string());
+                    params.name = display_name;
+                }
+            }
+            audio.preload(&path);
+            audio.mark_dirty();
+            beat::refresh_beat(&ui, &proj);
+            drop(proj);
+            audio.preview(&path, 0.9, 0.0);
+        });
+    }
+
     // Janelas flutuantes (mixer/sampler/piano roll): wiring dedicado.
     let handles = floats::install(
         &ui,
