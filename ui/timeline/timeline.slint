@@ -459,20 +459,11 @@ export component Timeline inherits Rectangle {
                                 ClipDragState.marquee-x0;
                             ClipDragState.marquee-y1 =
                                 ClipDragState.marquee-y0;
-                        } else if root.active-tool == 0 {
-
+                        } else {
+                            // Qualquer clique fora dos clips deseleciona
+                            // a seleção única, em qualquer ferramenta.
                             root.selected-clip = -1;
                         }
-                    }
-
-                    else if event.kind
-                                == PointerEventKind.move
-                            && ClipDragState.marquee-active {
-
-                        ClipDragState.marquee-x1 =
-                            self.mouse-x + root.scroll-x;
-                        ClipDragState.marquee-y1 =
-                            self.mouse-y + root.scroll-y;
                     }
 
                     else if event.kind

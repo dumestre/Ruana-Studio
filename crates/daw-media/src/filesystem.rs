@@ -18,9 +18,6 @@ pub fn list_drives() -> io::Result<Vec<FileEntry>> {
     
     #[cfg(windows)]
     {
-        use std::ffi::OsString;
-        use std::os::windows::ffi::OsStringExt;
-        use windows::Win32::Foundation::MAX_PATH;
         use windows::Win32::Storage::FileSystem::GetLogicalDrives;
         
         let mask = unsafe { GetLogicalDrives() };
@@ -64,7 +61,6 @@ pub fn list_drives() -> io::Result<Vec<FileEntry>> {
 
 #[cfg(windows)]
 fn drive_type_name(path: &Path) -> &'static str {
-    use windows::Win32::Foundation::MAX_PATH;
     use windows::Win32::Storage::FileSystem::GetDriveTypeW;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;

@@ -11,7 +11,7 @@
 //! A colagem/insersão vira uma operação puramente em memória:
 //! nenhum reprocessamento, nenhuma leitura de disco.
 
-use crate::waveform::{CachedWave, WaveformCache};
+use crate::waveform::CachedWave;
 use daw_media::waveform::WaveformData;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -87,27 +87,6 @@ pub fn ensure_cached(
     cache.borrow_mut().insert(key, entry.clone());
     Some(entry)
 }
-/// Consulta sem decodificar (drena pendentes primeiro).
-pub fn get(cache: &RefCell<SampleCache>, path: &str) -> Option<CachedSample> {
-    drain_pending(cache);
-    cache.borrow().get(&path.to_lowercase()).cloned()
-}
-
-/// Copia a entrada de waveform de um clip para outro (paste/duplicate)
-/// SEM tocar no disco — usa o que já está no WaveformCache.
-pub fn clone_wave(
-    waveforms: &RefCell<WaveformCache>,
-    src_id: u64,
-    dst_id: u64,
-    clips_model: &std::rc::Rc<slint::VecModel<crate::ClipData>>,
-) {
-    let cached = waveforms.borrow().get(&src_id).cloned();
-    if let Some(cw) = cached {
-        waveforms.borrow_mut().insert(dst_id, cw);
-        crate::waveform::reproject_clip(clips_model, &waveforms.borrow(), dst_id);
-    }
-}
-
 /// Key de cache normalizada (lowercase) — Windows é case-insensitive.
 pub fn norm_key(p: &PathBuf) -> String {
     p.to_string_lossy().to_lowercase()

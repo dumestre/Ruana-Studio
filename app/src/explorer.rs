@@ -75,16 +75,6 @@ pub fn load_directory_entries(path: &std::path::Path, filter: &str) -> Vec<Brows
                     "File".to_string()
                 }
             };
-            // Formatar tamanho
-            let size_str = if e.is_directory {
-                String::new()
-            } else if e.size >= 1048576 {
-                format!("{:.1} MB", e.size as f64 / 1048576.0)
-            } else if e.size >= 1024 {
-                format!("{:.1} KB", e.size as f64 / 1024.0)
-            } else {
-                format!("{} B", e.size)
-            };
             // Formatar data
             let modified_str = e.modified
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
