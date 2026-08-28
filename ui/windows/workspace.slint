@@ -537,6 +537,9 @@ export component Workspace inherits Rectangle {
             active-tool <=>
                 root.active-tool;
 
+            clip-pool-open <=>
+                root.clip-pool-open;
+
             beat-open <=>
                 root.beat-open;
 
@@ -979,6 +982,9 @@ export component Workspace inherits Rectangle {
 
                             zoom-y:
                                 root.zoom-y-level;
+
+                            scroll-y:
+                                timeline.scroll-y;
 
                             track-clicked(index) => {
                                 root.selected-track =

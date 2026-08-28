@@ -526,6 +526,11 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
             if track < 0 {
                 return;
             }
+            // Seleciona a linha alvo: o sampler mostra o sample da
+            // linha selecionada, então soltar numa linha deve trazer
+            // o sampler dela para a frente (feedback visual imediato,
+            // como arrastar para um canal frente no FL).
+            handler.set_beat_selected_track(track);
             commit(&handler, &project, &audio, |proj| {
                 let Some(t) = proj.beat_track_params_mut(track as usize) else {
                     return;

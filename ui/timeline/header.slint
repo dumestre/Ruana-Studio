@@ -13,6 +13,7 @@ export component TimelineHeader inherits Rectangle {
     in property <int> selected-track: 0;
     in property <length> ruler-height: 30px;
     in property <float> zoom-y: 1.0;
+    in property <length> scroll-y: 0px;
 
     callback track-clicked(int);
     callback add-track-requested(string);
@@ -205,59 +206,79 @@ export component TimelineHeader inherits Rectangle {
 
     // =====================================================
     // TRACK ROWS
+    //
+    // Viewport com rolagem vertical sincronizada com a
+    // timeline (o mesmo scroll-y). O conteúdo cresce com o
+    // zoom vertical (cada linha tem 64px * zoom-y), então as
+    // linhas do painel acompanham as linhas da timeline.
     // =====================================================
 
-    VerticalLayout {
-
+    Rectangle {
         x: 0;
         y: root.ruler-height;
 
         width: parent.width;
-        height:
-            parent.height
-            - root.ruler-height;
+        height: parent.height - root.ruler-height;
 
-        alignment:
-            LayoutAlignment.stretch;
+        clip: true;
 
-        cross-axis-alignment:
-            CrossAxisAlignment.stretch;
+        Rectangle {
+            x: 0;
+            y: -root.scroll-y;
 
-        spacing: 0;
+            width: parent.width;
+            height:
+                root.track-names.length
+                * 64px * root.zoom-y;
 
+            VerticalLayout {
 
-        for name[i] in root.track-names: TrackHeaderRow {
+                width: parent.width;
+                height: parent.height;
 
-            name:
-                name;
+                alignment:
+                    LayoutAlignment.stretch;
 
-            track-index:
-                i;
+                cross-axis-alignment:
+                    CrossAxisAlignment.stretch;
 
-            track-color:
-                // Cor escolhida na paleta (índice > 0) ou
-                // padrão por tipo de track (placeholder).
-                i < root.track-colors.length
-                && root.track-colors[i] != 0
-                    ? ClipPalette.colors[
-                        Math.mod(
-                            root.track-colors[i],
-                            ClipPalette.colors.length
-                        )
-                    ]
-                    : i == 2
-                        ? Theme.clip-audio
-                        : Theme.clip-midi;
-
-            selected:
-                root.selected-track == i;
-
-            zoom-y:
-                root.zoom-y;
+                spacing: 0;
 
 
-            clicked(index) => {
-                root.track-clicked(index);
+                for name[i] in root.track-names: TrackHeaderRow {
+
+                    name:
+                        name;
+
+                    track-index:
+                        i;
+
+                    track-color:
+                        // Cor escolhida na paleta (índice > 0) ou
+                        // padrão por tipo de track (placeholder).
+                        i < root.track-colors.length
+                        && root.track-colors[i] != 0
+                            ? ClipPalette.colors[
+                                Math.mod(
+                                    root.track-colors[i],
+                                    ClipPalette.colors.length
+                                )
+                            ]
+                            : i == 2
+                                ? Theme.clip-audio
+                                : Theme.clip-midi;
+
+                    selected:
+                        root.selected-track == i;
+
+                    zoom-y:
+                        root.zoom-y;
+
+
+                    clicked(index) => {
+                        root.track-clicked(index);
+                    }
+                }
             }
         }
     }

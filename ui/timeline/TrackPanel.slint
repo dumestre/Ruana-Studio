@@ -19,6 +19,9 @@ export component TrackPanel inherits Rectangle {
 
     in property <float> zoom-y: 1.0;
 
+    // Rolagem vertical sincronizada com a timeline (scroll-y).
+    in property <length> scroll-y: 0px;
+
 
     // =====================================================
     // LARGURA
@@ -80,6 +83,9 @@ export component TrackPanel inherits Rectangle {
 
         zoom-y:
             root.zoom-y;
+
+        scroll-y:
+            root.scroll-y;
 
 
         track-clicked(index) => {
