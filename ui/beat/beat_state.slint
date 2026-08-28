@@ -74,6 +74,14 @@ export global BeatState {
 
     callback pattern-changed(int);
 
+    // Linha do beat selecionada pelo usuário → o Rust sincroniza o
+    // sampler para refletir o instrumento (sample) daquela linha.
+    callback track-selected(int);
+
+    // Botão "sampler" de uma linha do beat → abre a aba do sampler
+    // apontando para a linha.
+    callback sampler-open(int);
+
     callback duplicate-beat;
     callback copy-beat;
     callback clear-beat;

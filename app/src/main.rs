@@ -325,7 +325,10 @@ fn main() -> Result<(), slint::PlatformError> {
 
             let mut proj = project.borrow_mut();
             if let Some(pattern) = proj.current_beat_pattern_mut() {
-                if let Some(params) = pattern.track_params.get_mut(0) {
+                // Drop no sampler grava na LINHA SELECIONADA do beat —
+                // cada linha com sample tem o seu sampler.
+                let index = ui.get_beat_selected_track().max(0) as usize;
+                if let Some(params) = pattern.track_params.get_mut(index) {
                     params.sample_path = Some(path.to_string());
                     params.name = display_name;
                 }

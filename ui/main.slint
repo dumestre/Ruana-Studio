@@ -129,6 +129,16 @@ export component MainWindow inherits Window {
     in-out property <bool> beat-open:
         false;
 
+    // Aba ativa do bottom panel (0 mixer, 1 sampler, ...), exposta
+    // ao Rust para abrir o sampler a partir de uma linha do beat.
+    in-out property <int> bottom-active-tab:
+        0;
+
+    // Bottom panel aberto (visible) — controlado pelo Rust junto
+    // com `bottom-active-tab` quando o sampler é aberto da linha.
+    in-out property <bool> bottom-panel-open:
+        false;
+
     in-out property <bool> explorer-visible:
         true;
     in-out property <string> sampler-sample-name: "No Sample";
@@ -754,6 +764,8 @@ export component MainWindow inherits Window {
         explorer-width <=> root.explorer-width;
         bottom-panel-height <=> root.bottom-panel-height;
         floated <=> root.floated;
+        selected-tab <=> root.bottom-active-tab;
+        bottom-panel-visible <=> root.bottom-panel-open;
         track-names <=> root.track-names;
         track-colors <=> root.track-colors;
         clips <=> root.clips;
@@ -856,6 +868,9 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
         swing <=> BeatState.swing;
 
         instrument-names <=> BeatState.instrument-names;
+
+        track-selected(index) => { BeatState.track-selected(index); }
+        sampler-open-requested(index) => { BeatState.sampler-open(index); }
 
         track-sample-names <=> BeatState.track-sample-names;
 

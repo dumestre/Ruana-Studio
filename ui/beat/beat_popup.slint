@@ -151,6 +151,12 @@ export component BeatPopup inherits Rectangle {
     // Pré-escuta do sample de uma linha.
     callback preview-track(int);
 
+    // Linha selecionada → main repassa ao BeatState (sync do sampler).
+    callback track-selected(int);
+
+    // Abre o sampler da linha (instrumento daquela track do beat).
+    callback sampler-open-requested(int);
+
     // Persistência no core.
     callback step-committed(int, bool);
     callback grid-resolution-committed(int);
@@ -278,11 +284,17 @@ export component BeatPopup inherits Rectangle {
 
 
         track-selected(index) => {
+            root.track-selected(index);
         }
 
 
         track-preview-requested(index) => {
             root.preview-track(index);
+        }
+
+
+        sampler-open-requested(index) => {
+            root.sampler-open-requested(index);
         }
 
 

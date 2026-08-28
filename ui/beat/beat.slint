@@ -90,6 +90,7 @@ export component Beat inherits Rectangle {
     callback add-track-requested;
     callback grid-resolution-changed(int);
     callback track-selected(int);
+    callback sampler-open-requested(int);
     callback duplicate-beat;
     callback copy-beat;
     callback clear-beat;
@@ -169,6 +170,10 @@ export component Beat inherits Rectangle {
 
         track-selected(index) => {
             root.track-selected(index);
+        }
+
+        sampler-open-requested(index) => {
+            root.sampler-open-requested(index);
         }
 
         step-toggled(index, value) => {

@@ -128,6 +128,9 @@ export component BeatContent inherits Rectangle {
     // Pré-escuta do sample de uma linha.
     callback track-preview-requested(int);
 
+    // Abre o sampler da linha (instrumento daquela track do beat).
+    callback sampler-open-requested(int);
+
     callback duplicate-beat;
     callback copy-beat;
     callback clear-beat;
@@ -445,6 +448,10 @@ export component BeatContent inherits Rectangle {
 
         track-preview-requested(index) => {
             root.track-preview-requested(index);
+        }
+
+        sampler-open-requested(index) => {
+            root.sampler-open-requested(index);
         }
 
         track-param-changed(track, param, value) => {

@@ -256,7 +256,7 @@ export component Workspace inherits Rectangle {
     // BOTTOM PANEL
     // ========================================================
 
-    property <bool> bottom-panel-visible: false;
+    in-out property <bool> bottom-panel-visible: false;
 
     in-out property <[bool]> floated:
         [false, false, false];

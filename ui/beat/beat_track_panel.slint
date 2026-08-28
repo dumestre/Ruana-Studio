@@ -27,6 +27,9 @@ export component BeatTrackPanel inherits Rectangle {
     // Pré-escuta do sample de uma linha.
     callback track-preview-requested(int);
 
+    // Abre o sampler da linha (instrumento daquela track do beat).
+    callback sampler-open-requested(int);
+
     // Persistência no core.
     // param: "active" | "solo" | "pan" | "volume" | "channel"
     callback track-param-changed(int, string, float);
@@ -61,6 +64,10 @@ export component BeatTrackPanel inherits Rectangle {
 
         preview-requested => {
             root.track-preview-requested(inst);
+        }
+
+        sampler-open-requested => {
+            root.sampler-open-requested(inst);
         }
 
         track-color:
