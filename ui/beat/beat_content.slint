@@ -172,14 +172,14 @@ export component BeatContent inherits Rectangle {
 
     property <length> content-gap: 10px;
 
-    property <length> content-top:
+    out property <length> content-top:
         root.header-y
         + root.header-height
         + root.divider-gap
         + 1px
         + root.content-gap;
 
-    property <length> row-height: 30px;
+    out property <length> row-height: 30px;
 
     property <length> dynamic-content-height:
         33px
@@ -727,8 +727,10 @@ export component BeatContent inherits Rectangle {
             let gy =
                 step-grid.absolute-position.y;
 
+            // Aceita o drop também sobre o painel de tracks
+            // (retângulo colorido) para a esquerda do grid.
             let inside-x =
-                root.drag-x >= gx
+                root.drag-x >= track-panel.absolute-position.x
                 && root.drag-x <= gx + step-grid.width;
 
             let row =

@@ -29,7 +29,7 @@ import {
 } from "../components/scrollbar.slint";
 import { TrackPanel } from "../timeline/TrackPanel.slint";
 import { BottomToolbar } from "../components/bottom_toolbar.slint";
-import { ClipDragState, TimelineMetrics, SamplerMetrics } from "../timeline/clip_drag/clip_drag_state.slint";
+import { ClipDragState, TimelineMetrics, SamplerMetrics, SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
 
 
 export component Workspace inherits Rectangle {
@@ -2255,6 +2255,23 @@ export component Workspace inherits Rectangle {
                 SamplerMetrics.visible =
                     root.bottom-panel-visible
                     && bottom-panel.current-tab == 1;
+
+                // Espelha o estado do sampler para o global
+                // SamplerState (a janela flutuante consome isso).
+                SamplerState.sample-name =
+                    root.sampler-sample-name;
+
+                SamplerState.sample-loaded =
+                    root.sampler-sample-loaded;
+
+                SamplerState.sample-format =
+                    root.sampler-sample-format;
+
+                SamplerState.sample-duration =
+                    root.sampler-sample-duration;
+
+                SamplerState.sample-peaks =
+                    root.sampler-sample-peaks;
 
                 root.timeline-bounds-changed(
                     timeline.absolute-position.x / 1px,

@@ -7,7 +7,7 @@ import { BrowserFileEntry } from "explorer/file_browser.slint";
 import { FloatPanel } from "windows/float_panel.slint";
 import { PianoRollData, PianoRollActions } from "piano_roll/piano_roll_state.slint";
 import { ContextMenu, ClipContextMenuState } from "components/context_menu.slint";
-import { TimelineMetrics, SamplerMetrics } from "timeline/clip_drag/clip_drag_state.slint";
+import { TimelineMetrics, SamplerMetrics, BeatMetrics } from "timeline/clip_drag/clip_drag_state.slint";
 
 export { FloatPanel }
 export { PianoRollData, PianoRollActions }
@@ -15,6 +15,7 @@ export { BrowserFileEntry }
 export { BeatState }
 export { TimelineMetrics }
 export { SamplerMetrics }
+export { BeatMetrics }
 
 export struct TimelineCoords {
     track: int,
@@ -993,6 +994,51 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
     // Enquanto o arrasto está ativo e o mouse parado, decai
     // a inclinação continuamente até a rotação zerar.
     // =====================================================
+
+    // =====================================================
+    // TIMER DO BEAT METRICS
+    //
+    // Publica a geometria do BeatPopup para o global
+    // BeatMetrics, usado pelo handler de OS drop para saber
+    // se um sample solto do Explorer do SO caiu sobre uma
+    // linha do beat (e qual linha).
+    // =====================================================
+
+    beat_metrics_timer := Timer {
+
+        interval: 50ms;
+
+        running: true;
+
+        triggered() => {
+
+            BeatMetrics.abs-x =
+                beat_popup.content-x / 1px;
+
+            BeatMetrics.abs-y =
+                beat_popup.content-y / 1px;
+
+            BeatMetrics.width =
+                beat_popup.content-w / 1px;
+
+            BeatMetrics.height =
+                beat_popup.content-h / 1px;
+
+            BeatMetrics.rows-y =
+                beat_popup.rows-top-y / 1px;
+
+            BeatMetrics.row-height =
+                beat_popup.row-height / 1px;
+
+            BeatMetrics.track-count =
+                beat_popup.instrument-names.length;
+
+            BeatMetrics.visible =
+                root.beat-open
+                && beat_popup.is-open;
+        }
+    }
+
 
     drag_decay := Timer {
 

@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 use crate::FloatPanel;
 use crate::icon;
+use crate::importer::is_audio_path;
 use crate::mixer::{MixerModels, apply_mixer_models, mixer_inserts_state};
 use crate::piano_roll::wire_piano_roll;
 use daw_core::mixer::MixerParam;
@@ -294,6 +295,55 @@ pub fn install(
 
             p.show().ok();
             icon::apply(p.window());
+
+            // OS drag & drop (Explorer do SO) na janela flutuante do
+            // sampler: arquivos de áudio viram sample do sampler — o
+            // mesmo fluxo do drop no painel principal. O estado do
+            // sampler é espelhado para a janela flutuante via global.
+            {
+                use i_slint_backend_winit::WinitWindowAccessor;
+                use i_slint_backend_winit::winit::event::WindowEvent;
+                let ui_main = ui_weak.clone();
+                let p_weak = p.as_weak();
+                p.window().on_winit_window_event(move |_win, event| {
+                    match event {
+                        WindowEvent::HoveredFile(path) => {
+                            if is_audio_path(&path) {
+                                if let Some(panel) = p_weak.upgrade() {
+                                    panel.set_sampler_drop_hover(true);
+                                }
+                            }
+                        }
+                        WindowEvent::HoveredFileCancelled => {
+                            if let Some(panel) = p_weak.upgrade() {
+                                panel.set_sampler_drop_hover(false);
+                            }
+                        }
+                        WindowEvent::DroppedFile(path) => {
+                            if let Some(panel) = p_weak.upgrade() {
+                                panel.set_sampler_drop_hover(false);
+                            }
+                            if !is_audio_path(&path) {
+                                return i_slint_backend_winit::EventResult::Propagate;
+                            }
+                            if let Some(ui) = ui_main.upgrade() {
+                                let name = path
+                                    .file_stem()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("Audio")
+                                    .to_string();
+                                ui.invoke_sampler_sample_dropped(
+                                    name.into(),
+                                    path.to_string_lossy().to_string().into(),
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                    i_slint_backend_winit::EventResult::Propagate
+                });
+            }
+
             {
                 let mut slots = panels.borrow_mut();
                 slots[idx] = Some(p);

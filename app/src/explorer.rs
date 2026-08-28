@@ -47,7 +47,8 @@ pub fn show_explorer_dir(ui: &MainWindow, path: &std::path::Path, push_history: 
 /// Lista um diretório para o explorador.
 ///
 /// `filter` vazio lista tudo; senão mantém só os nomes que contêm o
-/// termo (case-insensitive). Diretórios sempre passam, para o usuário
+/// termo (case-insensitive). Só arquivos de áudio aparecem — qualquer
+/// outro tipo é escondido — e diretórios sempre passam, para o usuário
 /// continuar navegando enquanto filtra.
 pub fn load_directory_entries(path: &std::path::Path, filter: &str) -> Vec<BrowserFileEntry> {
     let needle = filter.trim().to_lowercase();
@@ -56,7 +57,21 @@ pub fn load_directory_entries(path: &std::path::Path, filter: &str) -> Vec<Brows
     };
     entries
         .iter()
-        .filter(|e| needle.is_empty() || e.is_directory || e.name.to_lowercase().contains(&needle))
+        .filter(|e| {
+            let matches_needle =
+                needle.is_empty() || e.name.to_lowercase().contains(&needle);
+            if e.is_directory {
+                matches_needle
+            } else {
+                let ext = e
+                    .path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or("")
+                    .to_uppercase();
+                AUDIO_EXTS.contains(&ext.as_str()) && matches_needle
+            }
+        })
         .map(|e| {
             let entry_type = if e.is_directory {
                 "Folder".to_string()

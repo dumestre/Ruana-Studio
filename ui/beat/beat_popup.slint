@@ -106,6 +106,15 @@ export component BeatPopup inherits Rectangle {
     out property <length> content-h:
         content.height;
 
+    // Y absoluto da primeira linha de tracks (após o header 33px).
+    out property <length> rows-top-y:
+        content.absolute-position.y
+        + content.content-top
+        + 33px;
+
+    out property <length> row-height:
+        content.row-height;
+
 
     // ============================================================
     // DRAG DE SAMPLE

@@ -12,6 +12,7 @@
 use crate::ClipData;
 use crate::MainWindow;
 use crate::SamplerMetrics;
+use crate::BeatMetrics;
 use crate::clip_cache;
 use crate::importer::{import_audio_file_with_cache, is_audio_path};
 use crate::waveform::WaveformCache;
@@ -122,15 +123,43 @@ pub fn install(
                                 && logical_y >= sampler.get_abs_y()
                                 && logical_y <= sampler.get_abs_y() + sampler.get_height();
 
-                            if over_sampler {
-                                let name = path
-                                    .file_stem()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or("Audio")
-                                    .to_string();
+                            // Drop sobre uma linha do beat → importa o sample
+                            // naquela linha (mesma prioridade do drag interno).
+                            let beat = ui.global::<BeatMetrics>();
+                            let strike_track = if beat.get_visible() {
+                                let rows_y = beat.get_rows_y();
+                                let rows_bottom =
+                                    rows_y + beat.get_track_count() as f32 * beat.get_row_height();
+                                if logical_x >= beat.get_abs_x()
+                                    && logical_x <= beat.get_abs_x() + beat.get_width()
+                                    && logical_y >= rows_y
+                                    && logical_y <= rows_bottom
+                                {
+                                    ((logical_y - rows_y) / beat.get_row_height()).floor() as i32
+                                } else {
+                                    -1
+                                }
+                            } else {
+                                -1
+                            };
+
+                            let name = path
+                                .file_stem()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("Audio")
+                                .to_string();
+                            let path_str = path.to_string_lossy().to_string();
+
+                            if strike_track >= 0 && strike_track < beat.get_track_count() {
+                                ui.invoke_beat_sample_dropped(
+                                    strike_track,
+                                    name.into(),
+                                    path_str.clone().into(),
+                                );
+                            } else if over_sampler {
                                 ui.invoke_sampler_sample_dropped(
                                     name.into(),
-                                    path.to_string_lossy().to_string().into(),
+                                    path_str.clone().into(),
                                 );
                             } else {
                                 let coords =

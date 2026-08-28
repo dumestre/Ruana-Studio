@@ -47,10 +47,11 @@ export component BeatTrack inherits Rectangle {
     callback volume-changed(float);
     callback mixer-channel-changed(int);
 
-    // Pré-escuta do sample da linha (clique no botão da trilha).
+    // Pré-escuta do sample da linha.
     callback preview-requested;
 
-    // Botão "abrir sampler" da linha (visível só quando tem sample).
+    // Abre o sampler da linha (instrumento daquela track do beat).
+    // Disparado pelo clique no retângulo da track quando tem sample.
     callback sampler-open-requested;
 
     height: 30px;
@@ -263,60 +264,12 @@ export component BeatTrack inherits Rectangle {
 
 
         // ========================================================
-        // SAMPLER
-        //
-        // Abre o sampler mostrando o instrumento (sample) desta
-        // linha — só aparece quando a linha tem som carregado.
-        // ========================================================
-
-        Rectangle {
-
-            width: 18px;
-            height: 24px;
-
-            background: Theme.surface-high;
-
-            border-radius: 4px;
-
-            border-width: 1px;
-
-            border-color: Theme.border;
-
-            visible: root.has-sample;
-
-            Text {
-
-                text: "SP";
-
-                width: 100%;
-                height: 100%;
-
-                color: Theme.accent;
-
-                font-size: 7px;
-                font-weight: 700;
-
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-
-            TouchArea {
-
-                mouse-cursor: pointer;
-
-                clicked => {
-                    root.sampler-open-requested();
-                }
-            }
-        }
-
-
-        // ========================================================
         // TRACK
         //
         // Esta é a única coluna que cresce.
         // O TouchArea fica DENTRO dela.
-        // Não existe mais x: 139px.
+        // Clicar no retângulo da track (nome+cor) abre o sampler
+        // da linha quando ela tem sample carregado.
         // ========================================================
 
         Rectangle {
@@ -404,9 +357,10 @@ export component BeatTrack inherits Rectangle {
 
                         root.selected-changed();
 
-                        // Clicar no botão do canal toca o sample,
-                        // como no channel rack.
+                        // Clicar no retângulo da track abre o sampler
+                        // da linha (como no channel rack do FL).
                         if root.has-sample {
+                            root.sampler-open-requested();
                             root.preview-requested();
                         }
 

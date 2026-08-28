@@ -259,3 +259,55 @@ export global SamplerMetrics {
 
     in-out property <bool> visible: false;
 }
+
+
+// ------------------------------------------------------------
+// MÉTRICAS DO BEAT POPUP (área do conteúdo do sequenciador)
+//
+// Publicadas pelo main (timer de bounds, 50ms) e consumidas
+// pelo handler de OS drop para detectar quando um sample
+// solto do Explorer do SO cai sobre uma linha do beat.
+// ------------------------------------------------------------
+
+export global BeatMetrics {
+
+    in-out property <float> abs-x: 0.0;
+
+    in-out property <float> abs-y: 0.0;
+
+    in-out property <float> width: 0.0;
+
+    in-out property <float> height: 0.0;
+
+    // Y absoluto da primeira linha (content-top + rows-top 33px).
+    in-out property <float> rows-y: 0.0;
+
+    in-out property <float> row-height: 30.0;
+
+    in-out property <int> track-count: 0;
+
+    in-out property <bool> visible: false;
+}
+
+
+// ------------------------------------------------------------
+// ESTADO DO SAMPLER (espelho entre a janela principal e a
+// janela flutuante)
+//
+// Espelhado do MainWindow pelo workspace (timer de bounds) e
+// consumido pela janela flutuante do sampler (outra Window,
+// sem acesso às propriedades do MainWindow).
+// ------------------------------------------------------------
+
+export global SamplerState {
+
+    in-out property <string> sample-name: "No Sample";
+
+    in-out property <bool> sample-loaded: false;
+
+    in-out property <string> sample-format: "";
+
+    in-out property <string> sample-duration: "";
+
+    in-out property <[float]> sample-peaks: [];
+}

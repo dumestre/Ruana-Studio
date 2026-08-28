@@ -3,6 +3,7 @@ import { SamplerArea } from "../components/sampler_area.slint";
 import { PianoRollArea } from "../piano_roll/piano_roll.slint";
 import { Button } from "../components/button.slint";
 import { Theme } from "../theme.slint";
+import { SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
 
 export component FloatPanel inherits Window {
     title: "Floating Tool";
@@ -37,6 +38,10 @@ export component FloatPanel inherits Window {
     callback resize-cancel();
     callback resize-move(length, length);
     callback resize-end();
+
+    // Highlight de alvo enquanto um arquivo do SO é arrastado sobre a
+    // janela (preenchido pelo winit handler instalado no Rust).
+    in-out property <bool> sampler-drop-hover: false;
 
     property <string> header-title:
         root.tool-tab == 0 ? "Mixer"
@@ -132,6 +137,12 @@ export component FloatPanel inherits Window {
                 height: 100%;
                 visible: root.tool-tab == 1;
                 show-header: false;
+                drop-hover: root.sampler-drop-hover;
+                sample-name <=> SamplerState.sample-name;
+                sample-loaded <=> SamplerState.sample-loaded;
+                sample-format <=> SamplerState.sample-format;
+                sample-duration <=> SamplerState.sample-duration;
+                sample-peaks <=> SamplerState.sample-peaks;
             }
 
             PianoRollArea {
