@@ -66,6 +66,9 @@ pub fn ensure_cached(
     let points = ((length_beats * 24.0) as usize).clamp(256, 2048);
     let peaks = daw_media::waveform::waveform_points(&decoded_raw, points);
     let img = daw_media::waveform_image::waveform_image_rgba(&peaks, 0, false);
+    // Mono de exibição (downsample com teto) + pirâmide min/max: a
+    // cópia/colagem ganha o mesmo re-render por zoom do import.
+    let (mono_ds, mip) = daw_media::waveform_image::build_display_wave(&decoded_raw.samples);
 
     let name = path
         .file_stem()
@@ -80,7 +83,8 @@ pub fn ensure_cached(
         decoded: std::sync::Arc::new(decoded_raw),
         wave: CachedWave {
             peaks,
-            mono: Vec::new(),
+            mono_ds,
+            mip,
             image: img,
         },
     };
@@ -149,6 +153,7 @@ fn decode_entry(path: &std::path::Path, bpm: f32) -> Option<CachedSample> {
     let points = ((length_beats * 24.0) as usize).clamp(256, 2048);
     let peaks = daw_media::waveform::waveform_points(&decoded_raw, points);
     let img = daw_media::waveform_image::waveform_image_rgba(&peaks, 0, false);
+    let (mono_ds, mip) = daw_media::waveform_image::build_display_wave(&decoded_raw.samples);
     let name = path
         .file_stem()
         .and_then(|n| n.to_str())
@@ -161,7 +166,8 @@ fn decode_entry(path: &std::path::Path, bpm: f32) -> Option<CachedSample> {
         decoded: std::sync::Arc::new(decoded_raw),
         wave: CachedWave {
             peaks,
-            mono: Vec::new(),
+            mono_ds,
+            mip,
             image: img,
         },
     })

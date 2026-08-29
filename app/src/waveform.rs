@@ -15,9 +15,11 @@ use daw_core::clip::Clip;
 pub struct CachedWave {
     /// Picos agregados (fallback / compatibilidade).
     pub peaks: Vec<f32>,
-    /// Downmix mono dos samples (fonte do re-render por zoom,
-    /// incluindo o modo osciloscópio).
-    pub mono: Vec<f32>,
+    /// Downmix mono de EXIBIÇÃO (downsample com teto) — fonte do
+    /// re-render por zoom e do modo osciloscópio.
+    pub mono_ds: Vec<f32>,
+    /// Pirâmide MIN/MAX/RMS sobre `mono_ds` — zoom sem re-varredura.
+    pub mip: daw_media::waveform_image::Mipmap,
     /// Imagem pré-renderizada na resolução do último pedido.
     pub image: Option<Vec<u8>>,
 }
@@ -27,16 +29,17 @@ pub type WaveformCache = std::collections::HashMap<u64, CachedWave>;
 
 /// Renderiza uma waveform no tamanho EXATO pedido (px de tela).
 ///
-/// Rota nova: rasteriza direto dos samples mono com a fatia
-/// `view` visível — o modo osciloscópio entra sozinho quando o
-/// zoom está muito fundo (< 2 samples/px). Igual ao lab.
-pub fn render_waveform_at_samples(
+/// Rota nova: rasteriza direto do mono de exibição com a fatia
+/// `view` visível, lendo a pirâmide min/max (zoom barato) e caindo
+/// no osciloscópio quando a fatia tem < 2 samples/px. Igual ao lab.
+pub fn render_waveform_mip(
     mono: &[f32],
+    mip: &daw_media::waveform_image::Mipmap,
     width_px: u32,
     view: (usize, usize),
 ) -> Option<slint::Image> {
     let rgba =
-        daw_media::waveform_image::waveform_image_rgba_at_samples(mono, mono, width_px, view)?;
+        daw_media::waveform_image::waveform_image_rgba_mip(mono, mip, width_px, view)?;
     Some(image_from_rgba(
         &rgba,
         width_px,
@@ -159,11 +162,12 @@ pub fn wire_resolution_requests(
                                 let img_new = {
                                     let wf = waveforms.borrow();
                                     match wf.get(&id_u) {
-                                        // Rota nova: samples mono direto —
+                                        // Rota nova: mono de exibição +
+                                        // pirâmide min/max — zoom barato,
                                         // osciloscópio automático no zoom fundo.
-                                        Some(c) if !c.mono.is_empty() => {
-                                            let view = (0usize, c.mono.len());
-                                            render_waveform_at_samples(&c.mono, w, view)
+                                        Some(c) if !c.mono_ds.is_empty() => {
+                                            let view = (0usize, c.mono_ds.len());
+                                            render_waveform_mip(&c.mono_ds, &c.mip, w, view)
                                         }
                                         Some(c) if !c.peaks.is_empty() => {
                                             render_waveform_at(&c.peaks, w)

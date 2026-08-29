@@ -125,14 +125,16 @@ pub fn import_audio_file(
     };
 
     // `ClipAdded` já disparou e leu o cache ainda vazio; preenche
-    // agora (picos + imagem pré-renderizada) e reprojeta só a
-    // linha desse clip.
+    // agora (picos + mono de exibição + pirâmide + imagem) e
+    // reprojeta só a linha desse clip.
     if !peaks.is_empty() {
+        let (mono_ds, mip) = daw_media::waveform_image::build_display_wave(&decoded.samples);
         waveforms.borrow_mut().insert(
             clip_id,
             CachedWave {
                 peaks,
-                mono: decoded.samples,
+                mono_ds,
+                mip,
                 image: img,
             },
         );
