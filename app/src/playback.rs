@@ -123,8 +123,15 @@ pub fn install(
     let is_playing = Rc::new(Cell::new(false));
 
     // ---- PLAY / STOP ------------------------------------------------
+    //
+    // Um único controlador serve aos DOIS gatilhos de play:
+    //  • play do transporte/timeline (play-state-changed) → modo
+    //    global: clips + beat + playhead da timeline.
+    //  • play do beat sequencer (beat-play-state-changed) → modo
+    //    "só beat": o pattern soa e o grid acende, mas a timeline
+    //    fica parada (nenhum clip toca e o playhead não anda).
     {
-        let ui_weak = ui_weak.clone();
+        let ui_weak_c = ui_weak.clone();
         let transport = transport.clone();
         let project = project.clone();
         let visual_clock = visual_clock.clone();
@@ -132,8 +139,10 @@ pub fn install(
         let playhead_timer = playhead_timer.clone();
         let meter_timer = meter_timer.clone();
         let audio = audio.clone();
-        ui.on_play_state_changed(move |playing| {
-            if playing {
+
+        // `play` = quer tocar; `beat_only` = modo "só beat".
+        let control = move |play: bool, beat_only: bool| {
+            if play {
                 if is_playing.get() {
                     return;
                 }
@@ -146,6 +155,7 @@ pub fn install(
                 {
                     let mut t = transport.lock().unwrap();
                     t.playing = true;
+                    t.beat_only = beat_only;
                     // Lembra onde o play começou: SPACE (stop) devolve
                     // a agulha pra cá (comportamento padrão de DAW).
                     t.play_start_ticks = t.position_ticks;
@@ -155,15 +165,21 @@ pub fn install(
                         anchor_at: Instant::now(),
                     });
                 }
-                rt_log("[PLAY] transport.playing=true, playhead timer started");
+                rt_log(if beat_only {
+                    "[PLAY] beat-only: pattern soa, timeline parada"
+                } else {
+                    "[PLAY] transport.playing=true, playhead timer started"
+                });
 
                 // Playhead timer: roda NA event loop. Lê o clock
                 // autoritativo (áudio) via try_lock, corrige drift
                 // gradualmente (servo) e projeta por tempo real.
                 // Publica SEGUNDOS (float, sem quantização) para a
-                // agulha e ticks inteiros apenas para o LCD.
+                // agulha e ticks inteiros apenas para o LCD. No modo
+                // "só beat" NÃO publica posição (timeline parada),
+                // mas continua avançando o passo do beat.
                 {
-                    let ui_weak_t = ui_weak.clone();
+                    let ui_weak_t = ui_weak_c.clone();
                     let transport = transport.clone();
                     let clock = visual_clock.clone();
                     let last_lcd = Cell::new(i32::MIN);
@@ -176,10 +192,12 @@ pub fn install(
                             let Some(c) = guard.as_mut() else { return };
                             let mut lcd_ticks: Option<i64> = None;
                             let mut bpm = 120.0f64;
+                            let mut beat_only = false;
                             if let Ok(t) = transport.try_lock() {
                                 if !t.playing {
                                     return;
                                 }
+                                beat_only = t.beat_only;
                                 bpm = t.bpm as f64;
                                 let actual = t.position_seconds();
                                 let drift = actual - c.projected();
@@ -201,14 +219,19 @@ pub fn install(
                             let secs = c.projected().max(0.0);
                             drop(guard);
                             if let Some(ui) = ui_weak_t.upgrade() {
-                                // Playhead: valor contínuo, atualiza TODO tick.
-                                ui.set_transport_time_seconds(secs as f32);
-                                // LCD: inteiro dedupado (granularidade de tick).
-                                if let Some(ticks) = lcd_ticks {
-                                    let ticks = (ticks.min(i32::MAX as i64)) as i32;
-                                    if ticks != last_lcd.get() {
-                                        last_lcd.set(ticks);
-                                        ui.set_transport_position(ticks);
+                                // Modo "só beat": o playhead da timeline
+                                // NÃO anda (nem o LCD) — só o grid do
+                                // beat acende via publish_beat_step.
+                                if !beat_only {
+                                    // Playhead: valor contínuo, atualiza TODO tick.
+                                    ui.set_transport_time_seconds(secs as f32);
+                                    // LCD: inteiro dedupado (granularidade de tick).
+                                    if let Some(ticks) = lcd_ticks {
+                                        let ticks = (ticks.min(i32::MAX as i64)) as i32;
+                                        if ticks != last_lcd.get() {
+                                            last_lcd.set(ticks);
+                                            ui.set_transport_position(ticks);
+                                        }
                                     }
                                 }
                                 // Passo do beat sequencer: derivado do
@@ -258,6 +281,7 @@ pub fn install(
                 let (ret_ticks, ret_secs) = {
                     let mut t = transport.lock().unwrap();
                     t.playing = false;
+                    t.beat_only = false;
                     t.position_ticks = t.play_start_ticks;
                     (t.position_ticks, t.position_seconds())
                 };
@@ -265,12 +289,28 @@ pub fn install(
                 // O dispositivo de áudio NÃO fecha aqui: continua
                 // aberto para a pré-escuta de samples com o transporte
                 // parado. Ver `audio_bridge`.
-                if let Some(ui) = ui_weak.upgrade() {
+                if let Some(ui) = ui_weak_c.upgrade() {
                     let st = crate::BeatState::get(&ui);
                     st.set_playhead(-1);
                     ui.set_transport_time_seconds(ret_secs as f32);
                     ui.set_transport_position(ret_ticks.min(i32::MAX as u64) as i32);
                 }
+            }
+        };
+
+        let control = Rc::new(RefCell::new(Some(control)));
+
+        let c = control.clone();
+        ui.on_play_state_changed(move |playing| {
+            if let Some(f) = c.borrow_mut().as_mut() {
+                f(playing, false);
+            }
+        });
+
+        let c = control.clone();
+        ui.on_beat_play_state_changed(move |playing| {
+            if let Some(f) = c.borrow_mut().as_mut() {
+                f(playing, true);
             }
         });
     }

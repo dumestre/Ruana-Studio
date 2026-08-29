@@ -506,10 +506,12 @@ impl AudioEngine {
 
         // ---- transporte ----------------------------------------
         let mut playing = false;
+        let mut beat_only = false;
         let mut bpm = 120.0f64;
         let mut ppq = 960.0f64;
         if let Ok(t) = transport.try_lock() {
             playing = t.playing;
+            beat_only = t.beat_only;
             bpm = t.bpm as f64;
             ppq = t.ppq as f64;
 
@@ -543,7 +545,8 @@ impl AudioEngine {
             .try_lock()
             .map(|t| (t.metronome_enabled, t.metronome_sound.min(4), t.metronome_volume.clamp(0.0, 1.0)))
             .unwrap_or((false, 0, 0.7));
-        if playing && metronome_enabled {
+        // Modo "só beat": o metrônomo não toca — só o pattern.
+        if playing && !beat_only && metronome_enabled {
             let beat = (start_frames / frames_per_beat).floor() as i64;
             if beat != rt.metronome_beat {
                 rt.metronome_beat = beat;
@@ -621,8 +624,9 @@ impl AudioEngine {
             let mut left = 0.0f32;
             let mut right = 0.0f32;
 
-            // Clips da timeline (só com o transporte andando).
-            if playing {
+            // Clips da timeline (só com o transporte andando e fora do
+            // modo "só beat").
+            if playing && !beat_only {
                 let pos = start_frames + frame as f64;
 
                 for track in snap.tracks.iter() {

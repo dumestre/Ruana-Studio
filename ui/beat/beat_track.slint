@@ -23,6 +23,9 @@ export component BeatTrack inherits Rectangle {
 
     in property <bool> selected: false;
 
+    // Alvo do drag de sample (linha onde o sample vai cair).
+    in property <bool> drag-target: false;
+
     in-out property <int> track-menu-open-index: -1;
 
     // ============================================================
@@ -280,11 +283,15 @@ export component BeatTrack inherits Rectangle {
 
             border-radius: 4px;
 
-            border-width: 1px;
+            border-width: root.drag-target
+                ? 2px
+                : 1px;
 
-            border-color: root.selected
-                ? Theme.text-primary
-                : Theme.border;
+            border-color: root.drag-target
+                ? #FFFFFF
+                : (root.selected
+                    ? Theme.text-primary
+                    : Theme.border);
 
             opacity: root.active ? 1.0 : 0.35;
 

@@ -8,6 +8,9 @@
 #[derive(Debug, Clone)]
 pub struct Transport {
     pub playing: bool,
+    /// Modo "só beat": o transporte roda e o step sequencer soa e
+    /// avança, mas os clips da timeline NÃO tocam nem andam.
+    pub beat_only: bool,
     /// Posição do playhead em ticks (PPQ).
     pub position_ticks: u64,
     /// Onde o último play começou. SPACE (stop) devolve a agulha
@@ -34,6 +37,7 @@ impl Default for Transport {
     fn default() -> Self {
         Self {
             playing: false,
+            beat_only: false,
             position_ticks: 0,
             play_start_ticks: 0,
             bpm: 120,

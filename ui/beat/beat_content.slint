@@ -428,6 +428,18 @@ export component BeatContent inherits Rectangle {
 
 
         // --------------------------------------------------------
+        // FIXAÇÃO DO DROP
+        //
+        // Só o retângulo colorido da track mostra o alvo (borda
+        // branca); a grade de steps não destaca nada durante o
+        // arrasto.
+        // --------------------------------------------------------
+
+        drag-hover-track:
+            root.drag-hover-track;
+
+
+        // --------------------------------------------------------
         // SELEÇÃO / MENU
         // --------------------------------------------------------
 
@@ -511,17 +523,6 @@ export component BeatContent inherits Rectangle {
 
         track-colors:
             root.track-colors;
-
-
-        // --------------------------------------------------------
-        // DRAG DE SAMPLE
-        // --------------------------------------------------------
-
-        hover-row:
-            root.drag-hover-track;
-
-        drag-active:
-            root.drag-active;
 
 
         // --------------------------------------------------------

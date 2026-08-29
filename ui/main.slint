@@ -254,6 +254,11 @@ export component MainWindow inherits Window {
 
     callback play-state-changed(bool);
 
+    // Play/stop do BEAT SEQUENCER: roda o transporte em modo
+    // "só beat" (grid acende e o pattern soa; a timeline fica
+    // parada). O callback global acima é o transporte/timeline.
+    callback beat-play-state-changed(bool);
+
     callback seek-to(float);
 
     // BPM novo (inteiro). O backend atualiza o Transport e
@@ -901,12 +906,14 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
 
         // Playhead e play vêm do transporte — o beat NÃO tem clock
         // próprio, senão a coluna acesa não corresponde ao som.
+        // O play do beat dispara o modo "só beat" (ver callback
+        // beat-play-state-changed no Rust).
         playhead <=> BeatState.playhead;
 
         playing <=> root.playing;
 
         play-state-changed(state) => {
-            root.play-state-changed(state);
+            root.beat-play-state-changed(state);
         }
 
         preview-track(track) => {
