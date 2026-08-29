@@ -151,6 +151,10 @@ export component Timeline inherits Rectangle {
 
     callback paste-requested(float, int);
 
+    callback timewarp-markers-changed(int, [{beat: float, locked: bool}]);
+    callback timewarp-request-transients(int);
+    callback timewarp-clear-warps(int);
+
 
     // =====================================================
     // ESCALA
@@ -1292,6 +1296,18 @@ export component Timeline inherits Rectangle {
                     marquee-commit(b0, b1, t0, t1) => {
                         root.marquee-select(b0, b1, t0, t1);
                     }
+
+                    timewarp-markers-changed(id, markers) => {
+                        root.timewarp-markers-changed(id, markers);
+                    }
+
+                    timewarp-request-transients(id) => {
+                        root.timewarp-request-transients(id);
+                    }
+
+                    timewarp-clear-warps(id) => {
+                        root.timewarp-clear-warps(id);
+                    }
                 }
             }
 
@@ -1508,7 +1524,7 @@ export component Timeline inherits Rectangle {
 
     Timer {
 
-        interval: 16ms;
+        interval: 8ms;
 
         running:
             root.playing
@@ -1520,47 +1536,60 @@ export component Timeline inherits Rectangle {
             let px =
                 root.playhead-x;
 
-            let visible-left =
+            let width =
+                root.width;
+
+            let margin =
+                width * 0.12;
+
+
+            let target =
                 root.scroll-x;
 
             let visible-right =
                 root.scroll-x
-                + root.width;
-
-            let margin =
-                root.width * 0.1;
+                + width;
 
 
             // =============================================
-            // SAIU PELA DIREITA
+            // FOLLOW CONTÍNUO (sem pulo de relocação)
+            //
+            // Antes: ao cruzar a margem o scroll relocava o
+            // conteúdo por ~60% da largura de uma vez → a
+            // agulha "pulava". Agora o scroll acompanha a
+            // agulha exatamente na MESMA velocidade (delta
+            // por tick = delta da agulha), então o conteúdo
+            // desliza liso e o playhead fica ancorado no
+            // limiar.
             // =============================================
 
             if px >
                 visible-right - margin {
 
-                root.scroll-x =
-                    min(
-                        root.max-scroll-x,
-                        px
-                        - root.width * 0.3
-                    );
+                // Ancora o playhead no limiar direito.
+                target =
+                    px
+                    - (width - margin);
+
+            }
+            else if px <
+                root.scroll-x + margin {
+
+                // Ancora o playhead no limiar esquerdo.
+                target =
+                    px
+                    - margin;
             }
 
 
-            // =============================================
-            // SAIU PELA ESQUERDA
-            // =============================================
-
-            else if px <
-                visible-left + margin {
-
-                root.scroll-x =
+            root.scroll-x =
+                min(
                     max(
                         0px,
-                        px
-                        - root.width * 0.3
-                    );
-            }
+                        target
+                    ),
+                    root.max-scroll-x
+                );
         }
     }
 }

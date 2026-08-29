@@ -186,7 +186,7 @@ pub fn install(
                     let last_step = Cell::new(i32::MIN);
                     playhead_timer.borrow().start(
                         slint::TimerMode::Repeated,
-                        Duration::from_millis(8),
+                        Duration::from_millis(4),
                         move || {
                             let mut guard = clock.borrow_mut();
                             let Some(c) = guard.as_mut() else { return };
