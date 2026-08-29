@@ -14,8 +14,8 @@ export component ProjectKey inherits Rectangle {
     height: 18px;
     width: 64px; 
 
-    // Usa surface-high quando pressionado para dar feedback tátil
-    background: touch.pressed ? Theme.surface-high : Theme.surface;
+    // Usa surface-high no fundo, igual aos botões da toolbar
+    background: Theme.surface-high;
     border-radius: 2px;
 
     HorizontalLayout {

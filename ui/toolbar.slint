@@ -72,25 +72,25 @@ export component Toolbar inherits Rectangle {
             cross-axis-alignment: CrossAxisAlignment.center;
 
             Button {
-                text: "File"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; clicked => {} 
+                text: "File"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
             }
             Button {
-                text: "Edit"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; clicked => {} 
+                text: "Edit"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
             }
             Button {
-                text: "New"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; clicked => {} 
+                text: "New"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
             }
             Button {
-                text: "Save"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; clicked => {} 
+                text: "Save"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
             }
             Button {
-                text: "Save As"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; clicked => {} 
+                text: "Save As"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
             }
             Button {
-                text: "Settings"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; clicked => {} 
+                text: "Settings"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
             }
             Button {
-                text: "Help"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; clicked => {} 
+                text: "Help"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
             }
         }
 
@@ -115,11 +115,11 @@ export component Toolbar inherits Rectangle {
                 cross-axis-alignment: CrossAxisAlignment.center;
 
                 Button {
-                    height: 18px; width: 18px; corner-radius: 2px;
+                    height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
                     icon: @image-url("icons/undo.svg"); icon-size: 16px; icon-color: Theme.text-primary; borderless: true; clicked => {}
                 }
                 Button {
-                    height: 18px; width: 18px; corner-radius: 2px;
+                    height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
                     icon: @image-url("icons/redo.svg"); icon-size: 16px; icon-color: Theme.text-primary; borderless: true; clicked => {}
                 }
             }
@@ -130,7 +130,7 @@ export component Toolbar inherits Rectangle {
 
                 Button {
                     icon: @image-url("icons/follow.svg"); filled-icon: @image-url("icons/follow_filled.svg");
-                icon-size: 16px; icon-color: Theme.text-primary; height: 18px; width: 18px; corner-radius: 2px;
+                icon-size: 16px; icon-color: Theme.text-primary; height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
                 toggled: root.follow-enabled; toggled-bg: Theme.accent; toggled-fg: Theme.text-primary; borderless: true;
                 clicked => {
                     root.follow-enabled = !root.follow-enabled;
@@ -141,7 +141,7 @@ export component Toolbar inherits Rectangle {
             
             Button {
                 icon: @image-url("icons/snap.svg"); filled-icon: @image-url("icons/snap_filled.svg");
-                icon-size: 16px; icon-color: Theme.text-primary; height: 18px; width: 18px; corner-radius: 2px;
+                icon-size: 16px; icon-color: Theme.text-primary; height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
                 toggled: root.snap-enabled; toggled-bg: Theme.accent; toggled-fg: Theme.text-primary; borderless: true;
                 clicked => {
                     root.snap-enabled = !root.snap-enabled;
@@ -178,15 +178,15 @@ export component Toolbar inherits Rectangle {
             cross-axis-alignment: CrossAxisAlignment.center;
 
             Button {
-                height: 18px; icon: @image-url("icons/minimize.svg"); icon-size: 14px; preferred-height: 0px; preferred-width: 0px; text: ""; width: 18px; corner-radius: 9px;
+                height: 18px; icon: @image-url("icons/minimize.svg"); icon-size: 14px; preferred-height: 0px; preferred-width: 0px; text: ""; width: 18px; corner-radius: 9px; resting-bg: Theme.surface-high;
                 clicked => { root.minimize(); }
             }
             Button {
-                height: 18px; icon: root.full-screen ? @image-url("icons/restore.svg") : @image-url("icons/maximize.svg"); icon-size: 10px; text: ""; width: 18px; corner-radius: 9px;
+                height: 18px; icon: root.full-screen ? @image-url("icons/restore.svg") : @image-url("icons/maximize.svg"); icon-size: 10px; text: ""; width: 18px; corner-radius: 9px; resting-bg: Theme.surface-high;
                 clicked => { root.full-screen = !root.full-screen; }
             }
             Button {
-                height: 18px; icon: @image-url("icons/close.svg"); icon-color: Colors.crimson; icon-size: 14px; text: ""; width: 18px; corner-radius: 9px;
+                height: 18px; icon: @image-url("icons/close.svg"); icon-color: Colors.crimson; icon-size: 14px; text: ""; width: 18px; corner-radius: 9px; resting-bg: Theme.surface-high;
                 clicked => { root.close(); }
             }
         }
