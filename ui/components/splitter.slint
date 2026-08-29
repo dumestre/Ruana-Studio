@@ -27,9 +27,7 @@ export component SplitterVerticalGrowLeft inherits Rectangle {
     width: 5px;
 
     background:
-        touch.has-hover || root.dragging
-            ? Theme.surface-high
-            : Theme.border;
+        Theme.base;
 
     touch := TouchArea {
 
@@ -111,9 +109,7 @@ export component SplitterVerticalGrowRight inherits Rectangle {
     width: 5px;
 
     background:
-        touch.has-hover || root.dragging
-            ? Theme.surface-high
-            : Theme.border;
+        Theme.base;
 
     touch := TouchArea {
 
@@ -191,9 +187,7 @@ export component SplitterHorizontal inherits Rectangle {
     height: 5px;
 
     background:
-        touch.has-hover || root.dragging
-            ? Theme.surface-high
-            : Theme.border;
+        Theme.base;
 
     touch := TouchArea {
 

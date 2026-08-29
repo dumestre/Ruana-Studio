@@ -321,8 +321,7 @@ export component Timeline inherits Rectangle {
     // FUNDO PRINCIPAL
     // =====================================================
 
-    background:
-        Theme.base;
+    background: Theme.Transparent;
 
 
     // =====================================================
@@ -341,6 +340,7 @@ export component Timeline inherits Rectangle {
         height:
             parent.height;
 
+        border-radius: 6px;
         clip: true;
 
 
@@ -845,8 +845,7 @@ export component Timeline inherits Rectangle {
                     parent.height
                 );
 
-            background:
-                Theme.base;
+            background: Theme.Transparent;
 
 
             // =============================================
@@ -931,8 +930,8 @@ export component Timeline inherits Rectangle {
 
                 background:
                     Math.mod(i, 2) == 1
-                        ? Theme.surface
-                        : Theme.base;
+                        ? Theme.surface-high
+                        : Theme.surface-step;
 
                 z: -1;
             }
@@ -977,8 +976,8 @@ export component Timeline inherits Rectangle {
 
                     background:
                         Math.mod(i, 2) == 1
-                            ? Theme.border
-                            : Theme.border.transparentize(0.45);
+                            ? (Theme.is-paper ? Theme.base : Theme.border)
+                            : (Theme.is-paper ? Theme.base : Theme.border).transparentize(0.45);
                 }
 
 
@@ -1003,7 +1002,7 @@ export component Timeline inherits Rectangle {
                         parent.height;
 
                     background:
-                        Theme.border.transparentize(0.6);
+                        Theme.is-paper ? Theme.base.transparentize(0.6) : Theme.border.transparentize(0.6);
                 }
 
 
@@ -1028,7 +1027,7 @@ export component Timeline inherits Rectangle {
                         parent.height;
 
                     background:
-                        Theme.border.transparentize(0.7);
+                        Theme.is-paper ? Theme.base.transparentize(0.7) : Theme.border.transparentize(0.7);
                 }
 
 
@@ -1053,7 +1052,7 @@ export component Timeline inherits Rectangle {
                         parent.height;
 
                     background:
-                        Theme.border.transparentize(0.8);
+                        Theme.is-paper ? Theme.base.transparentize(0.8) : Theme.border.transparentize(0.8);
                 }
 
 
@@ -1078,7 +1077,7 @@ export component Timeline inherits Rectangle {
                         parent.height;
 
                     background:
-                        Theme.border.transparentize(0.8);
+                        Theme.is-paper ? Theme.base.transparentize(0.8) : Theme.border.transparentize(0.8);
                 }
             }
 

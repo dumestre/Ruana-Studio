@@ -354,7 +354,7 @@ export component PianoRollArea inherits Rectangle {
                         y: parent.height - 1px;
                         width: parent.width;
                         height: 1px;
-                        background: Theme.border;
+                        background: Theme.is-paper ? Theme.base : Theme.border;
                         z: 10;
                     }
 
@@ -363,7 +363,7 @@ export component PianoRollArea inherits Rectangle {
                         y: 0;
                         width: 1px;
                         height: parent.height;
-                        background: Theme.border;
+                        background: Theme.is-paper ? Theme.base : Theme.border;
                         z: 10;
                     }
                 }
@@ -400,21 +400,21 @@ export component PianoRollArea inherits Rectangle {
                         Rectangle {
                             x: 0; y: parent.height - 1px;
                             width: parent.width; height: 1px;
-                            background: Theme.border;
+                            background: Theme.is-paper ? Theme.base : Theme.border;
                         }
                     }
 
                     Rectangle {
                         x: parent.width - 1px; y: 0;
                         width: 1px; height: parent.height;
-                        background: Theme.border;
+                        background: Theme.is-paper ? Theme.base : Theme.border;
                         z: 10;
                     }
 
                     Rectangle {
                         x: 0; y: parent.height - 1px;
                         width: parent.width; height: 1px;
-                        background: Theme.border;
+                        background: Theme.is-paper ? Theme.base : Theme.border;
                         z: 50;
                     }
                 }
@@ -488,7 +488,7 @@ export component PianoRollArea inherits Rectangle {
                     Rectangle {
                         x: 0; y: 0;
                         width: parent.width; height: 1px;
-                        background: Theme.border;
+                        background: Theme.is-paper ? Theme.base : Theme.border;
                         z: 50;
                     }
 

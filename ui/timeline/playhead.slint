@@ -29,17 +29,17 @@ export component PlayheadOverlay inherits Rectangle {
         x: head-x - 1px;
         y: 7px;
         width: 2px;
-        height: ruler-h - 7px + tracks-h;
-        background: Theme.playhead;
+        background: Colors.crimson;
     }
 
     // Cabeça (bolinha) na régua — ÚNICA cabeça do playhead
     Rectangle {
         x: head-x - 6px;
         y: 1px;
+        vertical-stretch: 0;
         width: 12px;
         height: 12px;
         border-radius: 6px;
-        background: Theme.playhead;
+        background: Colors.crimson;
     }
 }

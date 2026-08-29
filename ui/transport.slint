@@ -227,7 +227,7 @@ export component Transport inherits Rectangle {
             toggled:
                 root.loop-enabled;
 
-            subtle-toggled: true;
+            subtle-toggled: !Theme.is-paper;
 
             keep-icon-color: true;
 
@@ -236,6 +236,9 @@ export component Transport inherits Rectangle {
 
             toggled-icon-color:
                 Theme.accent;
+
+            toggled-bg:
+                Theme.is-paper ? Theme.accent : Theme.surface-high;
 
             clicked => {
 
@@ -319,7 +322,7 @@ export component Transport inherits Rectangle {
             Rectangle {
                 width: 18px;
                 height: 18px;
-                background: Theme.surface-high;
+                background: (root.metronome-enabled && Theme.is-paper) ? Theme.accent : Theme.surface-high;
                 border-radius: 2px;
 
                 metro-icon := Image {
@@ -332,7 +335,7 @@ export component Transport inherits Rectangle {
                     height: 16px;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
-                    colorize: root.metronome-enabled ? Theme.accent : Theme.text-primary;
+                    colorize: root.metronome-enabled ? (Theme.is-paper ? Theme.text-primary : Theme.accent) : Theme.text-primary;
                 }
 
                 metro-area := TouchArea {

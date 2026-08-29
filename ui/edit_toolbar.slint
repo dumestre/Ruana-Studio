@@ -27,21 +27,7 @@ export component EditToolbar inherits Rectangle {
         transparent;
 
 
-    // ============================================================
-    // BORDA INFERIOR
-    // ============================================================
-
-    Rectangle {
-
-        x: 0px;
-        y: parent.height - 1px;
-
-        width: parent.width;
-        height: 1px;
-
-        background:
-            Theme.border;
-    }
+   
 
 
     // ============================================================
@@ -122,13 +108,16 @@ export component EditToolbar inherits Rectangle {
                     root.clip-pool-open;
 
                 toggled-fg:
-                    Colors.black;
+                    Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                subtle-toggled:
-                    true;
+                toggled-bg:
+                    Theme.is-paper ? Theme.accent : Theme.surface-high;
 
                 toggled-icon-color:
-                    Theme.accent;
+                    Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+                subtle-toggled:
+                    !Theme.is-paper;
 
 
                 clicked => {
@@ -238,21 +227,27 @@ export component EditToolbar inherits Rectangle {
                         text:
                             "";
 
-                        borderless:
-                            true;
-                        corner-radius: 2px;
+borderless:
+                        true;
+                    corner-radius: 2px;
 
-                        toggled:
-                            root.active-tool == 0;
+                    toggled:
+                        root.active-tool == 0;
 
-                        toggled-fg:
-                            Colors.black;
+                    toggled-fg:
+                        Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                        subtle-toggled:
-                            true;
+                    toggled-bg:
+                        Theme.is-paper ? Theme.accent : Theme.surface-high;
+
+                    toggled-icon-color:
+                        Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+                    subtle-toggled:
+                        !Theme.is-paper;
 
 
-                        clicked => {
+                    clicked => {
 
                             root.active-tool =
                                 0;
@@ -298,21 +293,27 @@ export component EditToolbar inherits Rectangle {
                         text:
                             "";
 
-                        borderless:
-                            true;
-                        corner-radius: 2px;
+borderless:
+                        true;
+                    corner-radius: 2px;
 
-                        toggled:
-                            root.active-tool == 1;
+                    toggled:
+                        root.active-tool == 1;
 
-                        toggled-fg:
-                            Colors.black;
+                    toggled-fg:
+                        Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                        subtle-toggled:
-                            true;
+                    toggled-bg:
+                        Theme.is-paper ? Theme.accent : Theme.surface-high;
+
+                    toggled-icon-color:
+                        Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+                    subtle-toggled:
+                        !Theme.is-paper;
 
 
-                        clicked => {
+                    clicked => {
 
                             root.active-tool =
                                 1;
@@ -359,21 +360,27 @@ export component EditToolbar inherits Rectangle {
                         text:
                             "";
 
-                        borderless:
-                            true;
-                        corner-radius: 2px;
+borderless:
+                        true;
+                    corner-radius: 2px;
 
-                        toggled:
-                            root.active-tool == 2;
+                    toggled:
+                        root.active-tool == 2;
 
-                        toggled-fg:
-                            Colors.black;
+                    toggled-fg:
+                        Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                        subtle-toggled:
-                            true;
+                    toggled-bg:
+                        Theme.is-paper ? Theme.accent : Theme.surface-high;
+
+                    toggled-icon-color:
+                        Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+                    subtle-toggled:
+                        !Theme.is-paper;
 
 
-                        clicked => {
+                    clicked => {
 
                             root.active-tool =
                                 2;
@@ -420,21 +427,27 @@ export component EditToolbar inherits Rectangle {
                         text:
                             "";
 
-                        borderless:
-                            true;
-                        corner-radius: 2px;
+borderless:
+                        true;
+                    corner-radius: 2px;
 
-                        toggled:
-                            root.active-tool == 3;
+                    toggled:
+                        root.active-tool == 3;
 
-                        toggled-fg:
-                            Colors.black;
+                    toggled-fg:
+                        Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                        subtle-toggled:
-                            true;
+                    toggled-bg:
+                        Theme.is-paper ? Theme.accent : Theme.surface-high;
+
+                    toggled-icon-color:
+                        Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+                    subtle-toggled:
+                        !Theme.is-paper;
 
 
-                        clicked => {
+                    clicked => {
 
                             root.active-tool =
                                 3;
@@ -481,21 +494,27 @@ export component EditToolbar inherits Rectangle {
                         text:
                             "";
 
-                        borderless:
-                            true;
-                        corner-radius: 2px;
+borderless:
+                        true;
+                    corner-radius: 2px;
 
-                        toggled:
-                            root.active-tool == 5;
+                    toggled:
+                        root.active-tool == 5;
 
-                        toggled-fg:
-                            Colors.black;
+                    toggled-fg:
+                        Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                        subtle-toggled:
-                            true;
+                    toggled-bg:
+                        Theme.is-paper ? Theme.accent : Theme.surface-high;
+
+                    toggled-icon-color:
+                        Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+                    subtle-toggled:
+                        !Theme.is-paper;
 
 
-                        clicked => {
+                    clicked => {
 
                             root.active-tool =
                                 5;
@@ -571,21 +590,24 @@ export component EditToolbar inherits Rectangle {
                 text:
                     "";
 
-                borderless:
-                    true;
-                corner-radius: 2px;
+borderless:
+                true;
+            corner-radius: 2px;
 
-                toggled:
-                    root.beat-open;
+            toggled:
+                root.beat-open;
 
-                toggled-fg:
-                    Colors.black;
+            toggled-fg:
+                Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                subtle-toggled:
-                    true;
+            toggled-bg:
+                Theme.is-paper ? Theme.accent : Theme.surface-high;
 
-                toggled-icon-color:
-                    Theme.accent;
+            toggled-icon-color:
+                Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+            subtle-toggled:
+                !Theme.is-paper;
 
 
                 clicked => {
@@ -625,21 +647,24 @@ export component EditToolbar inherits Rectangle {
                 text:
                     "";
 
-                borderless:
-                    true;
-                corner-radius: 2px;
+borderless:
+                true;
+            corner-radius: 2px;
 
-                toggled:
-                    root.explorer-visible;
+            toggled:
+                root.explorer-visible;
 
-                toggled-fg:
-                    Colors.black;
+            toggled-fg:
+                Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                subtle-toggled:
-                    true;
+            toggled-bg:
+                Theme.is-paper ? Theme.accent : Theme.surface-high;
 
-                toggled-icon-color:
-                    Theme.accent;
+            toggled-icon-color:
+                Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+            subtle-toggled:
+                !Theme.is-paper;
 
 
                 clicked => {
@@ -679,21 +704,24 @@ export component EditToolbar inherits Rectangle {
                 text:
                     "";
 
-                borderless:
-                    true;
-                corner-radius: 2px;
+borderless:
+                true;
+            corner-radius: 2px;
 
-                toggled:
-                    root.panel-visible;
+            toggled:
+                root.panel-visible;
 
-                toggled-fg:
-                    Colors.black;
+            toggled-fg:
+                Theme.is-paper ? Theme.text-primary : Colors.black;
 
-                subtle-toggled:
-                    true;
+            toggled-bg:
+                Theme.is-paper ? Theme.accent : Theme.surface-high;
 
-                toggled-icon-color:
-                    Theme.accent;
+            toggled-icon-color:
+                Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+            subtle-toggled:
+                !Theme.is-paper;
 
 
                 clicked => {

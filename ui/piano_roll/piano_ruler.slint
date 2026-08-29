@@ -39,7 +39,7 @@ export component PianoRuler inherits Rectangle {
             width: parent.width;
             height: 1px;
 
-            background: Theme.border;
+            background: Theme.is-paper ? Theme.base : Theme.border;
 
             z: 30;
         }
@@ -54,8 +54,8 @@ export component PianoRuler inherits Rectangle {
 
             background:
                 Math.mod(i, 2) == 1
-                    ? Theme.border
-                    : Theme.border.transparentize(0.45);
+                    ? (Theme.is-paper ? Theme.base : Theme.border)
+                    : (Theme.is-paper ? Theme.base : Theme.border).transparentize(0.45);
         }
 
         // Número dos compassos
@@ -99,7 +99,9 @@ export component PianoRuler inherits Rectangle {
                 : 5px;
 
             background:
-                Theme.border.transparentize(
+                Theme.is-paper ? Theme.base.transparentize(
+                    tick.level >= 2 ? 0.25 : 0.6
+                ) : Theme.border.transparentize(
                     tick.level >= 2 ? 0.25 : 0.6
                 );
 

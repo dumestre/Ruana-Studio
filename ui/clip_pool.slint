@@ -359,6 +359,10 @@ component ClipItem inherits ClipItemVisual {
 
 export component ClipPool inherits Rectangle {
 
+    border-radius: 6px;
+
+    clip: true;
+
     // ========================================================
     // DADOS
     //
@@ -411,7 +415,7 @@ export component ClipPool inherits Rectangle {
         230px;
 
     background:
-        transparent;
+        Theme.surface-high;
 
 
     // ========================================================
@@ -433,7 +437,7 @@ export component ClipPool inherits Rectangle {
             100%;
 
         background:
-            Theme.border;
+            Theme.Transparent;
     }
 
 
@@ -469,7 +473,7 @@ export component ClipPool inherits Rectangle {
                 28px;
 
             background:
-                Theme.surface-high;
+                Theme.base;
 
             border-radius:
                 4px;

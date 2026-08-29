@@ -552,13 +552,14 @@ export component Workspace inherits Rectangle {
             clip_pool := ClipPool {
 
                 x:
-                    0px;
+                    5px;
 
                 y:
                     0px;
 
                 width:
-                    root.left-panel-width;
+                    root.left-panel-width
+                    - 10px;
 
                 height:
                     100%;
@@ -887,17 +888,23 @@ export component Workspace inherits Rectangle {
             center-panel := Rectangle {
 
                 x:
-                    root.left-panel-width;
+                    root.clip-pool-open && !root.clip-pool-floating
+                        ? root.left-panel-width
+                        : 0px;
 
                 y:
                     0px;
 
                 width:
                     parent.width
-                    - root.left-panel-width
+                    - (
+                        root.clip-pool-open && !root.clip-pool-floating
+                            ? root.left-panel-width
+                            : 0px
+                    )
                     - (
                         root.explorer-visible
-                            ? root.explorer-width + 5px
+                            ? root.explorer-width + 10px
                             : 0px
                     );
 
@@ -1478,7 +1485,9 @@ export component Workspace inherits Rectangle {
                     root.bottom-panel-visible;
 
                 x:
-                    root.left-panel-width;
+                    root.clip-pool-open && !root.clip-pool-floating
+                        ? root.left-panel-width
+                        : 0px;
 
                 y:
                     parent.height
@@ -1515,7 +1524,9 @@ export component Workspace inherits Rectangle {
                     root.bottom-panel-visible;
 
                 x:
-                    root.left-panel-width;
+                    root.clip-pool-open && !root.clip-pool-floating
+                        ? root.left-panel-width
+                        : 0px;
 
                 y:
                     parent.height
@@ -1750,13 +1761,15 @@ export component Workspace inherits Rectangle {
 
                 x:
                     parent.width
-                    - root.explorer-width;
+                    - root.explorer-width
+                    - 5px;
 
                 y:
                     0px;
 
                 width:
-                    root.explorer-width;
+                    root.explorer-width
+                    - 5px;
 
                 height:
                     100%;
@@ -1802,7 +1815,7 @@ export component Workspace inherits Rectangle {
                         0px;
 
                     width:
-                        root.explorer-width;
+                        parent.width;
 
                     height:
                         100%;

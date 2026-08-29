@@ -18,6 +18,8 @@ export global Theme {
 
     in-out property <int> active: 0;
 
+    out property <color> Transparent: #00000000;
+
     // FUNDO GERAL DA JANELA (MainWindow). É a "main vazia".
     private property <[color]> base-list: [
         #1E1E1E, // [0] Studio Dark (PADRÃO)
@@ -26,7 +28,7 @@ export global Theme {
         #14160E, // [3] Volt
         #211A12, // [4] Sunset
         #0F1E21, // [5] Ocean Teal
-        #616161  // [6] PAPER (claro) ★
+        #555555,  // [6] PAPER (claro) ★
     ];
 
     // SUPERFÍCIES / PAINÉIS que sobem um degrau do base.
@@ -48,7 +50,7 @@ export global Theme {
         #262A1D, // [3] Volt
         #362A1B, // [4] Sunset
         #1E3035, // [5] Ocean Teal
-        #FCFCFC  // [6] PAPER (claro) ★
+        #919191  // [6] PAPER (claro) ★
     ];
 
     // BORDAS e separadores.
@@ -92,7 +94,7 @@ export global Theme {
         #14160E, // [3] Volt
         #211A12, // [4] Sunset
         #0F1E21, // [5] Ocean Teal
-        #20180A  // [6] PAPER (claro) ★
+        #1E1E1E,  // [6] PAPER (claro) ★
     ];
 
     // TEXTO PRINCIPAL (nomes, labels).
@@ -103,7 +105,7 @@ export global Theme {
         #F2F5E8, // [3] Volt
         #F5EDE2, // [4] Sunset
         #E2F0EE, // [5] Ocean Teal
-        #FFFFFF  // [6] PAPER (claro) ★
+        #1E1E1E,  // [6] PAPER (claro) ★
     ];
 
     // TEXTO SECUNDÁRIO / DISCRETO (dicas, breadcrumbs).
@@ -164,13 +166,13 @@ export global Theme {
 
     // COR DA PLAYHEAD.
     private property <[color]> playhead-list: [
-        #FFFFFF, // [0] Studio Dark (PADRÃO)
-        #FFFFFF, // [1] Midnight Blue
-        #FFFFFF, // [2] Violeta Ruana
-        #FFFFFF, // [3] Volt
-        #FFFFFF, // [4] Sunset
-        #FFFFFF, // [5] Ocean Teal
-        #FF4032  // [6] PAPER (claro) ★
+        #DC143C, // [0] Studio Dark (PADRÃO)
+        #DC143C, // [1] Midnight Blue
+        #DC143C, // [2] Violeta Ruana
+        #DC143C, // [3] Volt
+        #DC143C, // [4] Sunset
+        #DC143C, // [5] Ocean Teal
+        #DC143C  // [6] PAPER (claro) ★
     ];
 
     // CLIPS DE ÁUDIO.
@@ -228,6 +230,38 @@ export global Theme {
         #EFEFEF  // [6] PAPER (claro) ★
     ];
 
+    // GRID DA RÉGUA — transparente no tema Paper
+    private property <[color]> ruler-grid-list: [
+        #353535, // [0] Studio Dark
+        #2A3643, // [1] Midnight Blue
+        #332C44, // [2] Violeta Ruana
+        #2E3422, // [3] Volt
+        #3B2F1F, // [4] Sunset
+        #24383C, // [5] Ocean Teal
+        #00000000  // [6] PAPER (claro) — transparente
+    ];
+
+    // TIMELINE BG — intermediário entre base e surface (mais claro que base, mais escuro que surface)
+    private property <[color]> timeline-bg-list: [
+        #212121, // [0] Studio Dark — entre #1E1E1E e #242424
+        #1E2C35, // [1] Midnight Blue — entre #161A21 e #1D242E
+        #1F1B28, // [2] Violeta Ruana — entre #191722 e #221E2E
+        #181B11, // [3] Volt — entre #14160E e #1C1F15
+        #252119, // [4] Sunset — entre #211A12 e #2A2117
+        #122628, // [5] Ocean Teal — entre #0F1E21 e #15262A
+        #797979  // [6] PAPER (claro) — entre #616161 e #919191
+    ];
+
+    private property <[color]> surface-step-list: [
+        #282828, // [0] Studio Dark — entre #242424 e #2E2E2E
+        #232D38, // [1] Midnight Blue — entre #1D242E e #26303D
+        #272334, // [2] Violeta Ruana — entre #221E2E e #2D2740
+        #20231A, // [3] Volt — entre #1C1F15 e #262A1D
+        #30261F, // [4] Sunset — entre #2A2117 e #362A1B
+        #192C31, // [5] Ocean Teal — entre #15262A e #1E3035
+        #7A7A7A  // [6] PAPER (claro) — distinto de #919191, visível sobre #555555
+    ];
+
     private property <int> clamp: min(max(0, active), base-list.length - 1);
 
     // Tokens expostos — a UI usa apenas estes nomes:
@@ -249,5 +283,9 @@ export global Theme {
     in property <color> activ: activ-list[clamp];
     in property <color> grid-line: grid-line-list[clamp];
     in property <color> grid-sub: grid-sub-list[clamp];
+    in property <color> ruler-grid: ruler-grid-list[clamp];
     in property <color> toggle-active-bg: toggle-active-bg-list[clamp];
+    in property <bool> is-paper: active == 6;
+    in property <color> timeline-bg: timeline-bg-list[clamp];
+    in property <color> surface-step: surface-step-list[clamp];
 }

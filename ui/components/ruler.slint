@@ -26,6 +26,10 @@ export component TimelineRuler inherits Rectangle {
     in property <int> total-bars: 32;
 
     in property <int> beats-per-bar: 4;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+
+    clip: true;
 
     in property <length> px-per-bar: 160px;
 
@@ -69,17 +73,19 @@ export component TimelineRuler inherits Rectangle {
     // COR DA RÉGUA
     // =====================================================
 
-    background:
-        Theme.base;
+background:
+            Theme.surface-high;
 
     if root.loop-enabled: Rectangle {
         x: root.loop-start-beat * root.px-per-beat - root.scroll-x;
         y: 0px;
         width: max(2px, (root.loop-end-beat - root.loop-start-beat) * root.px-per-beat);
         height: root.ruler-height;
-        background: Theme.accent.transparentize(0.72);
+        background: Theme.Transparent;
         border-width: 1px;
         border-color: Theme.accent;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
         z: 20;
 
         TouchArea {
@@ -172,8 +178,8 @@ export component TimelineRuler inherits Rectangle {
 
         background:
             Math.mod(bar-rect.bar-index, 2) == 1
-                ? Theme.surface
-                : Theme.base;
+                ? Theme.surface-high
+                : Theme.surface-step;
 
 
         // =============================================
@@ -192,8 +198,8 @@ export component TimelineRuler inherits Rectangle {
                 parent.height - 1px;
             background:
                 Math.mod(bar-rect.bar-index, 2) == 1
-                    ? Theme.border
-                    : Theme.border.transparentize(
+                    ? (Theme.is-paper ? Theme.base : Theme.ruler-grid)
+                    : (Theme.is-paper ? Theme.base : Theme.ruler-grid).transparentize(
                         0.45
                     );
         }
@@ -265,9 +271,7 @@ export component TimelineRuler inherits Rectangle {
             height:
                 parent.height - 1px;
             background:
-                Theme.border.transparentize(
-                    0.60
-                );
+                Theme.is-paper ? Theme.base.transparentize(0.8) : Theme.border.transparentize(0.8);
         }
 
 
@@ -294,9 +298,7 @@ export component TimelineRuler inherits Rectangle {
                 7px;
 
             background:
-                Theme.border.transparentize(
-                    0.25
-                );
+                Theme.is-paper ? Theme.base.transparentize(0.25) : Theme.border.transparentize(0.25);
         }
 
 
@@ -323,9 +325,7 @@ export component TimelineRuler inherits Rectangle {
                 5px;
 
             background:
-                Theme.border.transparentize(
-                    0.25
-                );
+                Theme.is-paper ? Theme.base.transparentize(0.25) : Theme.border.transparentize(0.25);
         }
 
 
@@ -352,9 +352,7 @@ export component TimelineRuler inherits Rectangle {
                 5px;
 
             background:
-                Theme.border.transparentize(
-                    0.25
-                );
+                Theme.is-paper ? Theme.base.transparentize(0.25) : Theme.border.transparentize(0.25);
         }
     }
 
@@ -376,7 +374,7 @@ export component TimelineRuler inherits Rectangle {
         height:
             1px;
         background:
-            Theme.border;
+            Theme.is-paper ? Theme.base : Theme.border;
 
         z: 10;
     }

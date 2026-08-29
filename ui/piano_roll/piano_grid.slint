@@ -94,8 +94,8 @@ export component PianoGrid inherits Rectangle {
             height: 1px;
             
             background: Math.mod(PianoRollData.last-note - note, 12) == 0 
-                        ? Theme.border 
-                        : Theme.grid-line;
+                        ? (Theme.is-paper ? Theme.base : Theme.border) 
+                        : (Theme.is-paper ? Theme.base : Theme.grid-line);
         }
     }
 
@@ -109,7 +109,7 @@ export component PianoGrid inherits Rectangle {
         width: parent.width;
         height: 1px;
 
-        background: Theme.border;
+        background: Theme.is-paper ? Theme.base : Theme.border;
 
         z: 0;
     }
@@ -128,10 +128,10 @@ export component PianoGrid inherits Rectangle {
 
         background:
             Math.mod(beat, 16) == 0
-                ? Theme.border
+                ? (Theme.is-paper ? Theme.base : Theme.border)
                 : Math.mod(beat, 4) == 0
-                    ? Theme.grid-line
-                    : Theme.grid-sub;
+                    ? (Theme.is-paper ? Theme.base : Theme.grid-line)
+                    : (Theme.is-paper ? Theme.base : Theme.grid-sub);
 
         z: 1;
     }
@@ -146,7 +146,7 @@ export component PianoGrid inherits Rectangle {
         width: 1px;
         height: parent.height;
 
-        background: Theme.border;
+        background: Theme.is-paper ? Theme.base : Theme.border;
 
         z: 1;
     }
