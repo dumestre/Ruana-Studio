@@ -20,14 +20,12 @@ export component ThemePicker inherits Rectangle {
             root.names.length - 1
         );
 
-    height: 24px;
+    height: 18px;
     width: 92px;
 
     // Único jeito de dar tema no próprio seletor antes de aplicar.
     background: touch.pressed ? Theme.surface-high : Theme.surface;
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: 3px;
+    border-radius: 2px;
 
     Text {
         text: root.safe-index >= 0 ? root.names[root.safe-index] : "";

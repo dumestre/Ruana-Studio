@@ -19,14 +19,23 @@ export component Button inherits Rectangle {
     in property <length> letter-spacing: 0px;
     in property <length> padding-x: 7px;
     in property <color> hover-text-color: Theme.accent;
+    in property <color> resting-bg: Theme.surface;
     callback clicked;
 
-    background: Theme.surface;
+    background: root.resting-bg;
     border-radius: self.corner-radius;
     border-width: self.borderless ? 0px : 1px;
     border-color: Theme.border;
     height: 26px;
-    preferred-width: max(30px, (root.icon.width > 0 ? root.icon-size : label.preferred-width) + 2 * root.padding-x);
+    horizontal-stretch: 0;
+    preferred-width: max(
+        20px,
+        (root.text != ""
+            ? label.preferred-width
+            : (root.icon.width > 0 ? root.icon-size : 20px))
+            + 2 * root.padding-x
+    );
+    width: self.preferred-width;
 
     icon-image := Image {
         source: (root.toggled && !root.subtle-toggled && root.filled-icon.width > 0)

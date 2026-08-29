@@ -24,7 +24,7 @@ export component EditToolbar inherits Rectangle {
     height: 32px;
 
     background:
-        Theme.surface;
+        transparent;
 
 
     // ============================================================
@@ -46,15 +46,6 @@ export component EditToolbar inherits Rectangle {
 
     // ============================================================
     // TOOLBAR
-    //
-    // START:
-    //     Clip Pool | separador
-    //
-    // CENTER:
-    //     Select Slice Glue Stretch Draw Erase
-    //
-    // END:
-    //     separador | Drum Explorer Panel
     // ============================================================
 
     HorizontalLayout {
@@ -101,32 +92,31 @@ export component EditToolbar inherits Rectangle {
             Button {
 
                 width:
-                    28px;
+                    18px;
 
                 height:
-                    26px;
+                    18px;
+
+                resting-bg:
+                    Theme.surface-high;
 
                 icon:
                     @image-url(
                         "icons/clippool.svg"
                     );
 
-                // === AJUSTE AQUI: Tamanho aumentado para compensar o desenho do SVG ===
                 icon-size:
-                    20px; 
-                // ======================================================================
+                    16px;
 
                 text:
                     "";
 
                 borderless:
                     true;
+                corner-radius: 2px;
 
                 toggled:
                     root.clip-pool-open;
-
-                subtle-toggled:
-                    true;
 
                 toggled-icon-color:
                     Theme.accent;
@@ -165,304 +155,306 @@ export component EditToolbar inherits Rectangle {
         HorizontalLayout {
 
             horizontal-stretch:
+                0;
+
+            opacity:
                 1;
-            opacity: 1;
 
             spacing:
-                1px;
+                3px;
 
             alignment:
-                LayoutAlignment.stretch;
+                LayoutAlignment.center;
 
             cross-axis-alignment:
                 CrossAxisAlignment.center;
 
 
             // ====================================================
-            // SELECT - 0
+            // FERRAMENTAS
             // ====================================================
-            
 
-            Button {
+                HorizontalLayout {
 
-                width:
-                    22px;
+                    spacing:
+                        2px;
 
-                height:
-                    22px;
+                    alignment:
+                        LayoutAlignment.center;
 
-                icon:
-                    @image-url(
-                        "icons/select.svg"
-                    );
+                    cross-axis-alignment:
+                        CrossAxisAlignment.center;
 
-                filled-icon:
-                    @image-url(
-                        "icons/select_filled.svg"
-                    );
+                    padding-left:
+                        2px;
 
-                icon-size:
-                    17px;
-
-                padding-x: 7px;
-                text:
-                    "";
-
-                borderless:
-                    true;
-
-                toggled:
-                    root.active-tool == 0;
+                    padding-right:
+                        2px;
 
 
-                clicked => {
+                    // ============================================
+                    // SELECT - 0
+                    // ============================================
 
-                    root.active-tool =
-                        0;
+                    Button {
 
-                    root.tool-changed(
-                        0
-                    );
+                        width:
+                            18px;
+
+                        height:
+                            18px;
+
+                        resting-bg:
+                            Theme.surface-high;
+
+                        icon:
+                            @image-url(
+                                "icons/select.svg"
+                            );
+
+                        filled-icon:
+                            @image-url(
+                                "icons/select_filled.svg"
+                            );
+
+                        icon-size:
+                            16px;
+
+                        padding-x:
+                            0px;
+
+                        text:
+                            "";
+
+                        borderless:
+                            true;
+                        corner-radius: 2px;
+
+                        toggled:
+                            root.active-tool == 0;
+
+
+                        clicked => {
+
+                            root.active-tool =
+                                0;
+
+                            root.tool-changed(
+                                0
+                            );
+                        }
+                    }
+
+
+                    // ============================================
+                    // SLICE - 1
+                    // ============================================
+
+                    Button {
+
+                        width:
+                            18px;
+
+                        height:
+                            18px;
+
+                        resting-bg:
+                            Theme.surface-high;
+
+                        icon:
+                            @image-url(
+                                "icons/slice.svg"
+                            );
+
+                        filled-icon:
+                            @image-url(
+                                "icons/slice_filled.svg"
+                            );
+
+                        icon-size:
+                            16px;
+
+                        text:
+                            "";
+
+                        borderless:
+                            true;
+                        corner-radius: 2px;
+
+                        toggled:
+                            root.active-tool == 1;
+
+
+                        clicked => {
+
+                            root.active-tool =
+                                1;
+
+                            root.tool-changed(
+                                1
+                            );
+                        }
+                    }
+
+
+                 
+                    // ============================================
+                    // GLUE - 2
+                    // ============================================
+
+                    Button {
+
+                        width:
+                            18px;
+
+                        height:
+                            18px;
+
+                        resting-bg:
+                            Theme.surface-high;
+
+                        icon:
+                            @image-url(
+                                "icons/glue.svg"
+                            );
+
+                        filled-icon:
+                            @image-url(
+                                "icons/glue_filled.svg"
+                            );
+
+                        icon-size:
+                            16px;
+
+                        text:
+                            "";
+
+                        borderless:
+                            true;
+                        corner-radius: 2px;
+
+                        toggled:
+                            root.active-tool == 2;
+
+
+                        clicked => {
+
+                            root.active-tool =
+                                2;
+
+                            root.tool-changed(
+                                2
+                            );
+                        }
+                    }
+
+
+
+                    // ============================================
+                    // STRETCH - 3
+                    // ============================================
+
+                    Button {
+
+                        width:
+                            18px;
+
+                        height:
+                            18px;
+
+                        resting-bg:
+                            Theme.surface-high;
+
+                        icon:
+                            @image-url(
+                                "icons/expand_diag.svg"
+                            );
+
+                        filled-icon:
+                            @image-url(
+                                "icons/expand_diag.svg"
+                            );
+
+                        icon-size:
+                            16px;
+
+                        text:
+                            "";
+
+                        borderless:
+                            true;
+                        corner-radius: 2px;
+
+                        toggled:
+                            root.active-tool == 3;
+
+
+                        clicked => {
+
+                            root.active-tool =
+                                3;
+
+                            root.tool-changed(
+                                3
+                            );
+                        }
+                    }
+
+
+                    
+                    // ============================================
+                    // ERASE - 5
+                    // ============================================
+
+                    Button {
+
+                        width:
+                            18px;
+
+                        height:
+                            18px;
+
+                        resting-bg:
+                            Theme.surface-high;
+
+                        icon:
+                            @image-url(
+                                "icons/erase.svg"
+                            );
+
+                        filled-icon:
+                            @image-url(
+                                "icons/erase_filled.svg"
+                            );
+
+                        icon-color:
+                            Theme.text-dim;
+
+                        icon-size:
+                            16px;
+
+                        text:
+                            "";
+
+                        borderless:
+                            true;
+                        corner-radius: 2px;
+
+                        toggled:
+                            root.active-tool == 5;
+
+
+                        clicked => {
+
+                            root.active-tool =
+                                5;
+
+                            root.tool-changed(
+                                5
+                            );
+                        }
+                    }
                 }
-            }
-
-
-            // ====================================================
-            // SLICE - 1
-            // ====================================================
-
-            Button {
-
-                width:
-                    28px;
-
-                height:
-                    26px;
-
-                icon:
-                    @image-url(
-                        "icons/slice.svg"
-                    );
-
-                filled-icon:
-                    @image-url(
-                        "icons/slice_filled.svg"
-                    );
-
-                icon-size:
-                    17px;
-
-                text:
-                    "";
-
-                borderless:
-                    true;
-
-                toggled:
-                    root.active-tool == 1;
-
-
-                clicked => {
-
-                    root.active-tool =
-                        1;
-
-                    root.tool-changed(
-                        1
-                    );
-                }
-            }
-
-
-            // ====================================================
-            // GLUE - 2
-            // ====================================================
-
-            Button {
-
-                width:
-                    28px;
-
-                height:
-                    26px;
-
-                icon:
-                    @image-url(
-                        "icons/glue.svg"
-                    );
-
-                filled-icon:
-                    @image-url(
-                        "icons/glue_filled.svg"
-                    );
-
-                icon-size:
-                    17px;
-
-                text:
-                    "";
-
-                borderless:
-                    true;
-
-                toggled:
-                    root.active-tool == 2;
-
-
-                clicked => {
-
-                    root.active-tool =
-                        2;
-
-                    root.tool-changed(
-                        2
-                    );
-                }
-            }
-
-
-            // ====================================================
-            // STRETCH - 3
-            // ====================================================
-
-            Button {
-
-                width:
-                    28px;
-
-                height:
-                    26px;
-
-                icon:
-                    @image-url(
-                        "icons/expand_diag.svg"
-                    );
-
-                filled-icon:
-                    @image-url(
-                        "icons/expand_diag.svg"
-                    );
-
-                icon-size:
-                    17px;
-
-                text:
-                    "";
-
-                borderless:
-                    true;
-
-                toggled:
-                    root.active-tool == 3;
-
-
-                clicked => {
-
-                    root.active-tool =
-                        3;
-
-                    root.tool-changed(
-                        3
-                    );
-                }
-            }
-
-
-            // ====================================================
-            // DRAW - 4
-            // ====================================================
-
-            Button {
-
-                width:
-                    28px;
-
-                height:
-                    26px;
-
-                icon:
-                    @image-url(
-                        "icons/draw.svg"
-                    );
-
-                filled-icon:
-                    @image-url(
-                        "icons/draw_filled.svg"
-                    );
-
-                icon-size:
-                    17px;
-
-                text:
-                    "";
-
-                borderless:
-                    true;
-
-                toggled:
-                    root.active-tool == 4;
-
-
-                clicked => {
-
-                    root.active-tool =
-                        4;
-
-                    root.tool-changed(
-                        4
-                    );
-                }
-            }
-
-
-            // ====================================================
-            // ERASE - 5
-            // ====================================================
-
-            Button {
-
-                width:
-                    28px;
-
-                height:
-                    26px;
-
-                icon:
-                    @image-url(
-                        "icons/erase.svg"
-                    );
-
-                filled-icon:
-                    @image-url(
-                        "icons/erase_filled.svg"
-                    );
-
-                icon-color:
-                    #9a9a9a;
-
-                icon-size:
-                    17px;
-
-                text:
-                    "";
-
-                borderless:
-                    true;
-
-                toggled:
-                    root.active-tool == 5;
-
-
-                clicked => {
-
-                    root.active-tool =
-                        5;
-
-                    root.tool-changed(
-                        5
-                    );
-                }
-            }
         }
 
 
@@ -506,10 +498,13 @@ export component EditToolbar inherits Rectangle {
             Button {
 
                 width:
-                    28px;
+                    18px;
 
                 height:
-                    26px;
+                    18px;
+
+                resting-bg:
+                    Theme.surface-high;
 
                 icon:
                     @image-url(
@@ -517,19 +512,17 @@ export component EditToolbar inherits Rectangle {
                     );
 
                 icon-size:
-                    17px;
+                    16px;
 
                 text:
                     "";
 
                 borderless:
                     true;
+                corner-radius: 2px;
 
                 toggled:
                     root.beat-open;
-
-                subtle-toggled:
-                    true;
 
                 toggled-icon-color:
                     Theme.accent;
@@ -550,10 +543,13 @@ export component EditToolbar inherits Rectangle {
             Button {
 
                 width:
-                    28px;
+                    18px;
 
                 height:
-                    26px;
+                    18px;
+
+                resting-bg:
+                    Theme.surface-high;
 
                 icon:
                     @image-url(
@@ -561,19 +557,17 @@ export component EditToolbar inherits Rectangle {
                     );
 
                 icon-size:
-                    17px;
+                    16px;
 
                 text:
                     "";
 
                 borderless:
                     true;
+                corner-radius: 2px;
 
                 toggled:
                     root.explorer-visible;
-
-                subtle-toggled:
-                    true;
 
                 toggled-icon-color:
                     Theme.accent;
@@ -594,10 +588,13 @@ export component EditToolbar inherits Rectangle {
             Button {
 
                 width:
-                    28px;
+                    18px;
 
                 height:
-                    26px;
+                    18px;
+
+                resting-bg:
+                    Theme.surface-high;
 
                 icon:
                     @image-url(
@@ -605,19 +602,17 @@ export component EditToolbar inherits Rectangle {
                     );
 
                 icon-size:
-                    17px;
+                    16px;
 
                 text:
                     "";
 
                 borderless:
                     true;
+                corner-radius: 2px;
 
                 toggled:
                     root.panel-visible;
-
-                subtle-toggled:
-                    true;
 
                 toggled-icon-color:
                     Theme.accent;

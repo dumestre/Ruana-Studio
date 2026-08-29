@@ -7,69 +7,218 @@
 //
 // Índices: 0 Studio Dark · 1 Midnight Blue · 2 Violeta Ruana ·
 //          3 Volt · 4 Sunset · 5 Ocean Teal · 6 Paper (claro).
+//
+// EM CADA LISTA ABAIXO, CADA VALOR ESTÁ NO SEU ÍNDICE, comentado:
+//   [0] Studio Dark  = TEMA PADRÃO (default do app)
+//   [6] Paper        = TEMA CLARO (o que estamos ajustando)
+// A ordem de cada lista é: [0] [1] [2] [3] [4] [5] [6].
 // ============================================================
 
 export global Theme {
 
     in-out property <int> active: 0;
 
+    // FUNDO GERAL DA JANELA (MainWindow). É a "main vazia".
     private property <[color]> base-list: [
-        #1E1E1E, #161A21, #191722, #14160E, #211A12, #0F1E21, #F3F3F1
+        #1E1E1E, // [0] Studio Dark (PADRÃO)
+        #161A21, // [1] Midnight Blue
+        #191722, // [2] Violeta Ruana
+        #14160E, // [3] Volt
+        #211A12, // [4] Sunset
+        #0F1E21, // [5] Ocean Teal
+        #616161  // [6] PAPER (claro) ★
     ];
+
+    // SUPERFÍCIES / PAINÉIS que sobem um degrau do base.
     private property <[color]> surface-list: [
-        #242424, #1D242E, #221E2E, #1C1F15, #2A2117, #15262A, #FFFFFF
+        #242424, // [0] Studio Dark (PADRÃO)
+        #1D242E, // [1] Midnight Blue
+        #221E2E, // [2] Violeta Ruana
+        #1C1F15, // [3] Volt
+        #2A2117, // [4] Sunset
+        #15262A, // [5] Ocean Teal
+        #919191  // [6] PAPER (claro) ★
     ];
+
+    // SUPERFÍCIE MAIS CLARA: hover, cards, botões da edit_toolbar.
     private property <[color]> surface-high-list: [
-        #2E2E2E, #26303D, #2D2740, #262A1D, #362A1B, #1E3035, #EBEBE8
+        #2E2E2E, // [0] Studio Dark (PADRÃO)
+        #26303D, // [1] Midnight Blue
+        #2D2740, // [2] Violeta Ruana
+        #262A1D, // [3] Volt
+        #362A1B, // [4] Sunset
+        #1E3035, // [5] Ocean Teal
+        #FCFCFC  // [6] PAPER (claro) ★
     ];
+
+    // BORDAS e separadores.
     private property <[color]> border-list: [
-        #3D3D3D, #33404F, #3C3350, #383F2C, #4A3A26, #2C4247, #D0D0CD
+        #3D3D3D, // [0] Studio Dark (PADRÃO)
+        #33404F, // [1] Midnight Blue
+        #3C3350, // [2] Violeta Ruana
+        #383F2C, // [3] Volt
+        #4A3A26, // [4] Sunset
+        #2C4247, // [5] Ocean Teal
+        #D2D2D2  // [6] PAPER (claro) ★
     ];
+
+    // COR DE DESTAQUE (accent). Verde padrão no Studio e no Paper.
     private property <[color]> accent-list: [
-        #00C853, #4FA8FF, #B85CFF, #A8FF00, #FF9F43, #2EC4B6, #00875A
+        #00C853, // [0] Studio Dark (PADRÃO)
+        #4FA8FF, // [1] Midnight Blue
+        #B85CFF, // [2] Violeta Ruana
+        #A8FF00, // [3] Volt
+        #FF9F43, // [4] Sunset
+        #2EC4B6, // [5] Ocean Teal
+        #00C853  // [6] PAPER (claro) ★
     ];
+
+    // ACCENT no estado HOVER.
     private property <[color]> accent-hover-list: [
-        #09F664, #76BFFF, #CE8AFF, #C4FF4D, #FFB66D, #5AD9CC, #009F69
+        #09F664, // [0] Studio Dark (PADRÃO)
+        #76BFFF, // [1] Midnight Blue
+        #CE8AFF, // [2] Violeta Ruana
+        #C4FF4D, // [3] Volt
+        #FFB66D, // [4] Sunset
+        #5AD9CC, // [5] Ocean Teal
+        #09F664  // [6] PAPER (claro) ★
     ];
+
+    // TEXTO/ÍCONE quando sobre o ACCENT (contraste).
     private property <[color]> on-accent-list: [
-        #333333, #161A21, #191722, #14160E, #211A12, #0F1E21, #FFFFFF
+        #333333, // [0] Studio Dark (PADRÃO)
+        #161A21, // [1] Midnight Blue
+        #191722, // [2] Violeta Ruana
+        #14160E, // [3] Volt
+        #211A12, // [4] Sunset
+        #0F1E21, // [5] Ocean Teal
+        #20180A  // [6] PAPER (claro) ★
     ];
+
+    // TEXTO PRINCIPAL (nomes, labels).
     private property <[color]> text-primary-list: [
-        #E8E8E8, #E4ECF4, #EDE6F5, #F2F5E8, #F5EDE2, #E2F0EE, #1E1E1E
+        #E8E8E8, // [0] Studio Dark (PADRÃO)
+        #E4ECF4, // [1] Midnight Blue
+        #EDE6F5, // [2] Violeta Ruana
+        #F2F5E8, // [3] Volt
+        #F5EDE2, // [4] Sunset
+        #E2F0EE, // [5] Ocean Teal
+        #FFFFFF  // [6] PAPER (claro) ★
     ];
+
+    // TEXTO SECUNDÁRIO / DISCRETO (dicas, breadcrumbs).
     private property <[color]> text-dim-list: [
-        #9A9A9A, #8FA0B2, #9A8FB0, #9BA38A, #B0A090, #8FAAA6, #5F5F5F
+        #9A9A9A, // [0] Studio Dark (PADRÃO)
+        #8FA0B2, // [1] Midnight Blue
+        #9A8FB0, // [2] Violeta Ruana
+        #9BA38A, // [3] Volt
+        #B0A090, // [4] Sunset
+        #8FAAA6, // [5] Ocean Teal
+        #B0B0B0  // [6] PAPER (claro) ★
     ];
+
+    // SEMÂNTICO: OK / sucesso.
     private property <[color]> ok-list: [
-        #6FA86B, #6FA86B, #6FA86B, #8FC14F, #8FAA6B, #6FA86B, #2E7D32
+        #6FA86B, // [0] Studio Dark (PADRÃO)
+        #6FA86B, // [1] Midnight Blue
+        #6FA86B, // [2] Violeta Ruana
+        #8FC14F, // [3] Volt
+        #8FAA6B, // [4] Sunset
+        #6FA86B, // [5] Ocean Teal
+        #00A35C  // [6] PAPER (claro) ★
     ];
+
+    // SEMÂNTICO: aviso (warn).
     private property <[color]> warn-list: [
-        #F2B021, #F2B021, #F2B021, #F2B021, #F2B021, #F2B021, #B26A00
+        #F2B021, // [0] Studio Dark (PADRÃO)
+        #F2B021, // [1] Midnight Blue
+        #F2B021, // [2] Violeta Ruana
+        #F2B021, // [3] Volt
+        #F2B021, // [4] Sunset
+        #F2B021, // [5] Ocean Teal
+        #C77D02  // [6] PAPER (claro) ★
     ];
+
+    // SEMÂNTICO: perigo / erro.
     private property <[color]> danger-list: [
-        #C80014, #C80014, #C80014, #C80014, #C80014, #C80014, #C62828
+        #C80014, // [0] Studio Dark (PADRÃO)
+        #C80014, // [1] Midnight Blue
+        #C80014, // [2] Violeta Ruana
+        #C80014, // [3] Volt
+        #C80014, // [4] Sunset
+        #C80014, // [5] Ocean Teal
+        #FF4032  // [6] PAPER (claro) ★
     ];
+
+    // COR DA PLAYHEAD.
     private property <[color]> playhead-list: [
-        #FFFFFF, #FFFFFF, #FFFFFF, #FFFFFF, #FFFFFF, #FFFFFF, #E53434
+        #FFFFFF, // [0] Studio Dark (PADRÃO)
+        #FFFFFF, // [1] Midnight Blue
+        #FFFFFF, // [2] Violeta Ruana
+        #FFFFFF, // [3] Volt
+        #FFFFFF, // [4] Sunset
+        #FFFFFF, // [5] Ocean Teal
+        #FF4032  // [6] PAPER (claro) ★
     ];
+
+    // CLIPS DE ÁUDIO.
     private property <[color]> clip-audio-list: [
-        #00C853, #4FA8FF, #B85CFF, #A8FF00, #FF9F43, #2EC4B6, #00875A
+        #00C853, // [0] Studio Dark (PADRÃO)
+        #4FA8FF, // [1] Midnight Blue
+        #B85CFF, // [2] Violeta Ruana
+        #A8FF00, // [3] Volt
+        #FF9F43, // [4] Sunset
+        #2EC4B6, // [5] Ocean Teal
+        #E0AA2A  // [6] PAPER (claro) ★
     ];
+
+    // CLIPS DE MIDI.
     private property <[color]> clip-midi-list: [
-        #6FA86B, #6FA86B, #6FA86B, #8FC14F, #8FAA6B, #6FA86B, #2E7D32
+        #6FA86B, // [0] Studio Dark (PADRÃO)
+        #6FA86B, // [1] Midnight Blue
+        #6FA86B, // [2] Violeta Ruana
+        #8FC14F, // [3] Volt
+        #8FAA6B, // [4] Sunset
+        #6FA86B, // [5] Ocean Teal
+        #52BA46  // [6] PAPER (claro) ★
     ];
+
+    // ESTADO "ATIVO" (recém-ativado / destaque).
     private property <[color]> activ-list: [
-        #10f100, #4FA8FF, #B85CFF, #A8FF00, #FF9F43, #2EC4B6, #00875A
+        #10f100, // [0] Studio Dark (PADRÃO)
+        #4FA8FF, // [1] Midnight Blue
+        #B85CFF, // [2] Violeta Ruana
+        #A8FF00, // [3] Volt
+        #FF9F43, // [4] Sunset
+        #2EC4B6, // [5] Ocean Teal
+        #52BA46  // [6] PAPER (claro) ★
     ];
+
+    // GRID PRINCIPAL da timeline.
     private property <[color]> grid-line-list: [
-        #353535, #2A3643, #332C44, #2E3422, #3B2F1F, #24383C, #DDDDDA
+        #353535, // [0] Studio Dark (PADRÃO)
+        #2A3643, // [1] Midnight Blue
+        #332C44, // [2] Violeta Ruana
+        #2E3422, // [3] Volt
+        #3B2F1F, // [4] Sunset
+        #24383C, // [5] Ocean Teal
+        #D6D6D6  // [6] PAPER (claro) ★
     ];
+
+    // SUB-GRID (divisões menores da timeline).
     private property <[color]> grid-sub-list: [
-        #292929, #212B36, #292435, #24281A, #2F261A, #1D2C30, #E6E6E2
+        #292929, // [0] Studio Dark (PADRÃO)
+        #212B36, // [1] Midnight Blue
+        #292435, // [2] Violeta Ruana
+        #24281A, // [3] Volt
+        #2F261A, // [4] Sunset
+        #1D2C30, // [5] Ocean Teal
+        #EFEFEF  // [6] PAPER (claro) ★
     ];
 
     private property <int> clamp: min(max(0, active), base-list.length - 1);
 
+    // Tokens expostos — a UI usa apenas estes nomes:
     in property <color> base: base-list[clamp];
     in property <color> surface: surface-list[clamp];
     in property <color> surface-high: surface-high-list[clamp];
