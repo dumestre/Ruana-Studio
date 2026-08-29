@@ -523,6 +523,7 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
         let project = project.clone();
         let audio = audio.clone();
         win.on_beat_sample_dropped(move |track, _name, path| {
+            eprintln!("[drop] beat-sample-dropped track={track} path={path}");
             if track < 0 {
                 return;
             }

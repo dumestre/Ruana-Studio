@@ -329,6 +329,7 @@ export component MainWindow inherits Window {
     callback track-recolor-requested(int, int);
     callback sampler-load-requested(int);
     callback sampler-sample-dropped(string, string);
+    callback debug-log(string);
 
 
     // =====================================================
@@ -554,6 +555,19 @@ export component MainWindow inherits Window {
 
 
     drag-end() => {
+
+        let dx = root.drag-x / 1px;
+        let dy = root.drag-y / 1px;
+        let smx = SamplerMetrics.abs-x;
+        let smy = SamplerMetrics.abs-y;
+        let smw = SamplerMetrics.width;
+        let smh = SamplerMetrics.height;
+        let bmy = BeatMetrics.rows-y;
+        let bmh = BeatMetrics.row-height;
+        let bmn = BeatMetrics.track-count;
+        root.debug-log(
+            "DRAG-END | beat-open={root.beat-open} hover-track={beat_popup.hover-track} over-sampler={root.drag-over-sampler} over-timeline={root.drag-over-timeline} active={root.drag-active} inited={root.drag-inited} pos=({dx},{dy}) SM.vis={SamplerMetrics.visible} SM=({smx},{smy},{smw},{smh}) BM.vis={BeatMetrics.visible} rows-y={bmy} row-h={bmh} n={bmn}"
+        );
 
         if root.drag-active
             && root.drag-inited {

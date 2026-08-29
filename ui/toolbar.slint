@@ -65,21 +65,30 @@ export component Toolbar inherits Rectangle {
         // 2. MENUS (FILE)
         // ==========================================
         HorizontalLayout {
-            spacing: 2px;
+            spacing: 0px;
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
             Button {
-                text: "New"; borderless: true; text-color: Theme.text-primary; letter-spacing: 2px; clicked => {} 
+                text: "File"; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; clicked => {} 
             }
             Button {
-                text: "Open"; borderless: true; text-color: Theme.text-primary; letter-spacing: 2px; clicked => {} 
+                text: "Edit"; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; clicked => {} 
             }
             Button {
-                text: "Save"; borderless: true; text-color: Theme.text-primary; letter-spacing: 2px; clicked => {} 
+                text: "New"; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; clicked => {} 
             }
             Button {
-                text: "Save As"; borderless: true; text-color: Theme.text-primary; letter-spacing: 2px; clicked => {} 
+                text: "Save"; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; clicked => {} 
+            }
+            Button {
+                text: "Save As"; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; clicked => {} 
+            }
+            Button {
+                text: "Settings"; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; clicked => {} 
+            }
+            Button {
+                text: "Help"; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; clicked => {} 
             }
         }
 

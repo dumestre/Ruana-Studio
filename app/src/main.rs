@@ -291,7 +291,11 @@ fn main() -> Result<(), slint::PlatformError> {
         let project = project.clone();
         let audio = audio.clone();
         let ui_weak = ui.as_weak();
+        ui.on_debug_log(move |msg| {
+            eprintln!("[slint] {msg}");
+        });
         ui.on_sampler_sample_dropped(move |name, path| {
+            eprintln!("[drop] sampler-sample-dropped name={name} path={path}");
             if path.is_empty() {
                 return;
             }

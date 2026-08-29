@@ -151,17 +151,45 @@ pub fn install(
                             let path_str = path.to_string_lossy().to_string();
 
                             if strike_track >= 0 && strike_track < beat.get_track_count() {
+                                eprintln!(
+                                    "[drop] OS: over BEAT track={strike_track} logical=({logical_x},{logical_y}) SM.vis={} BM.vis={} rows-y={} row-h={} n={}",
+                                    sampler.get_visible(),
+                                    beat.get_visible(),
+                                    beat.get_rows_y(),
+                                    beat.get_row_height(),
+                                    beat.get_track_count(),
+                                );
                                 ui.invoke_beat_sample_dropped(
                                     strike_track,
                                     name.into(),
                                     path_str.clone().into(),
                                 );
                             } else if over_sampler {
+                                eprintln!(
+                                    "[drop] OS: over SAMPLER logical=({logical_x},{logical_y}) SM.vis={}",
+                                    sampler.get_visible(),
+                                );
                                 ui.invoke_sampler_sample_dropped(
                                     name.into(),
                                     path_str.clone().into(),
                                 );
                             } else {
+                                eprintln!(
+                                    "[drop] OS: fell to TIMELINE logical=({logical_x},{logical_y}) over_sampler={over_sampler} strike={strike_track} SM.vis={} SM=({},{},{},{}) BM.vis={} BM=({},{},{},{}) rows-y={} row-h={} n={}",
+                                    sampler.get_visible(),
+                                    sampler.get_abs_x(),
+                                    sampler.get_abs_y(),
+                                    sampler.get_width(),
+                                    sampler.get_height(),
+                                    beat.get_visible(),
+                                    beat.get_abs_x(),
+                                    beat.get_abs_y(),
+                                    beat.get_width(),
+                                    beat.get_height(),
+                                    beat.get_rows_y(),
+                                    beat.get_row_height(),
+                                    beat.get_track_count(),
+                                );
                                 let coords =
                                     ui.invoke_map_window_coords_to_timeline(logical_x, logical_y);
 

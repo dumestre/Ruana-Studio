@@ -71,5 +71,22 @@ export component BottomToolbar inherits Rectangle {
                 }
             }
         }
+
+         // Tab: AI Assistant
+        Button {
+            text: "AI Assistant";
+            height: 15px;
+            toggled: root.selected-tab == 2;
+            toggled-bg: Theme.accent;
+            clicked => {
+                if root.selected-tab == 2 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 2;
+                    root.panel-visible = true;
+                }
+            }
+        }
     }
 }
