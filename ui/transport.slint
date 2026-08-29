@@ -70,8 +70,7 @@ export component Transport inherits Rectangle {
 
     height: 48px;
 
-    background:
-        Theme.surface;
+    background: transparent;
 
 
     // ============================================================
@@ -95,232 +94,29 @@ export component Transport inherits Rectangle {
 
 
         // ========================================================
-        // SKIP BACK
+        // CONTROLES DE TRANSPORTE (em retângulo como as ferramentas)
         // ========================================================
 
-        Button {
+        Rectangle {
+            HorizontalLayout {
+                spacing: 8px; // espaçamento igual em px
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
 
-            width: 28px;
-            height: 28px;
-
-            background:
-                skip-back-hover.has-hover
-                ? Theme.surface-high
-                : transparent;
-
-            border-radius:
-                14px;
-
-            border-width:
-                0px;
-
-
-            Rectangle {
-                x: 0px;
-                y: 0px;
-
-                width: parent.width;
-                height: parent.height;
-
-                background:
-                    skip-back-hover.has-hover
-                    ? Theme.surface-high
-                    : transparent;
-
-                border-radius:
-                    14px;
-            }
-
-
-            Image {
-
-                source:
-                    @image-url(
-                        "icons/skip_back3d.png"
-                    );
-
-                width: 24px;
-                height: 24px;
-
-                x:
-                    (parent.width - self.width) / 2;
-
-                y:
-                    (parent.height - self.height) / 2;
-
-                image-fit:
-                    ImageFit.contain;
-            }
-
-
-            skip-back-hover := TouchArea {
-
-                width: parent.width;
-                height: parent.height;
-
-                mouse-cursor:
-                    pointer;
-
-                clicked => {
-                    root.position = 0;
+                Button {
+                    width: 18px;
+                    height: 18px;
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+                    borderless: true;
+                    icon: root.playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
+                    icon-size: 16px;
+                    icon-color: root.playing ? Theme.accent : Theme.text-primary;
+                    clicked => {
+                        root.playing = !root.playing;
+                        root.play-state-changed(root.playing);
+                    }
                 }
-            }
-        }
-
-
-        // ========================================================
-        // SKIP FORWARD
-        // ========================================================
-
-        Button {
-
-            width: 28px;
-            height: 28px;
-
-            background:
-                skip-forward-hover.has-hover
-                ? Theme.surface-high
-                : transparent;
-
-            border-radius:
-                14px;
-
-            border-width:
-                0px;
-
-
-            Rectangle {
-
-                width: parent.width;
-                height: parent.height;
-
-                background:
-                    skip-forward-hover.has-hover
-                    ? Theme.surface-high
-                    : transparent;
-
-                border-radius:
-                    14px;
-            }
-
-
-            Image {
-
-                source:
-                    @image-url(
-                        "icons/skip_fwd3d.png"
-                    );
-
-                width: 24px;
-                height: 24px;
-
-                x:
-                    (parent.width - self.width) / 2;
-
-                y:
-                    (parent.height - self.height) / 2;
-
-                image-fit:
-                    ImageFit.contain;
-            }
-
-
-            skip-forward-hover := TouchArea {
-
-                width: parent.width;
-                height: parent.height;
-
-                mouse-cursor:
-                    pointer;
-
-                clicked => {
-                    root.position =
-                        root.ticks-per-bar * 15;
-                }
-            }
-        }
-
-
-        // ========================================================
-        // PLAY / PAUSE
-        // ========================================================
-
-        Button {
-
-            width: 28px;
-            height: 28px;
-
-            background:
-                play-hover.has-hover
-                ? Theme.surface-high
-                : transparent;
-
-            border-radius:
-                14px;
-
-            border-width:
-                0px;
-
-
-            Rectangle {
-
-                width: parent.width;
-                height: parent.height;
-
-                background:
-                    play-hover.has-hover
-                    ? Theme.surface-high
-                    : transparent;
-
-                border-radius:
-                    14px;
-            }
-
-
-            Image {
-
-                source:
-                    root.playing
-                    ? @image-url(
-                        "icons/pause3d.png"
-                    )
-                    : @image-url(
-                        "icons/play3d.png"
-                    );
-
-                width: 24px;
-                height: 24px;
-
-                x:
-                    (parent.width - self.width) / 2;
-
-                y:
-                    (parent.height - self.height) / 2;
-
-                image-fit:
-                    ImageFit.contain;
-            }
-
-
-            play-hover := TouchArea {
-
-                width: parent.width;
-                height: parent.height;
-
-                mouse-cursor:
-                    pointer;
-
-                clicked => {
-
-                    root.playing =
-                        !root.playing;
-
-                    root.play-state-changed(
-                        root.playing
-                    );
-                }
-            }
-        }
 
 
         // ========================================================
@@ -329,74 +125,35 @@ export component Transport inherits Rectangle {
 
         Button {
 
-            width: 28px;
-            height: 28px;
+            width: 18px;
+            height: 18px;
 
-            background:
-                stop-hover.has-hover
-                ? Theme.surface-high
-                : transparent;
+            corner-radius:
+                2px;
 
-            border-radius:
-                14px;
+            resting-bg:
+                Theme.surface-high;
 
-            border-width:
-                0px;
+            borderless: true;
 
+            icon:
+                @image-url(
+                    "icons/stop.svg"
+                );
 
-            Rectangle {
+            icon-size: 16px;
 
-                width: parent.width;
-                height: parent.height;
+            icon-color:
+                Theme.text-primary;
 
-                background:
-                    stop-hover.has-hover
-                    ? Theme.surface-high
-                    : transparent;
+            clicked => {
 
-                border-radius:
-                    14px;
-            }
+                root.playing =
+                    false;
 
-
-            Image {
-
-                source:
-                    @image-url(
-                        "icons/stop3d.png"
-                    );
-
-                width: 24px;
-                height: 24px;
-
-                x:
-                    (parent.width - self.width) / 2;
-
-                y:
-                    (parent.height - self.height) / 2;
-
-                image-fit:
-                    ImageFit.contain;
-            }
-
-
-            stop-hover := TouchArea {
-
-                width: parent.width;
-                height: parent.height;
-
-                mouse-cursor:
-                    pointer;
-
-                clicked => {
-
-                    root.playing =
-                        false;
-
-                    root.play-state-changed(
-                        false
-                    );
-                }
+                root.play-state-changed(
+                    false
+                );
             }
         }
 
@@ -407,95 +164,37 @@ export component Transport inherits Rectangle {
 
         Button {
 
-            width: 28px;
-            height: 28px;
+            width: 18px;
+            height: 18px;
 
-            background:
-                record-hover.has-hover
-                ? (
-                    root.recording
-                    ? Theme.danger
-                    : Theme.surface-high
-                )
-                : (
-                    root.recording
-                    ? Theme.danger
-                    : transparent
+            corner-radius:
+                2px;
+
+            resting-bg:
+                Theme.surface-high;
+
+            borderless: true;
+
+            icon:
+                @image-url(
+                    "icons/rec.svg"
                 );
 
-            border-radius:
-                14px;
+            icon-size: 16px;
 
-            border-width:
-                0px;
+            icon-color:
+                root.recording
+                ? Theme.danger
+                : Theme.text-primary;
 
+            clicked => {
 
-            Rectangle {
+                root.recording =
+                    !root.recording;
 
-                width: parent.width;
-                height: parent.height;
-
-                background:
-                    record-hover.has-hover
-                    ? (
-                        root.recording
-                        ? Theme.danger
-                        : Theme.surface-high
-                    )
-                    : (
-                        root.recording
-                        ? Theme.danger
-                        : transparent
-                    );
-
-                border-radius:
-                    14px;
-            }
-
-
-            Image {
-
-                source:
+                root.record-state-changed(
                     root.recording
-                    ? @image-url(
-                        "icons/recording3d.png"
-                    )
-                    : @image-url(
-                        "icons/rec3d.png"
-                    );
-
-                width: 24px;
-                height: 24px;
-
-                x:
-                    (parent.width - self.width) / 2
-                    - 1px;
-
-                y:
-                    (parent.height - self.height) / 2;
-
-                image-fit:
-                    ImageFit.contain;
-            }
-
-
-            record-hover := TouchArea {
-
-                width: parent.width;
-                height: parent.height;
-
-                mouse-cursor:
-                    pointer;
-
-                clicked => {
-
-                    root.recording =
-                        !root.recording;
-
-                    root.record-state-changed(
-                        root.recording
-                    );
-                }
+                );
             }
         }
 
@@ -506,79 +205,48 @@ export component Transport inherits Rectangle {
 
         Button {
 
-            width: 28px;
-            height: 28px;
+            width: 18px;
+            height: 18px;
 
-            background:
-                loop-hover.has-hover
-                ? Theme.surface-high
-                : transparent;
+            corner-radius:
+                2px;
 
-            border-radius:
-                14px;
+            resting-bg:
+                Theme.surface-high;
 
-            border-width:
-                0px;
+            borderless: true;
 
+            icon:
+                @image-url(
+                    "icons/loop.svg"
+                );
 
-            Rectangle {
+            icon-size: 16px;
 
-                width: parent.width;
-                height: parent.height;
+            toggled:
+                root.loop-enabled;
 
-                background:
-                    loop-hover.has-hover
-                    ? Theme.surface-high
-                    : transparent;
+            subtle-toggled: true;
 
-                border-radius:
-                    14px;
-            }
+            keep-icon-color: true;
 
+            icon-color:
+                Theme.text-primary;
 
-            Image {
+            toggled-icon-color:
+                Theme.accent;
 
-                source:
+            clicked => {
+
+                root.loop-enabled =
+                    !root.loop-enabled;
+
+                root.loop-state-changed(
                     root.loop-enabled
-                    ? @image-url(
-                        "icons/loop3dactiv.png"
-                    )
-                    : @image-url(
-                        "icons/loop3d.png"
-                    );
-
-                width: 24px;
-                height: 24px;
-
-                x:
-                    (parent.width - self.width) / 2;
-
-                y:
-                    (parent.height - self.height) / 2;
-
-                image-fit:
-                    ImageFit.contain;
+                );
             }
-
-
-            loop-hover := TouchArea {
-
-                width: parent.width;
-                height: parent.height;
-
-                mouse-cursor:
-                    pointer;
-
-                clicked => {
-
-                    root.loop-enabled =
-                        !root.loop-enabled;
-
-                    root.loop-state-changed(
-                        root.loop-enabled
-                    );
-                }
-            }
+        }
+        }
         }
 
 
@@ -589,20 +257,13 @@ export component Transport inherits Rectangle {
         Rectangle {
 
             width: 120px;
-            height: 26px;
+            height: 22px;
 
             background:
-                Theme.base;
+                Theme.surface-high;
 
             border-radius:
-                4px;
-
-            border-width:
-                1px;
-
-            border-color:
-                Theme.border;
-
+                2px;
 
             Text {
 
@@ -620,7 +281,7 @@ export component Transport inherits Rectangle {
                     Theme.accent;
 
                 font-size:
-                    15px;
+                    14px;
 
                 horizontal-alignment:
                     center;
@@ -664,81 +325,33 @@ export component Transport inherits Rectangle {
             // METRONOME
             // ====================================================
 
-            Button {
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                background: Theme.surface-high;
+                border-radius: 2px;
 
-                width: 28px;
-                height: 28px;
-
-                background:
-                    metro-hover.has-hover
-                    ? Theme.surface-high
-                    : transparent;
-
-                border-radius:
-                    14px;
-
-                border-width:
-                    0px;
-
-
-                Rectangle {
-
-                    width: parent.width;
-                    height: parent.height;
-
-                    background:
-                        metro-hover.has-hover
-                        ? Theme.surface-high
-                        : transparent;
-
-                    border-radius:
-                        14px;
+                metro-icon := Image {
+                    source: root.metronome-enabled
+                        ? (Math.mod(Math.floor(root.position / root.ppq), 2) == 0
+                            ? @image-url("icons/metronome_l.svg")
+                            : @image-url("icons/metronome_r.svg"))
+                        : @image-url("icons/metronome_l.svg");
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: root.metronome-enabled ? Theme.accent : Theme.text-primary;
                 }
 
-
-                Image {
-
-                    source:
-                        root.metronome-enabled
-                        ? @image-url(
-                            "icons/metronome3dactiv.png"
-                        )
-                        : @image-url(
-                            "icons/metronome3d.png"
-                        );
-
-                    width: 24px;
-                    height: 24px;
-
-                    x:
-                        (parent.width - self.width) / 2;
-
-                    y:
-                        (parent.height - self.height) / 2;
-
-                    image-fit:
-                        ImageFit.contain;
-                }
-
-
-                metro-hover := TouchArea {
-
+                metro-area := TouchArea {
                     width: parent.width;
                     height: parent.height;
-
-                    mouse-cursor:
-                        pointer;
-
+                    mouse-cursor: pointer;
                     clicked => {
-
-                        root.metronome-enabled =
-                            !root.metronome-enabled;
-
-                        root.metronome-state-changed(
-                            root.metronome-enabled
-                        );
+                        root.metronome-enabled = !root.metronome-enabled;
+                        root.metronome-state-changed(root.metronome-enabled);
                     }
-
                     pointer-event(ev) => {
                         if ev.kind == PointerEventKind.down
                             && ev.button == PointerEventButton.right {
@@ -768,136 +381,46 @@ export component Transport inherits Rectangle {
             // ====================================================
 
             Rectangle {
-                width: 38px;
-                height: 22px;
+                height: 18px;
                 background: Theme.surface-high;
-                border-radius: 3px;
-                TextInput {
-                    width: 100%; height: 100%;
-                    text: "" + root.bpm;
-                    color: Theme.accent; font-size: 12px; font-weight: 700;
-                    horizontal-alignment: center; vertical-alignment: center;
-                    accepted => { root.set-bpm(self.text.to-float()); self.clear-focus(); }
-                }
-            }
+                border-radius: 2px;
 
-
-            // ====================================================
-            // BPM CONTROL
-            // ====================================================
-
-            Rectangle {
-
-                width: 34px;
-                height: 20px;
-
-                background:
-                    transparent;
-
-
-                property <length> anchor-y:
-                    0px;
-
-                property <int> anchor-value:
-                    120;
-
-
-                Text {
-
-                    text:
-                        "BPM";
-
-                    width: 100%;
-                    height: 100%;
-
-                    color:
-                        Theme.text-primary;
-
-                    font-size:
-                        12px;
-
-                    horizontal-alignment:
-                        TextHorizontalAlignment.center;
-
-                    vertical-alignment:
-                        center;
-                }
-
-
-                TouchArea {
-
-                    mouse-cursor:
-                        MouseCursor.ns_resize;
-
-
-                    pointer-event(ev) => {
-
-                        if ev.kind
-                            == PointerEventKind.down
-                            && ev.button
-                            == PointerEventButton.left {
-
-                            parent.anchor-y =
-                                self.mouse-y;
-
-                            parent.anchor-value =
-                                root.bpm;
-                        }
-                    }
-
-
-                    moved => {
-
-                        let steps =
-                            Math.floor(
-                                (
-                                    parent.anchor-y
-                                    - self.mouse-y
-                                ) / 3px
-                            );
-
-                        let target =
-                            max(
-                                20,
-                                min(
-                                    300,
-                                    parent.anchor-value
-                                    + steps
-                                )
-                            );
-
-
-                        if target != root.bpm {
-
-                            root.set-bpm(
-                                target
-                            );
-                        }
-                    }
-
-
+                bpm-area := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    mouse-cursor: MouseCursor.ns_resize;
                     scroll-event(e) => {
-
                         if e.delta-y > 0 {
-
-                            root.set-bpm(
-                                min(
-                                    300,
-                                    root.bpm + 1
-                                )
-                            );
-
+                            root.set-bpm(min(300, root.bpm + 1));
                         } else {
-
-                            root.set-bpm(
-                                max(
-                                    20,
-                                    root.bpm - 1
-                                )
-                            );
+                            root.set-bpm(max(20, root.bpm - 1));
                         }
-
                         accept;
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-left: 4px;
+                    spacing: 4px;
+
+                    Text {
+                        text: "BPM";
+                        font-size: 11px;
+                        color: Theme.text-primary;
+                        height: parent.height;
+                        vertical-alignment: center;
+                    }
+
+                    TextInput {
+                        text: "" + root.bpm;
+                        font-size: 12px;
+                        font-weight: 700;
+                        width: 30px;
+                        color: Theme.accent;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                        accepted => { root.set-bpm(self.text.to-float()); self.clear-focus(); }
                     }
                 }
             }
@@ -922,20 +445,39 @@ export component Transport inherits Rectangle {
         // TIME SIGNATURE
         // ========================================================
 
-        Text {
+        Rectangle {
 
-            text:
-                root.beats-per-bar
-                + "/4";
+            width: 36px;
+            height: 18px;
 
-            color:
-                Theme.accent;
+            background:
+                Theme.surface-high;
 
-            font-size:
-                12px;
+            border-radius:
+                2px;
 
-            vertical-alignment:
-                center;
+
+            Text {
+
+                text:
+                    root.beats-per-bar
+                    + "/4";
+
+                color:
+                    Theme.accent;
+
+                font-size:
+                    12px;
+
+                width: 100%;
+                height: 100%;
+
+                horizontal-alignment:
+                    center;
+
+                vertical-alignment:
+                    center;
+            }
         }
     }
 
