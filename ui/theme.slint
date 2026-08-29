@@ -150,6 +150,18 @@ export global Theme {
         #FF4032  // [6] PAPER (claro) ★
     ];
 
+    // TOGGLES ATIVOS (follow/snap) — verde fixo nos temas escuros,
+    // no Paper mantém o accent (claro).
+    private property <[color]> toggle-active-bg-list: [
+        #00C853, // [0] Studio Dark (PADRÃO)
+        #00C853, // [1] Midnight Blue
+        #00C853, // [2] Violeta Ruana
+        #00C853, // [3] Volt
+        #00C853, // [4] Sunset
+        #00C853, // [5] Ocean Teal
+        #00C853  // [6] PAPER (claro) ★ mantém accent
+    ];
+
     // COR DA PLAYHEAD.
     private property <[color]> playhead-list: [
         #FFFFFF, // [0] Studio Dark (PADRÃO)
@@ -237,4 +249,5 @@ export global Theme {
     in property <color> activ: activ-list[clamp];
     in property <color> grid-line: grid-line-list[clamp];
     in property <color> grid-sub: grid-sub-list[clamp];
+    in property <color> toggle-active-bg: toggle-active-bg-list[clamp];
 }

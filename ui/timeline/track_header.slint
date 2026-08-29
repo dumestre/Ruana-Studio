@@ -353,22 +353,13 @@ export component TrackHeaderRow inherits Rectangle {
         // CONTROLES
         // ========================================================
 
-        Rectangle {
-            width: 78px;
-            height: 26px;
-
-            background: Theme.surface-high;
-
-            border-radius: 7px;
-
-            border-width: 1px;
-            border-color: Theme.border;
 
             HorizontalLayout {
                 x: 2px;
                 y: 2px;
 
                 width: parent.width - 4px;
+                cross-axis-alignment: CrossAxisAlignment.center;
                 height: parent.height - 4px;
 
                 spacing: 1px;
@@ -378,7 +369,9 @@ export component TrackHeaderRow inherits Rectangle {
                 // ------------------------------------------------
 
                 ControlButton {
+                    height: 18px;
                     label: "M";
+                    width: 18px;
 
                     active: root.muted;
 
@@ -397,7 +390,9 @@ export component TrackHeaderRow inherits Rectangle {
                 // ------------------------------------------------
 
                 ControlButton {
+                    height: 18px;
                     label: "S";
+                    width: 18px;
 
                     active: root.solo;
 
@@ -416,7 +411,9 @@ export component TrackHeaderRow inherits Rectangle {
                 // ------------------------------------------------
 
                 ControlButton {
+                    height: 18px;
                     label: "A";
+                    width: 18px;
 
                     active: root.automation-enabled;
 
@@ -434,7 +431,7 @@ export component TrackHeaderRow inherits Rectangle {
                     }
                 }
             }
-        }
+        
 
         // ========================================================
         // RECORD
@@ -455,8 +452,8 @@ export component TrackHeaderRow inherits Rectangle {
 
             icon-size: 14px;
 
-            height: 24px;
-            width: 24px;
+            height: 18px;
+            width: 18px;
 
             border-radius: 12px;
 

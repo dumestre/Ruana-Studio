@@ -135,8 +135,10 @@ export component BeatHeader inherits Rectangle {
     Image {
         source:
             root.playing
-            ? @image-url("../icons/pause3d.png")
-            : @image-url("../icons/play3d.png");
+            ? @image-url("../icons/pause.svg")
+            : @image-url("../icons/play.svg");
+
+        colorize: root.playing ? Theme.accent : Theme.text-primary;
 
         width: 24px;
         height: 24px;
@@ -163,8 +165,8 @@ export component BeatHeader inherits Rectangle {
         // PLAY / PAUSE
         //
         // Usa:
-        // play3d.png
-        // pause3d.png
+        // play.svg
+        // pause.svg
         // ========================================================
 
        

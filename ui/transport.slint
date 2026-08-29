@@ -84,13 +84,14 @@ export component Transport inherits Rectangle {
         padding-top: 0px;
         padding-bottom: 0px;
 
-        spacing: 6px;
+        spacing: 20px;
 
         alignment:
             LayoutAlignment.center;
 
         cross-axis-alignment:
             CrossAxisAlignment.center;
+        height: 18px;
 
 
         // ========================================================
@@ -295,20 +296,6 @@ export component Transport inherits Rectangle {
 
 
         // ========================================================
-        // ESPAÇO FLEXÍVEL
-        // ========================================================
-
-        Rectangle {
-
-            horizontal-stretch:
-                1;
-
-            background:
-                transparent;
-        }
-
-
-        // ========================================================
         // METRONOME + BPM
         // ========================================================
 
@@ -506,7 +493,7 @@ export component Transport inherits Rectangle {
                     }
                 }
                 HorizontalLayout {
-                    spacing: 6px;
+        spacing: 16px;
                     Text { text: "VOLUME"; color: Theme.text-dim; font-size: 9px; vertical-alignment: center; }
                     Rectangle {
                         horizontal-stretch: 1; height: 5px; background: Theme.surface;

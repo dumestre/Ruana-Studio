@@ -89,9 +89,4 @@ impl SeekThrottle {
             None
         }
     }
-
-    /// Força envio imediato (usado no release do mouse).
-    pub fn flush(&self) -> Option<f64> {
-        self.pending.take()
-    }
 }
