@@ -1526,10 +1526,6 @@ export component Timeline inherits Rectangle {
             let margin =
                 width * 0.12;
 
-
-            let target =
-                root.scroll-x;
-
             let visible-right =
                 root.scroll-x
                 + width;
@@ -1551,29 +1547,31 @@ export component Timeline inherits Rectangle {
                 visible-right - margin {
 
                 // Ancora o playhead no limiar direito.
-                target =
-                    px
-                    - (width - margin);
+                root.scroll-x =
+                    min(
+                        max(
+                            0px,
+                            px
+                            - (width - margin)
+                        ),
+                        root.max-scroll-x
+                    );
 
             }
             else if px <
                 root.scroll-x + margin {
 
                 // Ancora o playhead no limiar esquerdo.
-                target =
-                    px
-                    - margin;
+                root.scroll-x =
+                    min(
+                        max(
+                            0px,
+                            px
+                            - margin
+                        ),
+                        root.max-scroll-x
+                    );
             }
-
-
-            root.scroll-x =
-                min(
-                    max(
-                        0px,
-                        target
-                    ),
-                    root.max-scroll-x
-                );
         }
     }
 }
