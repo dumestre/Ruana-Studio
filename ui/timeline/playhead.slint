@@ -10,6 +10,8 @@
 // linha das tracks < linha da régua < cabeça (bolinha).
 // =============================================================
 
+import { Theme } from "../theme.slint";
+
 export component PlayheadOverlay inherits Rectangle {
 
     // Posição da agulha em pixels (relativa ao content rect).
@@ -28,7 +30,7 @@ export component PlayheadOverlay inherits Rectangle {
         y: 7px;
         width: 2px;
         height: ruler-h - 7px + tracks-h;
-        background: Colors.crimson;
+        background: Theme.playhead;
     }
 
     // Cabeça (bolinha) na régua — ÚNICA cabeça do playhead
@@ -38,6 +40,6 @@ export component PlayheadOverlay inherits Rectangle {
         width: 12px;
         height: 12px;
         border-radius: 6px;
-        background: Colors.crimson;
+        background: Theme.playhead;
     }
 }

@@ -139,7 +139,7 @@ export component BeatTrack inherits Rectangle {
             width: root.channel-width;
             height: 24px;
 
-            background: #2f2e2e;
+            background: Theme.surface-high;
 
             border-radius: 4px;
             border-width: 1px;
@@ -288,7 +288,7 @@ export component BeatTrack inherits Rectangle {
                 : 1px;
 
             border-color: root.drag-target
-                ? #FFFFFF
+                ? Theme.text-primary
                 : (root.selected
                     ? Theme.text-primary
                     : Theme.border);
@@ -313,7 +313,7 @@ export component BeatTrack inherits Rectangle {
 
                 border-radius: 2.5px;
 
-                background: #1a1a1a;
+                background: Theme.accent;
 
                 visible: root.has-sample;
             }
@@ -332,7 +332,7 @@ export component BeatTrack inherits Rectangle {
                 width: parent.width - 18px;
                 height: parent.height;
 
-                color: #1a1a1a;
+                color: Theme.base;
 
                 font-size: 10px;
                 font-weight: 700;

@@ -86,9 +86,9 @@ export component ScrollBarHorizontal inherits Rectangle {
 
         background:
             root.dragging
-                ? #6E6E6E
+                ? Theme.surface-high
                 : touch.has-hover
-                    ? #5A5A5A
+                    ? Theme.border
                     : Theme.border;
 
         border-radius:
@@ -255,9 +255,9 @@ export component ScrollBarVertical inherits Rectangle {
 
         background:
             root.dragging
-                ? #6E6E6E
+                ? Theme.surface-high
                 : touch.has-hover
-                    ? #5A5A5A
+                    ? Theme.border
                     : Theme.border;
 
         border-radius:

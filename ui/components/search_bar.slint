@@ -26,7 +26,7 @@ export component SearchBar inherits Rectangle {
 
         Image {
             width: 16px;
-            colorize: #9a9a9a;
+            colorize: Theme.text-dim;
             height: 16px;
             source: @image-url("../icons/search.svg");
             horizontal-alignment: center;
@@ -38,7 +38,7 @@ export component SearchBar inherits Rectangle {
             preferred-height: 20px;
             preferred-width: 200px;
             vertical-stretch: 1;
-            background: #9a9a9a1c;
+            background: Theme.text-dim.transparentize(0.89);
             border-radius: 6px;
             border-width: 1px;
 

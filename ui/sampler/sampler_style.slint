@@ -32,30 +32,30 @@ export global SamplerStyle {
     // painel (fundo) < card (controles) < inset (poço de gráfico).
     // ========================================================
 
-    out property <color> panel: #1B1B1B;
+    out property <color> panel: Theme.base;
 
-    out property <color> card: #282828;
-    out property <color> card-hi: #303030;
-    out property <color> card-on: #2C312B;
+    out property <color> card: Theme.surface;
+    out property <color> card-hi: Theme.surface-high;
+    out property <color> card-on: Theme.accent.transparentize(0.82);
 
-    out property <color> inset: #141414;
-    out property <color> inset-line: #232323;
-    out property <color> inset-line-soft: #1C1C1C;
+    out property <color> inset: Theme.base;
+    out property <color> inset-line: Theme.border;
+    out property <color> inset-line-soft: Theme.surface;
 
-    out property <color> rail: #3A3A3A;
-    out property <color> rail-hi: #474747;
+    out property <color> rail: Theme.border;
+    out property <color> rail-hi: Theme.surface-high;
 
-    out property <color> hairline: #373737;
-    out property <color> hairline-soft: #2B2B2B;
+    out property <color> hairline: Theme.border;
+    out property <color> hairline-soft: Theme.surface;
 
     // ========================================================
     // TEXTO
     // ========================================================
 
     out property <color> text: Theme.text-primary;
-    out property <color> text-mid: #B4B4B4;
+    out property <color> text-mid: Theme.text-primary.transparentize(0.15);
     out property <color> text-dim: Theme.text-dim;
-    out property <color> text-faint: #6B6B6B;
+    out property <color> text-faint: Theme.text-dim.transparentize(0.35);
 
     // ========================================================
     // ACENTOS POR SEÇÃO
