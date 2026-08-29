@@ -7,10 +7,14 @@
 //! publicando SEGUNDOS contínuos (`transport-time-seconds`) — o
 //! domínio da Playhead. Ticks inteiros seguem só para o LCD.
 //!
-//! A correção de drift é gradual (servo/PLL): a cada tick a âncora
-//! absorve uma fração do erro em vez de re-ancorar de uma vez —
-//! qualquer resquício de deriva vira correção invisível, nunca um
-//! salto na agulha.
+//! Projeção PURA (estilo PlayheadLab): a posição avança
+//! linearmente a partir da âncora (`anchor + elapsed`), sem servo
+//! de posição por tick — cada micro-correção à âncora vira
+//! micro-não-linearidade no movimento, que é o que a olho percebe
+//! como "pulando". A âncora só é re-ancorada em saltos intencionais
+//! (play/seek/bpm) ou num drift real de áudio (> 0.25 s). O passo do
+//! beat deriva do MESMO relógio, então a coluna acesa continua
+//! alinhada com a agulha.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -45,8 +49,8 @@ fn next_random(seed: &mut u64) -> f32 {
 /// A Playhead vive no domínio de TEMPO CONTÍNUO (segundos), nunca
 /// em beats/ticks: a projeção avança à taxa 1 s/s (o clock de áudio
 /// também avança em tempo real) e o valor real só corrige a âncora
-/// gradualmente. A conversão segundos → pixels acontece na UI:
-/// `playhead_x = segundos * pixels_per_second`.
+/// em saltos intencionais. A conversão segundos → pixels acontece na
+/// UI: `playhead_x = segundos * pixels_per_second`.
 struct VisualClock {
     anchor_secs: f64,
     anchor_at: Instant,
@@ -60,17 +64,14 @@ impl VisualClock {
     }
 
     /// Posição projetada "agora", em segundos (contínua).
+    ///
+    /// Função LINEAR do tempo: sem correção de posição por tick, o
+    /// movimento da agulha é uniforme (mesma geometria do PlayheadLab).
+    /// deriva vs o relógio de áudio é da ordem de ppm (~ms/minuto),
+    /// irrelevante em escala de música; o gate do timer re-ancora se
+    /// houver um glitch real de áudio.
     fn projected(&self) -> f64 {
         self.anchor_secs + self.anchor_at.elapsed().as_secs_f64()
-    }
-
-    /// Servo: absorve 15% do drift por tick (~95% do erro some em
-    /// ~160ms). NÃO mexe em `anchor_at` — a projeção continua de
-    /// onde está, então não há descontinuidade. Com drift contido,
-    /// cada passo corrige < 0.5px: invisível.
-    fn nudge(&mut self, actual_secs: f64) {
-        let drift = actual_secs - self.projected();
-        self.anchor_secs += drift * 0.15;
     }
 }
 
@@ -172,12 +173,11 @@ pub fn install(
                 });
 
                 // Playhead timer: roda NA event loop. Lê o clock
-                // autoritativo (áudio) via try_lock, corrige drift
-                // gradualmente (servo) e projeta por tempo real.
-                // Publica SEGUNDOS (float, sem quantização) para a
-                // agulha e ticks inteiros apenas para o LCD. No modo
-                // "só beat" NÃO publica posição (timeline parada),
-                // mas continua avançando o passo do beat.
+                // autoritativo (áudio) via try_lock e projeta por tempo
+                // real (projeção pura). Publica SEGUNDOS (float, sem
+                // quantização) para a agulha e ticks inteiros apenas para
+                // o LCD. No modo "só beat" NÃO publica posição (timeline
+                // parada), mas continua avançando o passo do beat.
                 {
                     let ui_weak_t = ui_weak_c.clone();
                     let transport = transport.clone();
@@ -202,12 +202,10 @@ pub fn install(
                                 let actual = t.position_seconds();
                                 let drift = actual - c.projected();
                                 if drift.abs() > 0.25 {
-                                    // Descontinuidade real (glitch longo):
-                                    // re-ancora na posição verdadeira.
+                                    // Glitch real (dropout/Linux): re-ancora
+                                    // na posição verdadeira. Fora isso, projeção
+                                    // pura — nenhuma micro-correção por tick.
                                     c.resync(actual);
-                                } else {
-                                    // Jitter/deriva pequena: servo.
-                                    c.nudge(actual);
                                 }
                                 // LCD (bars:beat:ticks) — domínio musical,
                                 // derivado dos segundos com o BPM atual.
