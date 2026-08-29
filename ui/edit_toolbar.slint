@@ -108,6 +108,9 @@ export component EditToolbar inherits Rectangle {
                 icon-size:
                     16px;
 
+                icon-color:
+                    Theme.text-primary;
+
                 text:
                     "";
 
@@ -117,6 +120,12 @@ export component EditToolbar inherits Rectangle {
 
                 toggled:
                     root.clip-pool-open;
+
+                toggled-fg:
+                    Colors.black;
+
+                subtle-toggled:
+                    true;
 
                 toggled-icon-color:
                     Theme.accent;
@@ -220,6 +229,9 @@ export component EditToolbar inherits Rectangle {
                         icon-size:
                             16px;
 
+                        icon-color:
+                            Theme.text-primary;
+
                         padding-x:
                             0px;
 
@@ -232,6 +244,12 @@ export component EditToolbar inherits Rectangle {
 
                         toggled:
                             root.active-tool == 0;
+
+                        toggled-fg:
+                            Colors.black;
+
+                        subtle-toggled:
+                            true;
 
 
                         clicked => {
@@ -274,6 +292,9 @@ export component EditToolbar inherits Rectangle {
                         icon-size:
                             16px;
 
+                        icon-color:
+                            Theme.text-primary;
+
                         text:
                             "";
 
@@ -283,6 +304,12 @@ export component EditToolbar inherits Rectangle {
 
                         toggled:
                             root.active-tool == 1;
+
+                        toggled-fg:
+                            Colors.black;
+
+                        subtle-toggled:
+                            true;
 
 
                         clicked => {
@@ -326,6 +353,9 @@ export component EditToolbar inherits Rectangle {
                         icon-size:
                             16px;
 
+                        icon-color:
+                            Theme.text-primary;
+
                         text:
                             "";
 
@@ -335,6 +365,12 @@ export component EditToolbar inherits Rectangle {
 
                         toggled:
                             root.active-tool == 2;
+
+                        toggled-fg:
+                            Colors.black;
+
+                        subtle-toggled:
+                            true;
 
 
                         clicked => {
@@ -372,11 +408,14 @@ export component EditToolbar inherits Rectangle {
 
                         filled-icon:
                             @image-url(
-                                "icons/expand_diag.svg"
+                                "icons/stretch_filled.svg"
                             );
 
                         icon-size:
                             16px;
+
+                        icon-color:
+                            Theme.text-primary;
 
                         text:
                             "";
@@ -387,6 +426,12 @@ export component EditToolbar inherits Rectangle {
 
                         toggled:
                             root.active-tool == 3;
+
+                        toggled-fg:
+                            Colors.black;
+
+                        subtle-toggled:
+                            true;
 
 
                         clicked => {
@@ -428,7 +473,7 @@ export component EditToolbar inherits Rectangle {
                             );
 
                         icon-color:
-                            Theme.text-dim;
+                            Theme.text-primary;
 
                         icon-size:
                             16px;
@@ -442,6 +487,12 @@ export component EditToolbar inherits Rectangle {
 
                         toggled:
                             root.active-tool == 5;
+
+                        toggled-fg:
+                            Colors.black;
+
+                        subtle-toggled:
+                            true;
 
 
                         clicked => {
@@ -514,6 +565,9 @@ export component EditToolbar inherits Rectangle {
                 icon-size:
                     16px;
 
+                icon-color:
+                    Theme.text-primary;
+
                 text:
                     "";
 
@@ -523,6 +577,12 @@ export component EditToolbar inherits Rectangle {
 
                 toggled:
                     root.beat-open;
+
+                toggled-fg:
+                    Colors.black;
+
+                subtle-toggled:
+                    true;
 
                 toggled-icon-color:
                     Theme.accent;
@@ -559,6 +619,9 @@ export component EditToolbar inherits Rectangle {
                 icon-size:
                     16px;
 
+                icon-color:
+                    Theme.text-primary;
+
                 text:
                     "";
 
@@ -568,6 +631,12 @@ export component EditToolbar inherits Rectangle {
 
                 toggled:
                     root.explorer-visible;
+
+                toggled-fg:
+                    Colors.black;
+
+                subtle-toggled:
+                    true;
 
                 toggled-icon-color:
                     Theme.accent;
@@ -604,6 +673,9 @@ export component EditToolbar inherits Rectangle {
                 icon-size:
                     16px;
 
+                icon-color:
+                    Theme.text-primary;
+
                 text:
                     "";
 
@@ -613,6 +685,12 @@ export component EditToolbar inherits Rectangle {
 
                 toggled:
                     root.panel-visible;
+
+                toggled-fg:
+                    Colors.black;
+
+                subtle-toggled:
+                    true;
 
                 toggled-icon-color:
                     Theme.accent;

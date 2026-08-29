@@ -38,7 +38,7 @@ export component Button inherits Rectangle {
     width: self.preferred-width;
 
     icon-image := Image {
-        source: (root.toggled && !root.subtle-toggled && root.filled-icon.width > 0)
+        source: root.toggled && root.filled-icon.width > 0
             ? root.filled-icon
             : root.icon;
         visible: root.icon.width > 0;
@@ -71,7 +71,7 @@ export component Button inherits Rectangle {
             label.color: root.hover-text-color;
         }
         on when self.enabled && self.toggled && !touch.pressed: {
-            background: self.subtle-toggled ? Theme.surface : self.toggled-bg;
+            background: self.subtle-toggled ? root.resting-bg : self.toggled-bg;
             border-color: self.subtle-toggled ? Theme.border : self.toggled-bg;
             label.color: self.subtle-toggled ? root.text-color : self.toggled-fg;
             icon-image.colorize: self.subtle-toggled ? root.toggled-icon-color : self.toggled-fg;
