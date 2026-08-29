@@ -151,10 +151,6 @@ export component Timeline inherits Rectangle {
 
     callback paste-requested(float, int);
 
-    callback timewarp-markers-changed(int, [{beat: float, locked: bool}]);
-    callback timewarp-request-transients(int);
-    callback timewarp-clear-warps(int);
-
 
     // =====================================================
     // ESCALA
@@ -1295,18 +1291,6 @@ export component Timeline inherits Rectangle {
 
                     marquee-commit(b0, b1, t0, t1) => {
                         root.marquee-select(b0, b1, t0, t1);
-                    }
-
-                    timewarp-markers-changed(id, markers) => {
-                        root.timewarp-markers-changed(id, markers);
-                    }
-
-                    timewarp-request-transients(id) => {
-                        root.timewarp-request-transients(id);
-                    }
-
-                    timewarp-clear-warps(id) => {
-                        root.timewarp-clear-warps(id);
                     }
                 }
             }
