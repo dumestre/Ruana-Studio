@@ -32,6 +32,7 @@ mod os_drop;
 mod piano_roll;
 mod playback;
 mod timeline;
+mod theme;
 mod waveform;
 
 use std::cell::RefCell;
@@ -502,6 +503,22 @@ fn main() -> Result<(), slint::PlatformError> {
         track_colors_model.clone(),
         sample_cache.clone(),
     );
+
+    // ---- TEMA ------------------------------------------------------
+    // Restaura a paleta salva e aplica quando o usuário escolher
+    // outra no seletor do toolbar (persiste o índice selecionado).
+    {
+        let idx = theme::load().unwrap_or(0);
+        theme::apply(&ui, idx);
+
+        let ui_weak_theme = ui.as_weak();
+        ui.on_theme_selected(move |index| {
+            if let Some(ui) = ui_weak_theme.upgrade() {
+                let idx = theme::apply(&ui, index);
+                theme::save(idx);
+            }
+        });
+    }
 
     ui.run()
 }

@@ -1,6 +1,7 @@
 import { Button } from "components/button.slint";
 import { Theme } from "theme.slint";
 import { ProjectKey } from "components/project_key.slint";
+import { ThemePicker } from "components/theme_picker.slint";
 
 export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
@@ -17,6 +18,7 @@ export component Toolbar inherits Rectangle {
     callback close;
     callback minimize;
     callback page-toggled(bool);
+    callback theme-selected(int);
 
     height: 34px;
     background: Theme.surface;
@@ -148,6 +150,11 @@ export component Toolbar inherits Rectangle {
                 }
             }
             ProjectKey { }
+            ThemePicker {
+                theme-selected(i) => {
+                    root.theme-selected(i);
+                }
+            }
         }
 
         // ==========================================

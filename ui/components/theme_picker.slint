@@ -1,0 +1,92 @@
+import { Theme } from "../theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component ThemePicker inherits Rectangle {
+    callback theme-selected(int);
+
+    in property <[string]> names: [
+        "Studio Dark",
+        "Midnight Blue",
+        "Violeta Ruana",
+        "Volt",
+        "Sunset",
+        "Ocean Teal",
+        "Paper"
+    ];
+
+    property <int> safe-index:
+        min(
+            max(0, Theme.active),
+            root.names.length - 1
+        );
+
+    height: 24px;
+    width: 92px;
+
+    // Único jeito de dar tema no próprio seletor antes de aplicar.
+    background: touch.pressed ? Theme.surface-high : Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    Text {
+        text: root.safe-index >= 0 ? root.names[root.safe-index] : "";
+        font-size: 11px;
+        color: Theme.accent;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: parent.width - 8px;
+        height: parent.height;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        clicked => { popup.show(); }
+    }
+
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 2px;
+        width: 132px;
+        height: 152px;
+
+        Rectangle {
+            background: Theme.base;
+            border-color: Theme.border;
+            border-width: 1px;
+            border-radius: 3px;
+
+            ScrollView {
+                VerticalLayout {
+                    spacing: 0px;
+                    padding: 1px;
+
+                    for n[i] in root.names : TouchArea {
+                        height: 20px;
+
+                        Rectangle {
+                            background: parent.has-hover ? Theme.surface-high
+                                       : i == Theme.active ? Theme.accent.transparentize(0.78)
+                                       : Math.mod(i, 2) == 0 ? transparent
+                                       : Theme.surface;
+                            border-radius: 2px;
+
+                            Text {
+                                text: n;
+                                font-size: 11px;
+                                color: i == Theme.active ? Theme.accent : Theme.text-primary;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        clicked => {
+                            Theme.active = i;
+                            root.theme-selected(i);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -304,6 +304,16 @@ export component MainWindow inherits Window {
     callback marquee-select(float, float, int, int);
     callback clip-duplicate-requested(int);
 
+    callback theme-selected(int);
+
+    // Tema ativo: ponte Rust ↔ Theme (o Rust não gera acessor do
+    // global `Theme`; `changed` faz o set no global toda troca).
+    in-out property <int> theme-index: Theme.active;
+
+    changed theme-index => {
+        Theme.active = root.theme-index;
+    }
+
     callback undo-requested;
 
     callback redo-requested;
@@ -779,6 +789,7 @@ export component MainWindow inherits Window {
         sampler-sample-peaks <=> root.sampler-sample-peaks;
         sampler-load-requested() => { root.sampler-load-requested(root.beat-selected-track); }
         sampler-sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
+        theme-selected(i) => { root.theme-selected(i); }
         left-panel-width <=> root.left-panel-width;
         tracks-header-width <=> root.tracks-header-width;
         explorer-width <=> root.explorer-width;
