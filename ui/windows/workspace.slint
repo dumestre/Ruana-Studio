@@ -4,7 +4,6 @@
 
 import { Theme } from "../theme.slint";
 import { Toolbar } from "../toolbar.slint";
-import { Transport } from "../transport.slint";
 import { EditToolbar } from "../edit_toolbar.slint";
 import { ClipPool, ClipItemVisual } from "../clip_pool.slint";
 import { Timeline } from "../timeline/timeline.slint";
@@ -481,56 +480,25 @@ export component Workspace inherits Rectangle {
             theme-selected(i) => {
                 root.theme-selected(i);
             }
-        }
 
-
-        // ====================================================
-        // TRANSPORT
-        // ====================================================
-
-        Transport {
-
-            playing <=>
-                root.playing;
-
+            playing <=> root.playing;
             loop-enabled <=> root.loop-enabled;
-
-            position <=>
-                root.transport-position;
-
-            bpm <=>
-                root.bpm;
-
-            ppq:
-                root.ppq;
-
-            beats-per-bar:
-                root.beats-per-bar;
-
+            position <=> root.transport-position;
+            bpm <=> root.bpm;
+            ppq <=> root.ppq;
+            beats-per-bar <=> root.beats-per-bar;
             metronome-enabled <=> root.metronome-enabled;
             metronome-sound <=> root.metronome-sound;
             metronome-volume <=> root.metronome-volume;
 
-
             play-state-changed(state) => {
-                root.play-state-changed(
-                    state
-                );
+                root.play-state-changed(state);
             }
-
             loop-state-changed(state) => { root.loop-enabled = state; root.loop-state-changed(state); }
-
-            set-bpm(value) => {
-                root.set-bpm(
-                    value
-                );
-            }
-
-            metronome-state-changed(enabled) => {
-                root.metronome-state-changed(enabled);
-            }
+            metronome-state-changed(enabled) => { root.metronome-state-changed(enabled); }
             metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
             metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
+            set-bpm(value) => { root.set-bpm(value); }
         }
 
 

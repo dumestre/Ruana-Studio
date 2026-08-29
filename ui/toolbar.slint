@@ -2,6 +2,7 @@ import { Button } from "components/button.slint";
 import { Theme } from "theme.slint";
 import { ProjectKey } from "components/project_key.slint";
 import { ThemePicker } from "components/theme_picker.slint";
+import { Transport } from "transport.slint";
 
 export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
@@ -19,6 +20,24 @@ export component Toolbar inherits Rectangle {
     callback minimize;
     callback page-toggled(bool);
     callback theme-selected(int);
+
+    // ---- Transport (integrado à toolbar) ----
+    in-out property <bool> playing: false;
+    in-out property <bool> loop-enabled: false;
+    in-out property <bool> metronome-enabled: false;
+    in-out property <int> metronome-sound: 0;
+    in-out property <float> metronome-volume: 0.7;
+    in-out property <int> transport-position: 0;
+    in-out property <int> bpm: 120;
+    in-out property <int> beats-per-bar: 4;
+    in-out property <int> ppq: 960;
+
+    callback play-state-changed(bool);
+    callback loop-state-changed(bool);
+    callback metronome-state-changed(bool);
+    callback metronome-sound-changed(int);
+    callback metronome-volume-changed(float);
+    callback set-bpm(float);
 
     height: 34px;
     background: transparent;
@@ -167,6 +186,28 @@ export component Toolbar inherits Rectangle {
         Rectangle {
             horizontal-stretch: 1;
             background: transparent;
+        }
+
+        // ==========================================
+        // TRANSPORT (integrado à toolbar)
+        // ==========================================
+        Transport {
+            playing <=> root.playing;
+            loop-enabled <=> root.loop-enabled;
+            metronome-enabled <=> root.metronome-enabled;
+            metronome-sound <=> root.metronome-sound;
+            metronome-volume <=> root.metronome-volume;
+            position <=> root.transport-position;
+            bpm <=> root.bpm;
+            beats-per-bar <=> root.beats-per-bar;
+            ppq <=> root.ppq;
+
+            play-state-changed(state) => { root.play-state-changed(state); }
+            loop-state-changed(state) => { root.loop-state-changed(state); }
+            metronome-state-changed(enabled) => { root.metronome-state-changed(enabled); }
+            metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
+            metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
+            set-bpm(value) => { root.set-bpm(value); }
         }
 
         // ==========================================

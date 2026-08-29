@@ -68,7 +68,7 @@ export component Transport inherits Rectangle {
     // DIMENSÕES
     // ============================================================
 
-    height: 48px;
+    height: 34px;
 
     background: transparent;
 
@@ -81,8 +81,8 @@ export component Transport inherits Rectangle {
 
         padding-left: 8px;
         padding-right: 8px;
-        padding-top: 5px;
-        padding-bottom: 5px;
+        padding-top: 0px;
+        padding-bottom: 0px;
 
         spacing: 6px;
 
@@ -99,7 +99,7 @@ export component Transport inherits Rectangle {
 
         Rectangle {
             HorizontalLayout {
-                spacing: 8px; // espaçamento igual em px
+                spacing: 2px; // espaçamento igual em px
                 alignment: LayoutAlignment.center;
                 cross-axis-alignment: CrossAxisAlignment.center;
 
@@ -256,8 +256,10 @@ export component Transport inherits Rectangle {
 
         Rectangle {
 
-            width: 120px;
-            height: 22px;
+            height: 18px;
+            horizontal-stretch: 0;
+            preferred-width: max(52px, pos-label.preferred-width + 16px);
+            width: self.preferred-width;
 
             background:
                 Theme.surface-high;
@@ -265,7 +267,7 @@ export component Transport inherits Rectangle {
             border-radius:
                 2px;
 
-            Text {
+            pos-label := Text {
 
                 text:
                     root.pad2(root.bars)
@@ -312,7 +314,7 @@ export component Transport inherits Rectangle {
 
         HorizontalLayout {
 
-            spacing: 8px;
+            spacing: 2px;
 
             alignment:
                 LayoutAlignment.stretch;
@@ -324,6 +326,8 @@ export component Transport inherits Rectangle {
             // ====================================================
             // METRONOME
             // ====================================================
+
+
 
             Rectangle {
                 width: 18px;
@@ -362,18 +366,7 @@ export component Transport inherits Rectangle {
             }
 
 
-            // ====================================================
-            // DIVISOR
-            // ====================================================
-
-            Rectangle {
-
-                width: 1px;
-                height: 20px;
-
-                background:
-                    Theme.border;
-            }
+            
 
 
             // ====================================================
@@ -422,26 +415,10 @@ export component Transport inherits Rectangle {
                         horizontal-alignment: center;
                         accepted => { root.set-bpm(self.text.to-float()); self.clear-focus(); }
                     }
+                    
                 }
             }
-        }
-
-
-        // ========================================================
-        // DIVISOR
-        // ========================================================
-
-        Rectangle {
-
-            width: 1px;
-            height: 20px;
-
-            background:
-                Theme.border;
-        }
-
-
-        // ========================================================
+             // ========================================================
         // TIME SIGNATURE
         // ========================================================
 
@@ -479,6 +456,10 @@ export component Transport inherits Rectangle {
                     center;
             }
         }
+        }
+
+
+       
     }
 
 
