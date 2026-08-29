@@ -27,33 +27,6 @@ pub struct CachedWave {
 /// Cache de waveform: clip_id → dados completos.
 pub type WaveformCache = std::collections::HashMap<u64, CachedWave>;
 
-/// Renderiza uma waveform no tamanho EXATO pedido (px de tela).
-///
-/// Rota nova: rasteriza direto do mono de exibição com a fatia
-/// `view` visível, lendo a pirâmide min/max (zoom barato) e caindo
-/// no osciloscópio quando a fatia tem < 2 samples/px. Igual ao lab.
-pub fn render_waveform_mip(
-    mono: &[f32],
-    mip: &daw_media::waveform_image::Mipmap,
-    width_px: u32,
-    view: (usize, usize),
-) -> Option<slint::Image> {
-    let rgba =
-        daw_media::waveform_image::waveform_image_rgba_mip(mono, mip, width_px, view)?;
-    Some(image_from_rgba(
-        &rgba,
-        width_px,
-        daw_media::waveform_image::IMAGE_HEIGHT,
-    ))
-}
-
-/// Fallback pela rota antiga (picos agregados).
-fn render_waveform_at(peaks: &[f32], width_px: u32) -> Option<slint::Image> {
-    use daw_media::waveform_image::waveform_image_rgba_at;
-    let rgba = waveform_image_rgba_at(peaks, width_px)?;
-    Some(waveform_image_to_slint(Some(rgba)))
-}
-
 /// Converte RGBA cru + dimensões num `slint::Image`.
 fn image_from_rgba(rgba: &[u8], w: u32, h: u32) -> slint::Image {
     use slint::Rgba8Pixel;
@@ -102,12 +75,13 @@ pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache)
 //
 // DEBOUNCE: escrever no modelo dentro do próprio `changed
 // width` reconstrói a linha e redispara o handler (loop).
-// Guardamos o pedido e aplicamos num timer de 120 ms; se um
+// Guardamos o pedido e aplicamos num timer de 40 ms; se um
 // novo pedido chegar, reiniciamos o timer. Também ignoramos
 // larguras iguais à última renderizada.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::sync::mpsc;
 
 use crate::TimelineMetrics;
 use crate::models::clip_row;
@@ -121,17 +95,29 @@ pub fn wire_resolution_requests(
     // Re-renderiza a waveform de um clip na resolução exata de
     // exibição (zoom/resize mudaram a largura em px).
     //
-    // DEBOUNCE: escrever no modelo dentro do próprio `changed
-    // width` reconstrói a linha e redispara o handler (loop).
-    // Guardamos o pedido e aplicamos num timer de 120 ms; se um
-    // novo pedido chegar, reiniciamos o timer. Também ignoramos
-    // larguras iguais à última renderizada.
+    // Índice: (1) DEBOUNCE de 40ms no pedido de largura; (2) o
+    // raster roda numa THREAD DE FUNDO (a entrada mono_ds+mip é
+    // clonada antes de atravessar — a UI nunca espera); (3) bytes
+    // voltam por um canal e um timer curto (collector) aplica no
+    // modelo dentro da event loop. O zoom deixa de congelar a UI.
     {
-        let waveforms = waveforms.clone();
-        let clips_model = clips_model.clone();
         let pending: Rc<RefCell<HashMap<i32, u32>>> = Rc::new(RefCell::new(HashMap::new()));
         let done_width: Rc<RefCell<HashMap<u64, u32>>> = Rc::new(RefCell::new(HashMap::new()));
-        let timer: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
+        let debounce: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
+        let collector_timer: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
+        let in_flight: Rc<Cell<usize>> = Rc::new(Cell::new(0));
+        let (tx, rx0) = mpsc::channel::<(i32, u32, Option<Vec<u8>>)>();
+        let rx: Rc<RefCell<mpsc::Receiver<(i32, u32, Option<Vec<u8>>)>>> =
+            Rc::new(RefCell::new(rx0));
+
+        /// Trabalho que vai para a thread de fundo.
+        enum RenderJob {
+            Mip {
+                mono_ds: Vec<f32>,
+                mip: daw_media::waveform_image::Mipmap,
+            },
+            Peaks { peaks: Vec<f32> },
+        }
 
         ui.global::<TimelineMetrics>()
             .on_waveform_resolution_requested(move |id, width_px| {
@@ -146,44 +132,123 @@ pub fn wire_resolution_requests(
 
                 // Reinicia o timer (debounce do gesto de zoom).
                 let t = slint::Timer::default();
-                *timer.borrow_mut() = Some(t);
-                if let Some(t) = timer.borrow().as_ref() {
+                *debounce.borrow_mut() = Some(t);
+                if let Some(t) = debounce.borrow().as_ref() {
                     let pending = pending.clone();
                     let done_width = done_width.clone();
                     let waveforms = waveforms.clone();
                     let clips_model = clips_model.clone();
+                    let rx = rx.clone();
+                    let tx = tx.clone();
+                    let collector_timer = collector_timer.clone();
+                    let in_flight = in_flight.clone();
                     t.start(
                         slint::TimerMode::SingleShot,
-                        std::time::Duration::from_millis(120),
+                        std::time::Duration::from_millis(40),
                         move || {
                             let jobs: Vec<(i32, u32)> = pending.borrow_mut().drain().collect();
                             for (id, w) in jobs {
                                 let id_u = id.max(0) as u64;
-                                let img_new = {
+                                // Clona a entrada ANTES da thread (RefCell
+                                // não atravessa); mono de exibição ≤1M samples
+                                // + pirâmide = copia barata.
+                                let job = {
                                     let wf = waveforms.borrow();
                                     match wf.get(&id_u) {
-                                        // Rota nova: mono de exibição +
-                                        // pirâmide min/max — zoom barato,
-                                        // osciloscópio automático no zoom fundo.
                                         Some(c) if !c.mono_ds.is_empty() => {
-                                            let view = (0usize, c.mono_ds.len());
-                                            render_waveform_mip(&c.mono_ds, &c.mip, w, view)
+                                            Some(RenderJob::Mip {
+                                                mono_ds: c.mono_ds.clone(),
+                                                mip: c.mip.clone(),
+                                            })
                                         }
                                         Some(c) if !c.peaks.is_empty() => {
-                                            render_waveform_at(&c.peaks, w)
+                                            Some(RenderJob::Peaks {
+                                                peaks: c.peaks.clone(),
+                                            })
                                         }
                                         _ => None,
                                     }
                                 };
-                                if let Some(img) = img_new {
-                                    if let Some(i) = clip_row(&clips_model, id) {
-                                        if let Some(mut data) = clips_model.row_data(i) {
-                                            data.waveform_image = img;
-                                            clips_model.set_row_data(i, data);
-                                            done_width.borrow_mut().insert(id_u, w);
+                                let Some(job) = job else {
+                                    continue;
+                                };
+                                in_flight.set(in_flight.get() + 1);
+                                let w0 = w;
+                                let tx = tx.clone();
+                                std::thread::spawn(move || {
+                                    // Raster na thread de fundo: pirâmide
+                                    // min/max quando há mono de exibição,
+                                    // fallback de picos caso contrário.
+                                    let rgba = match job {
+                                        RenderJob::Mip { mono_ds, mip } => {
+                                            let view = (0usize, mono_ds.len());
+                                            daw_media::waveform_image::waveform_image_rgba_mip(
+                                                &mono_ds, &mip, w0, view,
+                                            )
                                         }
-                                    }
-                                }
+                                        RenderJob::Peaks { peaks } => {
+                                            daw_media::waveform_image::waveform_image_rgba_at(
+                                                &peaks, w0,
+                                            )
+                                        }
+                                    };
+                                    let _ = tx.send((id, w0, rgba));
+                                });
+                            }
+
+                            // Garante um collector aplicando os bytes na UI.
+                            let ct = slint::Timer::default();
+                            *collector_timer.borrow_mut() = Some(ct);
+                            if let Some(c) = collector_timer.borrow().as_ref() {
+                                let rx = rx.clone();
+                                let done_width = done_width.clone();
+                                let clips_model = clips_model.clone();
+                                let in_flight = in_flight.clone();
+                                let collector_timer = collector_timer.clone();
+                                c.start(
+                                    slint::TimerMode::Repeated,
+                                    std::time::Duration::from_millis(16),
+                                    move || {
+                                        let mut acted = false;
+                                        loop {
+                                            let item = rx.borrow_mut().try_recv();
+                                            let (id, w, rgba) = match item {
+                                                Ok(v) => v,
+                                                Err(_) => break,
+                                            };
+                                            acted = true;
+                                            in_flight
+                                                .set(in_flight.get().saturating_sub(1));
+                                            let Some(rgba) = rgba else {
+                                                continue;
+                                            };
+                                            let id_u = id.max(0) as u64;
+                                            let img = image_from_rgba(
+                                                &rgba,
+                                                w,
+                                                daw_media::waveform_image::IMAGE_HEIGHT,
+                                            );
+                                            if let Some(i) = clip_row(&clips_model, id) {
+                                                if let Some(mut data) =
+                                                    clips_model.row_data(i)
+                                                {
+                                                    data.waveform_image = img;
+                                                    clips_model.set_row_data(i, data);
+                                                    done_width.borrow_mut().insert(id_u, w);
+                                                }
+                                            }
+                                        }
+                                        // Só para quando não há mais trabalho —
+                                        // não queima CPU a 60Hz à toa.
+                                        if !acted && in_flight.get() == 0 {
+                                            if let Some(t) =
+                                                collector_timer.borrow().as_ref()
+                                            {
+                                                t.stop();
+                                            }
+                                        }
+                                    },
+                                );
                             }
                         },
                     );

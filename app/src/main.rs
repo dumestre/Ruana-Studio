@@ -17,6 +17,7 @@
 slint::include_modules!();
 
 mod audio_bridge;
+mod async_sampler;
 mod beat;
 mod clip_cache;
 mod cursors;
@@ -230,6 +231,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let project = project.clone();
         let audio = audio.clone();
         let ui_weak = ui.as_weak();
+        let sampler_decode = async_sampler::SamplerDecode::default();
         ui.on_sampler_load_requested(move |track| {
             let Some(path) = choose_audio_file() else {
                 return;
@@ -248,41 +250,23 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
             }
             let path_buf = std::path::PathBuf::from(&path);
-            let Ok(decoded) = daw_media::waveform::decode_audio(&path_buf) else {
-                return;
-            };
-            let peaks = daw_media::waveform::waveform_points(&decoded, 512);
-            let Some(ui) = ui_weak.upgrade() else {
-                return;
-            };
             let name = path_buf
                 .file_stem()
                 .and_then(|n| n.to_str())
-                .unwrap_or("Sample");
-            let format = path_buf
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_uppercase();
-            ui.set_sampler_sample_name(name.into());
-            ui.set_sampler_sample_loaded(true);
-            ui.set_sampler_sample_format(format.into());
-            ui.set_sampler_sample_duration(format!("{:.2}s", decoded.duration_seconds).into());
-            ui.set_sampler_sample_peaks(Rc::new(slint::VecModel::from(peaks)).into());
-
-            let mut proj = project.borrow_mut();
-            if let Some(pattern) = proj.current_beat_pattern_mut() {
-                let index = track.max(0) as usize;
-                if let Some(params) = pattern.track_params.get_mut(index) {
-                    params.sample_path = Some(path.clone());
-                    params.name = name.to_string();
-                }
-            }
-            audio.preload(&path);
-            audio.mark_dirty();
-            beat::refresh_beat(&ui, &proj);
-            drop(proj);
-            audio.preview(&path, 0.9, 0.0);
+                .unwrap_or("Sample")
+                .to_string();
+            // Decode em thread de fundo: a UI não congela em MP3/FLAC
+            // longos — o apply (painel + pattern + preview) roda no
+            // drainer quando o resultado chega.
+            sampler_decode.schedule(
+                &ui_weak,
+                project.clone(),
+                audio.clone(),
+                track,
+                path_buf,
+                async_sampler::SamplerSource::Load,
+                name,
+            );
         });
     }
 
@@ -291,6 +275,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let project = project.clone();
         let audio = audio.clone();
         let ui_weak = ui.as_weak();
+        let sampler_decode = async_sampler::SamplerDecode::default();
         ui.on_debug_log(move |msg| {
             eprintln!("[slint] {msg}");
         });
@@ -300,13 +285,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             }
             let path_buf = std::path::PathBuf::from(&path);
-            let Ok(decoded) = daw_media::waveform::decode_audio(&path_buf) else {
-                return;
-            };
-            let peaks = daw_media::waveform::waveform_points(&decoded, 512);
-            let Some(ui) = ui_weak.upgrade() else {
-                return;
-            };
             let display_name = if name.is_empty() {
                 path_buf
                     .file_stem()
@@ -316,32 +294,17 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 name.to_string()
             };
-            let format = path_buf
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_uppercase();
-            ui.set_sampler_sample_name(display_name.clone().into());
-            ui.set_sampler_sample_loaded(true);
-            ui.set_sampler_sample_format(format.into());
-            ui.set_sampler_sample_duration(format!("{:.2}s", decoded.duration_seconds).into());
-            ui.set_sampler_sample_peaks(Rc::new(slint::VecModel::from(peaks)).into());
-
-            let mut proj = project.borrow_mut();
-            if let Some(pattern) = proj.current_beat_pattern_mut() {
-                // Drop no sampler grava na LINHA SELECIONADA do beat —
-                // cada linha com sample tem o seu sampler.
-                let index = ui.get_beat_selected_track().max(0) as usize;
-                if let Some(params) = pattern.track_params.get_mut(index) {
-                    params.sample_path = Some(path.to_string());
-                    params.name = display_name;
-                }
-            }
-            audio.preload(&path);
-            audio.mark_dirty();
-            beat::refresh_beat(&ui, &proj);
-            drop(proj);
-            audio.preview(&path, 0.9, 0.0);
+            // Decode em thread de fundo; o apply grava na linha
+            // SELECIONADA na hora em que o resultado chega.
+            sampler_decode.schedule(
+                &ui_weak,
+                project.clone(),
+                audio.clone(),
+                -1,
+                path_buf,
+                async_sampler::SamplerSource::Drop,
+                display_name,
+            );
         });
     }
 
