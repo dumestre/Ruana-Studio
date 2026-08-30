@@ -42,18 +42,84 @@ export component TrackClip inherits Rectangle {
     // Waveform pré-renderizada (Rust). width 0 = sem imagem.
     in property <image> clip-waveform-image;
 
-    // Pede ao Rust uma nova imagem na resolução exata de exibição
-    // (dispara quando a largura muda: zoom da timeline ou resize).
-    // Vive no global TimelineMetrics: o handler está no Rust.
+    // Janela rasterizada (px do corpo). src-w == 0 → a imagem
+    // cobre o corpo inteiro; senão só o trecho [src-x, src-x+src-w]
+    // foi rasterizado (zoom fundo = janela visível, pura e leve).
+    in property <float> waveform-src-x: 0.0;
+    in property <float> waveform-src-w: 0.0;
+
+    // Viewport horizontal (origem e largura visíveis), no mesmo
+    // sistema de conteúdo do clip. Scroll/zoom acordam o re-render
+    // da janela da waveform.
+    in property <length> viewport-x: 0px;
+    in property <length> viewport-width: 1920px;
+
+    // =====================================================
+    // RE-RENDER POR JANELA
+    //
+    // Só o trecho do clip que cruza a viewport é pedido ao Rust:
+    // (id, largura total do corpo em px, janela x0/x1 em px). O
+    // raster na thread de fundo cobre APENAS essa janela — no zoom
+    // fundo só os samples visíveis (poucas waves) são desenhados,
+    // sample a sample: nítido e leve, sem varrer o arquivo inteiro.
+    // handler: app/src/waveform.rs::wire_resolution_requests.
+    // =====================================================
+
+    private property <float> wave-area-origin:
+        root.bw / 1px + 2.0;
+
+    // Início da janela visível, em px do trecho da waveform
+    // (0 = borda esquerda do corpo). Recorta [0, largura-px].
+    private property <float> wave-w0:
+        Math.clamp(
+            (root.viewport-x / 1px)
+                - root.beat * (root.px-per-beat / 1px)
+                - root.wave-area-origin,
+            0.0,
+            (root.width / 1px) - 4.0
+        );
+
+    private property <float> wave-w1:
+        Math.clamp(
+            (root.viewport-x / 1px)
+                + (root.viewport-width / 1px)
+                - root.beat * (root.px-per-beat / 1px)
+                - root.wave-area-origin,
+            root.wave-w0,
+            (root.width / 1px) - 4.0
+        );
 
     changed width => {
         if !root.is-midi
+            && root.interactive
             && root.waveform-peaks.length > 0
-            && self.width > 4px {
+            && root.width > 4px
+            && root.wave-w1 > root.wave-w0 + 0.5 {
 
             TimelineMetrics.waveform-resolution-requested(
                 root.clip-id,
-                (self.width - 4px) / 1px
+                (root.width - 4px) / 1px,
+                root.wave-w0,
+                root.wave-w1,
+            );
+        }
+    }
+
+    // Scroll horizontal / zoom: a janela muda sem a largura mudar
+    // (wave-w1 depende de viewport-x, viewport-width e px-per-beat),
+    // então este changed re-dispara o pedido com o novo recorte.
+    changed wave-w1 => {
+        if !root.is-midi
+            && root.interactive
+            && root.waveform-peaks.length > 0
+            && root.width > 4px
+            && root.wave-w1 > root.wave-w0 + 0.5 {
+
+            TimelineMetrics.waveform-resolution-requested(
+                root.clip-id,
+                (root.width - 4px) / 1px,
+                root.wave-w0,
+                root.wave-w1,
             );
         }
     }
@@ -392,17 +458,21 @@ export component TrackClip inherits Rectangle {
         // =================================================
 
         if !root.is-midi
-            && clip-waveform-image.width > 0:
+            && (clip-waveform-image.width > 0
+                || root.wave-w1 > 0.0):
 
             Image {
-                x: 2px;
+                x: 2px + root.waveform-src-x * 1px;
                 y: 0px;
-                width: parent.width - 4px;
+                width: root.waveform-src-w > 0.0
+                    ? root.waveform-src-w * 1px
+                    : parent.width - 4px;
                 height: parent.height;
                 source: clip-waveform-image;
-                // Estica para preencher TODO o corpo: sem
-                // letterbox (que empurrava a imagem pro rodapé
-                // e cortava o lobo de baixo).
+                // Estica para preencher a janela rasterizada (src-x/w):
+                // o Rust já desenhou a resolução exata da janela, então
+                // não há distorção; sem letterbox (que empurrava a
+                // imagem pro rodapé e cortava o lobo de baixo).
                 image-fit: fill;
                 // Crisp pra edição: a waveform é retilínea (linhas
                 // verticais); interpolação suave borrava os detalhes

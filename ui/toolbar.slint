@@ -3,6 +3,7 @@ import { Theme } from "theme.slint";
 import { ProjectKey } from "components/project_key.slint";
 import { ThemePicker } from "components/theme_picker.slint";
 import { Transport } from "transport.slint";
+import { EditToolbar } from "edit_toolbar.slint";
 
 export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
@@ -329,6 +330,7 @@ export component Toolbar inherits Rectangle {
         // TRANSPORT
         // ========================================================
 
+        EditToolbar { }
         Transport {
             playing <=> root.playing;
             loop-enabled <=> root.loop-enabled;

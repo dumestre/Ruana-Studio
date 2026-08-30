@@ -10,6 +10,12 @@ export struct ClipData {
     // Waveform pré-renderizada (Rust, uma vez por import).
     // Largura 0 = sem imagem → o clip cai no fallback de retângulos.
     waveform-image: image,
+    // Janela rasterizada dentro do clip, em px do corpo (0 = corpo
+    // inteiro). No zoom fundo só o trecho VISÍVEL é rasterizado
+    // (puro, sample a sample) — `src-x` é a origem e `src-w` a
+    // largura. Se `src-w == 0`, a imagem cobre o corpo todo.
+    waveform-src-x: float,
+    waveform-src-w: float,
     // Seleção múltipla (Ctrl+arrasto / marquee). Independente da
     // seleção simples (`selected-clip`).
     multi-selected: bool,

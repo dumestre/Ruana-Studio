@@ -245,6 +245,20 @@ export component TrackRow inherits Rectangle {
         clip-waveform-image:
             clip.waveform-image;
 
+        waveform-src-x:
+            clip.waveform-src-x;
+
+        waveform-src-w:
+            clip.waveform-src-w;
+
+        // Viewport horizontal: a janela visível de cada clip é
+        // derivada daqui → re-render só do trecho na tela.
+        viewport-x:
+            root.view-scroll-x;
+
+        viewport-width:
+            root.view-width;
+
 
         // =============================================
         // ESCALA
