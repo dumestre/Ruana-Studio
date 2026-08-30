@@ -494,6 +494,33 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
+    // Arrasto da janela frameless: guarda a posição no início e soma
+    // o delta (em pixels lógicos) vindo do drag da barra da UI.
+    let ui_weak_drag_start = ui.as_weak();
+    let window_origin: Rc<RefCell<slint::PhysicalPosition>> =
+        Rc::new(RefCell::new(slint::PhysicalPosition::new(0, 0)));
+    let window_origin_start = window_origin.clone();
+    ui.on_window_drag_started(move || {
+        if let Some(ui) = ui_weak_drag_start.upgrade() {
+            let pos = ui.window().position();
+            *window_origin_start.borrow_mut() = pos;
+        }
+    });
+
+    let ui_weak_drag_move = ui.as_weak();
+    let window_origin_move = window_origin.clone();
+    ui.on_window_drag_moved(move |dx, dy| {
+        if let Some(ui) = ui_weak_drag_move.upgrade() {
+            let origin = *window_origin_move.borrow();
+            ui.window().set_position(slint::PhysicalPosition::new(
+                origin.x + dx as i32,
+                origin.y + dy as i32,
+            ));
+        }
+    });
+
+    ui.on_window_drag_finished(|| {});
+
     // Drag & drop de arquivos direto do Sistema Operacional.
     os_drop::install(
         &ui,

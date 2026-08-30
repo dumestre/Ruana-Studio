@@ -53,7 +53,7 @@ export component MainWindow inherits Window {
         true;
 
     full-screen:
-        true;
+        false;
 
 
     // =====================================================
@@ -271,6 +271,10 @@ export component MainWindow inherits Window {
     callback window-close;
 
     callback minimize;
+
+    callback window-drag-started();
+    callback window-drag-moved(length, length);
+    callback window-drag-finished();
 
     callback add-track-requested(string);
 
@@ -834,6 +838,9 @@ export component MainWindow inherits Window {
 
         close => { root.window-close(); }
         minimize => { root.minimize(); }
+        window-drag-started() => { root.window-drag-started(); }
+        window-drag-moved(x, y) => { root.window-drag-moved(x, y); }
+        window-drag-finished() => { root.window-drag-finished(); }
         play-state-changed(state) => { root.play-state-changed(state); }
         seek-to(beat) => { root.seek-to(beat); }
         set-bpm(bpm) => { root.set-bpm(bpm); }

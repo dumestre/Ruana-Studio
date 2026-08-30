@@ -22,6 +22,16 @@ export component Toolbar inherits Rectangle {
     callback page-toggled(bool);
     callback theme-selected(int);
 
+    // Arrasto da janela (no-frame): move a janela do SO a partir da
+    // barra vazia. Dead-zone antes de mover — clique puro não arrasta.
+    callback window-drag-started();
+    callback window-drag-moved(length, length);
+    callback window-drag-finished();
+    in property <length> drag-threshold: 4px;
+    private property <length> press-x: 0px;
+    private property <length> press-y: 0px;
+    private property <bool> drag-armed: false;
+
     // ---- Transport (integrado à toolbar) ----
     in-out property <bool> playing: false;
     in-out property <bool> loop-enabled: false;
@@ -42,6 +52,51 @@ export component Toolbar inherits Rectangle {
 
     height: 34px;
     background: transparent;
+
+    // ============================================================
+    // DRAG AREA — move a janela frameless (fica atrás dos botões;
+    // só pega o espaço vazio da barra).
+    // ============================================================
+
+    drag-area := TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+
+        moved => {
+            if (self.pressed) {
+                if (!root.drag-armed) {
+                    if (max(
+                        abs(self.mouse-x - root.press-x),
+                        abs(self.mouse-y - root.press-y)
+                    ) >= root.drag-threshold) {
+                        root.drag-armed = true;
+                        root.window-drag-started();
+                    }
+                }
+                if (root.drag-armed) {
+                    root.window-drag-moved(
+                        self.mouse-x - root.press-x,
+                        self.mouse-y - root.press-y
+                    );
+                }
+            }
+        }
+
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                root.press-x = self.mouse-x;
+                root.press-y = self.mouse-y;
+                root.drag-armed = false;
+            } else if (event.kind == PointerEventKind.up) {
+                if (root.drag-armed) {
+                    root.drag-armed = false;
+                    root.window-drag-finished();
+                }
+            }
+        }
+    }
 
     // ============================================================
     // LAYOUT PRINCIPAL DA TOOLBAR

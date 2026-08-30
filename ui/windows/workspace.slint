@@ -314,6 +314,10 @@ export component Workspace inherits Rectangle {
 
     callback minimize();
 
+    callback window-drag-started();
+    callback window-drag-moved(length, length);
+    callback window-drag-finished();
+
     callback play-state-changed(bool);
 
     callback seek-to(float);
@@ -483,6 +487,18 @@ export component Workspace inherits Rectangle {
 
             minimize => {
                 root.minimize();
+            }
+
+            window-drag-started() => {
+                root.window-drag-started();
+            }
+
+            window-drag-moved(x, y) => {
+                root.window-drag-moved(x, y);
+            }
+
+            window-drag-finished() => {
+                root.window-drag-finished();
             }
 
             theme-selected(i) => {

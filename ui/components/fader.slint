@@ -14,6 +14,13 @@ export component Fader inherits Rectangle {
     callback changed(float);
     callback value-accepted(string);
 
+    // Zona morta de arrasto: só começa a mover depois de pressionar e
+    // arrastar além de `drag-threshold` px. Um clique puro não mexe.
+    in property <length> drag-threshold: 4px;
+    private property <length> press-x: 0px;
+    private property <length> press-y: 0px;
+    private property <bool> drag-armed: false;
+
     width: 48px;
     height: 180px;
 
@@ -130,6 +137,7 @@ export component Fader inherits Rectangle {
         }
 
         // INTERAÇÃO DO MOUSE (Mapeamento vertical 0.0 na base e 1.0 no topo)
+        // Só arrasta a partir do limiar; na soltura interrompe o arrasto.
         touch := TouchArea {
             width: parent.width;
             height: parent.height;
@@ -137,15 +145,28 @@ export component Fader inherits Rectangle {
 
             moved => {
                 if (self.pressed) {
-                    root.value = max(0.0, min(1.0, 1.0 - (self.mouse-y / self.height)));
-                    root.changed(root.value);
+                    if (!root.drag-armed) {
+                        if (max(
+                            abs(self.mouse-x - root.press-x),
+                            abs(self.mouse-y - root.press-y)
+                        ) >= root.drag-threshold) {
+                            root.drag-armed = true;
+                        }
+                    }
+                    if (root.drag-armed) {
+                        root.value = max(0.0, min(1.0, 1.0 - (self.mouse-y / self.height)));
+                        root.changed(root.value);
+                    }
                 }
             }
 
             pointer-event(event) => {
                 if (event.kind == PointerEventKind.down) {
-                    root.value = max(0.0, min(1.0, 1.0 - (self.mouse-y / self.height)));
-                    root.changed(root.value);
+                    root.press-x = self.mouse-x;
+                    root.press-y = self.mouse-y;
+                    root.drag-armed = false;
+                } else if (event.kind == PointerEventKind.up) {
+                    root.drag-armed = false;
                 }
             }
         }
