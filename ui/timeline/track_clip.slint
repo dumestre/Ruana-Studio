@@ -520,7 +520,7 @@ export component TrackClip inherits Rectangle {
             ? #FFFFFF
 
         : root.hovered
-            ? root.clip-color.brighter(0.22)
+            ? root.clip-color
 
         : root.clip-color.darker(0.18);
 
@@ -676,11 +676,7 @@ export component TrackClip inherits Rectangle {
                     parent.height;
 
                 waveform-color:
-                    root.clip-color.brighter(
-                        root.hovered
-                            ? 0.46
-                            : 0.34
-                    );
+                    #0A0A0A;
 
                 hovered:
                     root.hovered;
@@ -755,45 +751,13 @@ export component TrackClip inherits Rectangle {
             root.header-height - root.bw;
 
         background:
-            root.clip-color.brighter(
-                root.hovered
-                    ? 0.46
-                    : 0.34
-            );
+            root.clip-color;
 
         opacity:
             root.ghost-opacity;
 
         clip:
             true;
-
-
-        // =================================================
-        // BRILHO SUPERIOR
-        // =================================================
-
-        Rectangle {
-
-            x:
-                0px;
-
-            y:
-                0px;
-
-            width:
-                parent.width;
-
-            height:
-                2px;
-
-            background:
-                root.clip-color.brighter(0.58);
-
-            opacity:
-                root.dragging || root.resizing
-                    ? 1.0
-                    : 0.75;
-        }
 
 
         // =================================================
@@ -920,7 +884,7 @@ export component TrackClip inherits Rectangle {
             1px;
 
         background:
-            root.clip-color.brighter(0.30);
+            root.clip-color.darker(0.18);
 
         opacity:
             (
@@ -1205,7 +1169,7 @@ export component TrackClip inherits Rectangle {
                 transparent;
 
             stroke:
-                root.clip-color.brighter(0.45);
+                #FFFFFF;
 
             stroke-width:
                 1px;
@@ -1252,7 +1216,7 @@ export component TrackClip inherits Rectangle {
                 transparent;
 
             stroke:
-                root.clip-color.brighter(0.45);
+                #FFFFFF;
 
             stroke-width:
                 1px;
@@ -1292,13 +1256,13 @@ export component TrackClip inherits Rectangle {
                 root.fade-grip-half;
 
             background:
-                root.clip-color.brighter(0.55);
+                #FFFFFF;
 
             border-width:
                 1px;
 
             border-color:
-                #FFFFFF;
+                root.clip-color;
 
             opacity:
                 root.fading && root.fade-side < 0
@@ -1331,13 +1295,13 @@ export component TrackClip inherits Rectangle {
                 root.fade-grip-half;
 
             background:
-                root.clip-color.brighter(0.55);
+                #FFFFFF;
 
             border-width:
                 1px;
 
             border-color:
-                #FFFFFF;
+                root.clip-color;
 
             opacity:
                 root.fading && root.fade-side > 0

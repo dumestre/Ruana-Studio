@@ -494,30 +494,86 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
-    // Arrasto da janela frameless: guarda a posição no início e soma
-    // o delta (em pixels lógicos) vindo do drag da barra da UI.
+    // Janela sempre abre maximizada (pedido usuário) - PROFISSIONAL.
+    // Tenta via Slint (set_maximized) e fallback Win32 ShowWindow.
+    {
+        // Slint: tenta maximizar via API (se exposta)
+        ui.window().set_maximized(true);
+        let ui_weak_max = ui.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(50), move || {
+            if let Some(ui) = ui_weak_max.upgrade() {
+                ui.window().set_maximized(true);
+                #[cfg(windows)]
+                {
+                    use raw_window_handle::HasWindowHandle;
+                    use windows::Win32::Foundation::HWND;
+                    use windows::Win32::UI::WindowsAndMessaging::{IsZoomed, ShowWindow, SW_MAXIMIZE};
+                    if let Ok(handle) = ui.window().window_handle().window_handle() {
+                        if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                            unsafe {
+                                let hwnd = HWND(h.hwnd.get() as *mut _);
+                                if IsZoomed(hwnd).as_bool() == false {
+                                    let _ = ShowWindow(hwnd, SW_MAXIMIZE);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Arrasto da janela frameless - PROFISSIONAL sem tremor.
+    // Antes: `set_position(origin + dx logical)` causava jitter em
+    // HiDPI (logical vs physical) e trava por flood de mensagens.
+    // Agora: delega ao SO via WM_NCLBUTTONDOWN/HTCAPTION (drag nativo
+    // do Windows) - suave, com AeroSnap, sem cálculo manual.
     let ui_weak_drag_start = ui.as_weak();
-    let window_origin: Rc<RefCell<slint::PhysicalPosition>> =
-        Rc::new(RefCell::new(slint::PhysicalPosition::new(0, 0)));
-    let window_origin_start = window_origin.clone();
     ui.on_window_drag_started(move || {
-        if let Some(ui) = ui_weak_drag_start.upgrade() {
-            let pos = ui.window().position();
-            *window_origin_start.borrow_mut() = pos;
+        #[cfg(windows)]
+        {
+            if let Some(ui) = ui_weak_drag_start.upgrade() {
+                // Se já está maximizada, ignora arrasto (usuário deve
+                // restaurar primeiro) - evita pulo
+                let is_max = {
+                    use raw_window_handle::HasWindowHandle;
+                    use windows::Win32::Foundation::HWND;
+                    use windows::Win32::UI::WindowsAndMessaging::IsZoomed;
+                    if let Ok(handle) = ui.window().window_handle().window_handle() {
+                        if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                            unsafe { IsZoomed(HWND(h.hwnd.get() as *mut _)).as_bool() }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                };
+                if is_max {
+                    return;
+                }
+                if let Ok(handle) = ui.window().window_handle().window_handle() {
+                    if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                        unsafe {
+                            use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+                            use windows::Win32::UI::WindowsAndMessaging::{
+                                HTCAPTION, SendMessageW, WM_NCLBUTTONDOWN,
+                            };
+                            SendMessageW(
+                                HWND(h.hwnd.get() as *mut _),
+                                WM_NCLBUTTONDOWN,
+                                WPARAM(HTCAPTION as usize),
+                                LPARAM(0),
+                            );
+                        }
+                    }
+                }
+            }
         }
     });
 
-    let ui_weak_drag_move = ui.as_weak();
-    let window_origin_move = window_origin.clone();
-    ui.on_window_drag_moved(move |dx, dy| {
-        if let Some(ui) = ui_weak_drag_move.upgrade() {
-            let origin = *window_origin_move.borrow();
-            ui.window().set_position(slint::PhysicalPosition::new(
-                origin.x + dx as i32,
-                origin.y + dy as i32,
-            ));
-        }
-    });
+    // Mantido por compatibilidade mas agora é no-op (nativo cuida)
+    ui.on_window_drag_moved(|_, _| {});
 
     ui.on_window_drag_finished(|| {});
 
