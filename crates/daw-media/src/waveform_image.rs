@@ -18,6 +18,8 @@
 
 use tiny_skia::*;
 
+const LEVELS: usize = 6;
+
 /// Largura do cache padrão (import). Re-renders de zoom usam a
 /// largura exata pedida pela UI.
 pub const WAVEFORM_IMG_WIDTH: usize = 2048;
@@ -30,12 +32,37 @@ const H: u32 = 512;
 pub const IMAGE_HEIGHT: u32 = H;
 
 const FG: [u8; 4] = [0x0A, 0x0A, 0x0A, 255];
-/// Corpo RMS dentro do envelope (0 = só pico, 1 = RMS domina).
 const RMS_WEIGHT: f32 = 0.35;
-/// Espessura mínima do traço em px — trechos baixos não somem.
 const MIN_HALF: f32 = 0.75;
-/// Limite para trocar envelope → osciloscópio (samples por pixel).
 const SCOPE_SAMPLES_PER_PX: f64 = 2.0;
+
+#[derive(Clone)]
+pub struct WaveformLod {
+    pub width: u32,
+    pub rgba: Vec<u8>,
+}
+
+#[derive(Clone)]
+pub struct WaveformLods {
+    pub levels: Vec<WaveformLod>,
+}
+
+impl WaveformLods {
+    pub fn best_level(&self, target_width: u32) -> Option<&WaveformLod> {
+        let mut best: Option<&WaveformLod> = None;
+        for lvl in &self.levels {
+            if lvl.width <= target_width {
+                if best.map(|b| b.width).unwrap_or(0) < lvl.width {
+                    best = Some(lvl);
+                }
+            }
+        }
+        if best.is_none() && !self.levels.is_empty() {
+            best = Some(&self.levels[self.levels.len() - 1]);
+        }
+        best
+    }
+}
 
 /// Estatísticas MIN/MAX/RMS de uma fatia de samples.
 #[inline]
@@ -126,12 +153,24 @@ fn draw_envelope_lane(
     pb.close();
 
     if let Some(path) = pb.finish() {
-        pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+        pixmap.fill_path(
+            &path,
+            &paint,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
     }
 }
 
 /// MODO OSCILOSCÓPIO: linha fina sample a sample (sem preenchimento).
-fn draw_scope_lane(pixmap: &mut Pixmap, samples: &[f32], y_center: f32, half_h: f32, view: (usize, usize)) {
+fn draw_scope_lane(
+    pixmap: &mut Pixmap,
+    samples: &[f32],
+    y_center: f32,
+    half_h: f32,
+    view: (usize, usize),
+) {
     use tiny_skia::Stroke;
 
     let w = pixmap.width();
@@ -407,7 +446,13 @@ fn draw_envelope_mip(
     pb.close();
 
     if let Some(path) = pb.finish() {
-        pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+        pixmap.fill_path(
+            &path,
+            &paint,
+            FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
     }
 }
 
@@ -519,6 +564,31 @@ pub fn waveform_image_rgba_at(peaks: &[f32], w: u32, h: u32) -> Option<Vec<u8>> 
 /// Compatibilidade: rasteriza na largura padrão.
 pub fn waveform_image_rgba(peaks: &[f32], _color_index: i32, _is_midi: bool) -> Option<Vec<u8>> {
     waveform_image_rgba_at(peaks, WAVEFORM_IMG_WIDTH as u32, H)
+}
+
+/// Gera LODs de waveform a partir do mono de exibição.
+/// Cada nível é uma imagem em WAVEFORM_IMG_WIDTH ou potência de 2 menor.
+pub fn build_waveform_lods(mono: &[f32]) -> WaveformLods {
+    let base_width = WAVEFORM_IMG_WIDTH as u32;
+    let n = mono.len();
+
+    let mut levels = Vec::with_capacity(LEVELS);
+    let mut w = base_width;
+    for _ in 0..LEVELS {
+        if w < 32 {
+            break;
+        }
+        let view = (0usize, n);
+        let rgba = waveform_image_rgba_at_samples(mono, mono, w, view).unwrap_or_default();
+        levels.push(WaveformLod { width: w, rgba });
+        w /= 2;
+    }
+    WaveformLods { levels }
+}
+
+/// Retorna o melhor LOD para a largura alvo, ou None se vazio.
+pub fn pick_lod(lods: &WaveformLods, target_width: u32) -> Option<&WaveformLod> {
+    lods.best_level(target_width)
 }
 
 #[cfg(test)]

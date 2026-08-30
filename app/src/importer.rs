@@ -154,6 +154,7 @@ pub fn import_audio_file(
     // Se o usuário trocar a cor do clip, re-renderizamos adiante
     // (ver on_clip_color_cycle_requested).
     let img = waveform_image_rgba(&peaks, 0, false);
+    let lods = daw_media::waveform_image::build_waveform_lods(&source.samples);
 
     let clip_id = {
         let mut proj = project.borrow_mut();
@@ -203,6 +204,7 @@ pub fn import_audio_file(
                 peaks,
                 mono_ds,
                 mip,
+                lods,
                 image: img,
             },
         );
@@ -304,6 +306,7 @@ fn import_from_entry(
     let points = ((length * 24.0) as usize).clamp(256, 2048);
     let peaks = waveform_points(&source, points);
     let img = waveform_image_rgba(&peaks, 0, false);
+    let lods = daw_media::waveform_image::build_waveform_lods(&source.samples);
 
     let clip_id = {
         let mut proj = project.borrow_mut();
@@ -348,6 +351,7 @@ fn import_from_entry(
                 peaks,
                 mono_ds,
                 mip,
+                lods,
                 image: img,
             },
         );
