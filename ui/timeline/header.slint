@@ -6,35 +6,32 @@ import { ColorPicker } from "../components/color_picker.slint";
 
 export component TimelineHeader inherits Rectangle {
 
-in property <[string]> track-names: [];
-in property <[int]> track-colors: [];
-in property <int> selected-track: 0;
+    in property <[string]> track-names: [];
+    in property <[int]> track-colors: [];
+    in property <int> selected-track: 0;
 
-in property <length> ruler-height: 30px;
-in property <float> zoom-y: 1.0;
-in property <length> scroll-y: 0px;
+    in property <length> ruler-height: 30px;
+    in property <float> zoom-y: 1.0;
+    in property <length> scroll-y: 0px;
 
-callback track-clicked(int);
-callback add-track-requested(string);
-callback recolor-requested(int, int);
+    callback track-clicked(int);
+    callback add-track-requested(string);
+    callback recolor-requested(int, int);
 
-background: transparent;
+    background: transparent;
 
 
-// =====================================================
-// LAYOUT PRINCIPAL
-// =====================================================
+    // =====================================================
+    // LAYOUT PRINCIPAL
+    // =====================================================
 
-VerticalLayout {
+    VerticalLayout {
 
-    width: parent.width;
-    height: parent.height;
+        spacing: 0;
 
-    spacing: 0;
+        alignment: LayoutAlignment.start;
 
-    alignment: LayoutAlignment.start;
-
-    cross-axis-alignment: CrossAxisAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
 
 
     // =================================================
@@ -47,7 +44,7 @@ VerticalLayout {
 
         spacing: 2px;
 
-        alignment: LayoutAlignment.center;
+        alignment: LayoutAlignment.stretch;
 
         cross-axis-alignment: CrossAxisAlignment.center;
 
@@ -63,7 +60,7 @@ VerticalLayout {
 
             Text {
 
-                width: parent.width;
+                
                 height: parent.height;
 
                 text: "TRACKS";
@@ -116,13 +113,13 @@ VerticalLayout {
 
             color-area := TouchArea {
 
-                width: parent.width;
+                
                 height: parent.height;
 
                 mouse-cursor: pointer;
 
                 clicked => {
-                    color-popup.show();
+                    // color-popup disabled
                 }
             }
         }
@@ -162,13 +159,13 @@ VerticalLayout {
 
             add-area := TouchArea {
 
-                width: parent.width;
+                
                 height: parent.height;
 
                 mouse-cursor: pointer;
 
                 clicked => {
-                    new-track-popup.show();
+                    // new-track-popup disabled
                 }
             }
         }
@@ -222,7 +219,7 @@ VerticalLayout {
 
             VerticalLayout {
 
-                width: parent.width;
+                
 
                 height: parent.height;
 
@@ -284,225 +281,14 @@ VerticalLayout {
 
 
 // =====================================================
-// POPUP DE COR
+// POPUP DE COR (desabilitado)
 // =====================================================
 
-color-popup := PopupWindow {
-
-    x:
-        max(
-            0px,
-            root.width - self.width - 8px
-        );
-
-    y: root.ruler-height + 2px;
-
-    width: 197px;
-    height: 45px;
-
-    close-policy: close-on-click-outside;
-
-
-    ColorPicker {
-
-        width: parent.width;
-        height: parent.height;
-
-
-        picked(idx) => {
-
-            root.recolor-requested(
-                root.selected-track,
-                idx
-            );
-
-            color-popup.close();
-        }
-    }
-}
+// color-popup := PopupWindow { ... }
 
 
 // =====================================================
-// POPUP NOVA TRACK
+// POPUP NOVA TRACK (desabilitado)
 // =====================================================
 
-new-track-popup := PopupWindow {
-
-    x: 0;
-
-    y: root.ruler-height + 2px;
-
-    width: 230px;
-    height: 332px;
-
-    close-policy: close-on-click-outside;
-
-
-    Rectangle {
-
-        width: parent.width;
-        height: parent.height;
-
-        background: Theme.surface-high;
-
-        border-radius: 8px;
-
-        border-width: 1px;
-
-        border-color: Theme.border;
-
-
-        VerticalLayout {
-
-            padding: 6px;
-
-            spacing: 2px;
-
-
-            Text {
-
-                text: "NOVA TRACK";
-
-                color: Theme.text-dim;
-
-                font-size: 9px;
-
-                font-weight: 700;
-            }
-
-
-            TrackTypeItem {
-
-                icon: @image-url("../icons/audio.svg");
-
-                name: "Audio";
-
-                description: "Onda de áudio gravada";
-
-                item-color: #00C853;
-
-                clicked => {
-
-                    root.add-track-requested("AUDIO");
-
-                    new-track-popup.close();
-                }
-            }
-
-
-            TrackTypeItem {
-
-                icon: @image-url("../icons/midi.svg");
-
-                name: "MIDI";
-
-                description: "Notas e dados de controlador";
-
-                item-color: #6FA86B;
-
-                clicked => {
-
-                    root.add-track-requested("MIDI");
-
-                    new-track-popup.close();
-                }
-            }
-
-
-            TrackTypeItem {
-
-                icon: @image-url("../icons/instrument.svg");
-
-                name: "Instrument";
-
-                description: "Instrumento virtual (VST)";
-
-                item-color: #6FB3E0;
-
-                clicked => {
-
-                    root.add-track-requested("INSTRUMENT");
-
-                    new-track-popup.close();
-                }
-            }
-
-
-            TrackTypeItem {
-
-                icon: @image-url("../icons/drum.svg");
-
-                name: "Drum Machine";
-
-                description: "Bateria por steps";
-
-                item-color: #F2B021;
-
-                clicked => {
-
-                    root.add-track-requested("DRUM");
-
-                    new-track-popup.close();
-                }
-            }
-
-
-            TrackTypeItem {
-
-                icon: @image-url("../icons/fx.svg");
-
-                name: "FX";
-
-                description: "Cadeia de efeitos";
-
-                item-color: #B07CD8;
-
-                clicked => {
-
-                    root.add-track-requested("FX");
-
-                    new-track-popup.close();
-                }
-            }
-
-
-            TrackTypeItem {
-
-                icon: @image-url("../icons/bus.svg");
-
-                name: "Bus";
-
-                description: "Rota de múltiplos canais";
-
-                item-color: #4EC9C9;
-
-                clicked => {
-
-                    root.add-track-requested("BUS");
-
-                    new-track-popup.close();
-                }
-            }
-
-
-            TrackTypeItem {
-
-                icon: @image-url("../icons/master.svg");
-
-                name: "Master";
-
-                description: "Saída principal";
-
-                item-color: #E8E8E8;
-
-                clicked => {
-
-                    root.add-track-requested("MASTER");
-
-                    new-track-popup.close();
-                }
-            }
-        }
-    }
-}
-}
+// new-track-popup := PopupWindow { ... }

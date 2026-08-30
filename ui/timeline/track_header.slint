@@ -353,82 +353,81 @@ export component TrackHeaderRow inherits Rectangle {
         // CONTROLES
         // ========================================================
 
+        HorizontalLayout {
+            spacing: 1px;
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
-            HorizontalLayout {
-                width: parent.width - 4px;
-                cross-axis-alignment: CrossAxisAlignment.center;
-                height: parent.height - 4px;
+            // ------------------------------------------------
+            // MUTE
+            // ------------------------------------------------
 
-                spacing: 1px;
+            ControlButton {
+                label: "M";
+                width: 18px;
+                height: 18px;
 
-                // ------------------------------------------------
-                // MUTE
-                // ------------------------------------------------
+                active: root.muted;
 
-                ControlButton {
-                    height: 18px;
-                    label: "M";
-                    width: 18px;
+                active-background: Theme.warn;
 
-                    active: root.muted;
+                active-color: Theme.base;
+                border-radius: 2px;
 
-                    active-background: Theme.warn;
-
-                    active-color: Theme.base;
-
-                    clicked => {
-                        root.muted = !root.muted;
-                        root.mute-clicked(root.track-index);
-                    }
-                }
-
-                // ------------------------------------------------
-                // SOLO
-                // ------------------------------------------------
-
-                ControlButton {
-                    height: 18px;
-                    label: "S";
-                    width: 18px;
-
-                    active: root.solo;
-
-                    active-background: root.track-color;
-
-                    active-color: Theme.base;
-
-                    clicked => {
-                        root.solo = !root.solo;
-                        root.solo-clicked(root.track-index);
-                    }
-                }
-
-                // ------------------------------------------------
-                // AUTOMATION
-                // ------------------------------------------------
-
-                ControlButton {
-                    height: 18px;
-                    label: "A";
-                    width: 18px;
-
-                    active: root.automation-enabled;
-
-                    active-background: Theme.clip-midi;
-
-                    active-color: Theme.base;
-
-                    clicked => {
-                        root.automation-enabled =
-                            !root.automation-enabled;
-
-                        root.automation-clicked(
-                            root.track-index
-                        );
-                    }
+                clicked => {
+                    root.muted = !root.muted;
+                    root.mute-clicked(root.track-index);
                 }
             }
-        
+
+            // ------------------------------------------------
+            // SOLO
+            // ------------------------------------------------
+
+            ControlButton {
+                label: "S";
+                width: 18px;
+                height: 18px;
+
+                active: root.solo;
+
+                active-background: root.track-color;
+
+                active-color: Theme.base;
+                border-radius: 2px;
+
+                clicked => {
+                    root.solo = !root.solo;
+                    root.solo-clicked(root.track-index);
+                }
+            }
+
+            // ------------------------------------------------
+            // AUTOMATION
+            // ------------------------------------------------
+
+            ControlButton {
+                label: "A";
+                width: 18px;
+                height: 18px;
+
+                active: root.automation-enabled;
+
+                active-background: Colors.darkorange;
+
+                active-color: Theme.base;
+                border-radius: 2px;
+
+                clicked => {
+                    root.automation-enabled =
+                        !root.automation-enabled;
+
+                    root.automation-clicked(
+                        root.track-index
+                    );
+                }
+            }
+        }
 
         // ========================================================
         // RECORD
@@ -439,6 +438,7 @@ export component TrackHeaderRow inherits Rectangle {
 
             icon-color: Theme.danger;
 
+            preferred-width: 0px;
             toggled: root.record-armed;
 
             toggled-bg: Theme.danger;
@@ -446,6 +446,7 @@ export component TrackHeaderRow inherits Rectangle {
             toggled-fg: Theme.surface-high;
 
             borderless: true;
+            corner-radius: 2px;
 
             icon-size: 14px;
 
