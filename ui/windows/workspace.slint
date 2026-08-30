@@ -890,7 +890,7 @@ export component Workspace inherits Rectangle {
                 x:
                     root.clip-pool-open && !root.clip-pool-floating
                         ? root.left-panel-width
-                        : 0px;
+                        : 5px;
 
                 y:
                     0px;
@@ -900,7 +900,7 @@ export component Workspace inherits Rectangle {
                     - (
                         root.clip-pool-open && !root.clip-pool-floating
                             ? root.left-panel-width
-                            : 0px
+                            : 5px
                     )
                     - (
                         root.explorer-visible
