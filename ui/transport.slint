@@ -453,22 +453,6 @@ export component Transport inherits Rectangle {
     }
 
 
-    // ============================================================
-    // BORDA INFERIOR
-    // ============================================================
-
-    Rectangle {
-
-        y:
-            parent.height - 1px;
-
-        width: 100%;
-        height: 1px;
-
-        background:
-            Theme.border;
-    }
-
     metronome-popup := PopupWindow {
         x: parent.width - 245px;
         y: parent.height + 4px;

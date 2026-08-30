@@ -3,79 +3,6 @@ import { Button } from "../components/button.slint";
 import { TimelineVolume } from "../components/timeline_fader.slint";
 
 // ================================================================
-// CONTROL BUTTON
-// ================================================================
-
-component ControlButton inherits Rectangle {
-    in property <string> label: "";
-    in property <bool> active: false;
-    in property <color> active-background: Theme.accent;
-    in property <color> active-color: Theme.base;
-
-    callback clicked();
-
-    width: 22px;
-    height: 22px;
-
-    border-radius: 5px;
-
-    background:
-        root.active
-            ? root.active-background
-            : area.has-hover
-                ? Theme.surface-high
-                : transparent;
-
-    opacity:
-        area.pressed
-            ? 0.65
-            : 1.0;
-
-    animate background {
-        duration: 100ms;
-    }
-
-    animate opacity {
-        duration: 60ms;
-    }
-
-    Text {
-        x: 0;
-        y: 0;
-
-        width: parent.width;
-        height: parent.height;
-
-        text: root.label;
-
-        color:
-            root.active
-                ? root.active-color
-                : Theme.text-dim;
-
-        font-size: 9px;
-        font-weight: 700;
-
-        horizontal-alignment: center;
-        vertical-alignment: center;
-    }
-
-    area := TouchArea {
-        x: 0;
-        y: 0;
-
-        width: parent.width;
-        height: parent.height;
-
-        mouse-cursor: pointer;
-
-        clicked => {
-            root.clicked();
-        }
-    }
-}
-
-// ================================================================
 // TRACK HEADER ROW
 // ================================================================
 
@@ -362,17 +289,23 @@ export component TrackHeaderRow inherits Rectangle {
             // MUTE
             // ------------------------------------------------
 
-            ControlButton {
-                label: "M";
+            Button {
+                text: "M";
                 width: 18px;
                 height: 18px;
 
-                active: root.muted;
+                resting-bg: Theme.surface-high;
+                text-color: Theme.text-primary;
 
-                active-background: Theme.warn;
+                toggled: root.muted;
 
-                active-color: Theme.base;
-                border-radius: 2px;
+                toggled-bg: Theme.warn;
+                toggled-fg: Theme.on-accent;
+                toggled-icon-color: Theme.on-accent;
+                subtle-toggled: false;
+
+                borderless: true;
+                corner-radius: 2px;
 
                 clicked => {
                     root.muted = !root.muted;
@@ -384,17 +317,23 @@ export component TrackHeaderRow inherits Rectangle {
             // SOLO
             // ------------------------------------------------
 
-            ControlButton {
-                label: "S";
+            Button {
+                text: "S";
                 width: 18px;
                 height: 18px;
 
-                active: root.solo;
+                resting-bg: Theme.surface-high;
+                text-color: Theme.text-primary;
 
-                active-background: root.track-color;
+                toggled: root.solo;
 
-                active-color: Theme.base;
-                border-radius: 2px;
+                toggled-bg: root.track-color;
+                toggled-fg: Theme.on-accent;
+                toggled-icon-color: Theme.on-accent;
+                subtle-toggled: false;
+
+                borderless: true;
+                corner-radius: 2px;
 
                 clicked => {
                     root.solo = !root.solo;
@@ -406,17 +345,23 @@ export component TrackHeaderRow inherits Rectangle {
             // AUTOMATION
             // ------------------------------------------------
 
-            ControlButton {
-                label: "A";
+            Button {
+                text: "A";
                 width: 18px;
                 height: 18px;
 
-                active: root.automation-enabled;
+                resting-bg: Theme.surface-high;
+                text-color: Theme.text-primary;
 
-                active-background: Colors.darkorange;
+                toggled: root.automation-enabled;
 
-                active-color: Theme.base;
-                border-radius: 2px;
+                toggled-bg: Colors.darkorange;
+                toggled-fg: Theme.on-accent;
+                toggled-icon-color: Theme.on-accent;
+                subtle-toggled: false;
+
+                borderless: true;
+                corner-radius: 2px;
 
                 clicked => {
                     root.automation-enabled =

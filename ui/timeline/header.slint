@@ -197,7 +197,7 @@ export component TimelineHeader inherits Rectangle {
         clip: true;
 
 
-        Rectangle {
+        VerticalLayout {
 
             x: 0;
 
@@ -210,21 +210,12 @@ export component TimelineHeader inherits Rectangle {
                 * 64px
                 * root.zoom-y;
 
-            background: transparent;
+            spacing: 0;
 
+            alignment: LayoutAlignment.stretch;
 
-            VerticalLayout {
-
-                
-
-                height: parent.height;
-
-                spacing: 0;
-
-                alignment: LayoutAlignment.start;
-
-                cross-axis-alignment:
-                    CrossAxisAlignment.stretch;
+            cross-axis-alignment:
+                CrossAxisAlignment.stretch;
 
 
                 for name[i] in root.track-names:
@@ -272,7 +263,6 @@ export component TimelineHeader inherits Rectangle {
                 }
             }
         }
-    }
 }
 
 
