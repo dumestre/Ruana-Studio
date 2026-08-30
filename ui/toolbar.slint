@@ -143,16 +143,12 @@ export component Toolbar inherits Rectangle {
                 Button {
                     icon: @image-url("icons/follow.svg"); filled-icon: @image-url("icons/follow_filled.svg");
                 icon-size: 16px; icon-color: Theme.text-primary; height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
-<<<<<<< HEAD
                 toggled: root.follow-enabled;
                 toggled-bg: Theme.is-paper ? Theme.accent : Theme.toggle-active-bg;
                 toggled-fg: Theme.is-paper ? Theme.text-primary : Theme.text-primary;
                 toggled-icon-color: Theme.is-paper ? Theme.text-primary : Theme.accent;
                 subtle-toggled: !Theme.is-paper;
                 borderless: true;
-=======
-                toggled: root.follow-enabled; toggled-bg: Theme.toggle-active-bg; toggled-fg: Theme.text-primary; borderless: true; subtle-toggled: true;
->>>>>>> 2ff704c (213)
                 clicked => {
                     root.follow-enabled = !root.follow-enabled;
                     root.follow-toggled(root.follow-enabled);
@@ -163,16 +159,12 @@ export component Toolbar inherits Rectangle {
             Button {
                 icon: @image-url("icons/snap.svg"); filled-icon: @image-url("icons/snap_filled.svg");
                 icon-size: 16px; icon-color: Theme.text-primary; height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
-<<<<<<< HEAD
                 toggled: root.snap-enabled;
                 toggled-bg: Theme.is-paper ? Theme.accent : Theme.toggle-active-bg;
                 toggled-fg: Theme.is-paper ? Theme.text-primary : Theme.text-primary;
                 toggled-icon-color: Theme.is-paper ? Theme.text-primary : Theme.accent;
                 subtle-toggled: !Theme.is-paper;
                 borderless: true;
-=======
-                toggled: root.snap-enabled; toggled-bg: Theme.toggle-active-bg; toggled-fg: Theme.text-primary; borderless: true; subtle-toggled: true;
->>>>>>> 2ff704c (213)
                 clicked => {
                     root.snap-enabled = !root.snap-enabled;
                     root.snap-toggled(root.snap-enabled);
