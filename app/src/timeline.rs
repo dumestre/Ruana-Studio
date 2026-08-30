@@ -242,24 +242,60 @@ pub fn install(
 
     // Resize de clip: len (e beat, na borda esquerda) finais,
     // aplicados uma única vez.
+    //
+    // A waveform NÃO é re-projetada nem re-escalada pelo resize:
+    // o cache é aparado ao trecho visível novo (crop ANCORADO ao
+    // grid — borda só esconde/revela) e o re-render seguinte já
+    // desenha o trecho na mesma escala. Quem altera o desenho do
+    // wave são o ZOOM e o FADE in/out.
     {
         let project = project.clone();
+        let waveforms = waveforms.clone();
         let clips_model = clips_model.clone();
         ui.on_clip_resize_committed(move |id, side, new_len, new_beat| {
+            let id_u = id.max(0) as u64;
             let len = new_len.max(0.25);
             let beat = new_beat.max(0.0);
 
-            if let Some(i) = clip_row(&clips_model, id) {
-                if let Some(mut clip) = clips_model.row_data(i) {
-                    let start = if side < 0 { beat } else { clip.beat };
-                    if side < 0 {
-                        clip.beat = beat;
-                    }
-                    clip.len = len;
-                    clips_model.set_row_data(i, clip);
-                    project.borrow_mut().resize_clip(id as u64, start, len);
+            let Some(i) = clip_row(&clips_model, id) else {
+                return;
+            };
+            let Some(mut clip) = clips_model.row_data(i) else {
+                return;
+            };
+
+            let old_start = clip.beat;
+            let old_len = clip.len;
+            let start = if side < 0 { beat } else { old_start };
+
+            // Apara o cache ao trecho que o clip passa a enxergar:
+            // borda esquerda avança o source (janela fraciona a partir
+            // do início do OLD len); borda direita só encurta. O wave
+            // mantém a mesma amostra-por-pixel → nada de esticamento.
+            if !clip.is_midi && old_len > 0.0 {
+                let f0 = (((beat - old_start) / old_len).clamp(0.0, 1.0)) as f64;
+                let f1 = ((len / old_len).clamp(0.0, 1.0 - f0 as f32)) as f64;
+                let mut wf = waveforms.borrow_mut();
+                if let Some(cw) = wf.get(&id_u).cloned() {
+                    let trimmed = crate::waveform::trim_cached_wave(&cw, f0, f1);
+                    wf.insert(id_u, trimmed);
                 }
+                drop(wf);
+                let wf = waveforms.borrow();
+                let updated = crate::waveform::to_clip_data_from_id(id_u, &clip, &wf);
+                clip.beat = beat;
+                clip.len = len;
+                // Só os DADOS mudam aqui: a imagem anterior (ancorada)
+                // continua no lugar até o re-render do trecho novo chegar
+                // (o corpo com `clip` já mostra o crop correto no meio tempo).
+                clip.waveform_points = updated.waveform_points;
+            } else {
+                clip.beat = beat;
+                clip.len = len;
             }
+
+            clips_model.set_row_data(i, clip);
+            project.borrow_mut().resize_clip(id_u, start, len);
         });
     }
 

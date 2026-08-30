@@ -6,9 +6,14 @@
 //!   (linhas retas — sem splines: interpolação inventa overshoot)
 //! - Mapeamento por posição relativa (`x/w * n`), distribuição
 //!   uniforme dos samples por coluna de pixel
-//! - MODO OSCILOSCÓPIO automático: com menos de ~2 samples por
-//!   pixel, desenha a linha real sample a sample em vez do
-//!   envelope — os ciclos individuais ficam visíveis no zoom fundo
+//! - MODO OSCILOSCÓPIO automático (zoom fundo, < ~2 samples por
+//!   pixel): desenha UMA única linha que oscila positivo/negativo
+//!   sobre um eixo central horizontal (estilo WaveLab), sem
+//!   preenchimento — os ciclos individuais ficam visíveis
+//! - Acima disso: envelope MIN/MAX sólido (visão geral)
+//! - As imagens são rasterizadas na ALTURA DE EXIBIÇÃO pedida
+//!   pela UI (`h`), não numa altura fixa: linhas traçadas ficam
+//!   nítidas 1:1 na tela (sem achatamento vertical do canvas 512)
 //! - Waveform sempre escura (#0A0A0A), padrão DAW, nos dois modos
 
 use tiny_skia::*;
@@ -313,24 +318,20 @@ pub fn build_display_wave(mono: &[f32]) -> (Vec<f32>, Mipmap) {
     (ds, mip)
 }
 
-/// Rasteriza o envelope MIN/MAX+RMS lendo os buckets pré-computados
-/// do nível certo para a largura pedida — sem varrer os samples.
-fn draw_envelope_mip(
+/// Calcula os contornos superior/inferior do envelope (MIN/MAX+RMS)
+/// a partir dos buckets pré-computados, coluna a coluna de pixel.
+fn envelope_contours(
     pixmap: &mut Pixmap,
     buckets: &[MipBucket],
     bucket_size: usize,
     y_center: f32,
     half_h: f32,
     view: (usize, usize),
-) {
+) -> (Vec<f32>, Vec<f32>) {
     let w = pixmap.width();
     let n = view.1.saturating_sub(view.0);
     let v0 = view.0;
     let bucket_size = bucket_size.max(1);
-
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(FG[0], FG[1], FG[2], FG[3]);
-    paint.anti_alias = true;
 
     let mut top = Vec::with_capacity(w as usize);
     let mut bottom = Vec::with_capacity(w as usize);
@@ -376,6 +377,25 @@ fn draw_envelope_mip(
         bottom.push(y_center + (-lower * half_h).max(MIN_HALF));
     }
 
+    (top, bottom)
+}
+
+/// Rasteriza o envelope MIN/MAX+RMS preenchido (visão geral).
+fn draw_envelope_mip(
+    pixmap: &mut Pixmap,
+    buckets: &[MipBucket],
+    bucket_size: usize,
+    y_center: f32,
+    half_h: f32,
+    view: (usize, usize),
+) {
+    let w = pixmap.width();
+    let (top, bottom) = envelope_contours(pixmap, buckets, bucket_size, y_center, half_h, view);
+
+    let mut paint = Paint::default();
+    paint.set_color_rgba8(FG[0], FG[1], FG[2], FG[3]);
+    paint.anti_alias = true;
+
     let mut pb = PathBuilder::new();
     pb.move_to(0.0, top[0]);
     for x in 1..w as usize {
@@ -391,22 +411,24 @@ fn draw_envelope_mip(
     }
 }
 
-/// Rasteriza o mono de exibição (downsample/mipmap) na largura pedida.
+/// Rasteriza o mono de exibição (downsample/mipmap) na largura e
+/// altura pedidas (`h` = altura de EXIBIÇÃO em px da UI).
 ///
 /// `view.0..view.1` é a fatia visível em samples (do mono de origem).
-/// MODO OSCILOSCÓPIO quando o zoom está muito fundo (< 2 samples/px):
-/// aí o nível 0 não basta — desenha o mono direto sample a sample.
+/// - spp < 2 (zoom fundo): osciloscópio — UMA linha oscilando sobre o
+///   eixo central, sem preenchimento (estilo WaveLab).
+/// - caso contrário: envelope MIN/MAX sólido (visão geral).
 pub fn waveform_image_rgba_mip(
     mono: &[f32],
     mip: &Mipmap,
     w: u32,
+    h: u32,
     view: (usize, usize),
 ) -> Option<Vec<u8>> {
-    if mono.is_empty() || w == 0 {
+    if mono.is_empty() || w == 0 || h == 0 {
         return None;
     }
 
-    let h = H;
     let mut pm = new_canvas(w, h);
     let center = h as f32 / 2.0;
     let half_h = h as f32 / 2.0 - 4.0;
@@ -414,14 +436,14 @@ pub fn waveform_image_rgba_mip(
     let n = view.1.saturating_sub(view.0);
     let spp = n as f64 / w as f64;
 
+    let lvl = mip.level_for(spp);
+    let level = mip.levels.get(lvl).map(|l| (&**l, mip.bucket(lvl)));
+
     if spp < SCOPE_SAMPLES_PER_PX {
         draw_scope_lane(&mut pm, mono, center, half_h, view);
     } else {
-        let lvl = mip.level_for(spp);
-        match mip.levels.get(lvl) {
-            Some(level) => {
-                draw_envelope_mip(&mut pm, level, mip.bucket(lvl), center, half_h, view)
-            }
+        match level {
+            Some((l, b)) => draw_envelope_mip(&mut pm, l, b, center, half_h, view),
             None => draw_scope_lane(&mut pm, mono, center, half_h, view),
         }
     }
@@ -437,15 +459,14 @@ pub fn waveform_image_rgba_mip(
 // a integração avança.
 // ============================================================
 
-/// Rasteriza os picos num envelope contínuo, largura `w` px.
+/// Rasteriza os picos num envelope contínuo, largura `w` e altura `h` px.
 ///
 /// Os valores já chegam como amplitude real 0..1 (RMS + crista,
 /// sem normalização por arquivo): áudio baixo desenha baixo.
-pub fn waveform_image_rgba_at(peaks: &[f32], w: u32) -> Option<Vec<u8>> {
-    if peaks.is_empty() || w == 0 {
+pub fn waveform_image_rgba_at(peaks: &[f32], w: u32, h: u32) -> Option<Vec<u8>> {
+    if peaks.is_empty() || w == 0 || h == 0 {
         return None;
     }
-    let h = H;
 
     let mut pixmap = Pixmap::new(w, h)?;
     let center = h as f32 / 2.0;
@@ -497,7 +518,7 @@ pub fn waveform_image_rgba_at(peaks: &[f32], w: u32) -> Option<Vec<u8>> {
 
 /// Compatibilidade: rasteriza na largura padrão.
 pub fn waveform_image_rgba(peaks: &[f32], _color_index: i32, _is_midi: bool) -> Option<Vec<u8>> {
-    waveform_image_rgba_at(peaks, WAVEFORM_IMG_WIDTH as u32)
+    waveform_image_rgba_at(peaks, WAVEFORM_IMG_WIDTH as u32, H)
 }
 
 #[cfg(test)]
@@ -539,20 +560,45 @@ mod tests {
     #[test]
     fn mip_raster_matches_scan_at_column_alignment() {
         // Sinal senoidal; largura e tamanho poder-de-dois alinham as
-        // colunas com os buckets do nível 0 → o raster mip tem que
-        // ser IDÊNTICO ao scan direto dos samples.
-        let n = 64usize;
+        // colunas com os buckets do nível escolhido → o raster mip tem
+        // que ser IDÊNTICO ao scan direto dos samples. spp = 256 fica
+        // ACIMA do limiar de osciloscópio → ambos no envelope sólido.
+        let n = 1024usize;
         let mono: Vec<f32> = (0..n)
             .map(|i| ((i as f32 / 4.0).sin()) * 0.9)
             .collect();
         let mip = build_mipmap(&mono);
         let view = (0usize, n);
-        let w = 16u32; // spp = 4 → nível bucket 4 alinhado (borda par da coluna)
+        let w = 4u32; // spp = 256 → envelope sólido, bucket 256 alinhado
         let scan = waveform_image_rgba_at_samples(&mono, &mono, w, view).unwrap();
-        let mip_img = waveform_image_rgba_mip(&mono, &mip, w, view).unwrap();
+        let mip_img = waveform_image_rgba_mip(&mono, &mip, w, H, view).unwrap();
         assert_eq!(scan.len(), mip_img.len());
         for (a, b) in scan.iter().zip(mip_img.iter()) {
             assert_eq!(a, b, "pixel divergente no envelope mip");
         }
+    }
+
+    #[test]
+    fn scope_draws_single_oscillating_line() {
+        // spp = 0.5 (< 2) → osciloscópio: UMA linha fina (pouca tinta),
+        // não o envelope preenchido (que cobriria boa parte do corpo).
+        let n = 256usize;
+        let mono: Vec<f32> = (0..n)
+            .map(|i| ((i as f32 / 4.0).sin()) * 0.9)
+            .collect();
+        let mip = build_mipmap(&mono);
+        let view = (0usize, n);
+        let w = 512u32;
+        let h = 64u32;
+        let img = waveform_image_rgba_mip(&mono, &mip, w, h, view).unwrap();
+        let total = img.len() / 4;
+        let opaque = img.chunks_exact(4).filter(|p| p[3] > 0).count();
+        assert!(opaque > 0, "osciloscópio precisa de linha visível");
+        // Linha ≈ algumas fileiras de pixels; envelope preenchido
+        // cobriria a maior parte do corpo.
+        assert!(
+            opaque < total / 3,
+            "linha deve ser fina (tinta {opaque} de {total})"
+        );
     }
 }

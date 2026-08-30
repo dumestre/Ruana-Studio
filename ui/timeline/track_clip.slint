@@ -74,6 +74,12 @@ export component TrackClip inherits Rectangle {
     private property <float> wave-area-origin:
         root.bw / 1px + 2.0;
 
+    // Altura de EXIBIÇÃO do corpo do clip (px). O re-render rasteriza
+    // a waveform nesta altura real — contornos e linhas ficam nítidos
+    // 1:1 na tela (sem achatamento vertical).
+    private property <float> wave-body-px:
+        (root.row-height - root.header-height - root.bw) / 1px;
+
     // Início da janela visível, em px do trecho da waveform
     // (0 = borda esquerda do corpo). Recorta [0, largura-px].
     private property <float> wave-w0:
@@ -96,7 +102,8 @@ export component TrackClip inherits Rectangle {
         );
 
     changed width => {
-        if !root.is-midi
+        if !root.resizing
+            && !root.is-midi
             && root.interactive
             && root.waveform-peaks.length > 0
             && root.width > 4px
@@ -107,6 +114,7 @@ export component TrackClip inherits Rectangle {
                 (root.width - 4px) / 1px,
                 root.wave-w0,
                 root.wave-w1,
+                root.wave-body-px,
             );
         }
     }
@@ -115,7 +123,8 @@ export component TrackClip inherits Rectangle {
     // (wave-w1 depende de viewport-x, viewport-width e px-per-beat),
     // então este changed re-dispara o pedido com o novo recorte.
     changed wave-w1 => {
-        if !root.is-midi
+        if !root.resizing
+            && !root.is-midi
             && root.interactive
             && root.waveform-peaks.length > 0
             && root.width > 4px
@@ -126,6 +135,29 @@ export component TrackClip inherits Rectangle {
                 (root.width - 4px) / 1px,
                 root.wave-w0,
                 root.wave-w1,
+                root.wave-body-px,
+            );
+        }
+    }
+
+    // RESIZE: não existe RE-RENDER durante o gesto (guards acima).
+    // No CÓRTE da borda, o Rust aparou o cache da waveform para o
+    // trecho visível (crop ancorado, sem re-escalar) e este changed
+    // resizing pede o raster do trecho novo assim que o gesto solta.
+    changed resizing => {
+        if !root.resizing
+            && !root.is-midi
+            && root.interactive
+            && root.waveform-peaks.length > 0
+            && root.width > 4px
+            && root.wave-w1 > root.wave-w0 + 0.5 {
+
+            TimelineMetrics.waveform-resolution-requested(
+                root.clip-id,
+                (root.width - 4px) / 1px,
+                root.wave-w0,
+                root.wave-w1,
+                root.wave-body-px,
             );
         }
     }
@@ -635,6 +667,49 @@ export component TrackClip inherits Rectangle {
 
                 peaks:
                     root.waveform-peaks;
+            }
+
+        // =================================================
+        // FADES → ATENUAÇÃO DO WAVEFORM
+        //
+        // A região do fade-in/out escurece a waveform seguindo a
+        // curva (amplitude reduzida até zero na ponta). Gradiente
+        // horizontal sobre o tom do corpo, acima do wave/image e
+        // abaixo da cunha diaginal (z 6) e dos pinos (z 7).
+        // =================================================
+
+        if root.show-fade-controls && root.fade-in-w >= 1px:
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: root.fade-in-w;
+                height: parent.height;
+
+                background: @linear-gradient(
+                    90deg,
+                    root.clip-color.darker(0.12).with-alpha(0.92) 0%,
+                    transparent 100%
+                );
+
+                z: 5;
+            }
+
+        if root.show-fade-controls && root.fade-out-w >= 1px:
+
+            Rectangle {
+                x: parent.width - root.fade-out-w;
+                y: 0px;
+                width: root.fade-out-w;
+                height: parent.height;
+
+                background: @linear-gradient(
+                    90deg,
+                    transparent 0%,
+                    root.clip-color.darker(0.12).with-alpha(0.92) 100%
+                );
+
+                z: 5;
             }
     }
 

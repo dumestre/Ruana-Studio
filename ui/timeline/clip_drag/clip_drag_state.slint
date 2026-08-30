@@ -236,10 +236,11 @@ export global TimelineMetrics {
     // Global porque o handler vive no Rust (MainWindow) e o
     // pedido nasce dentro de cada TrackClip.
     //
-    // (id, largura total do corpo em px, janela visível x0/x1 em px).
+    // (id, largura total do corpo em px, janela visível x0/x1 em px,
+    // altura de exibição do corpo em px).
     // A janela é o trecho do clip que está na viewport — no zoom
     // fundo só ele é rasterizado (puro, leve, sem varrer o arquivo).
-    callback waveform-resolution-requested(int, float, float, float);
+    callback waveform-resolution-requested(int, float, float, float, float);
 }
 
 

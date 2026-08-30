@@ -111,18 +111,24 @@ pub fn wire_resolution_requests(
     // de atravessar — a UI nunca espera); (3) bytes voltam por um
     // canal e um timer curto (collector) aplica no modelo dentro
     // da event loop. O zoom deixa de congelar a UI.
+    //
+    // `h` = altura de EXIBIÇÃO do corpo do clip (px): o raster sai
+    // na resolução vertical real — envelopes e linhas ficam nítidos
+    // 1:1 na tela, sem achatamento do canvas fixo de 512.
     {
-        let pending: Rc<RefCell<HashMap<i32, (u32, f32, f32)>>> =
+        let pending: Rc<RefCell<HashMap<i32, (u32, f32, f32, u32)>>> =
             Rc::new(RefCell::new(HashMap::new()));
-        let done_window: Rc<RefCell<HashMap<u64, (u32, u32, u32)>>> =
+        let done_window: Rc<RefCell<HashMap<u64, (u32, u32, u32, u32)>>> =
             Rc::new(RefCell::new(HashMap::new()));
         let debounce: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
         let collector_timer: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
         let in_flight: Rc<Cell<usize>> = Rc::new(Cell::new(0));
-        // (id, largura total, largura rasterizada, janela x0, x1, rgba)
-        let (tx, rx0) = mpsc::channel::<(i32, u32, u32, f32, f32, Option<Vec<u8>>)>();
-        let rx: Rc<RefCell<mpsc::Receiver<(i32, u32, u32, f32, f32, Option<Vec<u8>>)>>> =
-            Rc::new(RefCell::new(rx0));
+        // (id, largura total, largura rasterizada, janela x0, x1, altura, rgba)
+        let (tx, rx0) =
+            mpsc::channel::<(i32, u32, u32, f32, f32, u32, Option<Vec<u8>>)>();
+        let rx: Rc<
+            RefCell<mpsc::Receiver<(i32, u32, u32, f32, f32, u32, Option<Vec<u8>>)>>,
+        > = Rc::new(RefCell::new(rx0));
 
         /// Trabalho que vai para a thread de fundo.
         enum RenderJob {
@@ -134,17 +140,27 @@ pub fn wire_resolution_requests(
         }
 
         ui.global::<TimelineMetrics>()
-            .on_waveform_resolution_requested(move |id, width_px, wx0, wx1| {
+            .on_waveform_resolution_requested(move |id, width_px, wx0, wx1, hh| {
                 let id_u = id.max(0) as u64;
                 let w = (width_px.round() as u32).clamp(16, 16384);
-                let x0 = wx0.round() as u32;
-                let x1 = wx1.round() as u32;
+                let h = (hh.round() as u32).clamp(4, 2048);
+                // wx0/wx1 podem cair fora de [0, width] em gestos
+                // transitórios (scroll/zoom além do clip, negativos):
+                // clampar ANTES de virar índice evita wrap de usize
+                // (negativo → número gigante que estoura o clamp).
+                let max = width_px.round().max(0.0);
+                let x0 = wx0.round().clamp(0.0, max) as u32;
+                let x1 = wx1.round().clamp(0.0, max) as u32;
 
-                // Janela já renderizada nessa resolução? Nada a fazer.
-                if done_window.borrow().get(&id_u) == Some(&(w, x0, x1)) {
+                if x1 <= x0 {
                     return;
                 }
-                pending.borrow_mut().insert(id, (w, wx0, wx1));
+
+                // Janela já renderizada nessa resolução? Nada a fazer.
+                if done_window.borrow().get(&id_u) == Some(&(w, x0, x1, h)) {
+                    return;
+                }
+                pending.borrow_mut().insert(id, (w, wx0, wx1, h));
 
                 // Reinicia o timer (debounce do gesto de zoom/scroll).
                 let t = slint::Timer::default();
@@ -162,13 +178,18 @@ pub fn wire_resolution_requests(
                         slint::TimerMode::SingleShot,
                         std::time::Duration::from_millis(40),
                         move || {
-                            let jobs: Vec<(i32, u32, f32, f32)> = pending
+                            let jobs: Vec<(i32, u32, f32, f32, u32)> = pending
                                 .borrow_mut()
                                 .drain()
-                                .map(|(id, (w_full, wx0, wx1))| (id, w_full, wx0, wx1))
+                                .map(|(id, (w_full, wx0, wx1, h))| (id, w_full, wx0, wx1, h))
                                 .collect();
-                            for (id, w_full, wx0, wx1) in jobs {
+                            for (id, w_full, wx0, wx1, h_px) in jobs {
                                 let id_u = id.max(0) as u64;
+                                // Geométria degenerada (gesto transitório)
+                                // ou altura inválida: pula com segurança.
+                                if wx1 <= wx0 || h_px < 2 {
+                                    continue;
+                                }
                                 // Largura rasterizada = apenas a janela
                                 // visível (≤ viewport). Clona a entrada
                                 // ANTES da thread (RefCell não atravessa).
@@ -179,10 +200,22 @@ pub fn wire_resolution_requests(
                                         Some(c) if !c.mono_ds.is_empty() => {
                                             let n = c.mono_ds.len();
                                             let f = w_full as f64;
-                                            let s0 = ((n as f64) * (wx0 as f64) / f).floor() as usize;
-                                            let s1 = ((((n as f64) * (wx1 as f64) / f)
-                                                .ceil()) as usize)
-                                                .clamp(s0, n);
+                                            // wx0/wx1 podem sair de [0, f]
+                                            // (janela além do clip em
+                                            // scroll/resize): clampa antes
+                                            // de virar índice de sample —
+                                            // negativo estoura o usize e
+                                            // `s0 > n` quebra o clamp.
+                                            let wa = wx0.clamp(0.0, w_full as f32);
+                                            let wb = wx1.clamp(0.0, w_full as f32);
+                                            let s0 =
+                                                (((n as f64) * (wa as f64) / f).floor()
+                                                    as usize)
+                                                    .min(n);
+                                            let s1 =
+                                                ((((n as f64) * (wb as f64) / f).ceil())
+                                                    as usize)
+                                                    .clamp(s0, n);
                                             if s1 > s0 {
                                                 Some((
                                                     RenderJob::Mip {
@@ -198,10 +231,16 @@ pub fn wire_resolution_requests(
                                         Some(c) if !c.peaks.is_empty() => {
                                             let n = c.peaks.len();
                                             let f = w_full as f64;
-                                            let p0 = ((n as f64) * (wx0 as f64) / f).floor() as usize;
-                                            let p1 = ((((n as f64) * (wx1 as f64) / f)
-                                                .ceil()) as usize)
-                                                .clamp(p0, n);
+                                            let wa = wx0.clamp(0.0, w_full as f32);
+                                            let wb = wx1.clamp(0.0, w_full as f32);
+                                            let p0 =
+                                                (((n as f64) * (wa as f64) / f).floor()
+                                                    as usize)
+                                                    .min(n);
+                                            let p1 =
+                                                ((((n as f64) * (wb as f64) / f).ceil())
+                                                    as usize)
+                                                    .clamp(p0, n);
                                             if p1 > p0 {
                                                 Some((
                                                     RenderJob::Peaks {
@@ -221,6 +260,7 @@ pub fn wire_resolution_requests(
                                 };
                                 in_flight.set(in_flight.get() + 1);
                                 let w0 = w_px;
+                                let h0 = h_px;
                                 let tx = tx.clone();
                                 std::thread::spawn(move || {
                                     // Raster na thread de fundo: pirâmide
@@ -230,16 +270,16 @@ pub fn wire_resolution_requests(
                                     let rgba = match job {
                                         RenderJob::Mip { mono_ds, mip } => {
                                             daw_media::waveform_image::waveform_image_rgba_mip(
-                                                &mono_ds, &mip, w0, view,
+                                                &mono_ds, &mip, w0, h0, view,
                                             )
                                         }
                                         RenderJob::Peaks { peaks } => {
                                             daw_media::waveform_image::waveform_image_rgba_at(
-                                                &peaks, w0,
+                                                &peaks, w0, h0,
                                             )
                                         }
                                     };
-                                    let _ = tx.send((id, w_full, w0, wx0, wx1, rgba));
+                                    let _ = tx.send((id, w_full, w0, wx0, wx1, h0, rgba));
                                 });
                             }
 
@@ -259,10 +299,11 @@ pub fn wire_resolution_requests(
                                         let mut acted = false;
                                         loop {
                                             let item = rx.borrow_mut().try_recv();
-                                            let (id, w_full, w, wx0, wx1, rgba) = match item {
-                                                Ok(v) => v,
-                                                Err(_) => break,
-                                            };
+                                            let (id, w_full, w, wx0, wx1, h, rgba) =
+                                                match item {
+                                                    Ok(v) => v,
+                                                    Err(_) => break,
+                                                };
                                             acted = true;
                                             in_flight
                                                 .set(in_flight.get().saturating_sub(1));
@@ -270,11 +311,7 @@ pub fn wire_resolution_requests(
                                                 continue;
                                             };
                                             let id_u = id.max(0) as u64;
-                                            let img = image_from_rgba(
-                                                &rgba,
-                                                w,
-                                                daw_media::waveform_image::IMAGE_HEIGHT,
-                                            );
+                                            let img = image_from_rgba(&rgba, w, h);
                                             if let Some(i) = clip_row(&clips_model, id) {
                                                 if let Some(mut data) =
                                                     clips_model.row_data(i)
@@ -291,6 +328,7 @@ pub fn wire_resolution_requests(
                                                             w_full,
                                                             wx0.round() as u32,
                                                             wx1.round() as u32,
+                                                            h,
                                                         ),
                                                     );
                                                 }
@@ -393,6 +431,41 @@ pub fn merge_cached_waves(a: &CachedWave, b: &CachedWave) -> CachedWave {
     CachedWave {
         peaks,
         mono_ds: mono,
+        mip,
+        image: None,
+    }
+}
+
+/// Corta a waveform cacheada ao trecho visível após um RESIZE de
+/// borda — sem re-escalar o conteúdo.
+///
+/// `f0` é a fração (do OLD len) que o novo clip recebe no INÍCIO
+/// (borda esquerda avança o source); `f1` é a fração do len novo.
+/// O conteúdo permanece ANCORADO no grid: um trim de borda direita
+/// só esconde/revela o trecho, nunca encolhe o wave. `image` volta
+/// a `None` — a UI re-rasteriza com o trecho já aparado.
+pub fn trim_cached_wave(cw: &CachedWave, f0: f64, f1: f64) -> CachedWave {
+    let f0 = f0.clamp(0.0, 1.0);
+    let f1 = f1.clamp(0.0, 1.0 - f0);
+
+    let trim = |v: &[f32]| -> Vec<f32> {
+        if v.is_empty() {
+            return Vec::new();
+        }
+        let n = v.len();
+        let lo = ((n as f64 * f0).floor() as usize).min(n - 1);
+        let hi = ((n as f64 * (f0 + f1)).ceil() as usize)
+            .max(lo + 1)
+            .min(n);
+        v[lo..hi].to_vec()
+    };
+
+    let peaks = trim(&cw.peaks);
+    let mono_ds = trim(&cw.mono_ds);
+    let mip = daw_media::waveform_image::build_mipmap(&mono_ds);
+    CachedWave {
+        peaks,
+        mono_ds,
         mip,
         image: None,
     }
