@@ -262,8 +262,7 @@ export component Transport inherits Rectangle {
 
             height: 18px;
             horizontal-stretch: 0;
-            preferred-width: max(52px, pos-label.preferred-width + 16px);
-            width: self.preferred-width;
+            width: 96px;
 
             background:
                 Theme.surface-high;
@@ -403,6 +402,7 @@ export component Transport inherits Rectangle {
                         height: parent.height;
                         vertical-alignment: center;
                         horizontal-alignment: center;
+                        input-type: number;
                         accepted => { root.set-bpm(self.text.to-float()); self.clear-focus(); }
                     }
                     

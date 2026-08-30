@@ -42,22 +42,27 @@ export component Toolbar inherits Rectangle {
     height: 34px;
     background: transparent;
 
-   
+    // ============================================================
+    // LAYOUT PRINCIPAL DA TOOLBAR
+    // ============================================================
 
-    // Layout Principal da Toolbar
     HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        // Espaço geral entre os grandes blocos (Logo, Menus, Ferramentas)
-        spacing: 16px; 
+
+        spacing: 16px;
+
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
 
-        // ==========================================
+
+        // ========================================================
         // 1. LOGO & TÍTULO
-        // ==========================================
+        // ========================================================
+
         HorizontalLayout {
             spacing: 8px;
+
             alignment: LayoutAlignment.center;
             cross-axis-alignment: CrossAxisAlignment.center;
 
@@ -76,100 +81,242 @@ export component Toolbar inherits Rectangle {
             }
         }
 
-        // ==========================================
-        // 2. MENUS (FILE)
-        // ==========================================
+
+        // ========================================================
+        // 2. MENUS
+        // ========================================================
+
         HorizontalLayout {
             spacing: 2px;
+
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
             Button {
-                text: "File"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
+                text: "File";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.surface-high;
+
+                clicked => {}
             }
+
             Button {
-                text: "Edit"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
+                text: "Edit";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.surface-high;
+
+                clicked => {}
             }
+
             Button {
-                text: "New"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
+                text: "New";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.surface-high;
+
+                clicked => {}
             }
+
             Button {
-                text: "Save"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
+                text: "Save";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.surface-high;
+
+                clicked => {}
             }
+
             Button {
-                text: "Save As"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
+                text: "Save As";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.surface-high;
+
+                clicked => {}
             }
+
             Button {
-                text: "Settings"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
+                text: "Settings";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.surface-high;
+
+                clicked => {}
             }
+
             Button {
-                text: "Help"; height: 18px; padding-x: 3px; borderless: true; text-color: Theme.text-primary; letter-spacing: 1px; corner-radius: 2px; resting-bg: Theme.surface-high; clicked => {} 
+                text: "Help";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.surface-high;
+
+                clicked => {}
             }
         }
 
-        // ==========================================
+
+        // ========================================================
         // 3. FERRAMENTAS DA DAW
-        // ==========================================
+        // ========================================================
+
         HorizontalLayout {
-            spacing: 20px; // Espaço maior entre as seções
+            spacing: 20px;
+
             alignment: LayoutAlignment.center;
             cross-axis-alignment: CrossAxisAlignment.center;
 
+
+            // ----------------------------------------------------
+            // UNDO / REDO
+            // ----------------------------------------------------
+
             HorizontalLayout {
                 spacing: 2px;
+
                 alignment: LayoutAlignment.center;
                 cross-axis-alignment: CrossAxisAlignment.center;
 
                 Button {
-                    height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
-                    icon: @image-url("icons/undo.svg"); icon-size: 16px; icon-color: Theme.text-primary; borderless: true; clicked => {}
+                    height: 18px;
+                    width: 18px;
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+
+                    icon: @image-url("icons/undo.svg");
+                    icon-size: 16px;
+                    icon-color: Theme.text-primary;
+
+                    borderless: true;
+
+                    clicked => {}
                 }
+
                 Button {
-                    height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
-                    icon: @image-url("icons/redo.svg"); icon-size: 16px; icon-color: Theme.text-primary; borderless: true; clicked => {}
+                    height: 18px;
+                    width: 18px;
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+
+                    icon: @image-url("icons/redo.svg");
+                    icon-size: 16px;
+                    icon-color: Theme.text-primary;
+
+                    borderless: true;
+
+                    clicked => {}
                 }
             }
+
+
+            // ----------------------------------------------------
+            // FOLLOW / SNAP
+            // ----------------------------------------------------
+
             HorizontalLayout {
                 spacing: 2px;
+
                 alignment: LayoutAlignment.center;
                 cross-axis-alignment: CrossAxisAlignment.center;
 
                 Button {
-                    icon: @image-url("icons/follow.svg"); filled-icon: @image-url("icons/follow_filled.svg");
-                icon-size: 16px; icon-color: Theme.text-primary; height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
-                toggled: root.follow-enabled;
-                toggled-bg: Theme.accent;
-                toggled-fg: Theme.on-accent;
-                toggled-icon-color: Theme.on-accent;
-                subtle-toggled: false;
-                borderless: true;
-                clicked => {
-                    root.follow-enabled = !root.follow-enabled;
-                    root.follow-toggled(root.follow-enabled);
+                    icon: @image-url("icons/follow.svg");
+                    filled-icon: @image-url("icons/follow_filled.svg");
+
+                    icon-size: 16px;
+                    icon-color: Theme.text-primary;
+
+                    height: 18px;
+                    width: 18px;
+
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+
+                    toggled: root.follow-enabled;
+                    toggled-bg: Theme.accent;
+                    toggled-fg: Theme.on-accent;
+                    toggled-icon-color: Theme.on-accent;
+
+                    subtle-toggled: false;
+                    borderless: true;
+
+                    clicked => {
+                        root.follow-enabled = !root.follow-enabled;
+                        root.follow-toggled(root.follow-enabled);
+                    }
                 }
-            }
-            
-            
-            Button {
-                icon: @image-url("icons/snap.svg"); filled-icon: @image-url("icons/snap_filled.svg");
-                icon-size: 16px; icon-color: Theme.text-primary; height: 18px; width: 18px; corner-radius: 2px; resting-bg: Theme.surface-high;
-                toggled: root.snap-enabled;
-                toggled-bg: Theme.accent;
-                toggled-fg: Theme.on-accent;
-                toggled-icon-color: Theme.on-accent;
-                subtle-toggled: false;
-                borderless: true;
-                clicked => {
-                    root.snap-enabled = !root.snap-enabled;
-                    root.snap-toggled(root.snap-enabled);
+
+                Button {
+                    icon: @image-url("icons/snap.svg");
+                    filled-icon: @image-url("icons/snap_filled.svg");
+
+                    icon-size: 16px;
+                    icon-color: Theme.text-primary;
+
+                    height: 18px;
+                    width: 18px;
+
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+
+                    toggled: root.snap-enabled;
+                    toggled-bg: Theme.accent;
+                    toggled-fg: Theme.on-accent;
+                    toggled-icon-color: Theme.on-accent;
+
+                    subtle-toggled: false;
+                    borderless: true;
+
+                    clicked => {
+                        root.snap-enabled = !root.snap-enabled;
+                        root.snap-toggled(root.snap-enabled);
+                    }
                 }
-            }
             }
 
-        
-            
+
+            // ----------------------------------------------------
+            // PROJECT KEY
+            // ----------------------------------------------------
+
             ProjectKey {
-                border-radius: 2px; }
+                border-radius: 2px;
+            }
+
+
+            // ----------------------------------------------------
+            // THEME PICKER
+            // ----------------------------------------------------
+
             ThemePicker {
                 theme-selected(i) => {
                     root.theme-selected(i);
@@ -177,47 +324,155 @@ export component Toolbar inherits Rectangle {
             }
         }
 
-        // ==========================================
-        // TRANSPORT (integrado à toolbar)
-        // ==========================================
+
+        // ========================================================
+        // TRANSPORT
+        // ========================================================
+
         Transport {
             playing <=> root.playing;
             loop-enabled <=> root.loop-enabled;
             metronome-enabled <=> root.metronome-enabled;
             metronome-sound <=> root.metronome-sound;
             metronome-volume <=> root.metronome-volume;
+
             position <=> root.transport-position;
+
             bpm <=> root.bpm;
             beats-per-bar <=> root.beats-per-bar;
             ppq <=> root.ppq;
 
-            play-state-changed(state) => { root.play-state-changed(state); }
-            loop-state-changed(state) => { root.loop-state-changed(state); }
-            metronome-state-changed(enabled) => { root.metronome-state-changed(enabled); }
-            metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
-            metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
-            set-bpm(value) => { root.set-bpm(value); }
+            play-state-changed(state) => {
+                root.play-state-changed(state);
+            }
+
+            loop-state-changed(state) => {
+                root.loop-state-changed(state);
+            }
+
+            metronome-state-changed(enabled) => {
+                root.metronome-state-changed(enabled);
+            }
+
+            metronome-sound-changed(sound) => {
+                root.metronome-sound-changed(sound);
+            }
+
+            metronome-volume-changed(value) => {
+                root.metronome-volume-changed(value);
+            }
+
+            set-bpm(value) => {
+                root.set-bpm(value);
+            }
         }
 
-        // ==========================================
+
+        // ========================================================
         // 4. CONTROLES DA JANELA
-        // ==========================================
+        // ========================================================
+
         HorizontalLayout {
-            spacing: 4px; // Substitui os Rectangles de 4px
+            spacing: 4px;
+
             alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
+
+            // ----------------------------------------------------
+            // MINIMIZAR
+            // ----------------------------------------------------
+
             Button {
-                height: 18px; icon: @image-url("icons/minimize.svg"); icon-size: 14px; preferred-height: 0px; preferred-width: 0px; text: ""; width: 18px; corner-radius: 9px; resting-bg: Theme.surface-high;
-                clicked => { root.minimize(); }
+                width: 18px;
+                height: 18px;
+
+                preferred-height: 0px;
+                preferred-width: 0px;
+
+                text: "";
+
+                icon:
+                    @image-url(
+                        "icons/minimize.svg"
+                    );
+
+                icon-size: 14px;
+                icon-color: Theme.text-primary;
+
+                corner-radius: 9px;
+
+                resting-bg:
+                    Theme.surface-high;
+
+                borderless: true;
+
+                clicked => {
+                    root.minimize();
+                }
             }
+
+
+            // ----------------------------------------------------
+            // MAXIMIZAR / RESTAURAR
+            // ----------------------------------------------------
+
             Button {
-                height: 18px; icon: root.full-screen ? @image-url("icons/restore.svg") : @image-url("icons/maximize.svg"); icon-size: 10px; text: ""; width: 18px; corner-radius: 9px; resting-bg: Theme.surface-high;
-                clicked => { root.full-screen = !root.full-screen; }
+                width: 18px;
+                height: 18px;
+
+                text: "";
+
+                icon:
+                    root.full-screen
+                        ? @image-url("icons/restore.svg")
+                        : @image-url("icons/maximize.svg");
+
+                icon-size: 10px;
+                icon-color: Theme.text-primary;
+
+                corner-radius: 9px;
+
+                resting-bg:
+                    Theme.surface-high;
+
+                borderless: true;
+
+                clicked => {
+                    root.full-screen =
+                        !root.full-screen;
+                }
             }
+
+
+            // ----------------------------------------------------
+            // FECHAR
+            // ----------------------------------------------------
+
             Button {
-                height: 18px; icon: @image-url("icons/close.svg"); icon-color: Colors.crimson; icon-size: 14px; text: ""; width: 18px; corner-radius: 9px; resting-bg: Theme.surface-high;
-                clicked => { root.close(); }
+                width: 18px;
+                height: 18px;
+
+                text: "";
+
+                icon:
+                    @image-url(
+                        "icons/close.svg"
+                    );
+
+                icon-size: 14px;
+                icon-color: Colors.crimson;
+
+                corner-radius: 9px;
+
+                resting-bg:
+                    Theme.surface-high;
+
+                borderless: true;
+
+                clicked => {
+                    root.close();
+                }
             }
         }
     }
