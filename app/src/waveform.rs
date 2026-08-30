@@ -156,9 +156,22 @@ pub fn wire_resolution_requests(
                     return;
                 }
 
-                // Janela já renderizada nessa resolução? Nada a fazer.
-                if done_window.borrow().get(&id_u) == Some(&(w, x0, x1, h)) {
+                // PROFISSIONAL: janela já renderizada? Só pula se o cache
+                // ainda tem imagem válida. Após um TRIM/SLICE o cache
+                // fica com `image: None` (precisa re-rasterizar) — o
+                // `done_window` antigo não pode bloquear o novo pedido.
+                let needs_rerender = waveforms
+                    .borrow()
+                    .get(&id_u)
+                    .map(|c| c.image.is_none())
+                    .unwrap_or(true);
+                if !needs_rerender && done_window.borrow().get(&id_u) == Some(&(w, x0, x1, h)) {
                     return;
+                }
+                // Se precisa re-renderizar, invalida o registro antigo
+                // para que o collector possa gravar a nova janela.
+                if needs_rerender {
+                    done_window.borrow_mut().remove(&id_u);
                 }
                 pending.borrow_mut().insert(id, (w, wx0, wx1, h));
 

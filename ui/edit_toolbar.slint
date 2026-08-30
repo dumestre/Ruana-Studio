@@ -26,228 +26,207 @@ export component EditToolbar inherits Rectangle {
 
 
     // ============================================================
-    // TOOLBAR
+    // TOOLBAR - LAYOUT PROFISSIONAL (CORRIGIDO PARA RELEASE)
     // ============================================================
 
- 
+    HorizontalLayout {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        spacing: 0px;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        padding-left: 4px;
+        padding-right: 4px;
 
+        // CENTER - ferramentas principais
+        HorizontalLayout {
+            spacing: 2px;
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+            horizontal-stretch: 1;
 
-          
+            // =================================================
+            // SELECT - 0
+            // =================================================
 
+            Button {
+                width: 18px;
+                height: 18px;
 
-        // ========================================================
-        // CENTER
-        // ========================================================
+                resting-bg: Theme.surface-high;
 
+                icon: @image-url("icons/select.svg");
+                filled-icon: @image-url("icons/select_filled.svg");
 
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
 
-            // ====================================================
-            // FERRAMENTAS
-            // ====================================================
+                padding-x: 0px;
 
-            HorizontalLayout {
-                spacing: 2px;
+                text: "";
 
-                alignment: LayoutAlignment.stretch;
-                cross-axis-alignment: CrossAxisAlignment.center;
+                borderless: true;
+                corner-radius: 2px;
 
-                padding-left: 2px;
-                padding-right: 2px;
+                toggled: root.active-tool == 0;
 
+                toggled-fg: Theme.on-accent;
+                toggled-bg: Theme.accent;
+                toggled-icon-color: Theme.on-accent;
 
-                // =================================================
-                // SELECT - 0
-                // =================================================
+                subtle-toggled: false;
 
-                Button {
-                    width: 18px;
-                    height: 18px;
-
-                    resting-bg: Theme.surface-high;
-
-                    icon: @image-url("icons/select.svg");
-                    filled-icon: @image-url("icons/select_filled.svg");
-
-                    icon-size: 16px;
-                    icon-color: Theme.text-primary;
-
-                    padding-x: 0px;
-
-                    text: "";
-
-                    borderless: true;
-                    corner-radius: 2px;
-
-                    toggled: root.active-tool == 0;
-
-                    toggled-fg: Theme.on-accent;
-                    toggled-bg: Theme.accent;
-                    toggled-icon-color: Theme.on-accent;
-
-                    subtle-toggled: false;
-
-                    clicked => {
-                        root.active-tool = 0;
-                        root.tool-changed(0);
-                    }
-                }
-
-
-                // =================================================
-                // SLICE - 1
-                // =================================================
-
-                Button {
-                    width: 18px;
-                    height: 18px;
-
-                    resting-bg: Theme.surface-high;
-
-                    icon: @image-url("icons/slice.svg");
-                    filled-icon: @image-url("icons/slice_filled.svg");
-
-                    icon-size: 16px;
-                    icon-color: Theme.text-primary;
-
-                    text: "";
-
-                    borderless: true;
-                    corner-radius: 2px;
-
-                    toggled: root.active-tool == 1;
-
-                    toggled-fg: Theme.on-accent;
-                    toggled-bg: Theme.accent;
-                    toggled-icon-color: Theme.on-accent;
-
-                    subtle-toggled: false;
-
-                    clicked => {
-                        root.active-tool = 1;
-                        root.tool-changed(1);
-                    }
-                }
-
-
-                // =================================================
-                // GLUE - 2
-                // =================================================
-
-                Button {
-                    width: 18px;
-                    height: 18px;
-
-                    resting-bg: Theme.surface-high;
-
-                    icon: @image-url("icons/glue.svg");
-                    filled-icon: @image-url("icons/glue_filled.svg");
-
-                    icon-size: 16px;
-                    icon-color: Theme.text-primary;
-
-                    text: "";
-
-                    borderless: true;
-                    corner-radius: 2px;
-
-                    toggled: root.active-tool == 2;
-
-                    toggled-fg: Theme.on-accent;
-                    toggled-bg: Theme.accent;
-                    toggled-icon-color: Theme.on-accent;
-
-                    subtle-toggled: false;
-
-                    clicked => {
-                        root.active-tool = 2;
-                        root.tool-changed(2);
-                    }
-                }
-
-
-                // =================================================
-                // STRETCH - 3
-                // =================================================
-
-                Button {
-                    width: 18px;
-                    height: 18px;
-
-                    resting-bg: Theme.surface-high;
-
-                    icon: @image-url("icons/expand_diag.svg");
-                    filled-icon: @image-url("icons/stretch_filled.svg");
-
-                    icon-size: 16px;
-                    icon-color: Theme.text-primary;
-
-                    text: "";
-
-                    borderless: true;
-                    corner-radius: 2px;
-
-                    toggled: root.active-tool == 3;
-
-                    toggled-fg: Theme.on-accent;
-                    toggled-bg: Theme.accent;
-                    toggled-icon-color: Theme.on-accent;
-
-                    subtle-toggled: false;
-
-                    clicked => {
-                        root.active-tool = 3;
-                        root.tool-changed(3);
-                    }
-                }
-
-
-                // =================================================
-                // ERASE - 5
-                // =================================================
-
-                Button {
-                    width: 18px;
-                    height: 18px;
-
-                    resting-bg: Theme.surface-high;
-
-                    icon: @image-url("icons/erase.svg");
-                    filled-icon: @image-url("icons/erase_filled.svg");
-
-                    icon-color: Theme.text-primary;
-                    icon-size: 16px;
-
-                    text: "";
-
-                    borderless: true;
-                    corner-radius: 2px;
-
-                    toggled: root.active-tool == 5;
-
-                    toggled-fg: Theme.on-accent;
-                    toggled-bg: Theme.accent;
-                    toggled-icon-color: Theme.on-accent;
-
-                    subtle-toggled: false;
-
-                    clicked => {
-                        root.active-tool = 5;
-                        root.tool-changed(5);
-                    }
+                clicked => {
+                    root.active-tool = 0;
+                    root.tool-changed(0);
                 }
             }
-        
 
 
-        // ========================================================
-        // END
-        // ========================================================
+            // =================================================
+            // SLICE - 1
+            // =================================================
 
-        HorizontalLayout {
-            spacing: 3px;
+            Button {
+                width: 18px;
+                height: 18px;
 
-            alignment: LayoutAlignment.end;
-            cross-axis-alignment: CrossAxisAlignment.center;
+                resting-bg: Theme.surface-high;
 
+                icon: @image-url("icons/slice.svg");
+                filled-icon: @image-url("icons/slice_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+
+                toggled: root.active-tool == 1;
+
+                toggled-fg: Theme.on-accent;
+                toggled-bg: Theme.accent;
+                toggled-icon-color: Theme.on-accent;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 1;
+                    root.tool-changed(1);
+                }
+            }
+
+
+            // =================================================
+            // GLUE - 2
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/glue.svg");
+                filled-icon: @image-url("icons/glue_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+
+                toggled: root.active-tool == 2;
+
+                toggled-fg: Theme.on-accent;
+                toggled-bg: Theme.accent;
+                toggled-icon-color: Theme.on-accent;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 2;
+                    root.tool-changed(2);
+                }
+            }
+
+
+            // =================================================
+            // STRETCH - 3
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/expand_diag.svg");
+                filled-icon: @image-url("icons/stretch_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+
+                toggled: root.active-tool == 3;
+
+                toggled-fg: Theme.on-accent;
+                toggled-bg: Theme.accent;
+                toggled-icon-color: Theme.on-accent;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 3;
+                    root.tool-changed(3);
+                }
+            }
+
+
+            // =================================================
+            // ERASE - 5
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/erase.svg");
+                filled-icon: @image-url("icons/erase_filled.svg");
+
+                icon-color: Theme.text-primary;
+                icon-size: 16px;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+
+                toggled: root.active-tool == 5;
+
+                toggled-fg: Theme.on-accent;
+                toggled-bg: Theme.accent;
+                toggled-icon-color: Theme.on-accent;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 5;
+                    root.tool-changed(5);
+                }
+            }
         }
     }
+}

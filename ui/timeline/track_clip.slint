@@ -80,6 +80,18 @@ export component TrackClip inherits Rectangle {
     private property <float> wave-body-px:
         (root.row-height - root.header-height - root.bw) / 1px;
 
+    // PROFISSIONAL: ancoragem da waveform durante o TRIM (resize).
+    // Antes a waveform esticava com a largura do clip (escala),
+    // encurtando visualmente. Agora a waveform mantém a escala
+    // original (amostra-por-pixel) e o corpo apenas RECORTA (crop
+    // ancorado no grid) — exatamente como FL Studio/Ableton.
+    private property <length> waveform-anchor-w:
+        root.resize-start-len * root.px-per-beat - 4px;
+    private property <length> waveform-live-offset:
+        root.resizing && root.resize-side < 0
+            ? (root.resize-start-beat - root.live-beat) * root.px-per-beat
+            : 0px;
+
     // Início da janela visível, em px do trecho da waveform
     // (0 = borda esquerda do corpo). Recorta [0, largura-px].
     private property <float> wave-w0:
@@ -294,14 +306,18 @@ export component TrackClip inherits Rectangle {
         touch.has-hover
         && !root.ghost;
 
+    // PROFISSIONAL: fade só bloqueia resize quando o cursor está
+    // EXATAMENTE sobre o pino do fade (on-fade-grip), não em toda
+    // a faixa superior. Antes `!in-fade-zone` desabilitava o resize
+    // em 16px de altura inteira, atrapalhando manipular o clip.
     private property <bool> on-left-edge:
         root.hovered
-        && !root.in-fade-zone
+        && !root.on-fade-grip
         && touch.mouse-x <= root.edge-width;
 
     private property <bool> on-right-edge:
         root.hovered
-        && !root.in-fade-zone
+        && !root.on-fade-grip
         && touch.mouse-x >= root.width - root.edge-width;
 
     private property <bool> on-edge:
@@ -619,11 +635,17 @@ export component TrackClip inherits Rectangle {
                 || root.wave-w1 > 0.0):
 
             Image {
-                x: 2px + root.waveform-src-x * 1px;
+                // PROFISSIONAL: durante o TRIM a imagem mantém a
+                // largura original e é recortada (crop), não esticada.
+                // Após o commit o Rust entrega a imagem já aparada
+                // no tamanho correto.
+                x: root.resizing
+                    ? 2px + root.waveform-live-offset + root.waveform-src-x * 1px
+                    : 2px + root.waveform-src-x * 1px;
                 y: 0px;
-                width: root.waveform-src-w > 0.0
-                    ? root.waveform-src-w * 1px
-                    : parent.width - 4px;
+                width: root.resizing
+                    ? (root.waveform-src-w > 0.0 ? root.waveform-src-w * 1px : root.waveform-anchor-w)
+                    : (root.waveform-src-w > 0.0 ? root.waveform-src-w * 1px : parent.width - 4px);
                 height: parent.height;
                 source: clip-waveform-image;
                 // Estica para preencher a janela rasterizada (src-x/w):
@@ -643,14 +665,12 @@ export component TrackClip inherits Rectangle {
 
             AudioWaveform {
 
-                x:
-                    2px;
+                x: root.resizing ? 2px + root.waveform-live-offset : 2px;
 
                 y:
                     0px;
 
-                width:
-                    parent.width - 4px;
+                width: root.resizing ? root.waveform-anchor-w : parent.width - 4px;
 
                 height:
                     parent.height;
@@ -1364,8 +1384,15 @@ export component TrackClip inherits Rectangle {
             : root.resizing
                 ? ew-resize
 
+            : root.fading
+                ? ew-resize
+
             : root.dragging
                 ? pointer
+
+            : root.active-tool == 0
+                && root.on-fade-grip
+                    ? ew-resize
 
             : root.active-tool == 0
                 && root.on-edge
@@ -1829,37 +1856,6 @@ export component TrackClip inherits Rectangle {
                                     // acesso ao modelo.
                                     // =====================================
 
-if root.fading {
-
-                        root.fading =
-                            false;
-
-                        let side =
-                            root.fade-side;
-
-                        let fi =
-                            side < 0
-                                ? root.live-fade-in
-                                : root.fade-in;
-
-                        let fo =
-                            side > 0
-                                ? root.live-fade-out
-                                : root.fade-out;
-
-                        root.fade-side =
-                            0;
-
-                        root.clip-fade-committed(
-                            root.clip-id,
-                            fi,
-                            fo
-                        );
-
-                        return;
-                    }
-
-
                     if root.resizing {
 
                         let cursor-abs-x =
@@ -2034,6 +2030,37 @@ if root.fading {
                         }
                     }
 
+
+                    // PROFISSIONAL: fade commit no UP (release), não no MOVE.
+                    // Antes o commit estava duplicado dentro do MOVE e
+                    // disparava no primeiro pixel de arrasto.
+                    if root.fading {
+
+                        root.fading =
+                            false;
+
+                        let side =
+                            root.fade-side;
+
+                        let fi =
+                            side < 0
+                                ? root.live-fade-in
+                                : root.fade-in;
+
+                        let fo =
+                            side > 0
+                                ? root.live-fade-out
+                                : root.fade-out;
+
+                        root.fade-side =
+                            0;
+
+                        root.clip-fade-committed(
+                            root.clip-id,
+                            fi,
+                            fo
+                        );
+                    }
 
                     if root.resizing {
 
