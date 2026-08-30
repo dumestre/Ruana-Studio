@@ -1061,6 +1061,13 @@ export component Workspace inherits Rectangle {
                             select-track(index) => {
                                 root.selected-track =
                                     index;
+
+                                // Selecionar a track (cabeçalho)
+                                // deseleciona o clip: assim a paleta
+                                // volta a colorir a track + clips,
+                                // em vez de ficar presa ao clip.
+                                root.selected-clip =
+                                    -1;
                             }
 
 

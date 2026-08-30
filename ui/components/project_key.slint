@@ -19,6 +19,8 @@ export component ProjectKey inherits Rectangle {
     border-radius: 2px;
 
     HorizontalLayout {
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
         padding-left: 4px;
         spacing: 4px;
 
@@ -33,6 +35,7 @@ export component ProjectKey inherits Rectangle {
 
     height:
         parent.height;
+            horizontal-alignment: TextHorizontalAlignment.start;
 
     vertical-alignment:
         center;
@@ -44,15 +47,19 @@ Text {
         root.key;
 
     font-size:
-        12px;
+        15px;
+
+        font-weight: 700;
 
     color:
         Theme.is-paper
             ? Theme.text-primary
             : Theme.accent;
+    font-family: "";
 
     height:
         parent.height;
+    horizontal-alignment: TextHorizontalAlignment.start;
 
     vertical-alignment:
         center;

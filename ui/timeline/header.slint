@@ -1,7 +1,8 @@
 import { Theme } from "../theme.slint";
 import { ClipPalette } from "../clip_palette.slint";
 import { TrackHeaderRow } from "track_header.slint";
-import { TrackTypeItem } from "new_track.slint";
+import { TrackTypeSelector } from "new_track.slint";
+import { Button } from "../components/button.slint";
 import { ColorPicker } from "../components/color_picker.slint";
 
 export component TimelineHeader inherits Rectangle {
@@ -43,35 +44,78 @@ export component TimelineHeader inherits Rectangle {
 
 
     // =====================================================
-    // LAYOUT PRINCIPAL
+    // VIEWPORT
+    //
+    // Contêiner clippado fixo no tamanho do componente. O
+    // conteúdo interno desliza com `scroll-y` — sincronizado
+    // com a timeline — e o excesso acima/abaixo é cortado.
     // =====================================================
 
-    VerticalLayout {
+    viewport := Rectangle {
 
-        spacing:
-            0px;
+        clip: true;
 
-        alignment:
-            LayoutAlignment.start;
+        x: 0;
 
-        cross-axis-alignment:
-            CrossAxisAlignment.stretch;
+        y: 0;
+
+        width: 100%;
+
+        height: 100%;
 
 
         // =================================================
-        // HEADER
+        // CONTEÚDO DESLIZANTE
         // =================================================
 
-        HorizontalLayout {
+        VerticalLayout {
+
+            x: 0;
+
+            y:
+                -root.scroll-y;
 
             width:
                 parent.width;
 
             height:
-                root.ruler-height;
+                max(
+                    parent.height,
+                    root.ruler-height
+                    + 1px
+                    + root.track-names.length * 64px * root.zoom-y
+                );
+
+            spacing:
+                0px;
+
+            alignment:
+                LayoutAlignment.start;
+
+            cross-axis-alignment:
+                CrossAxisAlignment.stretch;
+
+
+            // =================================================
+            // HEADER
+            // =================================================
+
+            HorizontalLayout {
+
+                width:
+                    parent.width;
+
+                height:
+                    root.ruler-height;
 
             spacing:
                 2px;
+
+            padding-left:
+                6px;
+
+            padding-right:
+                8px;
 
             alignment:
                 LayoutAlignment.stretch;
@@ -132,62 +176,39 @@ export component TimelineHeader inherits Rectangle {
             // PALETA
             // =============================================
 
-            Rectangle {
+            Button {
 
                 width:
-                    24px;
+                    20px;
 
                 height:
-                    24px;
+                    20px;
 
-                border-radius:
-                    5px;
+                corner-radius:
+                    2px;
 
-                background:
-                    color-area.has-hover
-                        ? Theme.surface-high
-                        : transparent;
+                icon:
+                    @image-url(
+                        "../icons/palette.svg"
+                    );
 
+                icon-size:
+                    16px;
 
-                Image {
+                icon-color:
+                    Theme.text-primary;
 
-                    source:
-                        @image-url(
-                            "../icons/palette.svg"
-                        );
+                resting-bg:
+                    transparent;
 
-                    width:
-                        18px;
+                hover-bg:
+                    Theme.base;
 
-                    height:
-                        18px;
+                borderless:
+                    true;
 
-                    x:
-                        (parent.width - self.width) / 2;
-
-                    y:
-                        (parent.height - self.height) / 2;
-
-                    colorize:
-                        Theme.text-primary;
-                }
-
-
-                color-area := TouchArea {
-
-                    width:
-                        parent.width;
-
-                    height:
-                        parent.height;
-
-                    mouse-cursor:
-                        pointer;
-
-
-                    clicked => {
-                        // Color popup desabilitado.
-                    }
+                clicked => {
+                    color-popup.show();
                 }
             }
 
@@ -196,62 +217,39 @@ export component TimelineHeader inherits Rectangle {
             // ADICIONAR TRACK
             // =============================================
 
-            Rectangle {
+            add-button := Button {
 
                 width:
-                    24px;
+                    20px;
 
                 height:
-                    24px;
+                    20px;
 
-                border-radius:
-                    5px;
+                corner-radius:
+                    2px;
 
-                background:
-                    add-area.has-hover
-                        ? Theme.surface-high
-                        : transparent;
+                icon:
+                    @image-url(
+                        "../icons/add.svg"
+                    );
 
+                icon-size:
+                    16px;
 
-                Image {
+                icon-color:
+                    Theme.text-primary;
 
-                    source:
-                        @image-url(
-                            "../icons/add.svg"
-                        );
+                resting-bg:
+                    transparent;
 
-                    width:
-                        18px;
+                hover-bg:
+                    Theme.base;
 
-                    height:
-                        18px;
+                borderless:
+                    true;
 
-                    x:
-                        (parent.width - self.width) / 2;
-
-                    y:
-                        (parent.height - self.height) / 2;
-
-                    colorize:
-                        Theme.text-primary;
-                }
-
-
-                add-area := TouchArea {
-
-                    width:
-                        parent.width;
-
-                    height:
-                        parent.height;
-
-                    mouse-cursor:
-                        pointer;
-
-
-                    clicked => {
-                        // New track popup desabilitado.
-                    }
+                clicked => {
+                    new-track-popup.show();
                 }
             }
         }
@@ -401,22 +399,60 @@ export component TimelineHeader inherits Rectangle {
                 }
         }
     }
+    }
 
 
     // =====================================================
     // POPUP DE COR
     // =====================================================
 
-    // color-popup := PopupWindow {
-    //     ...
-    // }
+    color-popup := PopupWindow {
+
+        x: root.width - 210px;
+
+        y: -root.scroll-y + root.ruler-height + 4px;
+
+        ColorPicker {
+
+            background: Theme.base;
+
+            current:
+                root.selected-track >= 0
+                && root.selected-track < root.track-colors.length
+                    ? root.track-colors[root.selected-track]
+                    : -1;
+
+            picked(idx) => {
+
+                root.recolor-requested(
+                    root.selected-track,
+                    idx
+                );
+
+                color-popup.close();
+            }
+        }
+    }
 
 
     // =====================================================
     // POPUP NOVA TRACK
     // =====================================================
 
-    // new-track-popup := PopupWindow {
-    //     ...
-    // }
+    new-track-popup := PopupWindow {
+
+        x: root.width - 220px;
+
+        y: -root.scroll-y + root.ruler-height + 4px;
+
+        TrackTypeSelector {
+
+            track-type-selected(type) => {
+
+                root.add-track-requested(type);
+
+                new-track-popup.close();
+            }
+        }
+    }
 }

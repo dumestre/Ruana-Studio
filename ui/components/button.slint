@@ -20,6 +20,7 @@ export component Button inherits Rectangle {
     in property <length> padding-x: 7px;
     in property <color> hover-text-color: Theme.accent;
     in property <color> resting-bg: Theme.surface;
+    in property <color> hover-bg: Theme.surface-high;
     callback clicked;
 
     background: root.resting-bg;
@@ -66,7 +67,7 @@ export component Button inherits Rectangle {
             opacity: 0.35;
         }
         hovered when self.enabled && touch.has-hover && !touch.pressed && !self.toggled: {
-            background: Theme.surface-high;
+            background: root.hover-bg;
             border-color: Theme.border;
             label.color: root.hover-text-color;
         }
