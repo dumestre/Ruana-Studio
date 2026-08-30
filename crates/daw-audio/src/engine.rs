@@ -69,6 +69,11 @@ struct ClipSlot {
     length_beats: f64,
     source_start_beats: f64,
     buffer: Arc<AudioBuffer>,
+    /// Fade de entrada em BEATS (multiplicamos por frames_per_beat no
+    /// render; o snapshot não tem o bpm/rate, então guardamos em beats).
+    fade_in_beats: f64,
+    /// Fade de saída em BEATS.
+    fade_out_beats: f64,
 }
 
 /// Trilha da timeline (pan 0..1, 0.5 = centro).
@@ -144,6 +149,8 @@ impl ProjectSnapshot {
                     length_beats: c.length_beats as f64,
                     source_start_beats: c.source_start_beats as f64,
                     buffer,
+                    fade_in_beats: c.fade_in_beats as f64,
+                    fade_out_beats: c.fade_out_beats as f64,
                 })
             })
             .collect();
@@ -652,8 +659,12 @@ impl AudioEngine {
 
                         // Rampa nas bordas: cortar o clip no meio de
                         // um ciclo é um degrau, e degrau é clique.
-                        let edge = (offset / CLIP_EDGE_FADE)
-                            .min((clip_len - offset) / CLIP_EDGE_FADE)
+                        // Cada lado tem seu próprio fade (mínimo da
+                        // rampa anti-clique de ~1 ms mesmo com fade=0).
+                        let fade_in = (clip.fade_in_beats * frames_per_beat).max(CLIP_EDGE_FADE);
+                        let fade_out = (clip.fade_out_beats * frames_per_beat).max(CLIP_EDGE_FADE);
+                        let edge = (offset / fade_in)
+                            .min((clip_len - offset) / fade_out)
                             .min(1.0) as f32;
 
                         mix_stereo_source(

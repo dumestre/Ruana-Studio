@@ -286,9 +286,10 @@ export component MainWindow inherits Window {
     callback clip-resize-committed(int, int, float, float);
     callback clip-delete-requested(int);
 
-    // Delete sem clip de seleção única: apaga todos os clips
-    // marcados pela multi-seleção (marquee). Sem nada marcado,
-    // o handler no Rust simplesmente não faz nada.
+    // Delete em massa (Delete/Backspace): apaga TODA a seleção —
+    // a seleção única (`selected-clip`) mais os clips marcados pela
+    // multi-seleção (marquee). Sem nada marcado, o handler no Rust
+    // simplesmente não faz nada.
     callback multi-delete-requested();
 
     // Clique na timeline → devolve o foco do teclado ao
@@ -301,6 +302,7 @@ export component MainWindow inherits Window {
     callback clip-color-cycle-requested(int);
     callback clip-copy-requested(int);
     callback clip-paste-requested(float, int);
+    callback clip-fade-committed(int, float, float);
     callback marquee-select(float, float, int, int);
     callback clip-duplicate-requested(int);
 
@@ -694,16 +696,15 @@ export component MainWindow inherits Window {
 
             } else if event.text == Key.Delete || event.text == Key.Backspace {
 
-                // Apaga o clip selecionado; sem seleção única mas com
-                // multi-seleção (marquee), apaga todos os marcados
-                // (o Rust decide pela flag multi-selected).
-                if root.selected-clip != -1 {
-                    root.clip-delete-requested(root.selected-clip);
-                    accept
-                } else {
-                    root.multi-delete-requested();
-                    accept
-                }
+                // Apaga a SELEÇÃO INTEIRA — seleção única (último
+                // clicado) mais os marcados pelo marquee. Antes a
+                // rota era bifurcada: com `selected-clip` presente
+                // apagava SÓ ele (a "origem" da instância) e os
+                // multi-selecionados do marquee eram ignorados. O
+                // handler do Rust (multi-delete-requested) funde os
+                // dois grupos e limpa a seleção.
+                root.multi-delete-requested();
+                accept
 
             } else if event.text == " " {
 
@@ -846,6 +847,7 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
         clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
         clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
         clip-copy-requested(id) => { root.clip-copy-requested(id); }
+        clip-fade-committed(id, fi, fo) => { root.clip-fade-committed(id, fi, fo); }
         clip-paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }
         marquee-select(b0, b1, t0, t1) => { root.marquee-select(b0, b1, t0, t1); }
         mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }

@@ -39,7 +39,6 @@ export component EditToolbar inherits Rectangle {
         // CENTER
         // ========================================================
 
-       
 
 
             // ====================================================
@@ -49,7 +48,7 @@ export component EditToolbar inherits Rectangle {
             HorizontalLayout {
                 spacing: 2px;
 
-                alignment: LayoutAlignment.center;
+                alignment: LayoutAlignment.stretch;
                 cross-axis-alignment: CrossAxisAlignment.center;
 
                 padding-left: 2px;
@@ -250,141 +249,5 @@ export component EditToolbar inherits Rectangle {
             alignment: LayoutAlignment.end;
             cross-axis-alignment: CrossAxisAlignment.center;
 
-
-            // ====================================================
-            // SEPARADOR
-            // ====================================================
-
-            Rectangle {
-                width: 1px;
-                height: 20px;
-
-                background: Theme.border;
-            }
-
-
-            // ====================================================
-            // DRUM / BEAT
-            // ====================================================
-
-            Button {
-                width: 18px;
-                height: 18px;
-
-                resting-bg: Theme.surface-high;
-
-                icon: @image-url("icons/drum.svg");
-                icon-size: 16px;
-                icon-color: Theme.text-primary;
-
-                text: "";
-
-                borderless: true;
-                corner-radius: 2px;
-
-                toggled: root.beat-open;
-
-                toggled-fg:
-                    Theme.is-paper
-                        ? Theme.text-primary
-                        : Theme.on-accent;
-
-                toggled-bg: Theme.accent;
-
-                toggled-icon-color:
-                    Theme.is-paper
-                        ? Theme.text-primary
-                        : Theme.on-accent;
-
-                subtle-toggled: false;
-
-                clicked => {
-                    root.beat-open = !root.beat-open;
-                }
-            }
-
-
-            // ====================================================
-            // EXPLORER
-            // ====================================================
-
-            Button {
-                width: 18px;
-                height: 18px;
-
-                resting-bg: Theme.surface-high;
-
-                icon: @image-url("icons/folder.svg");
-                icon-size: 16px;
-                icon-color: Theme.text-primary;
-
-                text: "";
-
-                borderless: true;
-                corner-radius: 2px;
-
-                toggled: root.explorer-visible;
-
-                toggled-fg:
-                    Theme.is-paper
-                        ? Theme.text-primary
-                        : Theme.on-accent;
-
-                toggled-bg: Theme.accent;
-
-                toggled-icon-color:
-                    Theme.is-paper
-                        ? Theme.text-primary
-                        : Theme.on-accent;
-
-                subtle-toggled: false;
-
-                clicked => {
-                    root.explorer-visible =
-                        !root.explorer-visible;
-                }
-            }
-
-
-            // ====================================================
-            // PANEL
-            // ====================================================
-
-            Button {
-                width: 18px;
-                height: 18px;
-
-                resting-bg: Theme.surface-high;
-
-                icon: @image-url("icons/restore.svg");
-                icon-size: 16px;
-                icon-color: Theme.text-primary;
-
-                text: "";
-
-                borderless: true;
-                corner-radius: 2px;
-
-                toggled: root.panel-visible;
-
-                toggled-fg:
-                    Theme.is-paper
-                        ? Theme.text-primary
-                        : Theme.on-accent;
-
-                toggled-bg: Theme.accent;
-
-                toggled-icon-color:
-                    Theme.is-paper
-                        ? Theme.text-primary
-                        : Theme.on-accent;
-
-                subtle-toggled: false;
-
-                clicked => {
-                    root.panel-visible =
-                        !root.panel-visible;
-                }
-            }
         }
     }

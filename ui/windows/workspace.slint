@@ -355,6 +355,12 @@ export component Workspace inherits Rectangle {
 
     callback clip-copy-requested(int);
 
+    callback clip-fade-committed(
+        int,
+        float,
+        float
+    );
+
     callback clip-paste-requested(float, int);
 
     callback marquee-select(float, float, int, int);
@@ -1251,6 +1257,24 @@ export component Workspace inherits Rectangle {
 
                                 root.clip-copy-requested(
                                     id
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // FADE COMMIT
+                            // ---------------------------------
+
+                            clip-fade-committed(
+                                id,
+                                fi,
+                                fo
+                            ) => {
+
+                                root.clip-fade-committed(
+                                    id,
+                                    fi,
+                                    fo
                                 );
                             }
 

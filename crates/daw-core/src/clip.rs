@@ -67,6 +67,12 @@ pub struct Clip {
     pub color_override: bool,
     /// Caminho do arquivo de áudio (apenas clips de áudio).
     pub file_path: Option<String>,
+    /// Fade de ENTRADA em beats (0 = sem fade além da rampa
+    /// anti-clique de ~1 ms do motor).
+    pub fade_in_beats: f32,
+    /// Fade de SAÍDA em beats (0 = sem fade além da rampa
+    /// anti-clique de ~1 ms do motor).
+    pub fade_out_beats: f32,
 }
 
 impl Clip {
@@ -90,6 +96,8 @@ impl Clip {
             color: ((id % 19) + 1) as u8,
             color_override: false,
             file_path: None,
+            fade_in_beats: 0.0,
+            fade_out_beats: 0.0,
         }
     }
 

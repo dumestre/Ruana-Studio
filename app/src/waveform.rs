@@ -70,6 +70,8 @@ pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache)
         waveform_src_x: 0.0,
         waveform_src_w: 0.0,
         multi_selected: base.multi_selected,
+        fade_in: base.fade_in,
+        fade_out: base.fade_out,
     }
 }
 
@@ -338,6 +340,64 @@ pub fn reproject_clip(
     clips_model.set_row_data(i, data);
 }
 
+/// Divide a waveform cacheada de um clip em duas metades proporcionais
+/// a `f` (fração de tempo que fica no clip da ESQUERDA após o corte).
+///
+/// A nossa invariante é "cache ⇔ janela de origem do clip": o `mono_ds`
+/// cobre exatamente o trecho do arquivo que o clip enxerga. Cortar sem
+/// dividir faz o lado esquerdo continuar mostrando o arquivo INTEIRO
+/// espremido e o direito não mostrar nada. Aqui cada metade ganha sua
+/// própria parte (picos + mono + mipmap reconstruído). `image` volta a
+/// `None` — o pedido de resolução da UI re-rasteriza as metades.
+pub fn split_cached_wave(cw: &CachedWave, f: f64) -> (CachedWave, CachedWave) {
+    let f = f.clamp(0.0, 1.0);
+    let split = |v: &[f32]| -> (Vec<f32>, Vec<f32>) {
+        if v.is_empty() {
+            return (Vec::new(), Vec::new());
+        }
+        let k = (v.len() as f64 * f + 0.5) as usize;
+        let k = k.clamp(1, v.len().saturating_sub(1));
+        (v[..k].to_vec(), v[k..].to_vec())
+    };
+    let (l_peaks, r_peaks) = split(&cw.peaks);
+    let (l_mono, r_mono) = split(&cw.mono_ds);
+    let (l_mip, r_mip) = {
+        let build = |mono: &[f32]| daw_media::waveform_image::build_mipmap(mono);
+        (build(&l_mono), build(&r_mono))
+    };
+    (
+        CachedWave {
+            peaks: l_peaks,
+            mono_ds: l_mono,
+            mip: l_mip,
+            image: None,
+        },
+        CachedWave {
+            peaks: r_peaks,
+            mono_ds: r_mono,
+            mip: r_mip,
+            image: None,
+        },
+    )
+}
+
+/// Reconstitue a waveform da esquerda unindo as duas metades de um
+/// corte (glue): picos + mono concatenados e mipmap reconstruído.
+/// `image` volta a `None` — a UI re-rasteriza no próximo pedido.
+pub fn merge_cached_waves(a: &CachedWave, b: &CachedWave) -> CachedWave {
+    let mut peaks = a.peaks.clone();
+    peaks.extend(b.peaks.iter().copied());
+    let mut mono = a.mono_ds.clone();
+    mono.extend(b.mono_ds.iter().copied());
+    let mip = daw_media::waveform_image::build_mipmap(&mono);
+    CachedWave {
+        peaks,
+        mono_ds: mono,
+        mip,
+        image: None,
+    }
+}
+
 /// Mapeia um clip do core para o DTO da camada Slint.
 pub fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
     let (peaks, img) = match waveforms.get(&clip.id) {
@@ -357,5 +417,7 @@ pub fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
         waveform_src_x: 0.0,
         waveform_src_w: 0.0,
         multi_selected: false,
+        fade_in: clip.fade_in_beats,
+        fade_out: clip.fade_out_beats,
     }
 }

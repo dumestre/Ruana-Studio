@@ -88,6 +88,12 @@ export component TrackRow inherits Rectangle {
 
     callback clip-copy-requested(int);
 
+    callback clip-fade-committed(
+        int,
+        float,
+        float
+    );
+
     callback marquee-commit(
         float,
         float,
@@ -297,6 +303,15 @@ export component TrackRow inherits Rectangle {
             root.active-tool;
 
 
+        // Fades do clip (beats). Vêm do modelo; o drag local só
+        // escreve nestes no commit do release.
+        fade-in:
+            clip.fade-in;
+
+        fade-out:
+            clip.fade-out;
+
+
         // =============================================
         // CLIQUE
         // =============================================
@@ -413,6 +428,24 @@ export component TrackRow inherits Rectangle {
 
             root.clip-copy-requested(
                 id
+            );
+        }
+
+
+        // =============================================
+        // FADE COMMIT
+        // =============================================
+
+        clip-fade-committed(
+            id,
+            fi,
+            fo
+        ) => {
+
+            root.clip-fade-committed(
+                id,
+                fi,
+                fo
             );
         }
 

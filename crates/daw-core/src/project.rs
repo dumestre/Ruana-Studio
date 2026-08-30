@@ -71,6 +71,11 @@ pub enum DocumentEvent {
         old: Clip,
         new: Clip,
     },
+    /// Mudança de fades do clip (entrada/saída, em beats).
+    ClipFadesChanged {
+        old: Clip,
+        new: Clip,
+    },
 }
 
 /// Um projeto da DAW.
@@ -267,6 +272,11 @@ impl Project {
                     *existing = new.clone();
                 }
             }
+            DocumentEvent::ClipFadesChanged { new, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == new.id) {
+                    *existing = new.clone();
+                }
+            }
         }
         self.emit(event, ChangeKind::Apply);
     }
@@ -317,6 +327,11 @@ impl Project {
                 }
             }
             DocumentEvent::ClipColorChanged { old, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
+                    *existing = old.clone();
+                }
+            }
+            DocumentEvent::ClipFadesChanged { old, .. } => {
                 if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
                     *existing = old.clone();
                 }
@@ -503,6 +518,34 @@ impl Project {
         length_beats: f32,
         file_path: Option<String>,
     ) -> Option<u64> {
+        self.add_clip_with_source(
+            track_id,
+            kind,
+            name,
+            start_beat,
+            length_beats,
+            0.0,
+            file_path,
+        )
+    }
+
+    /// Adiciona um clip apontando para UM TRECHO do arquivo de áudio
+    /// (`source_start_beats`, origem dentro do arquivo).
+    ///
+    /// Usado pela importação com recorte de silêncio: o clip só mostra/
+    /// toca a parte audível do arquivo (`length_beats` já é a duração
+    /// recortada). Todo o resto é idêntico ao [`add_clip_with_path`]
+    /// (cor herdada do sample, validate, histórico).
+    pub fn add_clip_with_source(
+        &mut self,
+        track_id: u64,
+        kind: ClipKind,
+        name: impl Into<String>,
+        start_beat: f32,
+        length_beats: f32,
+        source_start_beats: f32,
+        file_path: Option<String>,
+    ) -> Option<u64> {
         if self.track(track_id).is_none() || length_beats <= crate::clip::BEAT_EPSILON {
             return None;
         }
@@ -515,6 +558,7 @@ impl Project {
             start_beat.max(0.0),
             length_beats,
         );
+        clip.source_start_beats = source_start_beats.max(0.0);
         clip.file_path = file_path;
         if let Some(path) = clip.file_path.as_deref() {
             clip.color = crate::clip::sample_color(path);
@@ -555,6 +599,8 @@ impl Project {
         clip.source_start_beats = src.source_start_beats;
         clip.color = src.color;
         clip.color_override = src.color_override;
+        clip.fade_in_beats = src.fade_in_beats;
+        clip.fade_out_beats = src.fade_out_beats;
         self.clips.push(clip.clone());
 
         let event = DocumentEvent::ClipAdded(clip);
@@ -601,6 +647,9 @@ impl Project {
         // para o mesmo arquivo, as metades não podem divergir de cor.
         right.color = original.color;
         right.color_override = original.color_override;
+        // Fades acompanham o corte: cada metade herda os do original.
+        right.fade_in_beats = original.fade_in_beats;
+        right.fade_out_beats = original.fade_out_beats;
 
         self.clips[index] = left.clone();
         self.clips.push(right.clone());
@@ -743,6 +792,27 @@ impl Project {
         let new = self.clips[index].clone();
 
         let event = DocumentEvent::ClipColorChanged { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// Atualiza os fades de um clip (entrada/saída, em beats).
+    ///
+    /// Valores são clampados a `0..=length/2` — um fade nunca pode
+    /// exceder metade do clip nem ser negativo. Retorna `false` se o
+    /// clip não existe.
+    pub fn set_clip_fades(&mut self, clip_id: u64, fade_in: f32, fade_out: f32) -> bool {
+        let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
+            return false;
+        };
+        let old = self.clips[index].clone();
+        let half = (old.length_beats * 0.5).max(0.0);
+        self.clips[index].fade_in_beats = fade_in.clamp(0.0, half);
+        self.clips[index].fade_out_beats = fade_out.clamp(0.0, half);
+        let new = self.clips[index].clone();
+
+        let event = DocumentEvent::ClipFadesChanged { old, new };
         self.emit(&event, ChangeKind::Apply);
         self.history.record(event);
         true

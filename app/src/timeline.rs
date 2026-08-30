@@ -115,8 +115,14 @@ pub fn install(
     }
 
     // Slice de clip (ferramenta de corte) → core.
+    //
+    // Depois do corte no core, divide a waveform cacheada entre as
+    // duas metades: sem isso o lado esquerdo mostra o arquivo inteiro
+    // espremido e o direito não mostra nada (corte não visual).
     {
         let project = project.clone();
+        let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
         ui.on_clip_slice_requested(move |id, position| {
             let id = id as u64;
             let mut proj = project.borrow_mut();
@@ -124,15 +130,57 @@ pub fn install(
                 return;
             };
             let at = clip.start_beat + position.max(0.0);
-            proj.slice_clip(id, at);
+            let Some(right_id) = proj.slice_clip(id, at) else {
+                return;
+            };
+            drop(proj);
+
+            // Fração de tempo que ficou no lado esquerdo.
+            let fraction = ((at - clip.start_beat) / clip.length_beats) as f64;
+            let mut wf = waveforms.borrow_mut();
+            let Some(cw) = wf.get(&id).cloned() else {
+                return;
+            };
+            let (left, right) = crate::waveform::split_cached_wave(&cw, fraction);
+            wf.insert(id, left);
+            wf.insert(right_id, right);
+            drop(wf);
+
+            let wf = waveforms.borrow();
+            crate::waveform::reproject_clip(&clips_model, &wf, id);
+            crate::waveform::reproject_clip(&clips_model, &wf, right_id);
         });
     }
 
-    // Glue de clip (ferramenta cola) → core: funde com o vizinho à direita.
+    // Glue de clip (ferramenta cola) → core: funde com o vizinho à
+    // direita. Depois, uni as duas metades da waveform de volta num
+    // cache só (o inverso exato do slice).
     {
         let project = project.clone();
+        let waveforms = waveforms.clone();
+        let clips_model = clips_model.clone();
         ui.on_clip_glue_requested(move |id| {
-            project.borrow_mut().glue_clip(id as u64);
+            let id = id as u64;
+            let removed = {
+                let mut proj = project.borrow_mut();
+                proj.glue_clip(id)
+            };
+            let Some(right_id) = removed else {
+                return;
+            };
+            let mut wf = waveforms.borrow_mut();
+            let merged = match (wf.get(&id).cloned(), wf.get(&right_id).cloned()) {
+                (Some(a), Some(b)) => Some(crate::waveform::merge_cached_waves(&a, &b)),
+                (Some(a), None) => Some(a),
+                _ => None,
+            };
+            if let Some(m) = merged {
+                wf.insert(id, m);
+                wf.remove(&right_id);
+                drop(wf);
+                let wf = waveforms.borrow();
+                crate::waveform::reproject_clip(&clips_model, &wf, id);
+            }
         });
     }
 
@@ -223,10 +271,11 @@ pub fn install(
         });
     }
 
-    // Delete em massa (Delete/Backspace sem seleção única):
-    // apaga todos os clips marcados pela multi-seleção (marquee).
-    // O core não conhece multi-seleção (estado visual da UI) —
-    // ler a flag direto do modelo de clips do Slint.
+    // Delete em massa (Delete/Backspace): apaga TODA a seleção —
+    // a seleção única (`selected-clip`, o último clip clicado) MAIS
+    // os clips marcados pela multi-seleção (marquee/Ctrl+arrasto).
+    // O core não conhece seleção (estado visual da UI) — ler direto
+    // do modelo de clips do Slint.
     {
         let project = project.clone();
         let ui_weak = ui.as_weak();
@@ -235,14 +284,30 @@ pub fn install(
                 return;
             };
             let clips = ui.get_clips();
-            let ids: Vec<u64> = (0..clips.row_count())
+
+            // Seleção única primeiro (a "origem" da instância).
+            let single = ui.get_selected_clip();
+            let single = if single >= 0 { Some(single as u64) } else { None };
+
+            let mut ids: Vec<u64> = (0..clips.row_count())
                 .filter_map(|i| clips.row_data(i))
                 .filter(|d| d.multi_selected)
                 .map(|d| d.id as u64)
                 .collect();
+            if let Some(s) = single {
+                if !ids.contains(&s) {
+                    ids.push(s);
+                }
+            }
             if ids.is_empty() {
                 return;
             }
+
+            // Limpa a seleção única: o clip apagado pode ser exatamente
+            // o selecionado. Os multi-selecionados que restarem seguem
+            // marcados — DAWs mantêm a seleção após apagar.
+            ui.set_selected_clip(-1);
+
             let mut proj = project.borrow_mut();
             for id in ids {
                 proj.delete_clip(id);
@@ -276,6 +341,17 @@ pub fn install(
                 (current + 1) % 20
             };
             project.borrow_mut().set_clip_color(id as u64, new_color);
+        });
+    }
+
+    // Fade do clip (drag no pino do clip) → core, com undo unitário.
+    // O gesto é 100% local no TrackClip e só aqui cai o commit.
+    {
+        let project = project.clone();
+        ui.on_clip_fade_committed(move |id, fade_in, fade_out| {
+            project
+                .borrow_mut()
+                .set_clip_fades(id as u64, fade_in, fade_out);
         });
     }
 

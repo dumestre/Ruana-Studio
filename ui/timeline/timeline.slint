@@ -149,6 +149,12 @@ export component Timeline inherits Rectangle {
 
     callback clip-copy-requested(int);
 
+    callback clip-fade-committed(
+        int,
+        float,
+        float
+    );
+
     callback paste-requested(float, int);
 
 
@@ -1275,6 +1281,24 @@ export component Timeline inherits Rectangle {
 
                         root.clip-copy-requested(
                             id
+                        );
+                    }
+
+
+                    // =====================================
+                    // FADE COMMIT
+                    // =====================================
+
+                    clip-fade-committed(
+                        id,
+                        fi,
+                        fo
+                    ) => {
+
+                        root.clip-fade-committed(
+                            id,
+                            fi,
+                            fo
                         );
                     }
 
