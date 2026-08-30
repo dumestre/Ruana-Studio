@@ -1,11 +1,13 @@
 import { Button } from "./button.slint";
 import { Theme } from "../theme.slint";
 
-export component EditToolbar inherits Rectangle {
+export component BarProperties inherits Rectangle {
 
     // ============================================================
     // ESTADO
     // ============================================================
+
+    callback tool-changed(int);
 
     in-out property <int> active-tool: 0;
 

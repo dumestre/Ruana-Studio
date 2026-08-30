@@ -150,9 +150,18 @@ fn render_svg_to_png(
     let opt = Options::default();
     let tree = Tree::from_data(&svg_data, &opt)?;
 
+    // `scale` = fração do alvo (width×height) que a arte deve ocupar.
+    // A arte do SVG pode ter qualquer tamanho; normalizamos pelo tamanho
+    // real do SVG para caber no pixmap (ex: RuanaStudio.svg é 512×512).
+    let art_w = tree.size().width().max(0.001) as f32;
+    let art_h = tree.size().height().max(0.001) as f32;
+
     let offset_x = (width as f32 * (1.0 - scale)) / 2.0;
     let offset_y = (height as f32 * (1.0 - scale)) / 2.0;
-    let transform = Transform::from_translate(offset_x, offset_y).pre_scale(scale, scale);
+    let transform = Transform::from_translate(offset_x, offset_y).pre_scale(
+        width as f32 * scale / art_w,
+        height as f32 * scale / art_h,
+    );
 
     let mut pixmap = Pixmap::new(width, height).ok_or("Failed to create pixmap")?;
     render(&tree, transform, &mut pixmap.as_mut());
