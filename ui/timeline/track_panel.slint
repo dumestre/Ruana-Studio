@@ -10,7 +10,6 @@ export component TrackPanel inherits Rectangle {
 
     in property <[string]> track-names: [];
 
-    // Índice de cor da paleta por track (0 = padrão por tipo).
     in property <[int]> track-colors: [];
 
     in-out property <int> selected-track: 0;
@@ -19,7 +18,6 @@ export component TrackPanel inherits Rectangle {
 
     in property <float> zoom-y: 1.0;
 
-    // Rolagem vertical sincronizada com a timeline (scroll-y).
     in property <length> scroll-y: 0px;
 
 
@@ -36,10 +34,9 @@ export component TrackPanel inherits Rectangle {
     // =====================================================
 
     callback track-clicked(int);
+
     callback add-track-requested(string);
 
-    // Cor escolhida no seletor do cabeçalho
-    // (track selecionada, índice da paleta).
     callback recolor-requested(int, int);
 
 
@@ -49,7 +46,9 @@ export component TrackPanel inherits Rectangle {
 
     background:
         Theme.surface-high;
-    border-radius: 6px;
+
+    border-radius:
+        6px;
 
 
     // =====================================================
@@ -59,17 +58,20 @@ export component TrackPanel inherits Rectangle {
     TimelineHeader {
 
         x:
-            0;
+            0px;
 
         y:
-            0;
+            0px;
 
         width:
             parent.width;
 
-        border-radius: 6px;
         height:
             parent.height;
+
+        border-radius:
+            6px;
+
 
         track-names:
             root.track-names;

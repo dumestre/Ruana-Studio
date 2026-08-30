@@ -6,19 +6,40 @@ import { ColorPicker } from "../components/color_picker.slint";
 
 export component TimelineHeader inherits Rectangle {
 
+    // =====================================================
+    // DADOS
+    // =====================================================
+
     in property <[string]> track-names: [];
+
     in property <[int]> track-colors: [];
+
     in property <int> selected-track: 0;
 
     in property <length> ruler-height: 30px;
+
     in property <float> zoom-y: 1.0;
+
     in property <length> scroll-y: 0px;
 
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
+
     callback track-clicked(int);
+
     callback add-track-requested(string);
+
     callback recolor-requested(int, int);
 
-    background: transparent;
+
+    // =====================================================
+    // FUNDO
+    // =====================================================
+
+    background:
+        transparent;
 
 
     // =====================================================
@@ -27,207 +48,317 @@ export component TimelineHeader inherits Rectangle {
 
     VerticalLayout {
 
-        spacing: 0;
+        spacing:
+            0px;
 
-        alignment: LayoutAlignment.start;
+        alignment:
+            LayoutAlignment.start;
 
-        cross-axis-alignment: CrossAxisAlignment.stretch;
-
-
-    // =================================================
-    // HEADER
-    // =================================================
-
-    HorizontalLayout {
-
-        height: root.ruler-height;
-
-        spacing: 2px;
-
-        alignment: LayoutAlignment.stretch;
-
-        cross-axis-alignment: CrossAxisAlignment.center;
-
-
-        Rectangle {
-
-            horizontal-stretch: 1;
-
-            height: parent.height;
-
-            background: transparent;
-
-
-            Text {
-
-                
-                height: parent.height;
-
-                text: "TRACKS";
-
-                color: Theme.text-primary;
-
-                font-size: 9px;
-                font-weight: 700;
-
-                horizontal-alignment: TextHorizontalAlignment.center;
-
-                vertical-alignment: TextVerticalAlignment.center;
-
-                overflow: elide;
-            }
-        }
+        cross-axis-alignment:
+            CrossAxisAlignment.stretch;
 
 
         // =================================================
-        // BOTÃO PALETA
+        // HEADER
         // =================================================
 
-        Rectangle {
+        HorizontalLayout {
 
-            width: 24px;
-            height: 24px;
+            width:
+                parent.width;
 
-            border-radius: 5px;
+            height:
+                root.ruler-height;
 
-            background:
-                color-area.has-hover
-                ? Theme.surface-high
-                : transparent;
+            spacing:
+                2px;
+
+            alignment:
+                LayoutAlignment.stretch;
+
+            cross-axis-alignment:
+                CrossAxisAlignment.center;
 
 
-            Image {
+            // =============================================
+            // TÍTULO TRACKS
+            // =============================================
 
-                source: @image-url("../icons/palette.svg");
+            Rectangle {
 
-                width: 18px;
-                height: 18px;
+                horizontal-stretch:
+                    1;
 
-                x: (parent.width - self.width) / 2;
+                height:
+                    parent.height;
 
-                y: (parent.height - self.height) / 2;
+                background:
+                    transparent;
 
-                colorize: Theme.text-primary;
+
+                Text {
+
+                    width:
+                        parent.width;
+
+                    height:
+                        parent.height;
+
+                    text:
+                        "TRACKS";
+
+                    color:
+                        Theme.text-primary;
+
+                    font-size:
+                        9px;
+
+                    font-weight:
+                        700;
+
+                    horizontal-alignment:
+                        TextHorizontalAlignment.center;
+
+                    vertical-alignment:
+                        TextVerticalAlignment.center;
+
+                    overflow:
+                        elide;
+                }
             }
 
 
-            color-area := TouchArea {
+            // =============================================
+            // PALETA
+            // =============================================
 
-                
-                height: parent.height;
+            Rectangle {
 
-                mouse-cursor: pointer;
+                width:
+                    24px;
 
-                clicked => {
-                    // color-popup disabled
+                height:
+                    24px;
+
+                border-radius:
+                    5px;
+
+                background:
+                    color-area.has-hover
+                        ? Theme.surface-high
+                        : transparent;
+
+
+                Image {
+
+                    source:
+                        @image-url(
+                            "../icons/palette.svg"
+                        );
+
+                    width:
+                        18px;
+
+                    height:
+                        18px;
+
+                    x:
+                        (parent.width - self.width) / 2;
+
+                    y:
+                        (parent.height - self.height) / 2;
+
+                    colorize:
+                        Theme.text-primary;
+                }
+
+
+                color-area := TouchArea {
+
+                    width:
+                        parent.width;
+
+                    height:
+                        parent.height;
+
+                    mouse-cursor:
+                        pointer;
+
+
+                    clicked => {
+                        // Color popup desabilitado.
+                    }
+                }
+            }
+
+
+            // =============================================
+            // ADICIONAR TRACK
+            // =============================================
+
+            Rectangle {
+
+                width:
+                    24px;
+
+                height:
+                    24px;
+
+                border-radius:
+                    5px;
+
+                background:
+                    add-area.has-hover
+                        ? Theme.surface-high
+                        : transparent;
+
+
+                Image {
+
+                    source:
+                        @image-url(
+                            "../icons/add.svg"
+                        );
+
+                    width:
+                        18px;
+
+                    height:
+                        18px;
+
+                    x:
+                        (parent.width - self.width) / 2;
+
+                    y:
+                        (parent.height - self.height) / 2;
+
+                    colorize:
+                        Theme.text-primary;
+                }
+
+
+                add-area := TouchArea {
+
+                    width:
+                        parent.width;
+
+                    height:
+                        parent.height;
+
+                    mouse-cursor:
+                        pointer;
+
+
+                    clicked => {
+                        // New track popup desabilitado.
+                    }
                 }
             }
         }
 
 
         // =================================================
-        // BOTÃO ADICIONAR TRACK
+        // DIVISÓRIA
         // =================================================
 
         Rectangle {
 
-            width: 24px;
-            height: 24px;
+            width:
+                parent.width;
 
-            border-radius: 5px;
+            height:
+                1px;
 
             background:
-                add-area.has-hover
-                ? Theme.surface-high
-                : transparent;
-
-
-            Image {
-
-                source: @image-url("../icons/add.svg");
-
-                width: 18px;
-                height: 18px;
-
-                x: (parent.width - self.width) / 2;
-
-                y: (parent.height - self.height) / 2;
-
-                colorize: Theme.text-primary;
-            }
-
-
-            add-area := TouchArea {
-
-                
-                height: parent.height;
-
-                mouse-cursor: pointer;
-
-                clicked => {
-                    // new-track-popup disabled
-                }
-            }
+                Theme.is-paper
+                    ? Theme.base
+                    : Theme.border;
         }
-    }
 
 
-    // =================================================
-    // LINHA DIVISÓRIA
-    // =================================================
-
-    Rectangle {
-
-        height: 1px;
-
-        background: Theme.is-paper ? Theme.base : Theme.border;
-    }
-
-
-    // =================================================
-    // VIEWPORT DAS TRACKS
-    // =================================================
-
-    Rectangle {
-
-        vertical-stretch: 1;
-
-        background: transparent;
-
-        clip: true;
-
+        // =================================================
+        // TRACKS
+        //
+        // Não usamos x/y aqui porque este elemento está
+        // dentro do VerticalLayout.
+        // =================================================
 
         VerticalLayout {
 
-            x: 0;
-
-            y: -root.scroll-y;
-
-            width: parent.width;
+            width:
+                parent.width;
 
             height:
                 root.track-names.length
                 * 64px
                 * root.zoom-y;
 
-            spacing: 0;
+            vertical-stretch:
+                1;
 
-            alignment: LayoutAlignment.stretch;
+            spacing:
+                0px;
+
+            alignment:
+                LayoutAlignment.start;
 
             cross-axis-alignment:
                 CrossAxisAlignment.stretch;
 
 
-                for name[i] in root.track-names:
+            // =============================================
+            // TRACK HEADER ROW
+            // =============================================
+
+            for name[i] in root.track-names:
 
                 TrackHeaderRow {
 
-                    name: name;
+                    width:
+                        parent.width;
 
-                    track-index: i;
+                    height:
+                        64px * root.zoom-y;
 
+
+                    // -------------------------------------
+                    // NOME
+                    // -------------------------------------
+
+                    name:
+                        name;
+
+
+                    // -------------------------------------
+                    // ÍNDICE
+                    // -------------------------------------
+
+                    track-index:
+                        i;
+
+
+                    // -------------------------------------
+                    // TIPO
+                    // -------------------------------------
+
+                    track-type:
+                        "MIDI";
+
+
+                    // -------------------------------------
+                    // ZOOM
+                    // -------------------------------------
+
+                    zoom-y:
+                        root.zoom-y;
+
+
+                    // -------------------------------------
+                    // COR
+                    // -------------------------------------
 
                     track-color:
+
                         i < root.track-colors.length
                         && root.track-colors[i] != 0
 
@@ -244,38 +375,48 @@ export component TimelineHeader inherits Rectangle {
 
                         (
                             i == 2
-                            ? Theme.clip-audio
-                            : Theme.clip-midi
+                                ? Theme.clip-audio
+                                : Theme.clip-midi
                         );
 
+
+                    // -------------------------------------
+                    // SELEÇÃO
+                    // -------------------------------------
 
                     selected:
                         root.selected-track == i;
 
 
-                    zoom-y:
-                        root.zoom-y;
-
+                    // -------------------------------------
+                    // CLICK
+                    // -------------------------------------
 
                     clicked(index) => {
-                        root.track-clicked(index);
+
+                        root.track-clicked(
+                            index
+                        );
                     }
                 }
-            }
         }
-}
+    }
 
 
-// =====================================================
-// POPUP DE COR (desabilitado)
-// =====================================================
+    // =====================================================
+    // POPUP DE COR
+    // =====================================================
 
-// color-popup := PopupWindow { ... }
+    // color-popup := PopupWindow {
+    //     ...
+    // }
 
 
-// =====================================================
-// POPUP NOVA TRACK (desabilitado)
-// =====================================================
+    // =====================================================
+    // POPUP NOVA TRACK
+    // =====================================================
 
-// new-track-popup := PopupWindow { ... }
+    // new-track-popup := PopupWindow {
+    //     ...
+    // }
 }

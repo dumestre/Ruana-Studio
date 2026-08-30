@@ -26,7 +26,7 @@ import {
     ScrollBarHorizontal,
     ScrollBarVertical
 } from "../components/scrollbar.slint";
-import { TrackPanel } from "../timeline/TrackPanel.slint";
+import { TrackPanel } from "../timeline/track_panel.slint";
 import { BottomToolbar } from "../components/bottom_toolbar.slint";
 import { ClipDragState, TimelineMetrics, SamplerMetrics, SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
 
@@ -2020,23 +2020,6 @@ export component Workspace inherits Rectangle {
                         root.drag-is-midi;
                 }
             }
-        }
-
-
-        // ====================================================
-        // STATUS DIVIDER
-        // ====================================================
-
-        Rectangle {
-
-            width:
-                100%;
-
-            height:
-                1px;
-
-            background:
-                Theme.border;
         }
 
 
