@@ -100,7 +100,7 @@ export component EditToolbar inherits Rectangle {
             VerticalLayout {
                 spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
                 Text { text: "GAIN"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
-                Text { text: root.gain + " dB"; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
+                TextInput { text: root.gain + " dB"; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
             }
         }
 
@@ -134,7 +134,7 @@ export component EditToolbar inherits Rectangle {
             VerticalLayout {
                 spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
                 Text { text: "OCTAVE"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
-                Text { text: root.octave + " oct"; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
+                TextInput { text: root.octave + " oct"; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
             }
         }
 
@@ -151,7 +151,7 @@ export component EditToolbar inherits Rectangle {
             VerticalLayout {
                 spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
                 Text { text: "PAN"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
-                Text { text: root.pan == 0 ? "C" : root.pan; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
+                TextInput { text: root.pan == 0 ? "C" : root.pan; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
             }
         }
 
