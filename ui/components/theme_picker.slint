@@ -30,7 +30,7 @@ export component ThemePicker inherits Rectangle {
     Text {
         text: root.safe-index >= 0 ? root.names[root.safe-index] : "";
         font-size: 11px;
-        color: Theme.accent;
+        color: Theme.is-paper ? Theme.text-primary : Theme.accent;
         horizontal-alignment: center;
         vertical-alignment: center;
         width: parent.width - 8px;
@@ -72,7 +72,9 @@ export component ThemePicker inherits Rectangle {
                             Text {
                                 text: n;
                                 font-size: 11px;
-                                color: i == Theme.active ? Theme.accent : Theme.text-primary;
+                                color: i == Theme.active
+                                    ? (Theme.is-paper ? Theme.text-primary : Theme.accent)
+                                    : Theme.text-primary;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }

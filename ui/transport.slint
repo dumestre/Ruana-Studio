@@ -283,10 +283,13 @@ export component Transport inherits Rectangle {
                 height: 100%;
 
                 color:
-                    Theme.accent;
+                    Theme.is-paper ? Theme.text-primary : Theme.accent;
 
                 font-size:
-                    14px;
+                    12px;
+                font-weight: 700;
+
+        
 
                 horizontal-alignment:
                     center;
@@ -398,7 +401,7 @@ export component Transport inherits Rectangle {
                         font-size: 12px;
                         font-weight: 700;
                         width: 30px;
-                        color: Theme.accent;
+                        color: Theme.is-paper ? Theme.text-primary : Theme.accent;
                         height: parent.height;
                         vertical-alignment: center;
                         horizontal-alignment: center;
@@ -431,7 +434,7 @@ export component Transport inherits Rectangle {
                     + "/4";
 
                 color:
-                    Theme.accent;
+                    Theme.is-paper ? Theme.text-primary : Theme.accent;
 
                 font-size:
                     12px;

@@ -100,7 +100,7 @@ export component TimelineVolume inherits Rectangle {
                 y: 0;
                 height: parent.height;
                 width: parent.width * min(root.value, 0.75);
-                background: Theme.accent;
+                background: Theme.is-paper ? Theme.text-primary : Theme.accent;
                 opacity: 0.6;
                 border-radius: 3px;
             }
@@ -111,7 +111,7 @@ export component TimelineVolume inherits Rectangle {
                 y: 0;
                 height: parent.height;
                 width: max(0px, (root.value - 0.75) * parent.width);
-                background: Theme.accent;
+                background: Theme.is-paper ? Theme.text-primary : Theme.accent;
                 opacity: 0.25;
                 border-radius: 3px;
             }
@@ -174,7 +174,7 @@ export component TimelineVolume inherits Rectangle {
             y: (parent.height - self.height) / 2;
             
             border-radius: 7px;
-            background: Theme.surface;
+            background: Theme.base;
             border-width: 2px;
             border-color: Theme.accent;
 
