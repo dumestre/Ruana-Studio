@@ -21,6 +21,7 @@ pub enum ToolCursor {
     Select = 0,
     Slice = 1,
     Glue = 2,
+    Stretch = 3,
     Draw = 4,
     Erase = 5,
 }
@@ -31,6 +32,7 @@ impl ToolCursor {
             0 => Some(ToolCursor::Select),
             1 => Some(ToolCursor::Slice),
             2 => Some(ToolCursor::Glue),
+            3 => Some(ToolCursor::Stretch),
             4 => Some(ToolCursor::Draw),
             5 => Some(ToolCursor::Erase),
             _ => None,
@@ -42,6 +44,7 @@ impl ToolCursor {
             ToolCursor::Select => "select.cur",
             ToolCursor::Slice => "slice.cur",
             ToolCursor::Glue => "glue.cur",
+            ToolCursor::Stretch => "stretch.cur",
             ToolCursor::Draw => "draw.cur",
             ToolCursor::Erase => "erase.cur",
         }
@@ -53,6 +56,7 @@ impl ToolCursor {
             ToolCursor::Select => "select-dark.cur",
             ToolCursor::Slice => "slice-dark.cur",
             ToolCursor::Glue => "glue-dark.cur",
+            ToolCursor::Stretch => "stretch-dark.cur",
             ToolCursor::Draw => "draw-dark.cur",
             ToolCursor::Erase => "erase-dark.cur",
         }
@@ -88,6 +92,7 @@ impl CursorManager {
                 ToolCursor::Select,
                 ToolCursor::Slice,
                 ToolCursor::Glue,
+                ToolCursor::Stretch,
                 ToolCursor::Draw,
                 ToolCursor::Erase,
             ];
@@ -127,6 +132,7 @@ impl CursorManager {
     ) -> Option<CursorHandle> {
         let cur_path = cursor_dir.join(file_name);
         if !cur_path.exists() {
+            eprintln!("[cursor] arquivo nao encontrado: {}", cur_path.display());
             return None;
         }
 
@@ -156,6 +162,28 @@ impl CursorManager {
     fn cursor_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
         let exe_path = std::env::current_exe()?;
         let exe_dir = exe_path.parent().ok_or("No parent directory")?;
+
+        // Tenta exe_dir/cursors (layout padrão do build.rs).
+        // Fallbacks para debug/release quando o exe é movido ou rodado via cargo.
+        let candidates = [
+            exe_dir.join("cursors"),
+            exe_dir.join("../cursors"),
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("app/cursors"),
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("cursors"),
+        ];
+        for cand in &candidates {
+            if cand.exists() && cand.is_dir() {
+                let has_any = std::fs::read_dir(cand)
+                    .map(|mut it| it.next().is_some())
+                    .unwrap_or(false);
+                if has_any {
+                    eprintln!("[cursor] usando diretorio: {}", cand.display());
+                    return Ok(cand.clone());
+                }
+            }
+        }
+        // Fallback final: exe_dir/cursors mesmo que vazio — load_cursor vai falhar com log.
+        eprintln!("[cursor] diretorio nao encontrado, usando {}", exe_dir.join("cursors").display());
         Ok(exe_dir.join("cursors"))
     }
 
@@ -337,7 +365,16 @@ fn get_cursor_manager_lock() -> Option<std::sync::MutexGuard<'static, CursorMana
 pub fn set_cursor_for_tool(tool_index: i32) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(tool) = ToolCursor::from_tool_index(tool_index) {
         if let Some(mut mgr) = get_cursor_manager_lock() {
+            eprintln!("[cursor] set_cursor_for_tool {} -> {:?}", tool_index, tool);
             mgr.set_tool(tool)?;
+        } else {
+            eprintln!("[cursor] manager nao inicializado para tool {}", tool_index);
+        }
+    } else {
+        eprintln!("[cursor] tool_index {} sem cursor mapeado", tool_index);
+        // Ferramenta sem cursor customizado: volta ao cursor padrão
+        if let Some(mut mgr) = get_cursor_manager_lock() {
+            let _ = mgr.reset_to_default();
         }
     }
     Ok(())

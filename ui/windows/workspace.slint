@@ -367,6 +367,11 @@ export component Workspace inherits Rectangle {
         float
     );
 
+    callback clip-gain-committed(
+        int,
+        float
+    );
+
     callback clip-paste-requested(float, int);
 
     callback marquee-select(float, float, int, int);

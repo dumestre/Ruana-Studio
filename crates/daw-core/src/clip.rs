@@ -73,6 +73,10 @@ pub struct Clip {
     /// Fade de SAÍDA em beats (0 = sem fade além da rampa
     /// anti-clique de ~1 ms do motor).
     pub fade_out_beats: f32,
+    /// Ganho do clip em dB (-inf..+12). 0 = unidade (1.0 linear).
+    /// Controlado pela barrinha central do clip e pelo campo GAIN do
+    /// BarProperties quando o clip está selecionado.
+    pub gain_db: f32,
 }
 
 impl Clip {
@@ -98,6 +102,7 @@ impl Clip {
             file_path: None,
             fade_in_beats: 0.0,
             fade_out_beats: 0.0,
+            gain_db: 0.0,
         }
     }
 

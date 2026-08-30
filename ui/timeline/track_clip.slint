@@ -43,6 +43,10 @@ export component TrackClip inherits Rectangle {
 
     in property <float> fade-out: 0.0;
 
+    // Ganho do clip em dB (-24..+12). Vem do modelo; drag central
+    // escreve via live-gain e comita no release (clip-gain-committed).
+    in property <float> gain-db: 0.0;
+
     in property <[float]> waveform-peaks: [];
 
     // Waveform pré-renderizada (Rust). width 0 = sem imagem.
@@ -127,6 +131,9 @@ export component TrackClip inherits Rectangle {
                 root.wave-w0,
                 root.wave-w1,
                 root.wave-body-px,
+                root.gain-linear,
+                root.fade-in-w / 1px,
+                root.fade-out-w / 1px,
             );
         }
     }
@@ -148,6 +155,9 @@ export component TrackClip inherits Rectangle {
                 root.wave-w0,
                 root.wave-w1,
                 root.wave-body-px,
+                root.gain-linear,
+                root.fade-in-w / 1px,
+                root.fade-out-w / 1px,
             );
         }
     }
@@ -170,6 +180,9 @@ export component TrackClip inherits Rectangle {
                 root.wave-w0,
                 root.wave-w1,
                 root.wave-body-px,
+                root.gain-linear,
+                root.fade-in-w / 1px,
+                root.fade-out-w / 1px,
             );
         }
     }
@@ -275,6 +288,11 @@ export component TrackClip inherits Rectangle {
     callback clip-fade-committed(
         int,
         float,
+        float
+    );
+
+    callback clip-gain-committed(
+        int,
         float
     );
 
@@ -469,6 +487,68 @@ export component TrackClip inherits Rectangle {
     private property <bool> on-fade-grip:
         root.on-fade-in-grip
         || root.on-fade-out-grip;
+    // =====================================================
+    // ESTADO DO GAIN (linha central)
+    //
+    // Barra horizontal no meio do corpo do clip. Drag vertical
+    // ajusta ganho em dB (-24..+12). 0 dB = centro do corpo.
+    // Live-gain segue o mouse e display-gain é o valor ao vivo
+    // durante o gesto, senão o valor do modelo.
+    // =====================================================
+
+    private property <bool> gaining:
+        false;
+
+    private property <length> gain-start-y:
+        0px;
+
+    private property <float> gain-start-db:
+        0.0;
+
+    private property <float> live-gain-db:
+        0.0;
+
+    private property <float> display-gain-db:
+        root.gaining
+            ? root.live-gain-db
+            : root.gain-db;
+
+    // Ganho em linear aproximado para escala visual da waveform.
+    // 10^(dB/20). Slint tem log/exp? Usa pow se disponível.
+    private property <float> gain-linear:
+        Math.pow(10.0, root.display-gain-db / 20.0);
+
+    private property <bool> show-gain-controls:
+        !root.is-midi
+        && root.active-tool == 0
+        && (root.selected
+            || root.multi-selected
+            || root.hovered);
+
+    // Posição vertical da linha de ganho dentro do corpo.
+    // Centro = 0 dB. Sensibilidade 1.5px por dB (~36px para 24dB).
+    private property <length> gain-line-y:
+        (root.row-height - root.header-height - root.bw) / 2
+        - root.display-gain-db * 1.5px;
+
+    private property <length> gain-grip-size:
+        10px;
+
+    private property <length> gain-grip-half:
+        root.gain-grip-size / 2;
+
+    // Grip central: x no meio do clip, y na linha de ganho.
+    private property <length> gain-grip-x:
+        root.width / 2;
+
+    private property <bool> on-gain-grip:
+        root.show-gain-controls
+        && root.hovered
+        && touch.mouse-y >= root.header-height + root.gain-line-y - root.gain-grip-half
+        && touch.mouse-y <= root.header-height + root.gain-line-y + root.gain-grip-half
+        && Math.abs(touch.mouse-x - root.gain-grip-x) <= root.gain-grip-half;
+
+
 
 
     // =====================================================
@@ -1154,7 +1234,7 @@ export component TrackClip inherits Rectangle {
                 root.row-height - root.header-height - root.bw;
 
             commands:
-                "M 0,100 L 100,0";
+                "M 0,100 C 25,100 75,0 100,0";
 
             viewbox-width:
                 100;
@@ -1201,7 +1281,7 @@ export component TrackClip inherits Rectangle {
                 root.row-height - root.header-height - root.bw;
 
             commands:
-                "M 0,0 L 100,100";
+                "M 0,0 C 25,0 75,100 100,100";
 
             viewbox-width:
                 100;
@@ -1312,6 +1392,50 @@ export component TrackClip inherits Rectangle {
                 7;
         }
 
+
+
+        // =================================================
+        // GAIN BAR — linha horizontal no meio do corpo
+        //
+        // Mostra o ganho atual (0 dB = centro). Drag vertical
+        // no grip central ajusta -24..+12 dB. Sincroniza com
+        // BarProperties.gain via clip-gain-committed.
+        // =================================================
+        if root.show-gain-controls:
+            Rectangle {
+                x: 0px;
+                y: Math.clamp(root.gain-line-y - 0.75px, 0px, parent.height - 1.5px);
+                width: parent.width;
+                height: 1.5px;
+                background: #FFFFFF;
+                opacity: root.gaining ? 1.0 : 0.85;
+                z: 5;
+            }
+
+        if root.show-gain-controls && (root.hovered || root.gaining):
+            Rectangle {
+                x: parent.width / 2 - root.gain-grip-half;
+                y: Math.clamp(root.gain-line-y - root.gain-grip-half, 0px, parent.height - root.gain-grip-size);
+                width: root.gain-grip-size;
+                height: root.gain-grip-size;
+                border-radius: root.gain-grip-half;
+                background: #FFFFFF;
+                border-width: 1px;
+                border-color: root.clip-color;
+                opacity: root.gaining ? 1.0 : 0.9;
+                z: 6;
+
+                // Valor em dB ao lado do grip quando arrastando
+                if root.gaining:
+                    Text {
+                        x: parent.width + 4px;
+                        y: parent.height / 2 - 6px;
+                        text: Math.round(root.display-gain-db * 10) / 10 + " dB";
+                        color: #FFFFFF;
+                        font-size: 8px;
+                        font-weight: 700;
+                    }
+            }
 
     // =====================================================
     // TOUCH AREA
@@ -1610,8 +1734,31 @@ export component TrackClip inherits Rectangle {
                         root.live-fade-out =
                             root.fade-out;
 
-                        root.fading =
-                            true;
+                        root.fading
+                            = true;
+
+                        return;
+                    }
+
+                    // =====================================
+                    // GAIN GRIP
+                    //
+                    // Arrasta o ganho do clip em dB (-24..+12).
+                    // 0 dB = linha central do corpo.
+                    // =====================================
+
+                    if root.on-gain-grip {
+
+                        root.gaining = true;
+
+                        root.gain-start-y =
+                            self.absolute-position.y + self.mouse-y;
+
+                        root.gain-start-db =
+                            root.gain-db;
+
+                        root.live-gain-db =
+                            root.gain-db;
 
                         return;
                     }
@@ -1619,6 +1766,7 @@ export component TrackClip inherits Rectangle {
 
                     // =====================================
                     // RESIZE
+                    //
                     //
                     // 100% local: sem callback no DOWN.
                     // =====================================
@@ -1807,6 +1955,42 @@ export component TrackClip inherits Rectangle {
                                             root.live-fade-out =
                                                 dfade-value;
                                         }
+
+                                        return;
+                                    }
+                                    // =====================================
+                                    // GAIN
+                                    //
+                                    // Drag vertical ajusta ganho em dB.
+                                    // =====================================
+
+                                    if root.gaining {
+
+                                        let cursor-abs-y =
+                                            self.absolute-position.y
+                                            + self.mouse-y;
+
+                                        let dy-px =
+                                            cursor-abs-y
+                                            - root.gain-start-y;
+
+                                        // Sensibilidade: 1.5px por dB
+                                        let dg-db =
+                                            -dy-px / 1.5px;
+
+                                        let g-snap =
+                                            ClipDragState.snap-enabled
+                                                ? Math.round(dg-db)
+                                                : dg-db;
+
+                                        root.live-gain-db =
+                                            Math.max(
+                                                -24.0,
+                                                Math.min(
+                                                    12.0,
+                                                    root.gain-start-db + g-snap
+                                                )
+                                            );
 
                                         return;
                                     }
@@ -2023,6 +2207,22 @@ export component TrackClip inherits Rectangle {
                             root.clip-id,
                             fi,
                             fo
+                        );
+                    }
+
+                    // =====================================
+                    // GAIN COMMIT
+                    // =====================================
+
+                    if root.gaining {
+                        root.gaining = false;
+
+                        let final-gain =
+                            root.live-gain-db;
+
+                        root.clip-gain-committed(
+                            root.clip-id,
+                            final-gain
                         );
                     }
 

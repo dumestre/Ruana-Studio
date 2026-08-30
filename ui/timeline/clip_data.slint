@@ -22,4 +22,7 @@ export struct ClipData {
     // Fades do clip em beats (ajustáveis nos controladores do corpo).
     fade-in: float,
     fade-out: float,
+    // Ganho do clip em dB (-24..+12). 0 = unidade. Vem do core e é
+    // controlado pela barrinha central do clip ou pelo BarProperties.
+    gain-db: float,
 }

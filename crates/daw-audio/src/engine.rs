@@ -74,6 +74,8 @@ struct ClipSlot {
     fade_in_beats: f64,
     /// Fade de saída em BEATS.
     fade_out_beats: f64,
+    /// Ganho do clip em linear (10^(dB/20)). 1.0 = 0 dB.
+    gain_linear: f32,
 }
 
 /// Trilha da timeline (pan 0..1, 0.5 = centro).
@@ -151,6 +153,7 @@ impl ProjectSnapshot {
                     buffer,
                     fade_in_beats: c.fade_in_beats as f64,
                     fade_out_beats: c.fade_out_beats as f64,
+                    gain_linear: 10f32.powf(c.gain_db / 20.0),
                 })
             })
             .collect();
@@ -661,15 +664,17 @@ impl AudioEngine {
                         // um ciclo é um degrau, e degrau é clique.
                         // Cada lado tem seu próprio fade (mínimo da
                         // rampa anti-clique de ~1 ms mesmo com fade=0).
+                        // Gain do clip já vem linear (dB->linear).
                         let fade_in = (clip.fade_in_beats * frames_per_beat).max(CLIP_EDGE_FADE);
                         let fade_out = (clip.fade_out_beats * frames_per_beat).max(CLIP_EDGE_FADE);
                         let edge = (offset / fade_in)
                             .min((clip_len - offset) / fade_out)
                             .min(1.0) as f32;
 
+                        let clip_gain = clip.gain_linear;
                         mix_stereo_source(
-                            sl * edge,
-                            sr * edge,
+                            sl * edge * clip_gain,
+                            sr * edge * clip_gain,
                             gain_l,
                             gain_r,
                             &mut left,

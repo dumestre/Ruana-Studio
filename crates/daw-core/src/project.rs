@@ -76,6 +76,11 @@ pub enum DocumentEvent {
         old: Clip,
         new: Clip,
     },
+    /// Mudança de ganho do clip (dB).
+    ClipGainChanged {
+        old: Clip,
+        new: Clip,
+    },
 }
 
 /// Um projeto da DAW.
@@ -277,6 +282,11 @@ impl Project {
                     *existing = new.clone();
                 }
             }
+            DocumentEvent::ClipGainChanged { new, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == new.id) {
+                    *existing = new.clone();
+                }
+            }
         }
         self.emit(event, ChangeKind::Apply);
     }
@@ -332,6 +342,11 @@ impl Project {
                 }
             }
             DocumentEvent::ClipFadesChanged { old, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
+                    *existing = old.clone();
+                }
+            }
+            DocumentEvent::ClipGainChanged { old, .. } => {
                 if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
                     *existing = old.clone();
                 }
@@ -601,6 +616,7 @@ impl Project {
         clip.color_override = src.color_override;
         clip.fade_in_beats = src.fade_in_beats;
         clip.fade_out_beats = src.fade_out_beats;
+        clip.gain_db = src.gain_db;
         self.clips.push(clip.clone());
 
         let event = DocumentEvent::ClipAdded(clip);
@@ -813,6 +829,21 @@ impl Project {
         let new = self.clips[index].clone();
 
         let event = DocumentEvent::ClipFadesChanged { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// Atualiza o ganho de um clip em dB (clamp -24..+12).
+    pub fn set_clip_gain(&mut self, clip_id: u64, gain_db: f32) -> bool {
+        let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
+            return false;
+        };
+        let old = self.clips[index].clone();
+        self.clips[index].gain_db = gain_db.clamp(-24.0, 12.0);
+        let new = self.clips[index].clone();
+
+        let event = DocumentEvent::ClipGainChanged { old, new };
         self.emit(&event, ChangeKind::Apply);
         self.history.record(event);
         true

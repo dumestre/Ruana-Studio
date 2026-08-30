@@ -72,6 +72,7 @@ pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache)
         multi_selected: base.multi_selected,
         fade_in: base.fade_in,
         fade_out: base.fade_out,
+        gain_db: base.gain_db,
     }
 }
 
@@ -116,18 +117,18 @@ pub fn wire_resolution_requests(
     // na resolução vertical real — envelopes e linhas ficam nítidos
     // 1:1 na tela, sem achatamento do canvas fixo de 512.
     {
-        let pending: Rc<RefCell<HashMap<i32, (u32, f32, f32, u32)>>> =
+        let pending: Rc<RefCell<HashMap<i32, (u32, f32, f32, u32, f32, f32, f32)>>> =
             Rc::new(RefCell::new(HashMap::new()));
-        let done_window: Rc<RefCell<HashMap<u64, (u32, u32, u32, u32)>>> =
+        let done_window: Rc<RefCell<HashMap<u64, (u32, u32, u32, u32, f32, f32, f32)>>> =
             Rc::new(RefCell::new(HashMap::new()));
         let debounce: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
         let collector_timer: Rc<RefCell<Option<slint::Timer>>> = Rc::new(RefCell::new(None));
         let in_flight: Rc<Cell<usize>> = Rc::new(Cell::new(0));
         // (id, largura total, largura rasterizada, janela x0, x1, altura, rgba)
         let (tx, rx0) =
-            mpsc::channel::<(i32, u32, u32, f32, f32, u32, Option<Vec<u8>>)>();
+            mpsc::channel::<(i32, u32, u32, f32, f32, u32, f32, f32, f32, Option<Vec<u8>>)>();
         let rx: Rc<
-            RefCell<mpsc::Receiver<(i32, u32, u32, f32, f32, u32, Option<Vec<u8>>)>>,
+            RefCell<mpsc::Receiver<(i32, u32, u32, f32, f32, u32, f32, f32, f32, Option<Vec<u8>>)>>,
         > = Rc::new(RefCell::new(rx0));
 
         /// Trabalho que vai para a thread de fundo.
@@ -140,7 +141,7 @@ pub fn wire_resolution_requests(
         }
 
         ui.global::<TimelineMetrics>()
-            .on_waveform_resolution_requested(move |id, width_px, wx0, wx1, hh| {
+            .on_waveform_resolution_requested(move |id, width_px, wx0, wx1, hh, gain_linear, fi, fo| {
                 let id_u = id.max(0) as u64;
                 let w = (width_px.round() as u32).clamp(16, 16384);
                 let h = (hh.round() as u32).clamp(4, 2048);
@@ -173,7 +174,7 @@ pub fn wire_resolution_requests(
                 if needs_rerender {
                     done_window.borrow_mut().remove(&id_u);
                 }
-                pending.borrow_mut().insert(id, (w, wx0, wx1, h));
+                pending.borrow_mut().insert(id, (w, wx0, wx1, h, gain_linear, fi, fo));
 
                 // Reinicia o timer (debounce do gesto de zoom/scroll).
                 let t = slint::Timer::default();
@@ -191,12 +192,12 @@ pub fn wire_resolution_requests(
                         slint::TimerMode::SingleShot,
                         std::time::Duration::from_millis(40),
                         move || {
-                            let jobs: Vec<(i32, u32, f32, f32, u32)> = pending
+                            let jobs: Vec<(i32, u32, f32, f32, u32, f32, f32, f32)> = pending
                                 .borrow_mut()
                                 .drain()
-                                .map(|(id, (w_full, wx0, wx1, h))| (id, w_full, wx0, wx1, h))
+                                .map(|(id, (w_full, wx0, wx1, h, gain, fi_px, fo_px))| (id, w_full, wx0, wx1, h, gain, fi_px, fo_px))
                                 .collect();
-                            for (id, w_full, wx0, wx1, h_px) in jobs {
+                            for (id, w_full, wx0, wx1, h_px, gain, fi_px, fo_px) in jobs {
                                 let id_u = id.max(0) as u64;
                                 // Geométria degenerada (gesto transitório)
                                 // ou altura inválida: pula com segurança.
@@ -292,7 +293,7 @@ pub fn wire_resolution_requests(
                                             )
                                         }
                                     };
-                                    let _ = tx.send((id, w_full, w0, wx0, wx1, h0, rgba));
+                                    let _ = tx.send((id, w_full, w0, wx0, wx1, h0, gain, fi_px, fo_px, rgba));
                                 });
                             }
 
@@ -312,7 +313,7 @@ pub fn wire_resolution_requests(
                                         let mut acted = false;
                                         loop {
                                             let item = rx.borrow_mut().try_recv();
-                                            let (id, w_full, w, wx0, wx1, h, rgba) =
+                                            let (id, w_full, w, wx0, wx1, h, gain, fi_px, fo_px, rgba) =
                                                 match item {
                                                     Ok(v) => v,
                                                     Err(_) => break,
@@ -342,6 +343,9 @@ pub fn wire_resolution_requests(
                                                             wx0.round() as u32,
                                                             wx1.round() as u32,
                                                             h,
+                                                            gain,
+                                                            fi_px,
+                                                            fo_px,
                                                         ),
                                                     );
                                                 }
