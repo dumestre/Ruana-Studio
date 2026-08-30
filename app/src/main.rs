@@ -42,7 +42,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::cursors::{
     init_cursor_manager, reset_cursor_to_default, set_cursor_for_tool, set_cursor_window_handle,
-    set_timeline_bounds,
+    set_dark_cursors, set_timeline_bounds,
 };
 use crate::mixer::MixerModels;
 use crate::models::{bars_for_end_beat, bind_document_events, initial_bind};
@@ -510,12 +510,15 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let idx = theme::load().unwrap_or(0);
         theme::apply(&ui, idx);
+        // Cursores escuros no tema Paper (claro), claros nos escuros.
+        let _ = set_dark_cursors(idx == theme::THEME_PAPER);
 
         let ui_weak_theme = ui.as_weak();
         ui.on_theme_selected(move |index| {
             if let Some(ui) = ui_weak_theme.upgrade() {
                 let idx = theme::apply(&ui, index);
                 theme::save(idx);
+                let _ = set_dark_cursors(idx == theme::THEME_PAPER);
             }
         });
     }

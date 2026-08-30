@@ -8,406 +8,421 @@ import { TimelineVolume } from "../components/timeline_fader.slint";
 
 export component TrackHeaderRow inherits Rectangle {
 
-    // ============================================================
-    // DADOS
-    // ============================================================
+// ============================================================
+// DADOS
+// ============================================================
 
-    in property <string> name: "Track";
-    in property <string> track-type: "MIDI";
-    in property <color> track-color: Theme.clip-midi;
+in property <string> name: "Track";
+in property <string> track-type: "MIDI";
+in property <color> track-color: Theme.clip-midi;
 
-    in property <bool> selected: false;
-    in property <int> track-index: 0;
+in property <bool> selected: false;
+in property <int> track-index: 0;
 
-    in property <float> zoom-y: 1.0;
+in property <float> zoom-y: 1.0;
 
-    in-out property <bool> muted: false;
-    in-out property <bool> solo: false;
-    in-out property <bool> record-armed: false;
+in-out property <bool> muted: false;
+in-out property <bool> solo: false;
+in-out property <bool> record-armed: false;
 
-    in-out property <bool> automation-enabled: false;
+in-out property <bool> automation-enabled: false;
 
-    // ============================================================
-    // CALLBACKS
-    // ============================================================
+// ============================================================
+// CALLBACKS
+// ============================================================
 
-    callback clicked(int);
-    callback mute-clicked(int);
-    callback solo-clicked(int);
-    callback record-clicked(int);
-    callback automation-clicked(int);
+callback clicked(int);
+callback mute-clicked(int);
+callback solo-clicked(int);
+callback record-clicked(int);
+callback automation-clicked(int);
 
-    // ============================================================
-    // HELPERS
-    // ============================================================
+// ============================================================
+// HELPERS
+// ============================================================
 
-    pure function track-type-letter(t: string) -> string {
-        if t == "MIDI" {
-            return "M";
-        }
-
-        if t == "AUDIO" {
-            return "A";
-        }
-
-        if t == "BUS" {
-            return "B";
-        }
-
-        if t == "MASTER" {
-            return "Σ";
-        }
-
-        return "I";
+pure function track-type-letter(t: string) -> string {
+    if t == "MIDI" {
+        return "M";
     }
 
-    // ============================================================
-    // DIMENSÕES
-    // ============================================================
+    if t == "AUDIO" {
+        return "A";
+    }
 
-    height: 64px * root.zoom-y;
+    if t == "BUS" {
+        return "B";
+    }
 
-    // ============================================================
-    // FUNDO
-    // ============================================================
+    if t == "MASTER" {
+        return "Σ";
+    }
+
+    return "I";
+}
+
+// ============================================================
+// DIMENSÕES
+// ============================================================
+
+height: 64px * root.zoom-y;
+
+// ============================================================
+// FUNDO
+// ============================================================
+
+background:
+    root.selected
+        ? Theme.surface-high
+        : Theme.surface;
+
+animate background {
+    duration: 100ms;
+}
+
+// ============================================================
+// HOVER / SELEÇÃO
+// ============================================================
+
+Rectangle {
+    x: 0;
+    y: 0;
+
+    width: parent.width;
+    height: parent.height;
 
     background:
         root.selected
-            ? Theme.surface-high
-            : Theme.surface;
+            ? root.track-color.transparentize(0.88)
+            : selection-area.has-hover
+                ? Theme.surface-high.transparentize(0.45)
+                : transparent;
 
     animate background {
         duration: 100ms;
     }
+}
 
-    // ============================================================
-    // HOVER / SELEÇÃO
-    // ============================================================
+// ============================================================
+// INDICADOR DE TRACK
+// ============================================================
+
+Rectangle {
+    x: 0;
+    y: 7px;
+
+    width: root.selected ? 4px : 3px;
+    height: parent.height - 14px;
+
+    background: root.track-color;
+
+    border-radius: 2px;
+
+    animate width {
+        duration: 100ms;
+    }
+}
+
+// ============================================================
+// BORDA INFERIOR
+// ============================================================
+
+Rectangle {
+    x: 0;
+    y: parent.height - 1px;
+
+    width: parent.width;
+    height: 1px;
+
+    background: Theme.border;
+
+    opacity:
+        root.selected
+            ? 1.0
+            : 0.7;
+}
+
+// ============================================================
+// ÁREA DE SELEÇÃO
+// ============================================================
+
+selection-area := TouchArea {
+    x: 0;
+    y: 0;
+
+    width: parent.width;
+    height: parent.height;
+
+    mouse-cursor: pointer;
+
+    clicked => {
+        root.clicked(root.track-index);
+    }
+}
+
+// ============================================================
+// CONTEÚDO
+// ============================================================
+
+HorizontalLayout {
+    x: 10px;
+    y: 0;
+
+    width: parent.width - 20px;
+    height: parent.height;
+
+    cross-axis-alignment: CrossAxisAlignment.center;
+
+    spacing: 10px;
+
+    // ========================================================
+    // TYPE BADGE
+    // ========================================================
 
     Rectangle {
-        x: 0;
-        y: 0;
-
-        width: parent.width;
-        height: parent.height;
+        width: 28px;
+        height: 28px;
 
         background:
+            root.track-color.transparentize(0.84);
+
+        border-radius: 7px;
+
+        border-width:
             root.selected
-                ? root.track-color.transparentize(0.88)
-                : selection-area.has-hover
-                    ? Theme.surface-high.transparentize(0.45)
-                    : transparent;
+                ? 1px
+                : 0px;
 
-        animate background {
-            duration: 100ms;
-        }
-    }
+        border-color:
+            root.track-color.transparentize(0.35);
 
-    // ============================================================
-    // INDICADOR DE TRACK
-    // ============================================================
+        Text {
+            x: 0;
+            y: 0;
 
-    Rectangle {
-        x: 0;
-        y: 7px;
-
-        width: root.selected ? 4px : 3px;
-        height: parent.height - 14px;
-
-        background: root.track-color;
-
-        border-radius: 2px;
-
-        animate width {
-            duration: 100ms;
-        }
-    }
-
-    // ============================================================
-    // BORDA INFERIOR
-    // ============================================================
-
-    Rectangle {
-        x: 0;
-        y: parent.height - 1px;
-
-        width: parent.width;
-        height: 1px;
-
-        background: Theme.border;
-
-        opacity:
-            root.selected
-                ? 1.0
-                : 0.7;
-    }
-
-    // ============================================================
-    // ÁREA DE SELEÇÃO
-    // ============================================================
-
-    selection-area := TouchArea {
-        x: 0;
-        y: 0;
-
-        width: parent.width;
-        height: parent.height;
-
-        mouse-cursor: pointer;
-
-        clicked => {
-            root.clicked(root.track-index);
-        }
-    }
-
-    // ============================================================
-    // CONTEÚDO
-    // ============================================================
-
-    HorizontalLayout {
-        x: 10px;
-        y: 0;
-
-        width: parent.width - 20px;
-        height: parent.height;
-
-        cross-axis-alignment: CrossAxisAlignment.center;
-
-        spacing: 10px;
-
-        // ========================================================
-        // TYPE BADGE
-        // ========================================================
-
-        Rectangle {
-            width: 28px;
-            height: 28px;
-
-            background:
-                root.track-color.transparentize(0.84);
-
-            border-radius: 7px;
-
-            border-width:
-                root.selected
-                    ? 1px
-                    : 0px;
-
-            border-color:
-                root.track-color.transparentize(0.35);
-
-            Text {
-                x: 0;
-                y: 0;
-
-                width: parent.width;
-                height: parent.height;
-
-                text:
-                    root.track-type-letter(root.track-type);
-
-                color: root.track-color;
-
-                font-size: 11px;
-                font-weight: 800;
-
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-        }
-
-        // ========================================================
-        // INFORMAÇÕES DA TRACK
-        // ========================================================
-
-        VerticalLayout {
-            alignment: LayoutAlignment.center;
-
-            spacing: 2px;
-
-            Text {
-                text: root.name;
-
-                color: Theme.text-primary;
-
-                font-size: 12px;
-                font-weight: 600;
-
-                vertical-alignment: center;
-
-                overflow: elide;
-            }
-
-            Text {
-                text: root.track-type;
-
-                color:
-                    root.selected
-                        ? root.track-color
-                        : Theme.text-dim;
-
-                font-size: 8px;
-                font-weight: 600;
-
-                vertical-alignment: center;
-
-                overflow: elide;
-            }
-        }
-
-        // ========================================================
-        // VOLUME
-        // ========================================================
-
-        Rectangle {
-            horizontal-stretch: 1;
+            width: parent.width;
             height: parent.height;
 
-            TimelineVolume {
-                width: parent.width;
-                height: 32px;
+            text:
+                root.track-type-letter(root.track-type);
 
-                value: 0.75;
+            color: root.track-color;
 
-                changed(value) => {
-                    // Futuramente ligar ao motor de áudio:
-                    // root.volume-changed(root.track-index, value);
-                }
-            }
+            font-size: 11px;
+            font-weight: 800;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // ========================================================
+    // INFORMAÇÕES DA TRACK
+    // ========================================================
+
+    VerticalLayout {
+        alignment: LayoutAlignment.center;
+
+        spacing: 2px;
+
+        Text {
+            text: root.name;
+
+            color: Theme.text-primary;
+
+            font-size: 12px;
+            font-weight: 600;
+
+            vertical-alignment: center;
+
+            overflow: elide;
         }
 
-        // ========================================================
-        // CONTROLES
-        // ========================================================
+        Text {
+            text: root.track-type;
 
-        HorizontalLayout {
-            spacing: 2px;
-            alignment: LayoutAlignment.stretch;
-            cross-axis-alignment: CrossAxisAlignment.center;
+            color:
+                root.selected
+                    ? root.track-color
+                    : Theme.text-dim;
 
-            // ------------------------------------------------
-            // MUTE
-            // ------------------------------------------------
+            font-size: 8px;
+            font-weight: 600;
 
-            Button {
-                text: "M";
-                width: 18px;
-                height: 18px;
+            vertical-alignment: center;
 
-                resting-bg: Theme.surface-high;
-                text-color: Theme.text-primary;
+            overflow: elide;
+        }
+    }
 
-                toggled: root.muted;
+    // ========================================================
+    // VOLUME
+    // ========================================================
 
-                toggled-bg: Theme.warn;
-                toggled-fg: Theme.on-accent;
-                toggled-icon-color: Theme.on-accent;
-                subtle-toggled: false;
+    Rectangle {
+        horizontal-stretch: 1;
+        height: parent.height;
 
-                borderless: true;
-                corner-radius: 2px;
+        TimelineVolume {
+            width: parent.width;
+            height: 32px;
 
-                clicked => {
-                    root.muted = !root.muted;
-                    root.mute-clicked(root.track-index);
-                }
-            }
+            value: 0.75;
 
-            // ------------------------------------------------
-            // SOLO
-            // ------------------------------------------------
-
-            Button {
-                text: "S";
-                width: 18px;
-                height: 18px;
-
-                resting-bg: Theme.surface-high;
-                text-color: Theme.text-primary;
-
-                toggled: root.solo;
-
-                toggled-bg: root.track-color;
-                toggled-fg: Theme.on-accent;
-                toggled-icon-color: Theme.on-accent;
-                subtle-toggled: false;
-
-                borderless: true;
-                corner-radius: 2px;
-
-                clicked => {
-                    root.solo = !root.solo;
-                    root.solo-clicked(root.track-index);
-                }
-            }
-
-            // ------------------------------------------------
-            // AUTOMATION
-            // ------------------------------------------------
-
-            Button {
-                text: "A";
-                width: 18px;
-                height: 18px;
-
-                resting-bg: Theme.surface-high;
-                text-color: Theme.text-primary;
-
-                toggled: root.automation-enabled;
-
-                toggled-bg: Colors.darkorange;
-                toggled-fg: Theme.on-accent;
-                toggled-icon-color: Theme.on-accent;
-                subtle-toggled: false;
-
-                borderless: true;
-                corner-radius: 2px;
-
-                clicked => {
-                    root.automation-enabled =
-                        !root.automation-enabled;
-
-                    root.automation-clicked(
-                        root.track-index
-                    );
-                }
+            changed(value) => {
+                // Futuramente ligar ao motor de áudio:
+                // root.volume-changed(root.track-index, value);
             }
         }
+    }
 
-        // ========================================================
-        // RECORD
-        // ========================================================
+    // ========================================================
+    // CONTROLES
+    // ========================================================
+
+    HorizontalLayout {
+        spacing: 2px;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        // ------------------------------------------------
+        // MUTE
+        // ------------------------------------------------
 
         Button {
-            icon: @image-url("../icons/rec.svg");
+            text: "M";
+            width: 18px;
+            height: 18px;
 
-            icon-color: Theme.danger;
+            resting-bg:
+                Theme.is-paper
+                    ? Theme.base
+                    : Theme.surface-high;
 
-            preferred-width: 0px;
-            toggled: root.record-armed;
+            text-color: Theme.text-primary;
 
-            toggled-bg: Theme.danger;
+            toggled: root.muted;
 
-            toggled-fg: Theme.surface-high;
+            toggled-bg: Theme.warn;
+            toggled-fg: Theme.on-accent;
+            toggled-icon-color: Theme.on-accent;
+            subtle-toggled: false;
 
             borderless: true;
             corner-radius: 2px;
 
-            icon-size: 14px;
+            clicked => {
+                root.muted = !root.muted;
+                root.mute-clicked(root.track-index);
+            }
+        }
 
-            height: 18px;
+        // ------------------------------------------------
+        // SOLO
+        // ------------------------------------------------
+
+        Button {
+            text: "S";
             width: 18px;
+            height: 18px;
 
-            border-radius: 12px;
+            resting-bg:
+                Theme.is-paper
+                    ? Theme.base
+                    : Theme.surface-high;
+
+            text-color: Theme.text-primary;
+
+            toggled: root.solo;
+
+            toggled-bg: root.track-color;
+            toggled-fg: Theme.on-accent;
+            toggled-icon-color: Theme.on-accent;
+            subtle-toggled: false;
+
+            borderless: true;
+            corner-radius: 2px;
 
             clicked => {
-                root.record-armed =
-                    !root.record-armed;
+                root.solo = !root.solo;
+                root.solo-clicked(root.track-index);
+            }
+        }
 
-                root.record-clicked(
+        // ------------------------------------------------
+        // AUTOMATION
+        // ------------------------------------------------
+
+        Button {
+            text: "A";
+            width: 18px;
+            height: 18px;
+
+            resting-bg:
+                Theme.is-paper
+                    ? Theme.base
+                    : Theme.surface-high;
+
+            text-color: Theme.text-primary;
+
+            toggled: root.automation-enabled;
+
+            toggled-bg: Colors.darkorange;
+            toggled-fg: Theme.on-accent;
+            toggled-icon-color: Theme.on-accent;
+            subtle-toggled: false;
+
+            borderless: true;
+            corner-radius: 2px;
+
+            clicked => {
+                root.automation-enabled =
+                    !root.automation-enabled;
+
+                root.automation-clicked(
                     root.track-index
                 );
             }
         }
     }
+
+    // ========================================================
+    // RECORD
+    // ========================================================
+
+    Button {
+        icon: @image-url("../icons/rec.svg");
+
+        icon-color: Theme.danger;
+
+        preferred-width: 0px;
+        toggled: root.record-armed;
+
+        toggled-bg: Theme.danger;
+
+        toggled-fg:
+            Theme.is-paper
+                ? Theme.base
+                : Theme.surface-high;
+
+        borderless: true;
+        corner-radius: 2px;
+
+        icon-size: 14px;
+
+        height: 18px;
+        width: 18px;
+
+        border-radius: 12px;
+
+        clicked => {
+            root.record-armed =
+                !root.record-armed;
+
+            root.record-clicked(
+                root.track-index
+            );
+        }
+    }
+}
 }

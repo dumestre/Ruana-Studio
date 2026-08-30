@@ -294,6 +294,11 @@ pub fn install(
             let track_id = proj.tracks[idx].id;
             let color = color.clamp(0, 255) as u8;
 
+            eprintln!(
+                "[RECOLOR] track_index={} -> idx={} color={} selected_clip={}",
+                track_index, idx, color, ui_weak.upgrade().map(|u| u.get_selected_clip()).unwrap_or(-999)
+            );
+
             // Com um clip selecionado, a paleta do Track Panel atua
             // somente nele. Sem seleção, continua colorindo a track.
             if let Some(ui) = ui_weak.upgrade() {

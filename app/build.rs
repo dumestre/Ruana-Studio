@@ -120,7 +120,12 @@ fn build_cursors() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let png_bytes = render_svg_to_png(&svg_path, 32, 32, 0.55)?;
-        write_cur_file(&cur_path, &png_bytes, hotspot)?;
+        write_cur_file(&cur_path, &png_bytes, hotspot, false)?;
+
+        // Variante escura (modo Paper): inverte a cor, preservando a forma.
+        let dark_name = cur_name.replace(".cur", "-dark.cur");
+        let dark_path = out_dir.join(&dark_name);
+        write_cur_file(&dark_path, &png_bytes, hotspot, true)?;
 
         println!("cargo:rerun-if-changed={}", svg_path.display());
         println!("Generated: {}", cur_path.display());
@@ -266,6 +271,7 @@ fn write_cur_file(
     path: &std::path::Path,
     png_data: &[u8],
     hotspot: (i32, i32),
+    invert: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::io::Write;
 
@@ -328,6 +334,12 @@ fn write_cur_file(
                 let g = image_data[idx + 1];
                 let r = image_data[idx + 2];
                 let a = image_data[idx + 3];
+                // Variante escura: inverte a cor antes do premultiply.
+                let (r, g, b) = if invert {
+                    (255 - r, 255 - g, 255 - b)
+                } else {
+                    (r, g, b)
+                };
                 // Premultiply alpha
                 let r = ((r as u16 * a as u16) / 255) as u8;
                 let g = ((g as u16 * a as u16) / 255) as u8;

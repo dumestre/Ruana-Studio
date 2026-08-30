@@ -46,6 +46,17 @@ impl ToolCursor {
             ToolCursor::Erase => "erase.cur",
         }
     }
+
+    /// Variante escura (modo Paper) — mesmo nome com sufixo `-dark`.
+    pub fn dark_cursor_file_name(&self) -> &'static str {
+        match self {
+            ToolCursor::Select => "select-dark.cur",
+            ToolCursor::Slice => "slice-dark.cur",
+            ToolCursor::Glue => "glue-dark.cur",
+            ToolCursor::Draw => "draw-dark.cur",
+            ToolCursor::Erase => "erase-dark.cur",
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -62,64 +73,83 @@ unsafe impl Sync for CursorHandle {}
 pub struct CursorManager {
     #[cfg(windows)]
     cursors: HashMap<ToolCursor, CursorHandle>,
+    #[cfg(windows)]
+    dark_cursors: HashMap<ToolCursor, CursorHandle>,
     current_tool: Option<ToolCursor>,
+    dark: bool,
 }
 
 impl CursorManager {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         #[cfg(windows)]
         {
-            let mut cursors = HashMap::new();
             let cursor_dir = Self::cursor_directory()?;
-
-            for tool in [
+            let all = [
                 ToolCursor::Select,
                 ToolCursor::Slice,
                 ToolCursor::Glue,
                 ToolCursor::Draw,
                 ToolCursor::Erase,
-            ] {
-                let cur_path = cursor_dir.join(tool.cursor_file_name());
-                if !cur_path.exists() {
-                    continue;
+            ];
+
+            let mut cursors = HashMap::new();
+            let mut dark_cursors = HashMap::new();
+
+            for tool in all {
+                if let Some(h) = Self::load_cursor(&cursor_dir, tool.cursor_file_name()) {
+                    cursors.insert(tool, h);
                 }
-
-                let path_wide: Vec<u16> = cur_path
-                    .to_string_lossy()
-                    .encode_utf16()
-                    .chain(std::iter::once(0))
-                    .collect();
-
-                let hcursor = unsafe {
-                    LoadImageW(
-                        HINSTANCE::default(),
-                        PCWSTR::from_raw(path_wide.as_ptr()),
-                        IMAGE_CURSOR,
-                        0,
-                        0,
-                        LR_DEFAULTSIZE | LR_LOADFROMFILE,
-                    )
-                };
-
-                if let Ok(h) = hcursor {
-                    cursors.insert(
-                        tool,
-                        CursorHandle {
-                            hcursor: HCURSOR(h.0),
-                        },
-                    );
+                if let Some(h) = Self::load_cursor(&cursor_dir, tool.dark_cursor_file_name()) {
+                    dark_cursors.insert(tool, h);
                 }
             }
 
             Ok(Self {
                 cursors,
+                dark_cursors,
                 current_tool: None,
+                dark: false,
             })
         }
         #[cfg(not(windows))]
         {
-            Ok(Self { current_tool: None })
+            Ok(Self {
+                current_tool: None,
+                dark: false,
+            })
         }
+    }
+
+    #[cfg(windows)]
+    fn load_cursor(
+        cursor_dir: &std::path::Path,
+        file_name: &str,
+    ) -> Option<CursorHandle> {
+        let cur_path = cursor_dir.join(file_name);
+        if !cur_path.exists() {
+            return None;
+        }
+
+        let path_wide: Vec<u16> = cur_path
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let hcursor = unsafe {
+            LoadImageW(
+                HINSTANCE::default(),
+                PCWSTR::from_raw(path_wide.as_ptr()),
+                IMAGE_CURSOR,
+                0,
+                0,
+                LR_DEFAULTSIZE | LR_LOADFROMFILE,
+            )
+        };
+
+        hcursor.ok().map(|h| CursorHandle {
+            hcursor: HCURSOR(h.0),
+        })
     }
 
     #[cfg(windows)]
@@ -141,16 +171,22 @@ impl CursorManager {
     pub fn set_tool(&mut self, tool: ToolCursor) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(windows)]
         {
-            if let Some(cursor_handle) = self.cursors.get(&tool) {
-                if let Some(mut active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()) {
-                    *active = Some(cursor_handle.hcursor.0 as isize);
-                }
-                unsafe {
-                    SetCursor(cursor_handle.hcursor);
-                }
-            }
+            self.apply_tool_cursor(tool);
         }
         self.current_tool = Some(tool);
+        Ok(())
+    }
+
+    /// Alterna entre variantes claras (temas escuros) e escuras (Paper).
+    /// Reaplica o cursor da ferramenta atual quando houver uma ativa.
+    pub fn set_dark(&mut self, dark: bool) -> Result<(), Box<dyn std::error::Error>> {
+        self.dark = dark;
+        #[cfg(windows)]
+        {
+            if let Some(tool) = self.current_tool {
+                self.apply_tool_cursor(tool);
+            }
+        }
         Ok(())
     }
 
@@ -163,6 +199,23 @@ impl CursorManager {
                 bounds.w = w;
                 bounds.h = h;
                 bounds.valid = true;
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn apply_tool_cursor(&self, tool: ToolCursor) {
+        let map = if self.dark {
+            &self.dark_cursors
+        } else {
+            &self.cursors
+        };
+        if let Some(cursor_handle) = map.get(&tool) {
+            if let Some(mut active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()) {
+                *active = Some(cursor_handle.hcursor.0 as isize);
+            }
+            unsafe {
+                SetCursor(cursor_handle.hcursor);
             }
         }
     }
@@ -286,6 +339,14 @@ pub fn set_cursor_for_tool(tool_index: i32) -> Result<(), Box<dyn std::error::Er
         if let Some(mut mgr) = get_cursor_manager_lock() {
             mgr.set_tool(tool)?;
         }
+    }
+    Ok(())
+}
+
+/// Ativa a variante escura dos cursores (usada no tema Paper).
+pub fn set_dark_cursors(dark: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(mut mgr) = get_cursor_manager_lock() {
+        mgr.set_dark(dark)?;
     }
     Ok(())
 }

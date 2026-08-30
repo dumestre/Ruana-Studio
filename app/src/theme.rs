@@ -10,6 +10,9 @@ use crate::MainWindow;
 
 pub const THEME_COUNT: i32 = 7;
 
+/// Índice do tema Paper (claro). `Theme.is-paper` no .slint é `active == 6`.
+pub const THEME_PAPER: i32 = 6;
+
 fn cfg_path() -> std::path::PathBuf {
     std::env::current_exe()
         .ok()
