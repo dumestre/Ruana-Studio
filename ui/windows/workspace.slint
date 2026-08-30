@@ -2058,6 +2058,8 @@ export component Workspace inherits Rectangle {
 
             HorizontalLayout {
 
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.center;
                 padding-left:
                     8px;
 
@@ -2092,6 +2094,21 @@ export component Workspace inherits Rectangle {
                     background:
                         transparent;
                 }
+                // ====================================================
+        // BOTTOM TOOLBAR
+        // ====================================================
+
+        bottom-toolbar := BottomToolbar {
+
+            toolbar-height <=>
+                bottom-toolbar.height;
+
+            selected-tab <=>
+                root.selected-tab;
+
+            panel-visible <=>
+                root.bottom-panel-visible;
+        }
 
 
                 Text {
@@ -2164,17 +2181,6 @@ export component Workspace inherits Rectangle {
         // BOTTOM TOOLBAR
         // ====================================================
 
-        bottom-toolbar := BottomToolbar {
-
-            toolbar-height <=>
-                bottom-toolbar.height;
-
-            selected-tab <=>
-                root.selected-tab;
-
-            panel-visible <=>
-                root.bottom-panel-visible;
-        }
 
 
         // ====================================================
