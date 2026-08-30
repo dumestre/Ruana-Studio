@@ -487,6 +487,11 @@ export component TrackClip inherits Rectangle {
     private property <bool> on-fade-grip:
         root.on-fade-in-grip
         || root.on-fade-out-grip;
+
+    private property <bool> fade-grip-active:
+        root.on-fade-grip
+        && (touch.pressed
+            || root.fading);
     // =====================================================
     // ESTADO DO GAIN (linha central)
     //
@@ -547,6 +552,11 @@ export component TrackClip inherits Rectangle {
         && touch.mouse-y >= root.header-height + root.gain-line-y - root.gain-grip-half
         && touch.mouse-y <= root.header-height + root.gain-line-y + root.gain-grip-half
         && Math.abs(touch.mouse-x - root.gain-grip-x) <= root.gain-grip-half;
+
+    private property <bool> gain-grip-active:
+        root.on-gain-grip
+        && (touch.pressed
+            || root.gaining);
 
 
 
@@ -1336,13 +1346,15 @@ export component TrackClip inherits Rectangle {
                 root.fade-grip-half;
 
             background:
-                #FFFFFF;
+                root.fade-grip-active
+                    ? Theme.accent
+                    : Theme.accent-hover;
 
             border-width:
                 1px;
 
             border-color:
-                root.clip-color;
+                Theme.on-accent;
 
             opacity:
                 root.fading && root.fade-side < 0
@@ -1375,13 +1387,15 @@ export component TrackClip inherits Rectangle {
                 root.fade-grip-half;
 
             background:
-                #FFFFFF;
+                root.fade-grip-active
+                    ? Theme.accent
+                    : Theme.accent-hover;
 
             border-width:
                 1px;
 
             border-color:
-                root.clip-color;
+                Theme.on-accent;
 
             opacity:
                 root.fading && root.fade-side > 0
@@ -1419,9 +1433,9 @@ export component TrackClip inherits Rectangle {
                 width: root.gain-grip-size;
                 height: root.gain-grip-size;
                 border-radius: root.gain-grip-half;
-                background: #FFFFFF;
+                background: root.gain-grip-active ? Theme.accent : Theme.accent-hover;
                 border-width: 1px;
-                border-color: root.clip-color;
+                border-color: Theme.on-accent;
                 opacity: root.gaining ? 1.0 : 0.9;
                 z: 6;
 

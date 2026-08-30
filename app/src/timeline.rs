@@ -391,6 +391,17 @@ pub fn install(
         });
     }
 
+    // Gain do clip (drag na barra central) → core, com undo unitário.
+    // O gesto é 100% local no TrackClip e só aqui cai o commit.
+    {
+        let project = project.clone();
+        ui.on_clip_gain_committed(move |id, gain_db| {
+            project
+                .borrow_mut()
+                .set_clip_gain(id as u64, gain_db);
+        });
+    }
+
     // Botão "add color" do cabeçalho TRACKS → aplica o índice de cor
     // escolhido à track (cabeçalho) e a TODOS os seus clips.
     {

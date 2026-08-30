@@ -36,6 +36,7 @@ fn image_from_rgba(rgba: &[u8], w: u32, h: u32) -> slint::Image {
 
 /// Converte o RGBA cru do cache num `slint::Image`.
 /// Largura 0 = sem imagem (fallback de retângulos na UI).
+
 pub fn waveform_image_to_slint(rgba: Option<Vec<u8>>) -> slint::Image {
     use slint::Rgba8Pixel;
     match rgba {
@@ -48,6 +49,38 @@ pub fn waveform_image_to_slint(rgba: Option<Vec<u8>>) -> slint::Image {
             slint::Image::from_rgba8(buf)
         }
         None => slint::Image::default(),
+    }
+}
+
+/// Aplica ganho linear e fade in/out no RGBA da waveform.
+fn apply_gain_and_fade_to_rgba(rgba: &mut [u8], w: u32, h: u32, gain_linear: f32, fade_in_px: f32, fade_out_px: f32) {
+    let gain = gain_linear.clamp(0.0, 4.0);
+    let w = w as usize;
+    let h = h as usize;
+    if w == 0 || h == 0 {
+        return;
+    }
+    let fi = fade_in_px.clamp(0.0, w as f32) as usize;
+    let fo = fade_out_px.clamp(0.0, w as f32) as usize;
+    let fo_start = w.saturating_sub(fo);
+    for y in 0..h {
+        for x in 0..w {
+            let idx = (y * w + x) * 4;
+            if idx + 3 >= rgba.len() {
+                continue;
+            }
+            let mut factor = 1.0;
+            if fi > 0 && x < fi {
+                factor *= (x as f32 / fi as f32).clamp(0.0, 1.0);
+            }
+            if fo > 0 && x >= fo_start {
+                factor *= ((w - x) as f32 / fo as f32).clamp(0.0, 1.0);
+            }
+            let sample = factor * gain;
+            rgba[idx] = (rgba[idx] as f32 * sample).clamp(0.0, 255.0) as u8;
+            rgba[idx + 1] = (rgba[idx + 1] as f32 * sample).clamp(0.0, 255.0) as u8;
+            rgba[idx + 2] = (rgba[idx + 2] as f32 * sample).clamp(0.0, 255.0) as u8;
+        }
     }
 }
 
@@ -166,7 +199,7 @@ pub fn wire_resolution_requests(
                     .get(&id_u)
                     .map(|c| c.image.is_none())
                     .unwrap_or(true);
-                if !needs_rerender && done_window.borrow().get(&id_u) == Some(&(w, x0, x1, h)) {
+                if !needs_rerender && done_window.borrow().get(&id_u) == Some(&(w, x0, x1, h, 0.0, 0.0, 0.0)) {
                     return;
                 }
                 // Se precisa re-renderizar, invalida o registro antigo
@@ -325,6 +358,8 @@ pub fn wire_resolution_requests(
                                                 continue;
                                             };
                                             let id_u = id.max(0) as u64;
+                                            let mut rgba = rgba;
+                                            apply_gain_and_fade_to_rgba(&mut rgba, w, h, gain, fi_px, fo_px);
                                             let img = image_from_rgba(&rgba, w, h);
                                             if let Some(i) = clip_row(&clips_model, id) {
                                                 if let Some(mut data) =
@@ -502,6 +537,7 @@ pub fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
         len: clip.length_beats,
         is_midi: clip.is_midi(),
         color: clip.color as i32,
+        gain_db: clip.gain_db,
         waveform_points: Rc::new(slint::VecModel::from(peaks)).into(),
         waveform_image: waveform_image_to_slint(img),
         waveform_src_x: 0.0,
