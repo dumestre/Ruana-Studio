@@ -13,6 +13,9 @@ export component Knob {
 
     in-out property <float> last-y: 0;
 
+    // Arco e ponteiro: no Paper usa o texto primário, senão o accent.
+    property <color> accent-color: Theme.is-paper ? Theme.text-primary : Theme.accent;
+
     // The dial occupies the upper portion while the remaining height is used by
     // the value and caption. This keeps the whole control usable when resized.
     property <length> dial-size: root.show-text
@@ -45,7 +48,7 @@ export component Knob {
         x: parent.width / 2 + Math.cos(self.theta - 90deg) * root.dial-size * 0.42 - self.width / 2;
         y: root.dial-size / 2 + Math.sin(self.theta - 90deg) * root.dial-size * 0.42 - self.height / 2;
         
-        background: Theme.accent;
+        background: root.accent-color;
         border-radius: self.width / 2;
     }
 
@@ -66,7 +69,7 @@ export component Knob {
             height: parent.height * 0.38;
             x: (parent.width - self.width) / 2;
             y: parent.height * 0.12;
-            background: Theme.accent;
+            background: root.accent-color;
             border-radius: self.width / 2;
             
             transform-rotation: root.arc-start + root.value * root.arc-sweep;

@@ -532,6 +532,16 @@ export component Workspace inherits Rectangle {
                 root.bottom-panel-visible;
 
 
+            master-volume: root.mixer-volumes[root.mixer-volumes.length - 1];
+            master-volume-changed(v) => {
+                root.mixer-volumes[root.mixer-volumes.length - 1] = v;
+                root.mixer-param-changed(
+                    root.mixer-volumes.length - 1,
+                    "volume",
+                    v
+                );
+            }
+
             tool-changed(tool) => {
                 root.tool-changed(
                     tool
