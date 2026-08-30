@@ -331,11 +331,13 @@ export component TrackClip inherits Rectangle {
     private property <bool> on-left-edge:
         root.hovered
         && !root.on-fade-grip
+        && !root.on-gain-grip
         && touch.mouse-x <= root.edge-width;
 
     private property <bool> on-right-edge:
         root.hovered
         && !root.on-fade-grip
+        && !root.on-gain-grip
         && touch.mouse-x >= root.width - root.edge-width;
 
     private property <bool> on-edge:
@@ -1480,30 +1482,40 @@ export component TrackClip inherits Rectangle {
 
         mouse-cursor:
 
-            root.active-tool == 1
-                ? crosshair
-
-            : root.resizing
+            root.resizing
                 ? ew-resize
 
             : root.fading
                 ? ew-resize
 
-            : root.dragging
+            : root.gaining
                 ? pointer
 
-            : root.active-tool == 0
-                && root.on-fade-grip
-                    ? ew-resize
+            : root.on-gain-grip
+                ? pointer
+
+            : root.on-fade-grip
+                ? ew-resize
+
+            : root.on-edge
+                ? ew-resize
+
+            : root.active-tool == 1
+                ? crosshair
 
             : root.active-tool == 0
-                && root.on-edge
-                    ? ew-resize
+                ? pointer
 
-            : root.active-tool >= 3
-                ? none
+            : root.active-tool == 2
+                ? pointer
 
-            : pointer;
+            : root.active-tool == 3
+                ? ew-resize
+
+            : root.active-tool == 5
+                ? pointer
+
+            : none;
 
 
         // =================================================

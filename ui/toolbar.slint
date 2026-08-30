@@ -441,26 +441,18 @@ export component Toolbar inherits Rectangle {
             // ----------------------------------------------------
 
             Button {
-                width: 18px;
-                height: 18px;
+                width: 14px;
+                height: 14px;
 
                 preferred-height: 0px;
                 preferred-width: 0px;
 
                 text: "";
 
-                icon:
-                    @image-url(
-                        "icons/minimize.svg"
-                    );
-
-                icon-size: 14px;
-                icon-color: Theme.text-primary;
-
                 corner-radius: 9px;
 
                 resting-bg:
-                    Theme.surface-high;
+                    #FEBC2E;
 
                 borderless: true;
 
@@ -475,23 +467,15 @@ export component Toolbar inherits Rectangle {
             // ----------------------------------------------------
 
             Button {
-                width: 18px;
-                height: 18px;
+                width: 14px;
+                height: 14px;
 
                 text: "";
-
-                icon:
-                    root.full-screen
-                        ? @image-url("icons/restore.svg")
-                        : @image-url("icons/maximize.svg");
-
-                icon-size: 10px;
-                icon-color: Theme.text-primary;
 
                 corner-radius: 9px;
 
                 resting-bg:
-                    Theme.surface-high;
+                    #28C840;
 
                 borderless: true;
 
@@ -507,23 +491,15 @@ export component Toolbar inherits Rectangle {
             // ----------------------------------------------------
 
             Button {
-                width: 18px;
-                height: 18px;
+                width: 14px;
+                height: 14px;
 
                 text: "";
-
-                icon:
-                    @image-url(
-                        "icons/close.svg"
-                    );
-
-                icon-size: 14px;
-                icon-color: Colors.crimson;
 
                 corner-radius: 9px;
 
                 resting-bg:
-                    Theme.surface-high;
+                    #FF5F57;
 
                 borderless: true;
 

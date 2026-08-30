@@ -193,22 +193,83 @@ export component BeatPopup inherits Rectangle {
 
     clip: false;
 
+    // Consome eventos para não vazar para a timeline atrás.
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        enabled: root.open;
+    }
+
 
     // ============================================================
     // CONTEÚDO
     // ============================================================
 
-    content := BeatContent {
-
+    content := Rectangle {
         x: root.popup-x;
         y: root.popup-y;
-
         width: 800px;
+        height: 420px;
+        background: Theme.base;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: Theme.border;
+        z: 10;
 
+        // Header arrastável
+        header := Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: 24px;
+            background: Theme.surface-high;
+            border-radius: 8px;
 
-        // --------------------------------------------------------
-        // DADOS
-        // --------------------------------------------------------
+            Text {
+                text: root.beat-name;
+                x: 8px;
+                y: parent.height / 2 - self.height / 2;
+                color: Theme.text-primary;
+                font-size: 11px;
+                font-weight: 700;
+            }
+
+            TouchArea {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor: pointer;
+
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down {
+                        root.drag-start-x = event.x;
+                        root.drag-start-y = event.y;
+                        root.dragging = true;
+                    } else if event.kind == PointerEventKind.move && root.dragging {
+                        let dx = (event.x - root.drag-start-x) / 1px;
+                        let dy = (event.y - root.drag-start-y) / 1px;
+                        root.popup-x = Math.max(0px, root.popup-x + dx);
+                        root.popup-y = Math.max(0px, root.popup-y + dy);
+                        root.drag-start-x = event.x;
+                        root.drag-start-y = event.y;
+                    } else if event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel {
+                        root.dragging = false;
+                    }
+                }
+            }
+        }
+
+        BeatContent {
+            x: 0px;
+            y: 24px;
+            width: parent.width;
+            height: parent.height - 24px;
+
+            // DADOS
 
         playhead <=> root.playhead;
 
