@@ -144,7 +144,7 @@ impl CursorManager {
 
         let hcursor = unsafe {
             LoadImageW(
-                HINSTANCE::default(),
+                Some(HINSTANCE::default()),
                 PCWSTR::from_raw(path_wide.as_ptr()),
                 IMAGE_CURSOR,
                 0,
@@ -243,7 +243,7 @@ impl CursorManager {
                 *active = Some(cursor_handle.hcursor.0 as isize);
             }
             unsafe {
-                SetCursor(cursor_handle.hcursor);
+                SetCursor(Some(cursor_handle.hcursor));
             }
         }
     }
@@ -254,9 +254,9 @@ impl CursorManager {
             if let Some(mut active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()) {
                 *active = None;
             }
-            if let Ok(default) = unsafe { LoadCursorW(HINSTANCE::default(), IDC_ARROW) } {
+            if let Ok(default) = unsafe { LoadCursorW(Some(HINSTANCE::default()), IDC_ARROW) } {
                 unsafe {
-                    SetCursor(HCURSOR(default.0));
+                    SetCursor(Some(HCURSOR(default.0)));
                 }
             }
             self.current_tool = None;
@@ -344,7 +344,7 @@ unsafe extern "system" fn cursor_subclass_proc(
                 .and_then(|m| m.lock().ok())
                 .and_then(|c| *c)
             {
-                unsafe { SetCursor(HCURSOR(active as *mut core::ffi::c_void)) };
+                unsafe { SetCursor(Some(HCURSOR(active as *mut core::ffi::c_void))) };
                 return LRESULT(1);
             }
         }

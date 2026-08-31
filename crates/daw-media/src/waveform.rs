@@ -234,8 +234,8 @@ fn downmix_mono(
 fn decode_symphonia(
     path: &Path,
 ) -> Result<WaveformData, Box<dyn std::error::Error>> {
+    use symphonia::core::audio::layouts::CHANNEL_LAYOUT_MONO;
     use symphonia::core::audio::sample::Sample;
-    use symphonia::core::audio::Channels;
     use symphonia::core::codecs::audio::AudioDecoderOptions;
     use symphonia::core::formats::probe::Hint;
     use symphonia::core::formats::{FormatOptions, TrackType};
@@ -272,8 +272,7 @@ fn decode_symphonia(
                 mss,
                 fmt_opts,
                 meta_opts,
-            )?
-            .format;
+            )?;
 
     let track =
         format
@@ -299,9 +298,8 @@ fn decode_symphonia(
     let channels =
         codec_params
             .channels
-            .unwrap_or(
-                Channels::CHANNEL_LAYOUT_MONO,
-            );
+            .clone()
+            .unwrap_or(CHANNEL_LAYOUT_MONO);
 
     let channel_count =
         channels.count();
@@ -323,11 +321,12 @@ fn decode_symphonia(
     // ========================================================
 
     loop {
-        let Some(packet) =
-            format.next_packet()
-        else {
-            break;
-        };
+        let packet =
+            match format.next_packet() {
+                Ok(Some(p)) => p,
+                Ok(None) => break,
+                Err(_) => break,
+            };
 
         if packet.track_id != track_id {
             continue;
@@ -338,16 +337,17 @@ fn decode_symphonia(
                 let count =
                     decoded.samples_interleaved();
 
+                let start =
+                    all_samples.len();
+
                 all_samples.resize(
-                    all_samples.len() + count,
+                    start + count,
                     f32::MID,
                 );
 
                 decoded
                     .copy_to_slice_interleaved(
-                        &mut all_samples
-                            [all_samples.len()
-                                - count..],
+                        &mut all_samples[start..],
                     );
             }
 

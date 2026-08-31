@@ -570,8 +570,8 @@ fn main() -> Result<(), slint::PlatformError> {
                             SendMessageW(
                                 HWND(h.hwnd.get() as *mut _),
                                 WM_NCLBUTTONDOWN,
-                                WPARAM(HTCAPTION as usize),
-                                LPARAM(0),
+                                Some(WPARAM(HTCAPTION as usize)),
+                                Some(LPARAM(0)),
                             );
                         }
                     }

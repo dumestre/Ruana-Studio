@@ -6,8 +6,8 @@ use cpal::{SampleFormat, Stream, StreamConfig};
 pub enum AudioError {
     NoDefaultDevice,
     NoSupportedConfig,
-    BuildStream(cpal::BuildStreamError),
-    PlayStream(cpal::PlayStreamError),
+    BuildStream(cpal::Error),
+    PlayStream(cpal::Error),
 }
 
 impl std::fmt::Display for AudioError {
@@ -64,7 +64,7 @@ impl CpalBackend {
         let sample_format = supported.sample_format();
         let config: StreamConfig = supported.into();
 
-        let sample_rate = config.sample_rate.0;
+        let sample_rate = config.sample_rate;
         let channels = config.channels as u16;
         let buffer_size = match &config.buffer_size {
             cpal::BufferSize::Default => 512,
@@ -79,7 +79,7 @@ impl CpalBackend {
 
         let stream = match sample_format {
             SampleFormat::F32 => device.build_output_stream(
-                &config,
+                config.clone(),
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     callback(data);
                 },
@@ -89,7 +89,7 @@ impl CpalBackend {
             SampleFormat::I16 => {
                 let mut inner_callback = Some(callback);
                 device.build_output_stream(
-                    &config,
+                    config.clone(),
                     move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
                         let cb = inner_callback.as_mut().unwrap();
                         let mut f32_buf = vec![0.0f32; data.len()];
@@ -105,7 +105,7 @@ impl CpalBackend {
             SampleFormat::U16 => {
                 let mut inner_callback = Some(callback);
                 device.build_output_stream(
-                    &config,
+                    config.clone(),
                     move |data: &mut [u16], _: &cpal::OutputCallbackInfo| {
                         let cb = inner_callback.as_mut().unwrap();
                         let mut f32_buf = vec![0.0f32; data.len()];

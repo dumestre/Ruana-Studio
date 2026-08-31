@@ -182,7 +182,7 @@ fn decode_png_rgba(png_bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), Box<dyn std:
     let mut decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info()?;
-    let mut data = vec![0; reader.output_buffer_size()];
+    let mut data = vec![0; reader.output_buffer_size().unwrap()];
     reader.next_frame(&mut data)?;
     let info = reader.info();
     Ok((info.width, info.height, data))
@@ -293,14 +293,14 @@ fn write_cur_file(
     use std::io::Write;
 
     // Decode PNG first
-    let mut decoder = png::Decoder::new(png_data);
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png_data));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info()?;
     let info = reader.info();
     let width = info.width;
     let height = info.height;
 
-    let mut image_data = vec![0; reader.output_buffer_size()];
+    let mut image_data = vec![0; reader.output_buffer_size().unwrap()];
     reader.next_frame(&mut image_data)?;
 
     // Write proper Windows .cur format (based on ICO format)

@@ -38,7 +38,6 @@ const SCROLL_FLOOR: f32 = 12.0;
 // Quando tudo chega ao alvo, para o timer (evita tick eterno).
 const EPS: f32 = 0.05;
 
-#[derive(Default)]
 struct State {
     // Targets (px em coordenadas de conteúdo/timeline).
     tz: f32,
@@ -51,6 +50,20 @@ struct State {
     active: bool,
     // Instant do último tick (para o dt do smoothing).
     last: Instant,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            tz: 0.0,
+            tzy: 0.0,
+            tsx: 0.0,
+            tsy: 0.0,
+            anchor_mx: 0.0,
+            active: false,
+            last: Instant::now(),
+        }
+    }
 }
 
 /// Passo de scroll por evento (mesma semântica do handle antigo: piso
