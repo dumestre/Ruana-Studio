@@ -525,6 +525,15 @@ export component TrackClip inherits Rectangle {
     // =====================================================
 
     Rectangle {
+        background: root.clip-color.darker(
+                 root.hovered
+                     ? 0.05
+                     : 0.12
+             ).with-alpha(
+                 root.hovered
+                     ? 0.30
+                     : 0.50
+             );
         border-color: root.hovered
                  ? crimson.with-alpha(0.45)
                  :crimson.with-alpha(0.22);
@@ -590,15 +599,16 @@ export component TrackClip inherits Rectangle {
             && (clip-waveform-image.width > 0
                 || root.wave-w1 > 0.0):
 
-            Image {
-                // A imagem já vem rasterizada na resolução EXATA
-                // da largura do corpo do clip pelo Rust.
-                // image-fit: none evita qualquer stretch — a
-                // waveform gruda no clip sem distorcer,
-                // mesmo durante zoom/scroll. O crop do
-                // conteúdo excedente fica por conta do
-                // clip: true do Rectangle pai.
-                x: root.resizing
+                Image {
+                    // A imagem já vem rasterizada na resolução EXATA
+                    // da largura do corpo do clip pelo Rust.
+                    // image-fit: ImageFit.contain evita qualquer stretch — a
+                    // waveform gruda no clip sem distorcer,
+                    // mesmo durante zoom/scroll. O crop do
+                    // conteúdo excedente fica por conta do
+                    // clip: true do Rectangle pai.
+                    image-fit: ImageFit.contain;
+                    x: root.resizing
                     ? 2px + root.waveform-live-offset + root.waveform-src-x * 1px
                     : 2px + root.waveform-src-x * 1px;
                 y: 0px;
