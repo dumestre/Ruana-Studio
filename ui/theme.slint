@@ -175,6 +175,28 @@ export global Theme {
         #DC143C  // [6] PAPER (claro) ★
     ];
 
+    // CRIMSON — fundo das ferramentas ativas na toolbar (antes era accent verde).
+    private property <[color]> crimson-list: [
+        #DC143C, // [0] Studio Dark (PADRÃO)
+        #DC143C, // [1] Midnight Blue
+        #DC143C, // [2] Violeta Ruana
+        #DC143C, // [3] Volt
+        #DC143C, // [4] Sunset
+        #DC143C, // [5] Ocean Teal
+        #DC143C  // [6] PAPER (claro) ★
+    ];
+
+    // TEXTO/ÍCONE quando sobre CRIMSON (contraste claro).
+    private property <[color]> on-crimson-list: [
+        #FFFFFF, // [0] Studio Dark (PADRÃO)
+        #FFFFFF, // [1] Midnight Blue
+        #FFFFFF, // [2] Violeta Ruana
+        #FFFFFF, // [3] Volt
+        #FFFFFF, // [4] Sunset
+        #FFFFFF, // [5] Ocean Teal
+        #FFFFFF  // [6] PAPER (claro) ★
+    ];
+
     // CLIPS DE ÁUDIO.
     private property <[color]> clip-audio-list: [
         #00C853, // [0] Studio Dark (PADRÃO)
@@ -278,6 +300,8 @@ export global Theme {
     in property <color> warn: warn-list[clamp];
     in property <color> danger: danger-list[clamp];
     in property <color> playhead: playhead-list[clamp];
+    in property <color> crimson: crimson-list[clamp];
+    in property <color> on-crimson: on-crimson-list[clamp];
     in property <color> clip-audio: clip-audio-list[clamp];
     in property <color> clip-midi: clip-midi-list[clamp];
     in property <color> activ: activ-list[clamp];

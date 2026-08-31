@@ -3,6 +3,8 @@ import { ClipPalette } from "../clip_palette.slint";
 import { AudioWaveform } from "audio_waveform.slint";
 import { ClipContextMenuState } from "../components/context_menu.slint";
 import { ClipDragState, TimelineMetrics } from "clip_drag/clip_drag_state.slint";
+import { ClipFade } from "../components/clip_fade.slint";
+import { ClipGain } from "../components/clip_gain.slint";
 
 export component TrackClip inherits Rectangle {
 
@@ -132,8 +134,8 @@ export component TrackClip inherits Rectangle {
                 root.wave-w1,
                 root.wave-body-px,
                 root.gain-linear,
-                root.fade-in-w / 1px,
-                root.fade-out-w / 1px,
+                fade_ctrl.fade-in-w / 1px,
+                fade_ctrl.fade-out-w / 1px,
             );
         }
     }
@@ -156,8 +158,8 @@ export component TrackClip inherits Rectangle {
                 root.wave-w1,
                 root.wave-body-px,
                 root.gain-linear,
-                root.fade-in-w / 1px,
-                root.fade-out-w / 1px,
+                fade_ctrl.fade-in-w / 1px,
+                fade_ctrl.fade-out-w / 1px,
             );
         }
     }
@@ -181,8 +183,8 @@ export component TrackClip inherits Rectangle {
                 root.wave-w1,
                 root.wave-body-px,
                 root.gain-linear,
-                root.fade-in-w / 1px,
-                root.fade-out-w / 1px,
+                fade_ctrl.fade-in-w / 1px,
+                fade_ctrl.fade-out-w / 1px,
             );
         }
     }
@@ -330,14 +332,10 @@ export component TrackClip inherits Rectangle {
     // em 16px de altura inteira, atrapalhando manipular o clip.
     private property <bool> on-left-edge:
         root.hovered
-        && !root.on-fade-grip
-        && !root.on-gain-grip
         && touch.mouse-x <= root.edge-width;
 
     private property <bool> on-right-edge:
         root.hovered
-        && !root.on-fade-grip
-        && !root.on-gain-grip
         && touch.mouse-x >= root.width - root.edge-width;
 
     private property <bool> on-edge:
@@ -381,149 +379,21 @@ export component TrackClip inherits Rectangle {
 
 
     // =====================================================
-    // ESTADO DO FADE (entrada/saída)
+    // ESTADO DO FADE / GAIN
     //
-    // Assim como o resize, o gesto de fade é 100% LOCAL: o pino
-    // arrasta no corpo e só o release comita pro core (callback
-    // `clip-fade-committed`). Os `display-*` seguem o drag ao vivo
-    // e caem de volta para os valores do modelo no fim.
+    // O gesto e o visual de fade/gain agora vivem nos componentes
+    // separados ClipFade e ClipGain (instanciados no final do root,
+    // acima da TouchArea `touch`). Aqui ficam SÓ as bindings que o
+    // TrackClip ainda consome: mostrar/ocultar e o ganho linear para
+    // escalar a waveform.
     // =====================================================
 
-    private property <bool> fading:
-        false;
-
-    // -1 = fade-in (esquerda), +1 = fade-out (direita).
-    private property <int> fade-side:
-        0;
-
-    private property <length> fade-start-abs-x:
-        0px;
-
-    private property <float> fade-start-value:
-        0.0;
-
-    private property <float> live-fade-in:
-        0.0;
-
-    private property <float> live-fade-out:
-        0.0;
-
-    private property <float> display-fade-in:
-        root.fading
-            && root.fade-side < 0
-            ? root.live-fade-in
-            : root.fade-in;
-
-    private property <float> display-fade-out:
-        root.fading
-            && root.fade-side > 0
-            ? root.live-fade-out
-            : root.fade-out;
-
-    // Controles só para clips de áudio, ferramenta de seleção e estado
-    // visível (selecionado/multi/hover — não no fantasma do arrasto).
     private property <bool> show-fade-controls:
         !root.is-midi
         && root.active-tool == 0
         && (root.selected
             || root.multi-selected
             || root.hovered);
-
-    // Pinos de ~10px no topo do corpo, na borda da região do fade.
-    private property <length> fade-grip-size:
-        10px;
-
-    private property <length> fade-grip-half:
-        root.fade-grip-size / 2;
-
-    private property <length> fade-slot:
-        16px;
-
-    private property <length> fade-grip-y:
-        root.header-height
-        + root.fade-slot / 2;
-
-    // Largura das regiões de fade (em px do corpo), clampada ao corpo.
-    private property <length> fade-in-w:
-        Math.min(
-            root.px-per-beat * root.display-fade-in,
-            root.width - 2 * root.bw
-        );
-
-    private property <length> fade-out-w:
-        Math.min(
-            root.px-per-beat * root.display-fade-out,
-            root.width - 2 * root.bw
-        );
-
-    private property <length> fade-grip-x-in:
-        root.fade-in-w;
-
-    private property <length> fade-grip-x-out:
-        root.width - 2 * root.bw
-        - root.fade-out-w;
-
-    // Zona vertical de hit dos pinos: topo do corpo, abaixo do header.
-    private property <bool> in-fade-zone:
-        root.hovered
-        && root.active-tool == 0
-        && !root.is-midi
-        && touch.mouse-y >= root.header-height
-        && touch.mouse-y
-            <= root.header-height + root.fade-slot;
-
-    private property <bool> on-fade-in-grip:
-        root.in-fade-zone
-        && Math.abs(
-            touch.mouse-x
-            - (root.bw + root.fade-grip-x-in)
-        ) <= root.fade-grip-half;
-
-    private property <bool> on-fade-out-grip:
-        root.in-fade-zone
-        && Math.abs(
-            touch.mouse-x
-            - (root.width - root.bw - root.fade-grip-x-out)
-        ) <= root.fade-grip-half;
-
-    private property <bool> on-fade-grip:
-        root.on-fade-in-grip
-        || root.on-fade-out-grip;
-
-    private property <bool> fade-grip-active:
-        root.on-fade-grip
-        && (touch.pressed
-            || root.fading);
-    // =====================================================
-    // ESTADO DO GAIN (linha central)
-    //
-    // Barra horizontal no meio do corpo do clip. Drag vertical
-    // ajusta ganho em dB (-24..+12). 0 dB = centro do corpo.
-    // Live-gain segue o mouse e display-gain é o valor ao vivo
-    // durante o gesto, senão o valor do modelo.
-    // =====================================================
-
-    private property <bool> gaining:
-        false;
-
-    private property <length> gain-start-y:
-        0px;
-
-    private property <float> gain-start-db:
-        0.0;
-
-    private property <float> live-gain-db:
-        0.0;
-
-    private property <float> display-gain-db:
-        root.gaining
-            ? root.live-gain-db
-            : root.gain-db;
-
-    // Ganho em linear aproximado para escala visual da waveform.
-    // 10^(dB/20). Slint tem log/exp? Usa pow se disponível.
-    private property <float> gain-linear:
-        Math.pow(10.0, root.display-gain-db / 20.0);
 
     private property <bool> show-gain-controls:
         !root.is-midi
@@ -532,36 +402,10 @@ export component TrackClip inherits Rectangle {
             || root.multi-selected
             || root.hovered);
 
-    // Posição vertical da linha de ganho dentro do corpo.
-    // Centro = 0 dB. Sensibilidade 1.5px por dB (~36px para 24dB).
-    private property <length> gain-line-y:
-        (root.row-height - root.header-height - root.bw) / 2
-        - root.display-gain-db * 1.5px;
-
-    private property <length> gain-grip-size:
-        10px;
-
-    private property <length> gain-grip-half:
-        root.gain-grip-size / 2;
-
-    // Grip central: x no meio do clip, y na linha de ganho.
-    private property <length> gain-grip-x:
-        root.width / 2;
-
-    private property <bool> on-gain-grip:
-        root.show-gain-controls
-        && root.hovered
-        && touch.mouse-y >= root.header-height + root.gain-line-y - root.gain-grip-half
-        && touch.mouse-y <= root.header-height + root.gain-line-y + root.gain-grip-half
-        && Math.abs(touch.mouse-x - root.gain-grip-x) <= root.gain-grip-half;
-
-    private property <bool> gain-grip-active:
-        root.on-gain-grip
-        && (touch.pressed
-            || root.gaining);
-
-
-
+    // Ganho em linear aproximado para escala visual da waveform.
+    // 10^(dB/20). Lê o valor ao vivo publicado pelo ClipGain.
+    private property <float> gain-linear:
+        Math.pow(10.0, gain_ctrl.display-gain-db / 20.0);
 
     // =====================================================
     // RENAME
@@ -707,6 +551,21 @@ export component TrackClip inherits Rectangle {
                     : 0.75
             );
 
+        // Brilho suave na borda da waveform: só o contorno do
+        // perímetro brilha (borda fina translúcida branca), sem
+        // afetar o interior — dá um realce sutil de "luz" evitando
+        // o contorno nítido/duro de um border opaco.
+        border-width:
+            1px;
+
+        border-color:
+            root.hovered
+                ? #FFFFFF.with-alpha(0.45)
+                : #FFFFFF.with-alpha(0.22);
+
+        border-radius:
+            2px;
+
         opacity:
             root.ghost-opacity;
 
@@ -775,49 +634,6 @@ export component TrackClip inherits Rectangle {
 
                 peaks:
                     root.waveform-peaks;
-            }
-
-        // =================================================
-        // FADES → ATENUAÇÃO DO WAVEFORM
-        //
-        // A região do fade-in/out escurece a waveform seguindo a
-        // curva (amplitude reduzida até zero na ponta). Gradiente
-        // horizontal sobre o tom do corpo, acima do wave/image e
-        // abaixo da cunha diaginal (z 6) e dos pinos (z 7).
-        // =================================================
-
-        if root.show-fade-controls && root.fade-in-w >= 1px:
-
-            Rectangle {
-                x: 0px;
-                y: 0px;
-                width: root.fade-in-w;
-                height: parent.height;
-
-                background: @linear-gradient(
-                    90deg,
-                    root.clip-color.darker(0.12).with-alpha(0.92) 0%,
-                    transparent 100%
-                );
-
-                z: 5;
-            }
-
-        if root.show-fade-controls && root.fade-out-w >= 1px:
-
-            Rectangle {
-                x: parent.width - root.fade-out-w;
-                y: 0px;
-                width: root.fade-out-w;
-                height: parent.height;
-
-                background: @linear-gradient(
-                    90deg,
-                    transparent 0%,
-                    root.clip-color.darker(0.12).with-alpha(0.92) 100%
-                );
-
-                z: 5;
             }
     }
 
@@ -1221,239 +1037,6 @@ export component TrackClip inherits Rectangle {
 
 
     // =====================================================
-    // FADES (entrada/saída)
-    //
-    // Cunha diagonal sobre a região do fade + pino arrastável no
-    // topo do corpo (esquerda = fade-in, direita = fade-out).
-    // `commands` com coordenadas INTEIRAS de viewbox (a UI br messe
-    // trocaria vírgula decimal e quebraria o parser SVG).
-    // =====================================================
-
-    if root.show-fade-controls && root.fade-in-w >= 1px:
-
-        Path {
-
-            x:
-                root.bw;
-
-            y:
-                root.header-height;
-
-            width:
-                root.fade-in-w;
-
-            height:
-                root.row-height - root.header-height - root.bw;
-
-            commands:
-                "M 0,100 C 25,100 75,0 100,0";
-
-            viewbox-width:
-                100;
-
-            viewbox-height:
-                100;
-
-            fit:
-                fill;
-
-            fill:
-                transparent;
-
-            stroke:
-                #FFFFFF;
-
-            stroke-width:
-                1px;
-
-            opacity:
-                root.fading && root.fade-side < 0
-                    ? 0.95
-                    : 0.55;
-
-            z:
-                6;
-        }
-
-
-    if root.show-fade-controls && root.fade-out-w >= 1px:
-
-        Path {
-
-            x:
-                root.bw + root.fade-grip-x-out;
-
-            y:
-                root.header-height;
-
-            width:
-                root.fade-out-w;
-
-            height:
-                root.row-height - root.header-height - root.bw;
-
-            commands:
-                "M 0,0 C 25,0 75,100 100,100";
-
-            viewbox-width:
-                100;
-
-            viewbox-height:
-                100;
-
-            fit:
-                fill;
-
-            fill:
-                transparent;
-
-            stroke:
-                #FFFFFF;
-
-            stroke-width:
-                1px;
-
-            opacity:
-                root.fading && root.fade-side > 0
-                    ? 0.95
-                    : 0.55;
-
-            z:
-                6;
-        }
-
-
-    // Pino do drag (visível ao pairar/arrastar). Os dois nascem juntos
-    // na beira da região de fade; sem fade (0 beats) ficam na borda do
-    // clip e só aparecem com hover.
-    if root.show-fade-controls
-        && (root.hovered || root.fading):
-
-        Rectangle {
-
-            x:
-                root.bw + root.fade-grip-x-in
-                    - root.fade-grip-half;
-
-            y:
-                root.fade-grip-y - root.fade-grip-half;
-
-            width:
-                root.fade-grip-size;
-
-            height:
-                root.fade-grip-size;
-
-            border-radius:
-                root.fade-grip-half;
-
-            background:
-                root.fade-grip-active
-                    ? Theme.accent
-                    : Theme.accent-hover;
-
-            border-width:
-                1px;
-
-            border-color:
-                Theme.on-accent;
-
-            opacity:
-                root.fading && root.fade-side < 0
-                    ? 1.0
-                    : 0.85;
-
-            z:
-                7;
-        }
-
-
-    if root.show-fade-controls
-        && (root.hovered || root.fading):
-
-        Rectangle {
-
-            x: root.bw + root.fade-grip-x-out
-                - root.fade-grip-half;
-
-            y:
-                root.fade-grip-y - root.fade-grip-half;
-
-            width:
-                root.fade-grip-size;
-
-            height:
-                root.fade-grip-size;
-
-            border-radius:
-                root.fade-grip-half;
-
-            background:
-                root.fade-grip-active
-                    ? Theme.accent
-                    : Theme.accent-hover;
-
-            border-width:
-                1px;
-
-            border-color:
-                Theme.on-accent;
-
-            opacity:
-                root.fading && root.fade-side > 0
-                    ? 1.0
-                    : 0.85;
-
-            z:
-                7;
-        }
-
-
-
-        // =================================================
-        // GAIN BAR — linha horizontal no meio do corpo
-        //
-        // Mostra o ganho atual (0 dB = centro). Drag vertical
-        // no grip central ajusta -24..+12 dB. Sincroniza com
-        // BarProperties.gain via clip-gain-committed.
-        // =================================================
-        if root.show-gain-controls:
-            Rectangle {
-                x: 0px;
-                y: Math.clamp(root.gain-line-y - 0.75px, 0px, parent.height - 1.5px);
-                width: parent.width;
-                height: 1.5px;
-                background: #FFFFFF;
-                opacity: root.gaining ? 1.0 : 0.85;
-                z: 5;
-            }
-
-        if root.show-gain-controls && (root.hovered || root.gaining):
-            Rectangle {
-                x: parent.width / 2 - root.gain-grip-half;
-                y: Math.clamp(root.gain-line-y - root.gain-grip-half, 0px, parent.height - root.gain-grip-size);
-                width: root.gain-grip-size;
-                height: root.gain-grip-size;
-                border-radius: root.gain-grip-half;
-                background: root.gain-grip-active ? Theme.accent : Theme.accent-hover;
-                border-width: 1px;
-                border-color: Theme.on-accent;
-                opacity: root.gaining ? 1.0 : 0.9;
-                z: 6;
-
-                // Valor em dB ao lado do grip quando arrastando
-                if root.gaining:
-                    Text {
-                        x: parent.width + 4px;
-                        y: parent.height / 2 - 6px;
-                        text: Math.round(root.display-gain-db * 10) / 10 + " dB";
-                        color: #FFFFFF;
-                        font-size: 8px;
-                        font-weight: 700;
-                    }
-            }
-
-    // =====================================================
     // TOUCH AREA
     // =====================================================
 
@@ -1483,18 +1066,6 @@ export component TrackClip inherits Rectangle {
         mouse-cursor:
 
             root.resizing
-                ? ew-resize
-
-            : root.fading
-                ? ew-resize
-
-            : root.gaining
-                ? pointer
-
-            : root.on-gain-grip
-                ? pointer
-
-            : root.on-fade-grip
                 ? ew-resize
 
             : root.on-edge
@@ -1573,12 +1144,6 @@ export component TrackClip inherits Rectangle {
                     false;
 
                 root.resize-side =
-                    0;
-
-                root.fading =
-                    false;
-
-                root.fade-side =
                     0;
 
                 return;
@@ -1730,67 +1295,6 @@ export component TrackClip inherits Rectangle {
 
 
                     // =====================================
-                    // FADE GRIP
-                    //
-                    // Prioridade sobre o RESIZE na zona do fade:
-                    // o pino do topo (16px abaixo do header)
-                    // captura o down, o resto do corpo continua
-                    // redimensionando/reposicionando.
-                    // =====================================
-
-                    if root.on-fade-grip {
-
-                        root.fade-side =
-                            root.on-fade-in-grip
-                                ? -1
-                                : 1;
-
-                        root.fade-start-abs-x =
-                            self.absolute-position.x
-                            + self.mouse-x;
-
-                        root.fade-start-value =
-                            root.fade-side < 0
-                                ? root.fade-in
-                                : root.fade-out;
-
-                        root.live-fade-in =
-                            root.fade-in;
-
-                        root.live-fade-out =
-                            root.fade-out;
-
-                        root.fading
-                            = true;
-
-                        return;
-                    }
-
-                    // =====================================
-                    // GAIN GRIP
-                    //
-                    // Arrasta o ganho do clip em dB (-24..+12).
-                    // 0 dB = linha central do corpo.
-                    // =====================================
-
-                    if root.on-gain-grip {
-
-                        root.gaining = true;
-
-                        root.gain-start-y =
-                            self.absolute-position.y + self.mouse-y;
-
-                        root.gain-start-db =
-                            root.gain-db;
-
-                        root.live-gain-db =
-                            root.gain-db;
-
-                        return;
-                    }
-
-
-                    // =====================================
                     // RESIZE
                     //
                     //
@@ -1926,101 +1430,6 @@ export component TrackClip inherits Rectangle {
                                             + TimelineMetrics.scroll-y;
                                         return;
                                     }
-
-                                    // =====================================
-                                    // FADE
-                                    //
-                                    // Traduz o deslocamento horizontal
-                                    // em beats (mesma matemática do
-                                    // resize, com snap de 1 beat e
-                                    // clamp a metade do clip).
-                                    // =====================================
-
-                                    if root.fading {
-
-                                        let dfade-cursor-abs-x =
-                                            self.absolute-position.x
-                                            + self.mouse-x;
-
-                                        let dfade-dx-px =
-                                            (
-                                                dfade-cursor-abs-x
-                                                - root.fade-start-abs-x
-                                            ) / 1px;
-
-                                        let dfade-ppb =
-                                            root.px-per-beat / 1px;
-
-                                        let dfade-delta-beats =
-                                            dfade-dx-px / dfade-ppb;
-
-                                        let dfade-snap =
-                                            ClipDragState.snap-enabled
-                                                ? Math.round(
-                                                    dfade-delta-beats
-                                                )
-                                                : dfade-delta-beats;
-
-                                        let dfade-value =
-                                            Math.max(
-                                                0.0,
-                                                Math.min(
-                                                    root.len * 0.5,
-                                                    root.fade-start-value
-                                                    + dfade-snap
-                                                )
-                                            );
-
-                                        if root.fade-side < 0 {
-
-                                            root.live-fade-in =
-                                                dfade-value;
-                                        }
-                                        else {
-
-                                            root.live-fade-out =
-                                                dfade-value;
-                                        }
-
-                                        return;
-                                    }
-                                    // =====================================
-                                    // GAIN
-                                    //
-                                    // Drag vertical ajusta ganho em dB.
-                                    // =====================================
-
-                                    if root.gaining {
-
-                                        let cursor-abs-y =
-                                            self.absolute-position.y
-                                            + self.mouse-y;
-
-                                        let dy-px =
-                                            cursor-abs-y
-                                            - root.gain-start-y;
-
-                                        // Sensibilidade: 1.5px por dB
-                                        let dg-db =
-                                            -dy-px / 1.5px;
-
-                                        let g-snap =
-                                            ClipDragState.snap-enabled
-                                                ? Math.round(dg-db)
-                                                : dg-db;
-
-                                        root.live-gain-db =
-                                            Math.max(
-                                                -24.0,
-                                                Math.min(
-                                                    12.0,
-                                                    root.gain-start-db + g-snap
-                                                )
-                                            );
-
-                                        return;
-                                    }
-
 
                                     // =====================================
                                     // RESIZE
@@ -2204,54 +1613,6 @@ export component TrackClip inherits Rectangle {
                         }
                     }
 
-
-                    // PROFISSIONAL: fade commit no UP (release), não no MOVE.
-                    // Antes o commit estava duplicado dentro do MOVE e
-                    // disparava no primeiro pixel de arrasto.
-                    if root.fading {
-
-                        root.fading =
-                            false;
-
-                        let side =
-                            root.fade-side;
-
-                        let fi =
-                            side < 0
-                                ? root.live-fade-in
-                                : root.fade-in;
-
-                        let fo =
-                            side > 0
-                                ? root.live-fade-out
-                                : root.fade-out;
-
-                        root.fade-side =
-                            0;
-
-                        root.clip-fade-committed(
-                            root.clip-id,
-                            fi,
-                            fo
-                        );
-                    }
-
-                    // =====================================
-                    // GAIN COMMIT
-                    // =====================================
-
-                    if root.gaining {
-                        root.gaining = false;
-
-                        let final-gain =
-                            root.live-gain-db;
-
-                        root.clip-gain-committed(
-                            root.clip-id,
-                            final-gain
-                        );
-                    }
-
                     if root.resizing {
 
                         root.resizing =
@@ -2303,5 +1664,55 @@ export component TrackClip inherits Rectangle {
                 }
             }
         }
+
+    // =====================================================
+    // CONTROLES SEPARADOS (acima da TouchArea, capturam o gesto
+    // apenas sobre as bolinhas de fade e de gain).
+    // =====================================================
+
+    fade_ctrl := ClipFade {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: root.row-height;
+
+        clip-id: root.clip-id;
+        fade-in: root.fade-in;
+        fade-out: root.fade-out;
+        len: root.len;
+        px-per-beat: root.px-per-beat;
+        row-height: root.row-height;
+        header-height: root.header-height;
+        bw: root.bw;
+        is-midi: root.is-midi;
+        interactive: root.interactive;
+        active-tool: root.active-tool;
+        selected: root.selected;
+        multi-selected: root.multi-selected;
+        hovered: root.hovered;
+        clip-color: root.clip-color;
+
+        fade-committed(clip-id, fi, fo) => {
+            root.clip-fade-committed(clip-id, fi, fo);
+        }
+    }
+
+    gain_ctrl := ClipGain {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: root.row-height;
+
+        clip-id: root.clip-id;
+        gain-db: root.gain-db;
+        body-w: parent.width;
+        body-h: root.row-height - root.header-height - root.bw;
+        hovered: root.hovered;
+        show: root.show-gain-controls;
+
+        gain-committed(clip-id, g) => {
+            root.clip-gain-committed(clip-id, g);
+        }
+    }
     }
 }

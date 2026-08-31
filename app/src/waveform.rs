@@ -114,18 +114,21 @@ pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache)
 
 // Re-render da waveform na resolução exata de exibição.
 //
-// DEBOUNCE: escrever no modelo dentro do próprio `changed
-// width` reconstrói a linha e redispara o handler (loop).
-// Guardamos o pedido e aplicamos num timer de 40 ms; se um
-// novo pedido chegar, reiniciamos o timer. Também ignoramos
-// janelas iguais à última renderizada.
+// COALESCING (anti-travamento): o pedido chega a cada frame de
+// scroll/zoom (`changed wave-w1` no clip). Rasterizar síncrono aqui
+// bloqueia a thread da UI — cada clip visível re-rasterizava o clip
+// INTEIRO por frame, travando a DAW.
 //
-// JANELA (zoom fundo): o pedido vem com a janela visível do
-// clip em px (x0/x1). Só esse trecho é rasterizado — no zoom
-// fundo são poucos samples por pixel (poucas waves), desenhados
-// sample a sample: nítido e leve, sem varrer o arquivo inteiro.
-// Fora da viewport nada é renderizado (o row já culling faz o
-// clip sumir) e a largura da imagem fica ≤ a viewport.
+// Solução: guardamos só o pedido mais recente e o processamos num
+// timer de ~33 ms. Se novos pedidos chegarem enquanto o timer roda,
+// apenas sobrescrevemos o pendente (coalesce) — no máximo ~30
+// rasters/s por clip (não N por frame), UI fluida sem lag perceptível.
+//
+// WAVEFORM MIPMAP: render via pirâmide MIN/MAX/RMS na resolução
+// exata pedida (width_px = largura do corpo do clip). Rasterizamos o
+// clip INTEIRO (`mono_ds`, view = (0, len)) — sem recortar a janela
+// vitória (`_wx0/_wx1` ignorados de propósito): render do trecho
+// inteiro evita o artefato de fatia/esticada durante o drag/trim.
 
 use std::cell::RefCell;
 
@@ -133,46 +136,87 @@ use crate::TimelineMetrics;
 use crate::models::clip_row;
 use slint::{ComponentHandle, Model};
 
+/// Pedido mais recente de rasterização de waveform (de-duplicado por clip).
+#[derive(Clone, Copy)]
+struct PendingWave {
+    id: u64,
+    w: u32,
+    h: u32,
+    gain: f32,
+    fi: f32,
+    fo: f32,
+}
+
 pub fn wire_resolution_requests(
     ui: &MainWindow,
     waveforms: Rc<RefCell<WaveformCache>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
 ) {
-    // WAVEFORM MIPMAP: render via pirâmide MIN/MAX/RMS.
-    // A UI pede a resolução (width_px = largura do corpo do clip em px).
-    // Rasterizamos o clip INTEIRO (`mono_ds`) na resolução exata pedida,
-    // escolhendo o bucket de mip adequado — nítido e sem varrer o arquivo.
+    // Pedidos pendentes por clip + flag de coalescing (timer ativo).
+    let pending: Rc<RefCell<std::collections::HashMap<u64, PendingWave>>> =
+        Rc::new(RefCell::new(std::collections::HashMap::new()));
+    let scheduled: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+
     ui.global::<TimelineMetrics>()
         .on_waveform_resolution_requested(move |id, width_px, _wx0, _wx1, hh, gain_linear, fi, fo| {
-            let id_u = id.max(0) as u64;
-            let w = (width_px.round() as u32).clamp(16, 16384);
-            let h = (hh.round() as u32).clamp(4, 2048);
+            let req = PendingWave {
+                id: id.max(0) as u64,
+                w: (width_px.round() as u32).clamp(16, 16384),
+                h: (hh.round() as u32).clamp(4, 2048),
+                gain: gain_linear,
+                fi,
+                fo,
+            };
+            // De-duplica por clip: cada clip mantém o pedido mais novo.
+            pending.borrow_mut().insert(req.id, req);
 
-            let img = waveforms.borrow().get(&id_u).and_then(|c| {
-                let mono = &c.mono_ds;
-                if mono.is_empty() {
-                    return None;
-                }
-                let mut rgba =
-                    daw_media::waveform_image::waveform_image_rgba_mip(
-                        mono,
-                        &c.mip,
-                        w,
-                        h,
-                        (0, mono.len()),
-                    )?;
-                apply_gain_and_fade_to_rgba(&mut rgba, w, h, gain_linear, fi, fo);
-                Some(image_from_rgba(&rgba, w, h))
-            });
-
-            if let Some(i) = clip_row(&clips_model, id) {
-                if let Some(mut data) = clips_model.row_data(i) {
-                    data.waveform_image = img.unwrap_or_default();
-                    data.waveform_src_x = 0.0;
-                    data.waveform_src_w = w as f32;
-                    clips_model.set_row_data(i, data);
-                }
+            if *scheduled.borrow() {
+                return;
             }
+            *scheduled.borrow_mut() = true;
+
+            let pending_shot = pending.clone();
+            let scheduled_shot = scheduled.clone();
+            let waves_shot = waveforms.clone();
+            let clips_shot = clips_model.clone();
+
+            slint::Timer::single_shot(
+                std::time::Duration::from_millis(40),
+                move || {
+                    *scheduled_shot.borrow_mut() = false;
+                    // Consome TODOS os clips pedidos (não só o último):
+                    // ao parar o scroll, cada clip recebe sua waveform.
+                    let batch = std::mem::take(&mut *pending_shot.borrow_mut());
+
+                    for (&req_id, req) in &batch {
+                        let img = waves_shot.borrow().get(&req_id).and_then(|c| {
+                            let mono = &c.mono_ds;
+                            if mono.is_empty() {
+                                return None;
+                            }
+                            let mut rgba =
+                                daw_media::waveform_image::waveform_image_rgba_mip(
+                                    mono,
+                                    &c.mip,
+                                    req.w,
+                                    req.h,
+                                    (0, mono.len()),
+                                )?;
+                            apply_gain_and_fade_to_rgba(&mut rgba, req.w, req.h, req.gain, req.fi, req.fo);
+                            Some(image_from_rgba(&rgba, req.w, req.h))
+                        });
+
+                        if let Some(i) = clip_row(&clips_shot, req_id as i32) {
+                            if let Some(mut data) = clips_shot.row_data(i) {
+                                data.waveform_image = img.unwrap_or_default();
+                                data.waveform_src_x = 0.0;
+                                data.waveform_src_w = req.w as f32;
+                                clips_shot.set_row_data(i, data);
+                            }
+                        }
+                    }
+                },
+            );
         });
 }
 
