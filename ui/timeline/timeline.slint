@@ -692,17 +692,73 @@ export component Timeline inherits Rectangle {
 
 
         // =================================================
-        // CONTEÚDO SCROLLÁVEL
+        // RÉGUA FIXA NO TOPO (altura = ruler-height)
         // =================================================
 
-        Rectangle {
+        scrub-source := TimelineRuler {
+
+            // A régua agora é fixa no topo; x = scroll-x compensa
+            // o deslocamento horizontal; y = 0 fixo no topo.
+            x:
+                root.scroll-x;
+
+            y: 0;
+
+            width:
+                root.width;
+
+            height:
+                root.ruler-height;
+
+            ruler-height:
+                root.ruler-height;
+
+            viewport-width:
+                root.width;
+
+            total-bars:
+                root.total-bars;
+
+            beats-per-bar:
+                root.beats-per-bar;
+
+            px-per-bar:
+                root.px-per-bar;
+
+            scroll-x:
+                root.scroll-x;
+
+            loop-enabled: root.loop-enabled;
+            loop-start-beat: root.loop-start-beat;
+            loop-end-beat: root.loop-end-beat;
+            loop-range-changed(a, b) => { root.loop-start-beat = a; root.loop-end-beat = b; }
+
+
+            seek-to-beat(beat) => {
+
+                root.seek-to(
+                    beat
+                );
+            }
+
+
+            z: 10;
+        }
+
+
+        // =================================================
+        // CONTEÚDO SCROLLÁVEL (apenas tracks, começa abaixo da régua)
+        // =================================================
+
+        content := Rectangle {
 
             x:
                 root.timeline-left-padding
                 - root.scroll-x;
 
             y:
-                -root.scroll-y;
+                root.ruler-height
+                - root.scroll-y;
 
             width:
                 root.timeline-width
@@ -710,69 +766,11 @@ export component Timeline inherits Rectangle {
 
             height:
                 max(
-                    root.ruler-height
-                    + root.tracks-height,
-                    parent.height
+                    root.tracks-height,
+                    parent.height - root.ruler-height
                 );
 
             background: transparent;
-
-
-            // =============================================
-            // RÉGUA
-            // =============================================
-
-            scrub-source := TimelineRuler {
-
-                // A régua agora é um "visor" fixo na tela: anda
-                // JUNTO com o scroll (x = scroll-x compensa o
-                // deslocamento do container rolado) e só desenha
-                // os compassos visíveis.
-                x:
-                    root.scroll-x;
-
-                y: 0;
-
-                width:
-                    root.width;
-
-                height:
-                    root.ruler-height;
-
-                ruler-height:
-                    root.ruler-height;
-
-                viewport-width:
-                    parent.width;
-
-                total-bars:
-                    root.total-bars;
-
-                beats-per-bar:
-                    root.beats-per-bar;
-
-                px-per-bar:
-                    root.px-per-bar;
-
-                scroll-x:
-                    root.scroll-x;
-
-                loop-enabled: root.loop-enabled;
-                loop-start-beat: root.loop-start-beat;
-                loop-end-beat: root.loop-end-beat;
-                loop-range-changed(a, b) => { root.loop-start-beat = a; root.loop-end-beat = b; }
-
-
-                seek-to-beat(beat) => {
-
-                    root.seek-to(
-                        beat
-                    );
-                }
-
-
-                z: 5;
-            }
 
 
             // =============================================

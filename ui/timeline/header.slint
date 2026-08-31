@@ -39,19 +39,146 @@ export component TimelineHeader inherits Rectangle {
 
 
     // =====================================================
-    // FUNDO
+    // HEADER FIXO NO TOPO (altura = ruler-height)
     // =====================================================
 
-    background:
-        transparent;
+    header := HorizontalLayout {
+
+        x: 0;
+        y: 0;
+
+        width: parent.width;
+
+        height: root.ruler-height;
+
+        spacing: 2px;
+
+        padding-left: 6px;
+
+        padding-right: 8px;
+
+        alignment: LayoutAlignment.stretch;
+
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+
+        // =============================================
+        // TÍTULO TRACKS
+        // =============================================
+
+        Rectangle {
+
+            horizontal-stretch: 1;
+
+            height: parent.height;
+
+            background: transparent;
+
+
+            Text {
+
+                width: parent.width;
+
+                height: parent.height;
+
+                text: "TRACKS";
+
+                color: Theme.text-primary;
+
+                font-size: 9px;
+
+                font-weight: 700;
+
+                horizontal-alignment: TextHorizontalAlignment.center;
+
+                vertical-alignment: TextVerticalAlignment.center;
+
+                overflow: elide;
+            }
+        }
+
+
+        // =============================================
+        // PALETA
+        // =============================================
+
+        Button {
+
+            width: 20px;
+
+            height: 20px;
+
+            corner-radius: 2px;
+
+            icon: @image-url("../icons/palette.svg");
+
+            icon-size: 16px;
+
+            icon-color: Theme.text-primary;
+
+            resting-bg: transparent;
+
+            hover-bg: Theme.base;
+
+            borderless: true;
+
+            clicked => {
+                color-popup.show();
+            }
+        }
+
+
+        // =============================================
+        // ADICIONAR TRACK
+        // =============================================
+
+        add-button := Button {
+
+            width: 20px;
+
+            height: 20px;
+
+            corner-radius: 2px;
+
+            icon: @image-url("../icons/add.svg");
+
+            icon-size: 16px;
+
+            icon-color: Theme.text-primary;
+
+            resting-bg: transparent;
+
+            hover-bg: Theme.base;
+
+            borderless: true;
+
+            clicked => {
+                new-track-popup.show();
+            }
+        }
+    }
 
 
     // =====================================================
-    // VIEWPORT
-    //
-    // Contêiner clippado fixo no tamanho do componente. O
-    // conteúdo interno desliza com `scroll-y` — sincronizado
-    // com a timeline — e o excesso acima/abaixo é cortado.
+    // DIVISÓRIA
+    // =====================================================
+
+    divider := Rectangle {
+
+        x: 0;
+
+        y: root.ruler-height;
+
+        width: parent.width;
+
+        height: 1px;
+
+        background: Theme.is-paper ? Theme.base : Theme.border;
+    }
+
+
+    // =====================================================
+    // VIEWPORT SCROLLÁVEL (apenas as tracks)
     // =====================================================
 
     viewport := Rectangle {
@@ -60,251 +187,28 @@ export component TimelineHeader inherits Rectangle {
 
         x: 0;
 
-        y: 0;
+        y: root.ruler-height + 1px;  // abaixo do header + divisória
 
         width: 100%;
 
-        height: 100%;
+        height: parent.height - root.ruler-height - 1px;
 
-
-        // =================================================
-        // CONTEÚDO DESLIZANTE
-        // =================================================
 
         VerticalLayout {
 
             x: 0;
 
-            y:
-                -root.scroll-y;
+            y: -root.scroll-y;
 
-            width:
-                parent.width;
+            width: parent.width;
 
-            height:
-                max(
-                    parent.height,
-                    root.ruler-height
-                    + 1px
-                    + root.track-names.length * 64px * root.zoom-y
-                );
+            height: root.track-names.length * 64px * root.zoom-y;
 
-            spacing:
-                0px;
+            spacing: 0px;
 
-            alignment:
-                LayoutAlignment.start;
+            alignment: LayoutAlignment.start;
 
-            cross-axis-alignment:
-                CrossAxisAlignment.stretch;
-
-
-            // =================================================
-            // HEADER
-            // =================================================
-
-            HorizontalLayout {
-
-                width:
-                    parent.width;
-
-                height:
-                    root.ruler-height;
-
-            spacing:
-                2px;
-
-            padding-left:
-                6px;
-
-            padding-right:
-                8px;
-
-            alignment:
-                LayoutAlignment.stretch;
-
-            cross-axis-alignment:
-                CrossAxisAlignment.center;
-
-
-            // =============================================
-            // TÍTULO TRACKS
-            // =============================================
-
-            Rectangle {
-
-                horizontal-stretch:
-                    1;
-
-                height:
-                    parent.height;
-
-                background:
-                    transparent;
-
-
-                Text {
-
-                    width:
-                        parent.width;
-
-                    height:
-                        parent.height;
-
-                    text:
-                        "TRACKS";
-
-                    color:
-                        Theme.text-primary;
-
-                    font-size:
-                        9px;
-
-                    font-weight:
-                        700;
-
-                    horizontal-alignment:
-                        TextHorizontalAlignment.center;
-
-                    vertical-alignment:
-                        TextVerticalAlignment.center;
-
-                    overflow:
-                        elide;
-                }
-            }
-
-
-            // =============================================
-            // PALETA
-            // =============================================
-
-            Button {
-
-                width:
-                    20px;
-
-                height:
-                    20px;
-
-                corner-radius:
-                    2px;
-
-                icon:
-                    @image-url(
-                        "../icons/palette.svg"
-                    );
-
-                icon-size:
-                    16px;
-
-                icon-color:
-                    Theme.text-primary;
-
-                resting-bg:
-                    transparent;
-
-                hover-bg:
-                    Theme.base;
-
-                borderless:
-                    true;
-
-                clicked => {
-                    color-popup.show();
-                }
-            }
-
-
-            // =============================================
-            // ADICIONAR TRACK
-            // =============================================
-
-            add-button := Button {
-
-                width:
-                    20px;
-
-                height:
-                    20px;
-
-                corner-radius:
-                    2px;
-
-                icon:
-                    @image-url(
-                        "../icons/add.svg"
-                    );
-
-                icon-size:
-                    16px;
-
-                icon-color:
-                    Theme.text-primary;
-
-                resting-bg:
-                    transparent;
-
-                hover-bg:
-                    Theme.base;
-
-                borderless:
-                    true;
-
-                clicked => {
-                    new-track-popup.show();
-                }
-            }
-        }
-
-
-        // =================================================
-        // DIVISÓRIA
-        // =================================================
-
-        Rectangle {
-
-            width:
-                parent.width;
-
-            height:
-                1px;
-
-            background:
-                Theme.is-paper
-                    ? Theme.base
-                    : Theme.border;
-        }
-
-
-        // =================================================
-        // TRACKS
-        //
-        // Não usamos x/y aqui porque este elemento está
-        // dentro do VerticalLayout.
-        // =================================================
-
-        VerticalLayout {
-
-            width:
-                parent.width;
-
-            height:
-                root.track-names.length
-                * 64px
-                * root.zoom-y;
-
-            vertical-stretch:
-                1;
-
-            spacing:
-                0px;
-
-            alignment:
-                LayoutAlignment.start;
-
-            cross-axis-alignment:
-                CrossAxisAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.stretch;
 
 
             // =============================================
@@ -315,43 +219,37 @@ export component TimelineHeader inherits Rectangle {
 
                 TrackHeaderRow {
 
-                    width:
-                        parent.width;
+                    width: parent.width;
 
-                    height:
-                        64px * root.zoom-y;
+                    height: 64px * root.zoom-y;
 
 
                     // -------------------------------------
                     // NOME
                     // -------------------------------------
 
-                    name:
-                        name;
+                    name: name;
 
 
                     // -------------------------------------
                     // ÍNDICE
                     // -------------------------------------
 
-                    track-index:
-                        i;
+                    track-index: i;
 
 
                     // -------------------------------------
                     // TIPO
                     // -------------------------------------
 
-                    track-type:
-                        "MIDI";
+                    track-type: "MIDI";
 
 
                     // -------------------------------------
                     // ZOOM
                     // -------------------------------------
 
-                    zoom-y:
-                        root.zoom-y;
+                    zoom-y: root.zoom-y;
 
 
                     // -------------------------------------
@@ -385,8 +283,7 @@ export component TimelineHeader inherits Rectangle {
                     // SELEÇÃO
                     // -------------------------------------
 
-                    selected:
-                        root.selected-track == i;
+                    selected: root.selected-track == i;
 
 
                     // -------------------------------------
@@ -395,20 +292,15 @@ export component TimelineHeader inherits Rectangle {
 
                     clicked(index) => {
 
-                        root.track-clicked(
-                            index
-                        );
+                        root.track-clicked(index);
                     }
 
                     // Repassa o zoom vertical calculado na row.
                     zoom-y-scrolled(new-zoom-y) => {
-                        root.zoom-y-scrolled(
-                            new-zoom-y
-                        );
+                        root.zoom-y-scrolled(new-zoom-y);
                     }
                 }
         }
-    }
     }
 
 
@@ -420,7 +312,7 @@ export component TimelineHeader inherits Rectangle {
 
         x: root.width - 210px;
 
-        y: -root.scroll-y + root.ruler-height + 4px;
+        y: -root.scroll-y + root.ruler-height + 1px + 4px;
 
         ColorPicker {
 
@@ -453,7 +345,7 @@ export component TimelineHeader inherits Rectangle {
 
         x: root.width - 220px;
 
-        y: -root.scroll-y + root.ruler-height + 4px;
+        y: -root.scroll-y + root.ruler-height + 1px + 4px;
 
         TrackTypeSelector {
 
