@@ -83,7 +83,11 @@ fn choose_audio_file() -> Option<String> {
 
 #[cfg(not(windows))]
 fn choose_audio_file() -> Option<String> {
-    None
+    rfd::FileDialog::new()
+        .add_filter("Audio Files", &["wav", "mp3", "flac", "ogg", "oga"])
+        .add_filter("All Files", &["*"])
+        .pick_file()
+        .map(|p| p.to_string_lossy().into_owned())
 }
 
 fn main() -> Result<(), slint::PlatformError> {

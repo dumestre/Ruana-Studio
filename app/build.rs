@@ -41,26 +41,31 @@ fn build_app_icon() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // .ico do executável: usa o fornecido pelo usuário, senão gera do SVG.
-    let ico_path = if custom_ico.exists() {
-        println!("cargo:rerun-if-changed={}", custom_ico.display());
-        custom_ico.clone()
-    } else {
-        let mut entries: Vec<(u32, Vec<u8>)> = Vec::new();
-        for &size in &APP_ICON_SIZES {
-            let png_bytes = render_svg_to_png(&svg_path, size, size, 1.0)?;
-            entries.push((size, png_bytes));
-        }
-        let generated = out_dir.join("ruana-studio.ico");
-        write_bmp_ico(&generated, &entries)?;
-        generated
-    };
+    // Apenas no Windows — no Linux o ícone de runtime (PNG) é suficiente.
+    #[cfg(windows)]
+    {
+        let ico_path = if custom_ico.exists() {
+            println!("cargo:rerun-if-changed={}", custom_ico.display());
+            let _ = std::fs::copy(&custom_ico, out_dir.join("ruana-studio.ico"))?;
+            out_dir.join("ruana-studio.ico")
+        } else {
+            let mut entries: Vec<(u32, Vec<u8>)> = Vec::new();
+            for &size in &APP_ICON_SIZES {
+                let png_bytes = render_svg_to_png(&svg_path, size, size, 1.0)?;
+                entries.push((size, png_bytes));
+            }
+            let generated = out_dir.join("ruana-studio.ico");
+            write_bmp_ico(&generated, &entries)?;
+            generated
+        };
 
-    // Embute o .ico no executável. Falha graciosamente se rc.exe/windres
-    // não estiverem disponíveis (o ícone de runtime das janelas continua).
-    let mut resource = winresource::WindowsResource::new();
-    resource.set_icon(ico_path.to_str().expect("ico path is not valid UTF-8"));
-    if let Err(e) = resource.compile() {
-        eprintln!("cargo:warning=Icone nao embutido no .exe ({e}); usando apenas icone de runtime");
+        // Embute o .ico no executável. Falha graciosamente se rc.exe/windres
+        // não estiverem disponíveis (o ícone de runtime das janelas continua).
+        let mut resource = winresource::WindowsResource::new();
+        resource.set_icon(ico_path.to_str().expect("ico path is not valid UTF-8"));
+        if let Err(e) = resource.compile() {
+            eprintln!("cargo:warning=Icone nao embutido no .exe ({e}); usando apenas icone de runtime");
+        }
     }
 
     Ok(())
@@ -172,6 +177,7 @@ fn render_svg_to_png(
 }
 
 /// Decodifica um PNG (RGBA 8-bit) para `(width, height, rgba)`.
+#[cfg(windows)]
 fn decode_png_rgba(png_bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), Box<dyn std::error::Error>> {
     let mut decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
@@ -185,6 +191,7 @@ fn decode_png_rgba(png_bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), Box<dyn std:
 /// Escreve um .ico multi-size com entradas BMP clássicas (32-bit BGRA
 /// com alpha premultiplicado + máscara AND) — formato aceito por todo
 /// o shell do Windows, sem depender de decodificação de PNG embutido.
+#[cfg(windows)]
 fn write_bmp_ico(
     path: &std::path::Path,
     entries: &[(u32, Vec<u8>)],
