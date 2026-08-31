@@ -37,6 +37,9 @@ callback solo-clicked(int);
 callback record-clicked(int);
 callback automation-clicked(int);
 
+// Zoom vertical (Alt+roda) — novo valor de zoom-y já calculado.
+callback zoom-y-scrolled(float);
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -157,6 +160,27 @@ selection-area := TouchArea {
 
     clicked => {
         root.clicked(root.track-index);
+    }
+
+    // Alt+roda = zoom vertical (mesmo atalho da timeline). Cada row
+    // calcula o novo valor a partir do seu zoom-y e emite o callback;
+    // só o row sob o cursor recebe o scroll, então não há cascata.
+    scroll-event(event) => {
+        if event.modifiers.alt {
+            let dz = event.delta-x + event.delta-y;
+            let strength = min(6.0, abs(dz / 1px) / 60.0);
+            let factor = 1.0 - strength * 0.06;
+            let new-zoom-y =
+                max(0.25,
+                    min(6.0,
+                        root.zoom-y * (dz > 0px ? factor : 1.0 / factor)
+                    )
+                );
+            root.zoom-y-scrolled(new-zoom-y);
+            accept;
+        } else {
+            reject;
+        }
     }
 }
 

@@ -1025,6 +1025,14 @@ export component Workspace inherits Rectangle {
                                     color
                                 );
                             }
+
+                            // Alt+roda sobre a track panel faz zoom
+                            // vertical, propagando pelo zoom-y-level
+                            // (sincroniza timeline + ZoomBarVertical).
+                            zoom-y-scrolled(new-zoom-y) => {
+                                root.zoom-y-level =
+                                    new-zoom-y;
+                            }
                         }
 
 
@@ -1058,7 +1066,11 @@ export component Workspace inherits Rectangle {
                             zoom <=>
                                 root.zoom-level;
 
-                            zoom-y:
+                            // BIDIRECIONAL: Alt+roda na timeline
+                            // escreve de volta em root.zoom-y-level,
+                            // mantendo a track panel e o ZoomBarVertical
+                            // sincronizados com o atalho da timeline.
+                            zoom-y <=>
                                 root.zoom-y-level;
 
                             loop-enabled: root.loop-enabled;

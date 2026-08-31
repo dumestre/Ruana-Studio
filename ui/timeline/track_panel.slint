@@ -39,6 +39,9 @@ export component TrackPanel inherits Rectangle {
 
     callback recolor-requested(int, int);
 
+    // Zoom vertical (Alt+roda) vindo das rows do header.
+    callback zoom-y-scrolled(float);
+
 
     // =====================================================
     // FUNDO
@@ -113,6 +116,13 @@ export component TrackPanel inherits Rectangle {
             root.recolor-requested(
                 track,
                 color
+            );
+        }
+
+        zoom-y-scrolled(new-zoom-y) => {
+
+            root.zoom-y-scrolled(
+                new-zoom-y
             );
         }
     }

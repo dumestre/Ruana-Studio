@@ -34,6 +34,9 @@ export component TimelineHeader inherits Rectangle {
 
     callback recolor-requested(int, int);
 
+    // Zoom vertical (Alt+roda) repassado pelas rows.
+    callback zoom-y-scrolled(float);
+
 
     // =====================================================
     // FUNDO
@@ -394,6 +397,13 @@ export component TimelineHeader inherits Rectangle {
 
                         root.track-clicked(
                             index
+                        );
+                    }
+
+                    // Repassa o zoom vertical calculado na row.
+                    zoom-y-scrolled(new-zoom-y) => {
+                        root.zoom-y-scrolled(
+                            new-zoom-y
                         );
                     }
                 }

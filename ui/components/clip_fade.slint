@@ -4,250 +4,595 @@ import { ClipDragState } from "../timeline/clip_drag/clip_drag_state.slint";
 // ============================================================
 // CLIP FADE — controle de fade-in/out do clip
 //
-// POSICIONADO SOBRE O ROOT DO CLIP (cobre o corpo + header). As
-// duas BOLINHAS no topo (uma na borda do fade-in, outra do fade-out)
-// arrastam horizontalmente, mudando a largura da região de fade e a
-// CURVA BEZIER de atenuação. Gesto 100% local; release comita via
-// `fade-committed`.
+// POSICIONADO SOBRE O ROOT DO CLIP.
 //
-// Coordenadas relativas ao root do clip (mesmas do track_clip).
+// Fade-in:
+//   esquerda  -> atenuado
+//   direita   -> volume normal
+//
+// Fade-out:
+//   esquerda  -> volume normal
+//   direita   -> atenuado
+//
+// As curvas são espelhos horizontais:
+//   IN  = M 0,100 C 25,100 75,0   100,0
+//   OUT = M 0,0   C 25,0   75,100 100,100
+//
+// As duas bolinhas controlam a duração do respectivo fade.
+// O gesto é local e o resultado é enviado por `fade-committed`.
 // ============================================================
 
 export component ClipFade inherits Rectangle {
 
+    // ========================================================
+    // PROPRIEDADES PÚBLICAS
+    // ========================================================
+
     in property <int> clip-id: 0;
+
     in property <float> fade-in: 0.0;
     in property <float> fade-out: 0.0;
+
     in property <float> len: 4.0;
+
     in property <length> px-per-beat: 40px;
+
     in property <length> row-height: 64px;
     in property <length> header-height: 30px;
     in property <length> bw: 1px;
+
     in property <bool> is-midi: false;
     in property <bool> interactive: true;
+
     in property <int> active-tool: 0;
+
     in property <bool> selected: false;
     in property <bool> multi-selected: false;
     in property <bool> hovered: false;
+
     in property <color> clip-color: Theme.accent;
 
-    // Publicado: larguras de fade (px do root) p/ o waveform request.
+    // ========================================================
+    // LARGURAS DOS FADES
+    //
+    // Valores em beats -> pixels.
+    // Limitados à largura útil do corpo do clip.
+    // ========================================================
+
     in-out property <length> fade-in-w:
-        Math.min(root.px-per-beat * root.display-fade-in, root.body-w);
+        Math.min(
+            root.px-per-beat * root.display-fade-in,
+            root.body-w
+        );
 
     in-out property <length> fade-out-w:
-        Math.min(root.px-per-beat * root.display-fade-out, root.body-w);
+        Math.min(
+            root.px-per-beat * root.display-fade-out,
+            root.body-w
+        );
 
-    // Publicado: gesto ativo (usado p/ cursor/opacity pelo track_clip).
+    // ========================================================
+    // ESTADO DO GESTO
+    //
+    // fade-side:
+    //   -1 = fade-in
+    //    0 = nenhum
+    //   +1 = fade-out
+    // ========================================================
+
     in-out property <bool> fading: false;
-    // Publicado: lado do gesto (-1 in, +1 out).
     in-out property <int> fade-side: 0;
 
+    // ========================================================
+    // CALLBACK
+    //
+    // clip-id
+    // fade-in
+    // fade-out
+    // ========================================================
+
     callback fade-committed(int, float, float);
+
+    // ========================================================
+    // ROOT
+    // ========================================================
 
     background: transparent;
     clip: true;
 
+    // ========================================================
+    // VISIBILIDADE DOS CONTROLES
+    // ========================================================
+
     private property <bool> show-fade-controls:
-        !root.is-midi
+        root.interactive
+        && !root.is-midi
         && root.active-tool == 0
-        && (root.selected
+        && (
+            root.selected
             || root.multi-selected
-            || root.hovered);
+            || root.hovered
+            || root.fading
+        );
+
+    // ========================================================
+    // DIMENSÕES DOS CONTROLES
+    // ========================================================
 
     private property <length> fade-grip-size: 10px;
-    private property <length> fade-grip-half: root.fade-grip-size / 2;
+
+    private property <length> fade-grip-half:
+        root.fade-grip-size / 2;
+
     private property <length> fade-slot: 16px;
 
     private property <length> fade-grip-y:
         root.header-height + root.fade-slot / 2;
 
+    // ========================================================
+    // VALORES TEMPORÁRIOS DURANTE O DRAG
+    // ========================================================
+
     private property <float> live-fade-in: 0.0;
     private property <float> live-fade-out: 0.0;
+
     private property <length> fade-start-abs-x: 0px;
+
     private property <float> fade-start-value: 0.0;
 
+    // ========================================================
+    // VALORES EXIBIDOS
+    //
+    // Durante o drag usamos os valores live.
+    // Fora do drag usamos os valores confirmados.
+    // ========================================================
+
     private property <float> display-fade-in:
-        root.fading && root.fade-side < 0 ? root.live-fade-in : root.fade-in;
+        root.fading && root.fade-side < 0
+            ? root.live-fade-in
+            : root.fade-in;
 
     private property <float> display-fade-out:
-        root.fading && root.fade-side > 0 ? root.live-fade-out : root.fade-out;
+        root.fading && root.fade-side > 0
+            ? root.live-fade-out
+            : root.fade-out;
 
-    // Corpo: largura útil dentro das bordas.
-    private property <length> body-w: root.width - 2 * root.bw;
-    private property <length> body-h: root.row-height - root.header-height - root.bw;
+    // ========================================================
+    // CORPO ÚTIL DO CLIP
+    // ========================================================
 
-    private property <length> fade-grip-x-in: root.fade-in-w;
-    private property <length> fade-grip-x-out: root.width - 2 * root.bw - root.fade-out-w;
+    private property <length> body-w:
+        root.width - 2 * root.bw;
 
-    // =====================================================
-    // GRADIENTE DE ATENUAÇÃO (a região do fade escurece a onda)
-    // =====================================================
+    private property <length> body-h:
+        root.row-height
+        - root.header-height
+        - root.bw;
+
+    // ========================================================
+    // POSIÇÃO DOS GRIPS
+    // ========================================================
+
+    // Fade-in termina no ponto onde começa o volume normal.
+    private property <length> fade-grip-x-in:
+        root.fade-in-w;
+
+    // Fade-out começa no ponto onde inicia a atenuação.
+    //
+    // A posição é calculada a partir da DIREITA do clip.
+    // Isso é importante para o fade-out ser o inverso
+    // espacial do fade-in.
+    private property <length> fade-grip-x-out:
+        root.body-w - root.fade-out-w;
+
+    // ========================================================
+    // FADE-IN — REGIÃO ESCURECIDA
+    //
+    // Esquerda:
+    //   escuro
+    //
+    // Direita:
+    //   transparente
+    //
+    // Portanto acompanha a direção da curva:
+    //
+    //   atenuado -> normal
+    // ========================================================
 
     if root.show-fade-controls && root.fade-in-w >= 1px:
         Rectangle {
             x: root.bw;
             y: root.header-height;
+
             width: root.fade-in-w;
             height: root.body-h;
+
             background: @linear-gradient(
                 90deg,
                 root.clip-color.darker(0.12).with-alpha(0.92) 0%,
                 transparent 100%
             );
+
             z: 5;
         }
 
+    // ========================================================
+    // FADE-OUT — REGIÃO ESCURECIDA
+    //
+    // Esquerda:
+    //   transparente
+    //
+    // Direita:
+    //   escuro
+    //
+    // É o INVERSO horizontal do fade-in.
+    //
+    //   normal -> atenuado
+    // ========================================================
+
     if root.show-fade-controls && root.fade-out-w >= 1px:
         Rectangle {
-            x: root.width - root.bw - root.fade-out-w;
+            x: root.bw + root.fade-grip-x-out;
             y: root.header-height;
+
             width: root.fade-out-w;
             height: root.body-h;
+
             background: @linear-gradient(
                 90deg,
                 transparent 0%,
                 root.clip-color.darker(0.12).with-alpha(0.92) 100%
             );
+
             z: 5;
         }
 
-    // =====================================================
-    // CURVAS BEZIER do fade (linha branca sobre a onda)
-    // =====================================================
+    // ========================================================
+    // CURVA BEZIER — FADE-IN
+    //
+    // Começa embaixo:
+    //   Y = 100
+    //
+    // Termina em cima:
+    //   Y = 0
+    //
+    // Resultado:
+    //
+    //   atenuado -> normal
+    // ========================================================
 
     if root.show-fade-controls && root.fade-in-w >= 1px:
         Path {
-            x: root.bw + root.fade-grip-x-in;
+            x: root.bw;
             y: root.header-height;
+
             width: root.fade-in-w;
             height: root.body-h;
+
             commands: "M 0,100 C 25,100 75,0 100,0";
+
             viewbox-width: 100;
             viewbox-height: 100;
+
             fit: fill;
+
             fill: transparent;
+
             stroke: #FFFFFF;
             stroke-width: 1px;
-            opacity: root.fading && root.fade-side < 0 ? 0.95 : 0.55;
+
+            opacity:
+                root.fading && root.fade-side < 0
+                    ? 0.95
+                    : 0.55;
+
             z: 6;
         }
+
+    // ========================================================
+    // CURVA BEZIER — FADE-OUT
+    //
+    // ESPELHO HORIZONTAL DO FADE-IN.
+    //
+    // Começa em cima:
+    //   Y = 0
+    //
+    // Termina embaixo:
+    //   Y = 100
+    //
+    // Resultado:
+    //
+    //   normal -> atenuado
+    // ========================================================
 
     if root.show-fade-controls && root.fade-out-w >= 1px:
         Path {
             x: root.bw + root.fade-grip-x-out;
             y: root.header-height;
+
             width: root.fade-out-w;
             height: root.body-h;
+
             commands: "M 0,0 C 25,0 75,100 100,100";
+
             viewbox-width: 100;
             viewbox-height: 100;
+
             fit: fill;
+
             fill: transparent;
+
             stroke: #FFFFFF;
             stroke-width: 1px;
-            opacity: root.fading && root.fade-side > 0 ? 0.95 : 0.55;
+
+            opacity:
+                root.fading && root.fade-side > 0
+                    ? 0.95
+                    : 0.55;
+
             z: 6;
         }
 
-    // =====================================================
-    // BOLINHAS (pinos) — cada uma com sua TouchArea de gesto
-    // =====================================================
+    // ========================================================
+    // GRIP — FADE-IN
+    // ========================================================
 
     if root.show-fade-controls && (root.hovered || root.fading):
         TouchArea {
-            x: root.bw + root.fade-grip-x-in - root.fade-grip-half;
-            y: root.fade-grip-y - root.fade-grip-half;
+            x:
+                root.bw
+                + root.fade-grip-x-in
+                - root.fade-grip-half;
+
+            y:
+                root.fade-grip-y
+                - root.fade-grip-half;
+
             width: root.fade-grip-size;
             height: root.fade-grip-size;
+
             mouse-cursor: ew-resize;
+
             z: 7;
 
             Rectangle {
                 x: 0px;
                 y: 0px;
+
                 width: root.fade-grip-size;
                 height: root.fade-grip-size;
+
                 border-radius: root.fade-grip-half;
-                background: (root.fading && root.fade-side == -1)
-                    ? Theme.accent : Theme.accent-hover;
+
+                background:
+                    (
+                        root.fading
+                        && root.fade-side == -1
+                    )
+                    ? Theme.accent
+                    : Theme.accent-hover;
+
                 border-width: 1px;
                 border-color: Theme.on-accent;
-                opacity: root.fading && root.fade-side < 0 ? 1.0 : 0.85;
+
+                opacity:
+                    root.fading && root.fade-side < 0
+                        ? 1.0
+                        : 0.85;
             }
 
+            // =================================================
+            // INÍCIO DO DRAG — FADE-IN
+            // =================================================
+
             pointer-event(event) => {
-                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                if event.kind == PointerEventKind.down
+                    && event.button == PointerEventButton.left {
+
                     root.fade-side = -1;
-                    root.fade-start-abs-x = self.absolute-position.x + self.mouse-x;
-                    root.fade-start-value = root.fade-in;
-                    root.live-fade-in = root.fade-in;
-                    root.live-fade-out = root.fade-out;
+
+                    root.fade-start-abs-x =
+                        self.absolute-position.x
+                        + self.mouse-x;
+
+                    root.fade-start-value =
+                        root.fade-in;
+
+                    root.live-fade-in =
+                        root.fade-in;
+
+                    root.live-fade-out =
+                        root.fade-out;
+
                     root.fading = true;
-                } else if event.kind == PointerEventKind.up && root.fading && root.fade-side == -1 {
+
+                } else if event.kind == PointerEventKind.up
+                    && root.fading
+                    && root.fade-side == -1 {
+
                     root.commit-fade();
                 }
             }
 
+            // =================================================
+            // MOVIMENTO — FADE-IN
+            // =================================================
+
             moved => {
-                if self.pressed && root.fading && root.fade-side == -1 {
-                    root.apply-fade-move(self.absolute-position.x + self.mouse-x);
+                if self.pressed
+                    && root.fading
+                    && root.fade-side == -1 {
+
+                    root.apply-fade-move(
+                        self.absolute-position.x
+                        + self.mouse-x
+                    );
                 }
             }
         }
 
+    // ========================================================
+    // GRIP — FADE-OUT
+    // ========================================================
+
     if root.show-fade-controls && (root.hovered || root.fading):
         TouchArea {
-            x: root.bw + root.fade-grip-x-out - root.fade-grip-half;
-            y: root.fade-grip-y - root.fade-grip-half;
+            x:
+                root.bw
+                + root.fade-grip-x-out
+                - root.fade-grip-half;
+
+            y:
+                root.fade-grip-y
+                - root.fade-grip-half;
+
             width: root.fade-grip-size;
             height: root.fade-grip-size;
+
             mouse-cursor: ew-resize;
+
             z: 7;
 
             Rectangle {
                 x: 0px;
                 y: 0px;
+
                 width: root.fade-grip-size;
                 height: root.fade-grip-size;
+
                 border-radius: root.fade-grip-half;
-                background: (root.fading && root.fade-side == 1)
-                    ? Theme.accent : Theme.accent-hover;
+
+                background:
+                    (
+                        root.fading
+                        && root.fade-side == 1
+                    )
+                    ? Theme.accent
+                    : Theme.accent-hover;
+
                 border-width: 1px;
                 border-color: Theme.on-accent;
-                opacity: root.fading && root.fade-side > 0 ? 1.0 : 0.85;
+
+                opacity:
+                    root.fading && root.fade-side > 0
+                        ? 1.0
+                        : 0.85;
             }
 
+            // =================================================
+            // INÍCIO DO DRAG — FADE-OUT
+            // =================================================
+
             pointer-event(event) => {
-                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                if event.kind == PointerEventKind.down
+                    && event.button == PointerEventButton.left {
+
                     root.fade-side = 1;
-                    root.fade-start-abs-x = self.absolute-position.x + self.mouse-x;
-                    root.fade-start-value = root.fade-out;
-                    root.live-fade-in = root.fade-in;
-                    root.live-fade-out = root.fade-out;
+
+                    root.fade-start-abs-x =
+                        self.absolute-position.x
+                        + self.mouse-x;
+
+                    root.fade-start-value =
+                        root.fade-out;
+
+                    root.live-fade-in =
+                        root.fade-in;
+
+                    root.live-fade-out =
+                        root.fade-out;
+
                     root.fading = true;
-                } else if event.kind == PointerEventKind.up && root.fading && root.fade-side == 1 {
+
+                } else if event.kind == PointerEventKind.up
+                    && root.fading
+                    && root.fade-side == 1 {
+
                     root.commit-fade();
                 }
             }
 
+            // =================================================
+            // MOVIMENTO — FADE-OUT
+            //
+            // A direção horizontal é mantida:
+            //
+            // arrastar para DIREITA =
+            // aumenta o fade-out
+            //
+            // arrastar para ESQUERDA =
+            // diminui o fade-out.
+            // =================================================
+
             moved => {
-                if self.pressed && root.fading && root.fade-side == 1 {
-                    root.apply-fade-move(self.absolute-position.x + self.mouse-x);
+                if self.pressed
+                    && root.fading
+                    && root.fade-side == 1 {
+
+                    root.apply-fade-move(
+                        self.absolute-position.x
+                        + self.mouse-x
+                    );
                 }
             }
         }
 
-    // =====================================================
+    // ========================================================
     // LÓGICA COMPARTILHADA DO GESTO
-    // =====================================================
+    // ========================================================
 
     function apply-fade-move(cursor-abs-x: length) {
-        let dfade-dx-px = (cursor-abs-x - root.fade-start-abs-x) / 1px;
-        let dfade-ppb = root.px-per-beat / 1px;
-        let dfade-delta-beats = dfade-dx-px / dfade-ppb;
-        let dfade-snap = ClipDragState.snap-enabled ? Math.round(dfade-delta-beats) : dfade-delta-beats;
-        let dfade-value = Math.max(0.0, Math.min(root.len * 0.5, root.fade-start-value + dfade-snap));
+
+        // ----------------------------------------------------
+        // Distância horizontal desde o início do gesto.
+        // ----------------------------------------------------
+
+        let dfade-dx-px =
+            (cursor-abs-x - root.fade-start-abs-x) / 1px;
+
+        // ----------------------------------------------------
+        // Pixels por beat.
+        // ----------------------------------------------------
+
+        let dfade-ppb =
+            root.px-per-beat / 1px;
+
+        // ----------------------------------------------------
+        // Converte pixels -> beats.
+        // ----------------------------------------------------
+
+        let dfade-delta-beats =
+            dfade-dx-px / dfade-ppb;
+
+        // ----------------------------------------------------
+        // Snap opcional.
+        // ----------------------------------------------------
+
+        let dfade-snap =
+            ClipDragState.snap-enabled
+                ? Math.round(dfade-delta-beats)
+                : dfade-delta-beats;
+
+        // ----------------------------------------------------
+        // Limite máximo:
+        //
+        // nenhum fade pode ocupar mais de 50% do clip.
+        // ----------------------------------------------------
+
+        let dfade-value =
+            Math.max(
+                0.0,
+                Math.min(
+                    root.len * 0.5,
+                    root.fade-start-value
+                        + dfade-snap
+                )
+            );
+
+        // ----------------------------------------------------
+        // Atualiza somente o lado sendo arrastado.
+        // ----------------------------------------------------
+
         if root.fade-side < 0 {
             root.live-fade-in = dfade-value;
         } else {
@@ -255,12 +600,32 @@ export component ClipFade inherits Rectangle {
         }
     }
 
+    // ========================================================
+    // COMMIT DO FADE
+    // ========================================================
+
     function commit-fade() {
+
         root.fading = false;
+
         let side = root.fade-side;
-        let fi = side < 0 ? root.live-fade-in : root.fade-in;
-        let fo = side > 0 ? root.live-fade-out : root.fade-out;
+
+        let fi =
+            side < 0
+                ? root.live-fade-in
+                : root.fade-in;
+
+        let fo =
+            side > 0
+                ? root.live-fade-out
+                : root.fade-out;
+
         root.fade-side = 0;
-        root.fade-committed(root.clip-id, fi, fo);
+
+        root.fade-committed(
+            root.clip-id,
+            fi,
+            fo
+        );
     }
 }

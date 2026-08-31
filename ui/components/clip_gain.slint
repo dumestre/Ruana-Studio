@@ -19,6 +19,7 @@ export component ClipGain inherits Rectangle {
     in property <float> gain-db: 0.0;
     in property <length> body-w: 0px;
     in property <length> body-h: 0px;
+    in property <length> header-height: 0px;
     in property <bool> hovered: false;
     in property <bool> show: false;
 
@@ -40,6 +41,11 @@ export component ClipGain inherits Rectangle {
     private property <length> gain-line-y:
         root.body-h / 2 - root.display-gain-db * 1.5px;
 
+    // Posição real no clip: a linha vive no CORPO (que começa após o
+    // header); `gain-line-y` é relativa ao corpo, somamos o header.
+    private property <length> gain-y:
+        root.header-height + root.gain-line-y;
+
     // =====================================================
     // LINHA DE GANHO
     // =====================================================
@@ -47,10 +53,10 @@ export component ClipGain inherits Rectangle {
     if root.show:
         Rectangle {
             x: 0px;
-            y: Math.clamp(root.gain-line-y - 0.75px, 0px, root.body-h - 1.5px);
+            y: Math.clamp(root.gain-y - 0.75px, root.header-height, root.header-height + root.body-h - 1.5px);
             width: root.body-w;
             height: 1.5px;
-            background: #FFFFFF;
+            background: Theme.surface;
             opacity: root.gaining ? 1.0 : 0.85;
             z: 5;
         }
@@ -62,7 +68,7 @@ export component ClipGain inherits Rectangle {
     if root.show && (root.hovered || root.gaining):
         TouchArea {
             x: root.width / 2 - root.gain-grip-half;
-            y: Math.clamp(root.gain-line-y - root.gain-grip-half, 0px, root.body-h - root.gain-grip-size);
+            y: Math.clamp(root.gain-y - root.gain-grip-half, root.header-height, root.header-height + root.body-h - root.gain-grip-size);
             width: root.gain-grip-size;
             height: root.gain-grip-size;
             mouse-cursor: pointer;
