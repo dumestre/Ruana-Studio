@@ -56,6 +56,15 @@ export component Timeline inherits Rectangle {
 
     callback zoom-to(float, length);
 
+    // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
+    // Repassa os deltas crus (px) + modifiers + posição do cursor sob
+    // o qual o zoom deve ancorar. O Rust acumula TARGETS e o smoothing
+    // por frame (timer) escreve de volta em scroll-x/y/zoom/zoom-y.
+    // Aqui NÃO acontece nenhum cálculo de zoom/scroll — só captura de
+    // input cru (CQRS: UI captura, Rust decide, UI renderiza).
+    callback scroll-input(float, float, bool, bool, bool, float, float);
+    //      (delta-x, delta-y, ctrl, shift, alt, mouse-x, mouse-y)
+
 
     // =====================================================
     // SCROLL
@@ -389,15 +398,6 @@ export component Timeline inherits Rectangle {
             // Shift pressionado no UP? Shift+clique em área vazia cola.
             property <bool> shift-pressed: false;
 
-            // Acumuladores de zoom (H e V): somam os deltas crus de
-            // scroll (roda e touchpad) e disparam passos de zoom fixos
-            // quando o acumulado cruza um limiar — o resíduo permanece
-            // para o próximo evento. Isso dá a MESMA fluidez/continuidade
-            // do pan com botão do meio, independente de o dispositivo
-            // entregar deltas grandes (roda) ou micro-deltas (touchpad).
-            property <float> zoom-h-accum: 0.0;
-            property <float> zoom-v-accum: 0.0;
-
 
             pointer-event(event) => {
 
@@ -666,210 +666,25 @@ export component Timeline inherits Rectangle {
 
             scroll-event(event) => {
 
-                let dz =
-                    event.delta-x
-                    + event.delta-y;
+                let dx = event.delta-x / 1px;
+                let dy = event.delta-y / 1px;
 
-
-                // =============================================
-                // HORIZONTAL ZOOM
-                // =============================================
-
-                if event.modifiers.control
-                    || (
-                        self.middle-pressed
-                        && !event.modifiers.alt
-                    ) {
-
-                    // Acumula o delta cru (px) e dispara passos fixos,
-                    // suaves e uniformes — fluidez igual ao pan do meio.
-                    // Roda entrega ~60px/notch, touchpad micro-deltas;
-                    // o acúmulo + passo fixo normaliza os dois.
-                    self.zoom-h-accum += dz / 1px;
-
-                    let h-threshold = 24.0;
-                    let h-zoom-in = 1.09;
-                    let h-zoom-out = 1.0 / h-zoom-in;
-
-                    // Quantos passos inteiros cruzam o limiar acumulado.
-                    let h-steps = floor(abs(self.zoom-h-accum) / h-threshold) * 1.0;
-
-                    if h-steps > 0.0 {
-
-                        let dir-mul = self.zoom-h-accum > 0.0
-                            ? h-zoom-out
-                            : h-zoom-in;
-
-                        let combined = pow(dir-mul, h-steps);
-
-                        let old-zoom = root.zoom;
-                        let new-zoom =
-                            max(
-                                0.25,
-                                min(
-                                    64.0,
-                                    old-zoom * combined
-                                )
-                            );
-
-                        let mouse-x = self.mouse-x;
-
-                        let content-x =
-                            (
-                                mouse-x
-                                + root.scroll-x
-                                - root.timeline-left-padding
-                            )
-                            / old-zoom;
-
-                        let new-scroll-x =
-                            root.timeline-left-padding
-                            + content-x * new-zoom
-                            - mouse-x;
-
-                        root.zoom = new-zoom;
-
-                        root.scroll-x =
-                            max(
-                                0px,
-                                min(
-                                    root.max-scroll-x,
-                                    new-scroll-x
-                                )
-                            );
-
-                        // Consome os passos, mantendo o resíduo (mod retorno
-                        // sempre >= 0, então reaplica o sinal pelo sentido).
-                        let h-rem = mod(abs(self.zoom-h-accum), h-threshold);
-                        self.zoom-h-accum = self.zoom-h-accum > 0.0 ? h-rem : -h-rem;
-                    }
-                }
-
-
-                // =============================================
-                // SHIFT = HORIZONTAL SCROLL
-                // =============================================
-
-                else if event.modifiers.shift {
-
-                    let dy = event.delta-y / 1px;
-                    let step-x = dy == 0.0
-                        ? 0.0
-                        : (dy > 0.0 ? 1.0 : -1.0) * max(abs(dy), 12.0) * 2.5;
-
-                    root.scroll-x =
-                        max(
-                            0px,
-                            min(
-                                root.max-scroll-x,
-                                root.scroll-x
-                                - step-x * 1px
-                            )
-                        );
-                }
-
-
-                // =============================================
-                // ALT = VERTICAL ZOOM
-                // =============================================
-
-                else if event.modifiers.alt {
-
-                    // Mesmo esquema de acúmulo + passo fixo do zoom
-                    // horizontal: fluidez uniforme para roda/touchpad.
-                    self.zoom-v-accum += dz / 1px;
-
-                    let v-threshold = 24.0;
-                    let v-zoom-in = 1.09;
-                    let v-zoom-out = 1.0 / v-zoom-in;
-
-                    let v-steps = floor(abs(self.zoom-v-accum) / v-threshold) * 1.0;
-
-                    if v-steps > 0.0 {
-
-                        let dir-mul = self.zoom-v-accum > 0.0
-                            ? v-zoom-out
-                            : v-zoom-in;
-
-                        let combined = pow(dir-mul, v-steps);
-
-                        root.zoom-y =
-                            max(
-                                0.25,
-                                min(
-                                    6.0,
-                                    root.zoom-y * combined
-                                )
-                            );
-
-                        let v-rem = mod(abs(self.zoom-v-accum), v-threshold);
-                        self.zoom-v-accum = self.zoom-v-accum > 0.0 ? v-rem : -v-rem;
-                    }
-
-                    root.scroll-x =
-                        min(
-                            root.scroll-x,
-                            root.max-scroll-x
-                        );
-
-
-                    root.scroll-y =
-                        min(
-                            root.scroll-y,
-                            root.max-scroll-y
-                        );
-                }
-
-
-                // =============================================
-                // SCROLL NORMAL
-                //
-                // Multiplicador no delta: o valor cru do winit é
-                // curto demais (linhas de roda ~3 "notches" por
-                // gesto), o que dava a sensação de scroll pesado
-                // com micro-saltos. 2.5x + clamp = deslize contínuo.
-                //
-                // PISO de 12px: no Linux o touchpad entrega deltas
-                // de 1–10px por evento (vs. 60px de linha de roda no
-                // normalizado pelo backend). Sem piso, o pan ficava
-                // "travando lento"/desigual. Um eixo em 0 é ignorado
-                // (sign(0)=1 no Slint, então precisa do guarda `== 0`).
-                // =============================================
-
-                else {
-
-                    let dx = event.delta-x / 1px;
-                    let dy = event.delta-y / 1px;
-
-                    let step-x = dx == 0.0
-                        ? 0.0
-                        : (dx > 0.0 ? 1.0 : -1.0) * max(abs(dx), 12.0) * 2.5;
-
-                    let step-y = dy == 0.0
-                        ? 0.0
-                        : (dy > 0.0 ? 1.0 : -1.0) * max(abs(dy), 12.0) * 2.5;
-
-                    root.scroll-x =
-                        max(
-                            0px,
-                            min(
-                                root.max-scroll-x,
-                                root.scroll-x
-                                - step-x * 1px
-                            )
-                        );
-
-                    root.scroll-y =
-                        max(
-                            0px,
-                            min(
-                                root.max-scroll-y,
-                                root.scroll-y
-                                - step-y * 1px
-                            )
-                        );
-                }
-
+                // Ctrl+roda (ou botão do meio segurado, fora do Alt)
+                // = zoom horizontal. A decisão sobre como usar os deltas
+                // é EXCLUSIVA do RUST (motor da interação): aqui apenas
+                // capturamos o input cru e repassamos — não há nenhum
+                // cálculo de zoom/scroll (CQRS: UI captura, Rust decide).
+                root.scroll-input(
+                    dx,
+                    dy,
+                    event.modifiers.control
+                        || (self.middle-pressed
+                            && !event.modifiers.alt),
+                    event.modifiers.shift,
+                    event.modifiers.alt,
+                    self.mouse-x / 1px,
+                    self.mouse-y / 1px
+                );
 
                 accept;
             }

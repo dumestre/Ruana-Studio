@@ -25,6 +25,7 @@ mod explorer;
 mod floats;
 mod icon;
 mod importer;
+mod interaction;
 #[macro_use]
 mod mixer;
 mod models;
@@ -334,6 +335,9 @@ fn main() -> Result<(), slint::PlatformError> {
         handles.apply_mixer_state.clone(),
         handles.fit_float_mixer_windows.clone(),
     );
+
+    // Motor de zoom/scroll: captura o input cru e suaviza por frame.
+    interaction::install(&ui);
 
     // Waveform: re-render na resolução exata quando o zoom muda.
     waveform::wire_resolution_requests(&ui, waveforms.clone(), clips_model.clone());

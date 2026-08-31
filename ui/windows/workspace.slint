@@ -305,6 +305,19 @@ export component Workspace inherits Rectangle {
     out property <length> timeline-row-height:
         timeline.row-height;
 
+    // Métricas do motor de zoom/scroll (Rust). O blur de âncora do
+    // cursor e o clamp dos targets precisam desses valores ATUAIS.
+    in-out property <length> timeline-left-padding <=> timeline.timeline-left-padding;
+
+    out property <length> timeline-ruler-height:
+        timeline.ruler-height;
+
+    out property <length> timeline-max-scroll-x:
+        timeline.max-scroll-x;
+
+    out property <length> timeline-max-scroll-y:
+        timeline.max-scroll-y;
+
 
     // ========================================================
     // CALLBACKS
@@ -383,6 +396,9 @@ export component Workspace inherits Rectangle {
 
     // Clique na timeline → FocusScope global volta a ter foco.
     callback keyboard-focus-requested();
+
+    // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
+    callback scroll-input(float, float, bool, bool, bool, float, float);
 
     callback mixer-param-changed(int, string, float);
 
@@ -1151,6 +1167,11 @@ export component Workspace inherits Rectangle {
 
                             keyboard-focus-requested() => {
                                 root.keyboard-focus-requested();
+                            }
+
+                            // Scroll/zoom (roda/touchpad) → RUST (motor).
+                            scroll-input(dx, dy, ctrl, shift, alt, mx, my) => {
+                                root.scroll-input(dx, dy, ctrl, shift, alt, mx, my);
                             }
 
 

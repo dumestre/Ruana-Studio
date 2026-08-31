@@ -221,7 +221,17 @@ export component MainWindow inherits Window {
     in-out property <length> timeline-scroll-x <=> workspace.timeline-scroll-x;
     in-out property <length> timeline-scroll-y <=> workspace.timeline-scroll-y;
     in property <length> timeline-view-width: workspace.timeline-view-width;
+
+    // Métricas do motor de zoom/scroll (Rust): âncora do cursor + clamp.
+    in-out property <length> timeline-left-padding <=> workspace.timeline-left-padding;
+    in property <length> timeline-ruler-height: workspace.timeline-ruler-height;
+    in property <length> timeline-max-scroll-x: workspace.timeline-max-scroll-x;
+    in property <length> timeline-max-scroll-y: workspace.timeline-max-scroll-y;
+
     callback focus-selected-clip-requested(int, float, length, length, length);
+
+    // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
+    callback scroll-input(float, float, bool, bool, bool, float, float);
 
     in-out property <[ClipData]> clips:
         [
@@ -760,6 +770,11 @@ export component MainWindow inherits Window {
         // Clique na timeline devolve o foco de teclado aos atalhos.
         keyboard-focus-requested() => {
             root.restore-keyboard-focus();
+        }
+
+        // Scroll/zoom (roda/touchpad) → RUST (motor da interação).
+        scroll-input(dx, dy, ctrl, shift, alt, mx, my) => {
+            root.scroll-input(dx, dy, ctrl, shift, alt, mx, my);
         }
 
         snap-enabled <=> root.snap-enabled;

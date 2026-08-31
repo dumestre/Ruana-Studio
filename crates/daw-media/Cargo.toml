@@ -5,9 +5,9 @@ edition.workspace = true
 
 [dependencies]
 hound = "3.5"
-dirs = "5.0"
-tiny-skia = "0.8"
-symphonia = { version = "0.5", features = ["wav", "mp3", "flac", "ogg", "pcm"] }
+dirs = "6.0"
+tiny-skia = "0.12"
+symphonia = { version = "0.6", features = ["wav", "mp3", "flac", "ogg", "pcm"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
