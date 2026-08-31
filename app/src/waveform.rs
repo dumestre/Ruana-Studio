@@ -138,52 +138,38 @@ pub fn wire_resolution_requests(
     waveforms: Rc<RefCell<WaveformCache>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
 ) {
-    // WAVEFORM MIPMAP: re-render por zoom via pirâmide MIN/MAX/RMS.
-    // A UI pede a resolução e a janela visível em px (wx0..wx1). A janela
-    // é mapeada para o intervalo de samples do `mono_ds` e só esse trecho
-    // é rasterizado na resolução exata da tela — nítido em qualquer zoom.
+    // WAVEFORM MIPMAP: render via pirâmide MIN/MAX/RMS.
+    // A UI pede a resolução (width_px = largura do corpo do clip em px).
+    // Rasterizamos o clip INTEIRO (`mono_ds`) na resolução exata pedida,
+    // escolhendo o bucket de mip adequado — nítido e sem varrer o arquivo.
     ui.global::<TimelineMetrics>()
-        .on_waveform_resolution_requested(move |id, width_px, wx0, wx1, hh, gain_linear, fi, fo| {
+        .on_waveform_resolution_requested(move |id, width_px, _wx0, _wx1, hh, gain_linear, fi, fo| {
             let id_u = id.max(0) as u64;
-            let full_w = (width_px.round() as u32).clamp(16, 16384).max(1) as f32;
+            let w = (width_px.round() as u32).clamp(16, 16384);
             let h = (hh.round() as u32).clamp(4, 2048);
-
-            // Janela visível em px (0..full_w), clampada ao corpo do clip.
-            let vx0 = wx0.clamp(0.0, full_w);
-            let vx1 = wx1.clamp(0.0, full_w);
-            let view_w = (vx1 - vx0).max(1.0);
-            let render_w = (view_w.round() as u32).clamp(1, 16384);
 
             let img = waveforms.borrow().get(&id_u).and_then(|c| {
                 let mono = &c.mono_ds;
                 if mono.is_empty() {
                     return None;
                 }
-                // janela px → intervalo [start, end) de samples do mono_ds.
-                let s = ((vx0 / full_w) * mono.len() as f32) as usize;
-                let e = (((vx1 / full_w) * mono.len() as f32) as usize)
-                    .max(s + 1)
-                    .min(mono.len());
-                if e <= s {
-                    return None;
-                }
                 let mut rgba =
                     daw_media::waveform_image::waveform_image_rgba_mip(
                         mono,
                         &c.mip,
-                        render_w,
+                        w,
                         h,
-                        (s, e),
+                        (0, mono.len()),
                     )?;
-                apply_gain_and_fade_to_rgba(&mut rgba, render_w, h, gain_linear, fi, fo);
-                Some(image_from_rgba(&rgba, render_w, h))
+                apply_gain_and_fade_to_rgba(&mut rgba, w, h, gain_linear, fi, fo);
+                Some(image_from_rgba(&rgba, w, h))
             });
 
             if let Some(i) = clip_row(&clips_model, id) {
                 if let Some(mut data) = clips_model.row_data(i) {
                     data.waveform_image = img.unwrap_or_default();
-                    data.waveform_src_x = vx0;
-                    data.waveform_src_w = view_w;
+                    data.waveform_src_x = 0.0;
+                    data.waveform_src_w = w as f32;
                     clips_model.set_row_data(i, data);
                 }
             }
