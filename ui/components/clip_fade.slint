@@ -127,7 +127,7 @@ export component ClipFade inherits Rectangle {
     private property <length> fade-slot: 16px;
 
     private property <length> fade-grip-y:
-        root.header-height + root.fade-slot / 2;
+        root.header-height + root.fade-grip-half;
 
     // ========================================================
     // VALORES TEMPORÁRIOS DURANTE O DRAG
@@ -515,13 +515,15 @@ export component ClipFade inherits Rectangle {
             // =================================================
             // MOVIMENTO — FADE-OUT
             //
-            // A direção horizontal é mantida:
+            // A direção horizontal é INVERTA para o fade-out:
             //
             // arrastar para DIREITA =
-            // aumenta o fade-out
+            //   grip se move para a direita =
+            //   fade-out ENCURTA (menos atenuação).
             //
             // arrastar para ESQUERDA =
-            // diminui o fade-out.
+            //   grip se move para a esquerda =
+            //   fade-out EXTENDE (mais atenuação).
             // =================================================
 
             moved => {
@@ -585,7 +587,8 @@ export component ClipFade inherits Rectangle {
                 Math.min(
                     root.len * 0.5,
                     root.fade-start-value
-                        + dfade-snap
+                        + (root.fade-side < 0 ? 1.0 : -1.0)
+                        * dfade-snap
                 )
             );
 
