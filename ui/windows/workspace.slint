@@ -29,6 +29,7 @@ import {
     ScrollBarVertical
 } from "../components/scrollbar.slint";
 import { TrackPanel } from "../timeline/track_panel.slint";
+import { MeterTimeline } from "../timeline/meter_timeline.slint";
 import { BottomToolbar } from "../components/bottom_toolbar.slint";
 import { ClipDragState, TimelineMetrics, SamplerMetrics, SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
 
@@ -1049,6 +1050,47 @@ export component Workspace inherits Rectangle {
                                 root.zoom-y-level =
                                     new-zoom-y;
                             }
+                        }
+
+
+                        // =====================================
+                        // METER TIMELINE
+                        // =====================================
+
+                        meter-timeline := MeterTimeline {
+
+                            ruler-height:
+                                timeline.ruler-height;
+
+                            row-height:
+                                timeline.row-height;
+
+                            track-count:
+                                root.track-names.length;
+
+                            scroll-y:
+                                timeline.scroll-y;
+
+                            max-scroll-y:
+                                timeline.max-scroll-y;
+
+                            left-levels:
+                                root.track-meter-left-levels;
+
+                            right-levels:
+                                root.track-meter-right-levels;
+
+                            left-peaks:
+                                root.track-meter-left-peaks;
+
+                            right-peaks:
+                                root.track-meter-right-peaks;
+
+                            left-clipped:
+                                root.track-meter-left-clipped;
+
+                            right-clipped:
+                                root.track-meter-right-clipped;
                         }
 
 
