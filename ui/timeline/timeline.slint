@@ -1,3 +1,4 @@
+
 import { Theme } from "../theme.slint";
 import { TimelineRuler } from "../components/ruler.slint";
 import { TrackRow } from "track_row.slint";
@@ -15,26 +16,15 @@ export component Timeline inherits Rectangle {
     in-out property <int> selected-track: 0;
     in-out property <int> selected-clip: -1;
 
-    // =====================================================
-    // MARQUEE (Ctrl + clique esq. arrasto)
-    //
-    // Retângulo de seleção múltipla: nasce no DOWN com Ctrl,
-    // cresce com o mouse e no UP seleciona os clips que
-    // intersectam (callback `marquee-select` no Rust).
-    // Coordenadas de CONTEÚDO (independem do scroll).
-    // =====================================================
 
-
+    // =====================================================
+    // MARQUEE
+    // =====================================================
 
     callback marquee-select(float, float, float, float);
-        // (beat0, beat1, track0, track1)
 
-    // Clique em qualquer área da timeline → o FocusScope global
-    // recupera o foco do teclado (atalhos voltam a funcionar).
     callback keyboard-focus-requested();
 
-    // Delete sem clip de seleção única: apaga todos os clips
-    // multi-selecionados (marquee).
     callback multi-delete-requested();
 
 
@@ -51,19 +41,27 @@ export component Timeline inherits Rectangle {
     in-out property <float> zoom-y: 1.0;
 
     in-out property <bool> loop-enabled: false;
+
     in-out property <float> loop-start-beat: 0.0;
+
     in-out property <float> loop-end-beat: 16.0;
 
     callback zoom-to(float, length);
 
-    // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
-    // Repassa os deltas crus (px) + modifiers + posição do cursor sob
-    // o qual o zoom deve ancorar. O Rust acumula TARGETS e o smoothing
-    // por frame (timer) escreve de volta em scroll-x/y/zoom/zoom-y.
-    // Aqui NÃO acontece nenhum cálculo de zoom/scroll — só captura de
-    // input cru (CQRS: UI captura, Rust decide, UI renderiza).
-    callback scroll-input(float, float, bool, bool, bool, float, float);
-    //      (delta-x, delta-y, ctrl, shift, alt, mouse-x, mouse-y)
+
+    // =====================================================
+    // SCROLL / ZOOM
+    // =====================================================
+
+    callback scroll-input(
+        float,
+        float,
+        bool,
+        bool,
+        bool,
+        float,
+        float
+    );
 
 
     // =====================================================
@@ -74,16 +72,20 @@ export component Timeline inherits Rectangle {
 
     in-out property <length> scroll-y: 0px;
 
+
     out property <length> max-scroll-x:
         max(
             0px,
             self.content-width - self.width
         );
 
+
     out property <length> max-scroll-y:
         max(
             0px,
-            self.ruler-height + self.tracks-height - self.height
+            self.ruler-height
+            + self.tracks-height
+            - self.height
         );
 
 
@@ -179,8 +181,10 @@ export component Timeline inherits Rectangle {
     out property <length> px-per-beat:
         40px * self.zoom;
 
+
     property <length> px-per-bar:
-        self.px-per-beat * self.beats-per-bar;
+        self.px-per-beat
+        * self.beats-per-bar;
 
 
     // =====================================================
@@ -207,6 +211,7 @@ export component Timeline inherits Rectangle {
 
     out property <length> ruler-height: 30px;
 
+
     out property <length> row-height:
         64px * self.zoom-y;
 
@@ -222,26 +227,27 @@ export component Timeline inherits Rectangle {
     // =====================================================
     // PADDING DA ORIGEM
     //
-    // Pequeno espaço para o beat 0 não ficar escondido
-    // pelo Splitter / Track Panel.
+    // Este mesmo padding é utilizado por:
+    //
+    // - conteúdo
+    // - régua
+    // - playhead
+    //
+    // Portanto todos começam exatamente no mesmo X.
     // =====================================================
 
-    in-out property <length> timeline-left-padding: 4px;
+    in-out property <length> timeline-left-padding: 0px;
 
 
     // =====================================================
     // LARGURA
     // =====================================================
 
-        // Largura da timeline: SEMPRE pelo menos 200 compassos de
-    // "chão" (o espaço vazio rolável que DAWs mostram à direita),
-    // crescendo além disso se total-bars pedir mais. O custo é
-    // zero: área vazia não gera elementos.
     property <length> timeline-width:
         max(
             200 * 1px * self.px-per-bar / 1px,
             self.total-bars * self.px-per-bar
-);
+        );
 
 
     property <length> content-width:
@@ -255,13 +261,12 @@ export component Timeline inherits Rectangle {
     // =====================================================
 
     property <length> tracks-height:
-        self.track-count * self.row-height;
+        self.track-count
+        * self.row-height;
 
 
     // =====================================================
     // PLAYHEAD
-    //
-    // Movimento contínuo baseado em SEGUNDOS.
     // =====================================================
 
     property <float> seconds-per-beat:
@@ -273,26 +278,23 @@ export component Timeline inherits Rectangle {
         / root.seconds-per-beat;
 
 
+    // =====================================================
+    // POSIÇÃO DO PLAYHEAD
+    //
+    // Já inclui os 4px do padding.
+    // NÃO adicionar padding novamente.
+    // =====================================================
+
     property <length> playhead-x:
         root.timeline-left-padding
         + root.current-time-seconds
         * root.pixels-per-second;
 
+
     // =====================================================
-    // SCRUB (arrasto na régua)
-    //
-    // Durante o arrasto, o playhead visual usa uma posição
-    // LOCAL atualizada no próprio evento de mouse (0ms de
-    // latência). O seek ao motor de áudio é feito pela régua
-    // em paralelo; quando o arrasto termina, o visual volta
-    // a seguir `current-time-seconds` — que nesse ponto já
-    // é igual à posição arrastada.
+    // SCRUB
     // =====================================================
 
-    // X local do mouse durante o scrub (-1 = inativo).
-    //
-    // Ligado DIRETO à posição do mouse na régua: enquanto
-    // `scrubbing`, cada frame reflete o cursor sem roundtrip.
     property <length> scrub-x:
         scrub-source.scrubbing
             ? scrub-source.live-mouse-x
@@ -300,35 +302,30 @@ export component Timeline inherits Rectangle {
               + root.scroll-x
             : -1px;
 
-    // Última posição de scrub vista (anti-flash, padrão
-    // PlayheadLab): ao soltar o mouse há um frame em que
-    // `scrubbing` já caiu mas `current-time-seconds` ainda não
-    // propagou o seek final → a agulha piscaria na posição
-    // antiga. Seguramos o último x até o transporte alcançar.
-    // Atualizado via `changed` do scrub-x (binding próprio é ilegal).
+
     property <length> last-scrub-x:
         0px;
 
+
     changed scrub-x => {
+
         if root.scrub-x >= 0px {
-            root.last-scrub-x = root.scrub-x;
+
+            root.last-scrub-x =
+                root.scrub-x;
         }
     }
 
-    // O hold só vale durante o PRÓPRIO arrasto + o frame em que
-    // ele termina. NUNCA depois: se segurasse além disso, um
-    // pause via tecla espaço (playing=false) reativaria o hold e
-    // pause via espaço reativaria o hold e a agulha "voltaria" ao
-    // onde a música pausou.
+
     property <bool> use-scrub-pos:
         root.scrub-x < 0px
         && !root.playing
-        && (root.playhead-x - root.last-scrub-x).abs() > 2px;
+        && (
+            root.playhead-x
+            - root.last-scrub-x
+        ).abs() > 2px;
 
-    // Playhead efetivo, prioridade:
-    // 1. ARRASTO ATIVO → mouse direto (0ms, sem hold intermediário)
-    // 2. PÓS-RELEASE parado → hold anti-flash até transporte alcançar
-    // 3. caso contrário → transporte
+
     property <length> effective-playhead-x:
         root.scrub-x >= 0px
             ? root.scrub-x
@@ -338,14 +335,14 @@ export component Timeline inherits Rectangle {
 
 
     // =====================================================
-    // FUNDO PRINCIPAL
+    // FUNDO
     // =====================================================
 
     background: transparent;
 
 
     // =====================================================
-    // ÁREA DA TIMELINE
+    // ÁREA PRINCIPAL
     // =====================================================
 
     Rectangle {
@@ -361,11 +358,12 @@ export component Timeline inherits Rectangle {
             parent.height;
 
         border-radius: 6px;
+
         clip: true;
 
 
         // =================================================
-        // ZOOM / PAN
+        // INPUT / PAN / ZOOM
         // =================================================
 
         zoom-pan-area := TouchArea {
@@ -381,32 +379,47 @@ export component Timeline inherits Rectangle {
                 parent.height;
 
 
-            property <bool> middle-pressed: false;
+            property <bool> middle-pressed:
+                false;
 
-            property <bool> dragging: false;
 
-            property <length> drag-start-x: 0px;
+            property <bool> dragging:
+                false;
 
-            property <length> drag-start-y: 0px;
 
-            property <length> drag-start-scroll-x: 0px;
+            property <length> drag-start-x:
+                0px;
 
-            property <length> drag-start-scroll-y: 0px;
 
-            property <bool> left-pressed: false;
+            property <length> drag-start-y:
+                0px;
 
-            // Shift pressionado no UP? Shift+clique em área vazia cola.
-            property <bool> shift-pressed: false;
 
+            property <length> drag-start-scroll-x:
+                0px;
+
+
+            property <length> drag-start-scroll-y:
+                0px;
+
+
+            property <bool> left-pressed:
+                false;
+
+
+            property <bool> shift-pressed:
+                false;
+
+
+            // =============================================
+            // POINTER
+            // =============================================
 
             pointer-event(event) => {
 
-                // =========================================
+                // -----------------------------------------
                 // CANCEL
-                //
-                // Gesto interrompido (foco perdido, drag do
-                // sistema etc.): nunca deixa o marquee preso.
-                // =========================================
+                // -----------------------------------------
 
                 if event.kind
                         == PointerEventKind.cancel {
@@ -424,33 +437,30 @@ export component Timeline inherits Rectangle {
                         false;
                 }
 
-                // =========================================
-                // MOVE DO MARQUEE (Ctrl+arrasto começado NA
-                // ÁREA VAZIA)
-                //
-                // O Slint entrega `Moved` com button = Other
-                // (nunca Left), então este update precisa viver
-                // FORA do bloco `button == left` abaixo — era
-                // isso que fazia o lasso não desenhar/atualizar
-                // quando se começava fora de um clip: x1/y1
-                // nunca mudavam e o UP via x1==x0 (nada).
-                // =========================================
 
-                if event.kind == PointerEventKind.move
+                // -----------------------------------------
+                // MARQUEE MOVE
+                // -----------------------------------------
+
+                if event.kind
+                        == PointerEventKind.move
                         && ClipDragState.marquee-active {
 
                     ClipDragState.marquee-x1 =
-                        self.mouse-x + root.scroll-x;
+                        self.mouse-x
+                        + root.scroll-x;
 
                     ClipDragState.marquee-y1 =
-                        self.mouse-y + root.scroll-y;
+                        self.mouse-y
+                        + root.scroll-y;
 
                     return;
                 }
 
-                // =========================================
-                // LEFT CLICK EM ÁREA VAZIA
-                // =========================================
+
+                // -----------------------------------------
+                // LEFT CLICK
+                // -----------------------------------------
 
                 if event.button
                         == PointerEventButton.left {
@@ -458,101 +468,142 @@ export component Timeline inherits Rectangle {
                     if event.kind
                             == PointerEventKind.down {
 
-                        self.left-pressed = true;
+                        self.left-pressed =
+                            true;
 
-                        // Qualquer clique na timeline devolve o foco
-                        // ao FocusScope global — sem isso, depois de
-                        // clicar num campo de texto (busca/rename),
-                        // Delete, Ctrl+Z etc. morriam.
+
                         root.keyboard-focus-requested();
 
-                        // CTRL → inicia marquee em vez de deselecionar
-                        // (igual ao lasso do piano roll). Shift fica
-                        // reservado para o Shift+clique colar.
+
+                        // CTRL = MARQUEE
+
                         if event.modifiers.control {
-                            ClipDragState.marquee-active = true;
+
+                            ClipDragState.marquee-active =
+                                true;
+
+
                             ClipDragState.marquee-x0 =
-                                self.mouse-x + root.scroll-x;
+                                self.mouse-x
+                                + root.scroll-x;
+
+
                             ClipDragState.marquee-y0 =
-                                self.mouse-y + root.scroll-y;
+                                self.mouse-y
+                                + root.scroll-y;
+
+
                             ClipDragState.marquee-x1 =
                                 ClipDragState.marquee-x0;
+
+
                             ClipDragState.marquee-y1 =
                                 ClipDragState.marquee-y0;
+
                         } else {
-                            // Qualquer clique fora dos clips deseleciona
-                            // a seleção única, em qualquer ferramenta.
-                            root.selected-clip = -1;
+
+                            root.selected-clip =
+                                -1;
                         }
                     }
+
 
                     else if event.kind
                                 == PointerEventKind.up
                             && self.left-pressed {
 
-                        self.left-pressed = false;
+                        self.left-pressed =
+                            false;
 
-                        // Snapshot do Shift no UP: cola só se estava
-                        // pressionado (Shift + clique em área vazia).
-                        self.shift-pressed = event.modifiers.shift;
 
-                        // Marquee ativo? Seleciona e consome o UP.
-                        // Desliga SEMPRE (Ctrl+clique simples não pode
-                        // deixar a caixa pendurada); só seleciona se
-                        // houve arrasto de verdade.
+                        self.shift-pressed =
+                            event.modifiers.shift;
+
+
+                        // ---------------------------------
+                        // MARQUEE
+                        // ---------------------------------
+
                         if ClipDragState.marquee-active {
-                            ClipDragState.marquee-active = false;
 
-                            if (ClipDragState.marquee-x1 != ClipDragState.marquee-x0
-                                || ClipDragState.marquee-y1 != ClipDragState.marquee-y0) {
+                            ClipDragState.marquee-active =
+                                false;
 
-                                let bx0 = min(
-                                    ClipDragState.marquee-x0,
-                                    ClipDragState.marquee-x1,
-                                ) / root.px-per-beat;
 
-                                let bx1 = max(
-                                    ClipDragState.marquee-x0,
-                                    ClipDragState.marquee-x1,
-                                ) / root.px-per-beat;
+                            if (
+                                ClipDragState.marquee-x1
+                                != ClipDragState.marquee-x0
+                            )
+                            ||
+                            (
+                                ClipDragState.marquee-y1
+                                != ClipDragState.marquee-y0
+                            ) {
 
-                                let ty0 = Math.floor(
-                                    (
-                                        min(
-                                            ClipDragState.marquee-y0,
-                                            ClipDragState.marquee-y1,
-                                        )
-                                        - root.ruler-height
+                                let bx0 =
+                                    min(
+                                        ClipDragState.marquee-x0,
+                                        ClipDragState.marquee-x1
                                     )
-                                    / root.row-height
-                                );
+                                    / root.px-per-beat;
 
-                                let ty1 = Math.floor(
-                                    (
-                                        max(
-                                            ClipDragState.marquee-y0,
-                                            ClipDragState.marquee-y1,
-                                        )
-                                        - root.ruler-height
+
+                                let bx1 =
+                                    max(
+                                        ClipDragState.marquee-x0,
+                                        ClipDragState.marquee-x1
                                     )
-                                    / root.row-height
-                                );
+                                    / root.px-per-beat;
+
+
+                                let ty0 =
+                                    Math.floor(
+                                        (
+                                            min(
+                                                ClipDragState.marquee-y0,
+                                                ClipDragState.marquee-y1
+                                            )
+                                            - root.ruler-height
+                                        )
+                                        / root.row-height
+                                    );
+
+
+                                let ty1 =
+                                    Math.floor(
+                                        (
+                                            max(
+                                                ClipDragState.marquee-y0,
+                                                ClipDragState.marquee-y1
+                                            )
+                                            - root.ruler-height
+                                        )
+                                        / root.row-height
+                                    );
+
 
                                 root.marquee-select(
                                     max(0.0, bx0),
                                     bx1,
                                     max(0, ty0),
-                                    ty1,
+                                    ty1
                                 );
+
                                 return;
                             }
                         }
+
+
+                        // ---------------------------------
+                        // CLIQUE EM ÁREA VAZIA
+                        // ---------------------------------
 
                         if root.active-tool == 0 {
 
                             let content-y =
                                 self.mouse-y
                                 + root.scroll-y;
+
 
                             let track =
                                 Math.floor(
@@ -563,6 +614,7 @@ export component Timeline inherits Rectangle {
                                     / root.row-height
                                 );
 
+
                             if track >= 0 {
 
                                 let content-x =
@@ -570,14 +622,14 @@ export component Timeline inherits Rectangle {
                                     + root.scroll-x
                                     - root.timeline-left-padding;
 
+
                                 let beat =
                                     content-x
                                     / root.px-per-beat;
 
-                                // Colar SÓ com Shift + clique em área
-                                // vazia (pedido do usuário). Clique sem
-                                // Shift apenas deseleciona.
+
                                 if self.shift-pressed {
+
                                     root.paste-requested(
                                         max(0.0, beat),
                                         track
@@ -590,7 +642,7 @@ export component Timeline inherits Rectangle {
 
 
                 // =========================================
-                // MIDDLE MOUSE
+                // MIDDLE DOWN
                 // =========================================
 
                 if event.kind
@@ -598,34 +650,51 @@ export component Timeline inherits Rectangle {
                     && event.button
                         == PointerEventButton.middle {
 
-                    self.middle-pressed = true;
+                    self.middle-pressed =
+                        true;
 
-                    self.dragging = true;
+
+                    self.dragging =
+                        true;
+
 
                     self.drag-start-x =
                         self.mouse-x;
 
+
                     self.drag-start-y =
                         self.mouse-y;
 
+
                     self.drag-start-scroll-x =
                         root.scroll-x;
+
 
                     self.drag-start-scroll-y =
                         root.scroll-y;
                 }
 
 
+                // =========================================
+                // MIDDLE UP
+                // =========================================
+
                 else if event.kind
                             == PointerEventKind.up
                         && event.button
                             == PointerEventButton.middle {
 
-                    self.middle-pressed = false;
+                    self.middle-pressed =
+                        false;
 
-                    self.dragging = false;
+                    self.dragging =
+                        false;
                 }
 
+
+                // =========================================
+                // MIDDLE MOVE
+                // =========================================
 
                 else if event.kind
                             == PointerEventKind.move
@@ -644,6 +713,7 @@ export component Timeline inherits Rectangle {
                             )
                         );
 
+
                     root.scroll-y =
                         max(
                             0px,
@@ -661,30 +731,38 @@ export component Timeline inherits Rectangle {
 
 
             // =================================================
-            // SCROLL / ZOOM
+            // SCROLL
             // =================================================
 
             scroll-event(event) => {
 
-                let dx = event.delta-x / 1px;
-                let dy = event.delta-y / 1px;
+                let dx =
+                    event.delta-x / 1px;
 
-                // Ctrl+roda (ou botão do meio segurado, fora do Alt)
-                // = zoom horizontal. A decisão sobre como usar os deltas
-                // é EXCLUSIVA do RUST (motor da interação): aqui apenas
-                // capturamos o input cru e repassamos — não há nenhum
-                // cálculo de zoom/scroll (CQRS: UI captura, Rust decide).
+
+                let dy =
+                    event.delta-y / 1px;
+
+
                 root.scroll-input(
                     dx,
                     dy,
+
                     event.modifiers.control
-                        || (self.middle-pressed
-                            && !event.modifiers.alt),
+                        || (
+                            self.middle-pressed
+                            && !event.modifiers.alt
+                        ),
+
                     event.modifiers.shift,
+
                     event.modifiers.alt,
+
                     self.mouse-x / 1px,
+
                     self.mouse-y / 1px
                 );
+
 
                 accept;
             }
@@ -692,93 +770,43 @@ export component Timeline inherits Rectangle {
 
 
         // =================================================
-        // RÉGUA FIXA NO TOPO (altura = ruler-height)
+        // CONTEÚDO SCROLLÁVEL
+        //
+        // A régua NÃO está aqui.
+        //
+        // Este bloco é o único que recebe scroll-y.
         // =================================================
 
-        scrub-source := TimelineRuler {
-
-            // A régua agora é fixa no topo; x = scroll-x compensa
-            // o deslocamento horizontal; y = 0 fixo no topo.
-            x:
-                root.scroll-x;
-
-            y: 0;
-
-            width:
-                root.width;
-
-            height:
-                root.ruler-height;
-
-            ruler-height:
-                root.ruler-height;
-
-            viewport-width:
-                root.width;
-
-            total-bars:
-                root.total-bars;
-
-            beats-per-bar:
-                root.beats-per-bar;
-
-            px-per-bar:
-                root.px-per-bar;
-
-            scroll-x:
-                root.scroll-x;
-
-            loop-enabled: root.loop-enabled;
-            loop-start-beat: root.loop-start-beat;
-            loop-end-beat: root.loop-end-beat;
-            loop-range-changed(a, b) => { root.loop-start-beat = a; root.loop-end-beat = b; }
-
-
-            seek-to-beat(beat) => {
-
-                root.seek-to(
-                    beat
-                );
-            }
-
-
-            z: 10;
-        }
-
-
-        // =================================================
-        // CONTEÚDO SCROLLÁVEL (apenas tracks, começa abaixo da régua)
-        // =================================================
-
-        content := Rectangle {
+        Rectangle {
 
             x:
                 root.timeline-left-padding
                 - root.scroll-x;
 
+
             y:
-                root.ruler-height
-                - root.scroll-y;
+                -root.scroll-y;
+
 
             width:
                 root.timeline-width
                 + 80px;
 
+
             height:
                 max(
-                    root.tracks-height,
-                    parent.height - root.ruler-height
+                    root.ruler-height
+                    + root.tracks-height,
+                    parent.height
                 );
 
-            background: transparent;
+
+            background:
+                transparent;
 
 
             // =============================================
-            // FUNDO ALTERNADO POR COMPASSO
-            //
-            // Invertido em relação à régua antiga:
-            // compasso ímpar = surface
-            // compasso par   = base
+            // FUNDO ALTERNADO
             // =============================================
 
             for i in root.total-bars: Rectangle {
@@ -786,20 +814,25 @@ export component Timeline inherits Rectangle {
                 x:
                     i * root.px-per-bar;
 
+
                 y:
                     root.ruler-height;
 
+
                 width:
                     root.px-per-bar;
+
 
                 height:
                     parent.height
                     - root.ruler-height;
 
+
                 background:
                     Math.mod(i, 2) == 1
                         ? Theme.surface-high
                         : Theme.surface-step;
+
 
                 z: -1;
             }
@@ -814,22 +847,26 @@ export component Timeline inherits Rectangle {
                 x:
                     i * root.px-per-bar;
 
+
                 y:
                     root.ruler-height;
 
+
                 width:
                     root.px-per-bar;
+
 
                 height:
                     parent.height
                     - root.ruler-height;
 
+
                 z: 0;
 
 
-                // =========================================
+                // -----------------------------------------
                 // LINHA DO COMPASSO
-                // =========================================
+                // -----------------------------------------
 
                 Rectangle {
 
@@ -842,16 +879,25 @@ export component Timeline inherits Rectangle {
                     height:
                         parent.height;
 
+
                     background:
                         Math.mod(i, 2) == 1
-                            ? (Theme.is-paper ? Theme.base : Theme.grid-line)
-                            : (Theme.is-paper ? Theme.base : Theme.grid-line).transparentize(0.45);
+                            ? (
+                                Theme.is-paper
+                                    ? Theme.base
+                                    : Theme.grid-line
+                              )
+                            : (
+                                Theme.is-paper
+                                    ? Theme.base
+                                    : Theme.grid-line
+                              ).transparentize(0.45);
                 }
 
 
-                // =========================================
-                // LINHAS DAS BATIDAS
-                // =========================================
+                // -----------------------------------------
+                // BATIDAS
+                // -----------------------------------------
 
                 for k in root.beats-per-bar: Rectangle {
 
@@ -859,93 +905,117 @@ export component Timeline inherits Rectangle {
                         k > 0
                         && root.px-per-bar >= 40px;
 
+
                     x:
                         k * root.px-per-beat;
+
 
                     y: 0;
 
                     width: 1px;
 
+
                     height:
                         parent.height;
 
+
                     background:
-                        Theme.is-paper ? Theme.base.transparentize(0.6) : Theme.grid-line.transparentize(0.6);
+                        Theme.is-paper
+                            ? Theme.base.transparentize(0.6)
+                            : Theme.grid-line.transparentize(0.6);
                 }
 
 
-                // =========================================
-                // SUBDIVISÃO 1/8
-                // =========================================
+                // -----------------------------------------
+                // 1/8
+                // -----------------------------------------
 
                 for k in root.beats-per-bar: Rectangle {
 
                     visible:
                         root.px-per-bar >= 120px;
 
+
                     x:
                         k * root.px-per-beat
                         + root.px-per-beat * 0.5;
+
 
                     y: 0;
 
                     width: 1px;
 
+
                     height:
                         parent.height;
 
+
                     background:
-                        Theme.is-paper ? Theme.base.transparentize(0.7) : Theme.grid-line.transparentize(0.7);
+                        Theme.is-paper
+                            ? Theme.base.transparentize(0.7)
+                            : Theme.grid-line.transparentize(0.7);
                 }
 
 
-                // =========================================
-                // SUBDIVISÃO 1/16 — 1/4
-                // =========================================
+                // -----------------------------------------
+                // 1/16 — 1/4
+                // -----------------------------------------
 
                 for k in root.beats-per-bar: Rectangle {
 
                     visible:
                         root.px-per-bar >= 240px;
+
 
                     x:
                         k * root.px-per-beat
                         + root.px-per-beat * 0.25;
 
+
                     y: 0;
 
                     width: 1px;
 
+
                     height:
                         parent.height;
 
+
                     background:
-                        Theme.is-paper ? Theme.base.transparentize(0.8) : Theme.grid-line.transparentize(0.8);
+                        Theme.is-paper
+                            ? Theme.base.transparentize(0.8)
+                            : Theme.grid-line.transparentize(0.8);
                 }
 
 
-                // =========================================
-                // SUBDIVISÃO 1/16 — 3/4
-                // =========================================
+                // -----------------------------------------
+                // 1/16 — 3/4
+                // -----------------------------------------
 
                 for k in root.beats-per-bar: Rectangle {
 
                     visible:
                         root.px-per-bar >= 240px;
 
+
                     x:
                         k * root.px-per-beat
                         + root.px-per-beat * 0.75;
+
 
                     y: 0;
 
                     width: 1px;
 
+
                     height:
                         parent.height;
 
+
                     background:
-                        Theme.is-paper ? Theme.base.transparentize(0.8) : Theme.grid-line.transparentize(0.8);
+                        Theme.is-paper
+                            ? Theme.base.transparentize(0.8)
+                            : Theme.grid-line.transparentize(0.8);
                 }
             }
 
@@ -958,17 +1028,22 @@ export component Timeline inherits Rectangle {
 
                 x: 0;
 
+
                 y:
                     root.ruler-height;
+
 
                 width:
                     root.timeline-width;
 
+
                 height:
                     root.tracks-height;
 
+
                 alignment:
                     LayoutAlignment.stretch;
+
 
                 spacing: 0;
 
@@ -978,58 +1053,71 @@ export component Timeline inherits Rectangle {
                     width:
                         root.timeline-width;
 
+
                     height:
                         root.row-height;
+
 
                     track-index:
                         index;
 
-                    // Viewport pro culling de clips (só desenha
-                    // os que intersectam a área visível).
+
                     view-scroll-x:
                         root.scroll-x
                         - root.timeline-left-padding;
 
+
                     view-width:
                         root.width;
+
 
                     selected-track:
                         index == root.selected-track;
 
+
                     selected-clip:
                         root.selected-clip;
+
 
                     clips:
                         root.clips;
 
+
                     px-per-beat:
                         root.px-per-beat;
+
 
                     px-per-bar:
                         root.px-per-bar;
 
+
                     row-height:
                         root.row-height;
+
 
                     ruler-height:
                         root.ruler-height;
 
+
                     track-count:
                         root.track-names.length;
+
 
                     total-bars:
                         root.total-bars;
 
+
                     beats-per-bar:
                         root.beats-per-bar;
+
 
                     active-tool:
                         root.active-tool;
 
 
-                    // =====================================
+                    // -------------------------------------
                     // CLIP SELECTION
-                    // =====================================
+                    // -------------------------------------
 
                     clip-selected(id) => {
 
@@ -1038,6 +1126,7 @@ export component Timeline inherits Rectangle {
                             root.selected-clip =
                                 id;
 
+
                             root.clip-selected(
                                 id
                             );
@@ -1045,9 +1134,9 @@ export component Timeline inherits Rectangle {
                     }
 
 
-                    // =====================================
+                    // -------------------------------------
                     // SLICE
-                    // =====================================
+                    // -------------------------------------
 
                     slice-requested(
                         id,
@@ -1061,9 +1150,9 @@ export component Timeline inherits Rectangle {
                     }
 
 
-                    // =====================================
-                    // MOVE / RESIZE — commit único
-                    // =====================================
+                    // -------------------------------------
+                    // MOVE
+                    // -------------------------------------
 
                     clip-move-committed(
                         id,
@@ -1078,6 +1167,10 @@ export component Timeline inherits Rectangle {
                         );
                     }
 
+
+                    // -------------------------------------
+                    // RESIZE
+                    // -------------------------------------
 
                     clip-resize-committed(
                         id,
@@ -1095,9 +1188,9 @@ export component Timeline inherits Rectangle {
                     }
 
 
-                    // =====================================
+                    // -------------------------------------
                     // DELETE
-                    // =====================================
+                    // -------------------------------------
 
                     clip-delete-requested(id) => {
 
@@ -1107,9 +1200,9 @@ export component Timeline inherits Rectangle {
                     }
 
 
-                    // =====================================
+                    // -------------------------------------
                     // RENAME
-                    // =====================================
+                    // -------------------------------------
 
                     clip-rename-requested(
                         id,
@@ -1123,9 +1216,9 @@ export component Timeline inherits Rectangle {
                     }
 
 
-                    // =====================================
+                    // -------------------------------------
                     // COLOR
-                    // =====================================
+                    // -------------------------------------
 
                     clip-color-cycle-requested(id) => {
 
@@ -1135,9 +1228,9 @@ export component Timeline inherits Rectangle {
                     }
 
 
-                    // =====================================
+                    // -------------------------------------
                     // COPY
-                    // =====================================
+                    // -------------------------------------
 
                     clip-copy-requested(id) => {
 
@@ -1147,9 +1240,9 @@ export component Timeline inherits Rectangle {
                     }
 
 
-                    // =====================================
-                    // FADE COMMIT
-                    // =====================================
+                    // -------------------------------------
+                    // FADE
+                    // -------------------------------------
 
                     clip-fade-committed(
                         id,
@@ -1165,24 +1258,30 @@ export component Timeline inherits Rectangle {
                     }
 
 
-                    // =====================================
+                    // -------------------------------------
                     // MARQUEE COMMIT
-                    //
-                    // O UP do marquee pode cair sobre um
-                    // clip (o Slint entrega ao item sob o
-                    // cursor): o TrackClip calcula e comita
-                    // por aqui.
-                    // =====================================
+                    // -------------------------------------
 
-                    marquee-commit(b0, b1, t0, t1) => {
-                        root.marquee-select(b0, b1, t0, t1);
+                    marquee-commit(
+                        b0,
+                        b1,
+                        t0,
+                        t1
+                    ) => {
+
+                        root.marquee-select(
+                            b0,
+                            b1,
+                            t0,
+                            t1
+                        );
                     }
                 }
             }
 
 
             // =============================================
-            // PREVIEW DE DROP
+            // DROP PREVIEW
             // =============================================
 
             Rectangle {
@@ -1190,23 +1289,29 @@ export component Timeline inherits Rectangle {
                 visible:
                     root.drop-visible;
 
+
                 x:
                     root.drop-x;
+
 
                 y:
                     root.ruler-height
                     + root.drop-track
                     * root.row-height;
 
+
                 width:
                     root.drop-len-beats
                     * root.px-per-beat;
 
+
                 height:
                     root.row-height;
 
+
                 background:
                     Theme.accent.transparentize(0.85);
+
 
                 z: 8;
 
@@ -1222,8 +1327,10 @@ export component Timeline inherits Rectangle {
                     height:
                         parent.height;
 
+
                     background:
                         Theme.accent;
+
 
                     z: 1;
                 }
@@ -1231,11 +1338,7 @@ export component Timeline inherits Rectangle {
 
 
             // =============================================
-            // OVERLAY DO ARRASTO DE CLIP
-            //
-            // Renderiza o clip sendo arrastado no espaço
-            // de conteúdo, seguindo o mouse a cada frame
-            // (bindings puros sobre ClipDragState).
+            // CLIP DRAG OVERLAY
             // =============================================
 
             ClipDragOverlay {
@@ -1243,73 +1346,196 @@ export component Timeline inherits Rectangle {
                 px-per-beat:
                     root.px-per-beat;
 
+
                 row-height:
                     root.row-height;
+
 
                 ruler-height:
                     root.ruler-height;
 
+
                 z: 60;
-                            }
+            }
+        }
 
 
-                            PlayheadOverlay {
+        // =================================================
+        // RÉGUA FIXA
+        //
+        // NÃO recebe scroll-y.
+        //
+        // O X inicial é exatamente o mesmo padding
+        // utilizado pelo conteúdo.
+        // =================================================
 
-                                head-x:
-                                    root.effective-playhead-x;
+        scrub-source := TimelineRuler {
 
-                                ruler-h:
-                                    root.ruler-height;
-
-                                tracks-h:
-                                    root.tracks-height;
-
-                                z: 120;
-                            }
-                        }
-                    }
+            x:
+                root.timeline-left-padding;
 
 
-                    // ======================================================
-                    // RETÂNGULO DO MARQUEE (SELEÇÃO MÚLTIPLA)
-                    //
-                    // Desenhado no nível RAIZ do Timeline (irmão do
-                    // zoom-pan-area e da VerticalLayout das tracks),
-                    // DEPOIS das tracks para ficar POR CIMA de tudo.
-                    // Mesmo estilo do lasso do Piano Roll: Theme.accent.
-                    // ======================================================
-
-                    if ClipDragState.marquee-active: Rectangle {
-
-                        x:
-                            min(ClipDragState.marquee-x0, ClipDragState.marquee-x1)
-                            - root.scroll-x;
-
-                        y:
-                            min(ClipDragState.marquee-y0, ClipDragState.marquee-y1)
-                            - root.scroll-y;
-
-                        width:
-                            abs(ClipDragState.marquee-x1 - ClipDragState.marquee-x0);
-
-                        height:
-                            abs(ClipDragState.marquee-y1 - ClipDragState.marquee-y0);
-
-                        border-width:
-                            1px;
-
-                        border-color:
-                            Theme.accent;
-
-                        background:
-                            Theme.accent.transparentize(0.85);
-
-                        z: 200;
-                    }
+            y: 0;
 
 
-                    // =====================================================
-                    // CURSOR ESPECIAL DAS FERRAMENTAS
+            width:
+                root.width
+                - root.timeline-left-padding;
+
+
+            height:
+                root.ruler-height;
+
+
+            ruler-height:
+                root.ruler-height;
+
+
+            viewport-width:
+                root.width
+                - root.timeline-left-padding;
+
+
+            total-bars:
+                root.total-bars;
+
+
+            beats-per-bar:
+                root.beats-per-bar;
+
+
+            px-per-bar:
+                root.px-per-bar;
+
+
+            scroll-x:
+                root.scroll-x;
+
+
+            loop-enabled:
+                root.loop-enabled;
+
+
+            loop-start-beat:
+                root.loop-start-beat;
+
+
+            loop-end-beat:
+                root.loop-end-beat;
+
+
+            loop-range-changed(a, b) => {
+
+                root.loop-start-beat =
+                    a;
+
+
+                root.loop-end-beat =
+                    b;
+            }
+
+
+            seek-to-beat(beat) => {
+
+                root.seek-to(
+                    beat
+                );
+            }
+
+
+            // Régua acima do conteúdo.
+            z: 150;
+        }
+
+
+        // =================================================
+        // PLAYHEAD
+        //
+        // FICA FORA DO CONTEÚDO SCROLLÁVEL.
+        //
+        // Portanto:
+        //
+        // - scroll-y NÃO move a bolha;
+        // - scroll-y NÃO move a parte superior;
+        // - scroll-x é compensado aqui;
+        // - o padding já está dentro de effective-playhead-x.
+        // =================================================
+
+        PlayheadOverlay {
+
+            head-x:
+                root.effective-playhead-x
+                - root.scroll-x;
+
+
+            ruler-h:
+                root.ruler-height;
+
+
+            tracks-h:
+                root.tracks-height;
+
+
+            // Acima da régua para a bolha nunca ser escondida.
+            z: 180;
+        }
+    }
+
+
+    // =====================================================
+    // MARQUEE
+    // =====================================================
+
+    if ClipDragState.marquee-active: Rectangle {
+
+        x:
+            min(
+                ClipDragState.marquee-x0,
+                ClipDragState.marquee-x1
+            )
+            - root.scroll-x;
+
+
+        y:
+            min(
+                ClipDragState.marquee-y0,
+                ClipDragState.marquee-y1
+            )
+            - root.scroll-y;
+
+
+        width:
+            abs(
+                ClipDragState.marquee-x1
+                - ClipDragState.marquee-x0
+            );
+
+
+        height:
+            abs(
+                ClipDragState.marquee-y1
+                - ClipDragState.marquee-y0
+            );
+
+
+        border-width:
+            1px;
+
+
+        border-color:
+            Theme.accent;
+
+
+        background:
+            Theme.accent.transparentize(0.85);
+
+
+        z: 200;
+    }
+
+
+    // =====================================================
+    // CURSOR ESPECIAL
     // =====================================================
 
     tool-cursor := TouchArea {
@@ -1323,6 +1549,7 @@ export component Timeline inherits Rectangle {
 
         height:
             parent.height;
+
 
         enabled:
             root.active-tool == 2
@@ -1347,7 +1574,7 @@ export component Timeline inherits Rectangle {
             : MouseCursor.default;
 
 
-        z: 200;
+        z: 250;
 
 
         pointer-event(event) => {
@@ -1395,6 +1622,7 @@ export component Timeline inherits Rectangle {
 
         interval: 8ms;
 
+
         running:
             root.playing
             && root.follow-playhead;
@@ -1405,33 +1633,27 @@ export component Timeline inherits Rectangle {
             let px =
                 root.playhead-x;
 
+
             let width =
                 root.width;
 
+
             let margin =
                 width * 0.12;
+
 
             let visible-right =
                 root.scroll-x
                 + width;
 
 
-            // =============================================
-            // FOLLOW CONTÍNUO (sem pulo de relocação)
-            //
-            // Antes: ao cruzar a margem o scroll relocava o
-            // conteúdo por ~60% da largura de uma vez → a
-            // agulha "pulava". Agora o scroll acompanha a
-            // agulha exatamente na MESMA velocidade (delta
-            // por tick = delta da agulha), então o conteúdo
-            // desliza liso e o playhead fica ancorado no
-            // limiar.
-            // =============================================
+            // ---------------------------------------------
+            // DIREITA
+            // ---------------------------------------------
 
             if px >
                 visible-right - margin {
 
-                // Ancora o playhead no limiar direito.
                 root.scroll-x =
                     min(
                         max(
@@ -1441,12 +1663,16 @@ export component Timeline inherits Rectangle {
                         ),
                         root.max-scroll-x
                     );
-
             }
+
+
+            // ---------------------------------------------
+            // ESQUERDA
+            // ---------------------------------------------
+
             else if px <
                 root.scroll-x + margin {
 
-                // Ancora o playhead no limiar esquerdo.
                 root.scroll-x =
                     min(
                         max(
