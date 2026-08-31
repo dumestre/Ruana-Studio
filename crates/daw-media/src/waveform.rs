@@ -234,18 +234,13 @@ fn downmix_mono(
 fn decode_symphonia(
     path: &Path,
 ) -> Result<WaveformData, Box<dyn std::error::Error>> {
-    use symphonia::core::audio::{
-        Channels,
-        SampleBuffer,
-    };
-    use symphonia::core::codecs::{
-        DecoderOptions,
-        CODEC_TYPE_NULL,
-    };
-    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::audio::sample::Sample;
+    use symphonia::core::audio::Channels;
+    use symphonia::core::codecs::audio::AudioDecoderOptions;
+    use symphonia::core::formats::probe::Hint;
+    use symphonia::core::formats::{FormatOptions, TrackType};
     use symphonia::core::io::MediaSourceStream;
     use symphonia::core::meta::MetadataOptions;
-    use symphonia::core::probe::Hint;
 
     let src =
         std::fs::File::open(path)?;
@@ -270,32 +265,31 @@ fn decode_symphonia(
     let fmt_opts =
         FormatOptions::default();
 
-    let probed =
+    let mut format =
         symphonia::default::get_probe()
-            .format(
+            .probe(
                 &hint,
                 mss,
-                &fmt_opts,
-                &meta_opts,
-            )?;
-
-    let mut format =
-        probed.format;
+                fmt_opts,
+                meta_opts,
+            )?
+            .format;
 
     let track =
         format
-            .tracks()
-            .iter()
-            .find(|t| {
-                t.codec_params.codec
-                    != CODEC_TYPE_NULL
-            })
+            .default_track(TrackType::Audio)
             .ok_or(
                 "no supported audio track found",
             )?;
 
     let codec_params =
-        &track.codec_params;
+        track
+            .codec_params
+            .as_ref()
+            .and_then(|p| p.audio())
+            .ok_or(
+                "no audio codec parameters",
+            )?;
 
     let sample_rate =
         codec_params
@@ -306,7 +300,7 @@ fn decode_symphonia(
         codec_params
             .channels
             .unwrap_or(
-                Channels::FRONT_LEFT,
+                Channels::CHANNEL_LAYOUT_MONO,
             );
 
     let channel_count =
@@ -314,15 +308,12 @@ fn decode_symphonia(
 
     let mut decoder =
         symphonia::default::get_codecs()
-            .make(
+            .make_audio_decoder(
                 codec_params,
-                &DecoderOptions::default(),
+                &AudioDecoderOptions::default(),
             )?;
 
     let track_id = track.id;
-
-    let mut sample_buf:
-        Option<SampleBuffer<f32>> = None;
 
     let mut all_samples:
         Vec<f32> = Vec::new();
@@ -332,47 +323,32 @@ fn decode_symphonia(
     // ========================================================
 
     loop {
-        let packet =
-            match format.next_packet() {
-                Ok(p) => p,
+        let Some(packet) =
+            format.next_packet()
+        else {
+            break;
+        };
 
-                Err(
-                    symphonia::core::errors::Error::IoError(
-                        ref e,
-                    ),
-                ) if e.kind()
-                    == std::io::ErrorKind::UnexpectedEof =>
-                {
-                    break;
-                }
-
-                Err(_) => {
-                    break;
-                }
-            };
-
-        if packet.track_id() != track_id {
+        if packet.track_id != track_id {
             continue;
         }
 
         match decoder.decode(&packet) {
             Ok(decoded) => {
-                let buf =
-                    sample_buf
-                        .get_or_insert_with(|| {
-                            SampleBuffer::<f32>::new(
-                                decoded.capacity() as u64,
-                                *decoded.spec(),
-                            )
-                        });
+                let count =
+                    decoded.samples_interleaved();
 
-                buf.copy_interleaved_ref(
-                    decoded,
+                all_samples.resize(
+                    all_samples.len() + count,
+                    f32::MID,
                 );
 
-                all_samples.extend_from_slice(
-                    buf.samples(),
-                );
+                decoded
+                    .copy_to_slice_interleaved(
+                        &mut all_samples
+                            [all_samples.len()
+                                - count..],
+                    );
             }
 
             Err(_) => {
