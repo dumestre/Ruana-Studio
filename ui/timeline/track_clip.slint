@@ -562,7 +562,7 @@ export component TrackClip inherits Rectangle {
         // afetar o interior — dá um realce sutil de "luz" evitando
         // o contorno nítido/duro de um border opaco.
         border-width:
-            0px;
+            1px;
 
 
         border-color: root.hovered
@@ -591,27 +591,23 @@ export component TrackClip inherits Rectangle {
                 || root.wave-w1 > 0.0):
 
             Image {
-                // PROFISSIONAL: durante o TRIM a imagem mantém a
-                // largura original e é recortada (crop), não esticada.
-                // Após o commit o Rust entrega a imagem já aparada
-                // no tamanho correto.
+                // A imagem já vem rasterizada na resolução EXATA
+                // da largura do corpo do clip pelo Rust.
+                // image-fit: none evita qualquer stretch — a
+                // waveform gruda no clip sem distorcer,
+                // mesmo durante zoom/scroll. O crop do
+                // conteúdo excedente fica por conta do
+                // clip: true do Rectangle pai.
                 x: root.resizing
                     ? 2px + root.waveform-live-offset + root.waveform-src-x * 1px
                     : 2px + root.waveform-src-x * 1px;
                 y: 0px;
-                width: root.resizing
-                    ? (root.waveform-src-w > 0.0 ? root.waveform-src-w * 1px : root.waveform-anchor-w)
-                    : (root.waveform-src-w > 0.0 ? root.waveform-src-w * 1px : parent.width - 4px);
+                width:
+                    root.waveform-src-w > 0.0
+                        ? root.waveform-src-w * 1px
+                        : parent.width - 4px;
                 height: parent.height;
                 source: clip-waveform-image;
-                // Estica para preencher a janela rasterizada (src-x/w):
-                // o Rust já desenhou a resolução exata da janela, então
-                // não há distorção; sem letterbox (que empurrava a
-                // imagem pro rodapé e cortava o lobo de baixo).
-                image-fit: fill;
-                // Crisp pra edição: a waveform é retilínea (linhas
-                // verticais); interpolação suave borrava os detalhes
-                // finos usados pra cortar/alinhar no grid.
                 image-rendering: pixelated;
             }
 

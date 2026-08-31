@@ -1,0 +1,346 @@
+import { Theme } from "../theme.slint";
+
+// ============================================================
+// STEREO METER
+// ============================================================
+//
+// Medidor estéreo vertical.
+//
+// L = canal esquerdo
+// R = canal direito
+//
+// left-level / right-level:
+//     nível atual: 0.0 .. 1.0
+//
+// left-peak / right-peak:
+//     pico segurado: 0.0 .. 1.0
+//
+// left-clipped / right-clipped:
+//     indica clipping.
+//
+// O processamento do áudio deve ser feito no Rust.
+// ============================================================
+
+export component StereoMeter inherits Rectangle {
+    // ========================================================
+    // PROPRIEDADES
+    // ========================================================
+
+    in property <float> left-level: 0.0;
+    in property <float> right-level: 0.0;
+
+    in property <float> left-peak: 0.0;
+    in property <float> right-peak: 0.0;
+
+    in property <bool> left-clipped: false;
+    in property <bool> right-clipped: false;
+
+    in property <length> meter-width: 8px;
+    in property <length> channel-gap: 3px;
+    in property <length> label-width: 24px;
+
+    in property <color> meter-background: #111111;
+    in property <color> meter-border: #2A2A2A;
+
+    // ========================================================
+    // DIMENSÕES
+    // ========================================================
+
+    private property <length> meter-height: Math.max(1px, root.height - 22px);
+    private property <length> channel-width: Math.max(2px, root.meter-width);
+    private property <length> meters-width: root.channel-width * 2 + root.channel-gap;
+
+    // ========================================================
+    // CLAMP
+    // ========================================================
+
+    pure function level-clamped(value: float) -> float {
+        return Math.max(0.0, Math.min(1.0, value));
+    }
+
+    // ========================================================
+    // FUNDO
+    // ========================================================
+
+    background: transparent;
+
+    // ========================================================
+    // ESCALA
+    // ========================================================
+
+    Text {
+        text: "0";
+        x: 0px;
+        y: 0px;
+        width: root.label-width;
+        height: 14px;
+        color: Theme.text-primary; // CORRIGIDO AQUI
+        font-size: 9px;
+    }
+
+    Text {
+        text: "-6";
+        x: 0px;
+        y: root.meter-height * 0.25 - 7px;
+        width: root.label-width;
+        height: 14px;
+        color: Theme.text-primary; // CORRIGIDO AQUI
+        font-size: 9px;
+    }
+
+    Text {
+        text: "-12";
+        x: 0px;
+        y: root.meter-height * 0.50 - 7px;
+        width: root.label-width;
+        height: 14px;
+        color: Theme.text-primary; // CORRIGIDO AQUI
+        font-size: 9px;
+    }
+
+    Text {
+        text: "-24";
+        x: 0px;
+        y: root.meter-height * 0.75 - 7px;
+        width: root.label-width;
+        height: 14px;
+        color: Theme.text-primary; // CORRIGIDO AQUI
+        font-size: 9px;
+    }
+
+    Text {
+        text: "-inf";
+        x: 0px;
+        y: root.meter-height - 14px;
+        width: root.label-width;
+        height: 14px;
+        color: Theme.text-primary; // CORRIGIDO AQUI
+        font-size: 9px;
+    }
+
+    // ========================================================
+    // CANAL L
+    // ========================================================
+
+    Rectangle {
+        x: root.label-width;
+        y: 0px;
+        width: root.channel-width;
+        height: root.meter-height;
+        background: root.meter-background;
+        border-width: 1px;
+        border-color: root.meter-border;
+        clip: true;
+
+        // ----------------------------------------------------
+        // NÍVEL
+        // ----------------------------------------------------
+        Rectangle {
+            x: 1px;
+            y: parent.height - (root.level-clamped(root.left-level) * (parent.height - 2px));
+            width: parent.width - 2px;
+            height: root.level-clamped(root.left-level) * (parent.height - 2px);
+            background: #00C853;
+        }
+
+        // ----------------------------------------------------
+        // ZONA AMARELA
+        // ----------------------------------------------------
+        Rectangle {
+            x: 1px;
+            y: parent.height * 0.18;
+            width: parent.width - 2px;
+            height: Math.max(0px, root.level-clamped(root.left-level) * (parent.height - 2px) - parent.height * 0.82);
+            background: #FFCC00;
+            visible: root.left-level > 0.82;
+        }
+
+        // ----------------------------------------------------
+        // ZONA VERMELHA
+        // ----------------------------------------------------
+        Rectangle {
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: Math.max(0px, root.level-clamped(root.left-level) * (parent.height - 2px) - parent.height * 0.18);
+            background: #FF3B30;
+            visible: root.left-level > 0.98;
+        }
+
+        // ----------------------------------------------------
+        // PEAK HOLD
+        // ----------------------------------------------------
+        Rectangle {
+            x: 1px;
+            y: parent.height - (root.level-clamped(root.left-peak) * (parent.height - 2px)) - 1px;
+            width: parent.width - 2px;
+            height: 2px;
+            background: root.left-clipped ? #FF3030 : #FFFFFF;
+            visible: root.left-peak > 0.001;
+        }
+    }
+
+    // ========================================================
+    // CANAL R
+    // ========================================================
+
+    Rectangle {
+        x: root.label-width + root.channel-width + root.channel-gap;
+        y: 0px;
+        width: root.channel-width;
+        height: root.meter-height;
+        background: root.meter-background;
+        border-width: 1px;
+        border-color: root.meter-border;
+        clip: true;
+
+        // ----------------------------------------------------
+        // NÍVEL
+        // ----------------------------------------------------
+        Rectangle {
+            x: 1px;
+            y: parent.height - (root.level-clamped(root.right-level) * (parent.height - 2px));
+            width: parent.width - 2px;
+            height: root.level-clamped(root.right-level) * (parent.height - 2px);
+            background: #00C853;
+        }
+
+        // ----------------------------------------------------
+        // ZONA AMARELA
+        // ----------------------------------------------------
+        Rectangle {
+            x: 1px;
+            y: parent.height * 0.18;
+            width: parent.width - 2px;
+            height: Math.max(0px, root.level-clamped(root.right-level) * (parent.height - 2px) - parent.height * 0.82);
+            background: #FFCC00;
+            visible: root.right-level > 0.82;
+        }
+
+        // ----------------------------------------------------
+        // ZONA VERMELHA
+        // ----------------------------------------------------
+        Rectangle {
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: Math.max(0px, root.level-clamped(root.right-level) * (parent.height - 2px) - parent.height * 0.18);
+            background: #FF3B30;
+            visible: root.right-level > 0.98;
+        }
+
+        // ----------------------------------------------------
+        // PEAK HOLD
+        // ----------------------------------------------------
+        Rectangle {
+            x: 1px;
+            y: parent.height - (root.level-clamped(root.right-peak) * (parent.height - 2px)) - 1px;
+            width: parent.width - 2px;
+            height: 2px;
+            background: root.right-clipped ? #FF3030 : #FFFFFF;
+            visible: root.right-peak > 0.001;
+        }
+    }
+
+    // ========================================================
+    // LINHA 0 dB
+    // ========================================================
+
+    Rectangle {
+        x: root.label-width;
+        y: 0px;
+        width: root.meters-width;
+        height: 1px;
+        background: #555555;
+    }
+
+    // ========================================================
+    // LINHA -6 dB
+    // ========================================================
+
+    Rectangle {
+        x: root.label-width;
+        y: root.meter-height * 0.25;
+        width: root.meters-width;
+        height: 1px;
+        background: #303030;
+    }
+
+    // ========================================================
+    // LINHA -12 dB
+    // ========================================================
+
+    Rectangle {
+        x: root.label-width;
+        y: root.meter-height * 0.50;
+        width: root.meters-width;
+        height: 1px;
+        background: #303030;
+    }
+
+    // ========================================================
+    // LINHA -24 dB
+    // ========================================================
+
+    Rectangle {
+        x: root.label-width;
+        y: root.meter-height * 0.75;
+        width: root.meters-width;
+        height: 1px;
+        background: #303030;
+    }
+
+    // ========================================================
+    // LABEL L
+    // ========================================================
+
+    Text {
+        text: "L";
+        x: root.label-width;
+        y: root.meter-height + 3px;
+        width: root.channel-width;
+        height: 16px;
+        color: Theme.text-primary; // CORRIGIDO AQUI
+        font-size: 9px;
+    }
+
+    // ========================================================
+    // LABEL R
+    // ========================================================
+
+    Text {
+        text: "R";
+        x: root.label-width + root.channel-width + root.channel-gap;
+        y: root.meter-height + 3px;
+        width: root.channel-width;
+        height: 16px;
+        color: Theme.text-primary; // CORRIGIDO AQUI
+        font-size: 9px;
+    }
+
+    // ========================================================
+    // CLIP L
+    // ========================================================
+
+    Rectangle {
+        x: root.label-width;
+        y: root.meter-height + 3px;
+        width: root.channel-width;
+        height: 2px;
+        background: #FF3030;
+        visible: root.left-clipped;
+    }
+
+    // ========================================================
+    // CLIP R
+    // ========================================================
+
+    Rectangle {
+        x: root.label-width + root.channel-width + root.channel-gap;
+        y: root.meter-height + 3px;
+        width: root.channel-width;
+        height: 2px;
+        background: #FF3030;
+        visible: root.right-clipped;
+    }
+}
