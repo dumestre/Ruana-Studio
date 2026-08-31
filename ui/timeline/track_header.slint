@@ -27,6 +27,10 @@ in-out property <bool> record-armed: false;
 
 in-out property <bool> automation-enabled: false;
 
+// Acumulador do zoom vertical (Alt+roda): mesmo esquema de passos
+// fixos da timeline -> fluidez uniforme p/ roda e touchpad.
+private property <float> zoom-accum: 0.0;
+
 // ============================================================
 // CALLBACKS
 // ============================================================
@@ -167,16 +171,36 @@ selection-area := TouchArea {
     // só o row sob o cursor recebe o scroll, então não há cascata.
     scroll-event(event) => {
         if event.modifiers.alt {
-            let dz = event.delta-x + event.delta-y;
-            let strength = min(6.0, abs(dz / 1px) / 60.0);
-            let factor = 1.0 - strength * 0.06;
-            let new-zoom-y =
-                max(0.25,
-                    min(6.0,
-                        root.zoom-y * (dz > 0px ? factor : 1.0 / factor)
-                    )
-                );
-            root.zoom-y-scrolled(new-zoom-y);
+            // Acúmulo + passo fixo (igual à timeline): fluido e
+            // uniforme para roda (60px/notch) e touchpad (micro-delta).
+            root.zoom-accum += (event.delta-x + event.delta-y) / 1px;
+
+            let threshold = 24.0;
+            let zoom-in-factor = 1.09;
+            let zoom-out-factor = 1.0 / zoom-in-factor;
+
+            let steps = floor(abs(root.zoom-accum) / threshold) * 1.0;
+
+            if steps > 0.0 {
+
+                let dir-mul = root.zoom-accum > 0.0
+                    ? zoom-out-factor
+                    : zoom-in-factor;
+
+                let combined = pow(dir-mul, steps);
+
+                let new-zoom-y =
+                    max(0.25,
+                        min(6.0,
+                            root.zoom-y * combined
+                        )
+                    );
+
+                root.zoom-y-scrolled(new-zoom-y);
+
+                let remain = mod(abs(root.zoom-accum), threshold);
+                root.zoom-accum = root.zoom-accum > 0.0 ? remain : -remain;
+            }
             accept;
         } else {
             reject;

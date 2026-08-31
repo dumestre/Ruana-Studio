@@ -544,30 +544,51 @@ export component PianoRollArea inherits Rectangle {
 
                             if event.modifiers.control {
 
-                                root.px-per-beat =
-                                    Math.max(24px, Math.min(320px,
-                                        root.px-per-beat * (event.delta-y > 0 ? 0.9 : 1.1)
-                                    ));
-                                root.note-height =
-                                    Math.max(12px, Math.min(40px,
-                                        root.note-height * (event.delta-y > 0 ? 0.9 : 1.1)
-                                    ));
+                                // Piso de 16px e guarda de eixo zero:
+                                // no Linux o touchpad manda deltas de
+                                // 1–10px; sem piso o zoom era lento.
+                                let dz = event.delta-y / 1px;
+                                if dz == 0.0 {
+                                    accept
+                                } else {
+                                    let dir = dz > 0.0 ? 0.9 : 1.1;
+                                    root.px-per-beat =
+                                        Math.max(24px, Math.min(320px,
+                                            root.px-per-beat * dir
+                                        ));
+                                    root.note-height =
+                                        Math.max(12px, Math.min(40px,
+                                            root.note-height * dir
+                                        ));
+                                    accept
+                                }
 
                             } else if event.modifiers.shift {
 
+                                let dx = event.delta-x / 1px;
+                                let step-x = dx == 0.0
+                                    ? 0.0
+                                    : (dx > 0.0 ? 1.0 : -1.0) * max(abs(dx), 12.0) * 2.5;
+
                                 root.scroll-x =
                                     Math.max(0px, Math.min(root.max-scroll-x,
-                                        root.scroll-x + event.delta-x
+                                        root.scroll-x - step-x * 1px
                                     ));
+                                accept
 
                             } else {
 
+                                let dy = event.delta-y / 1px;
+                                let step-y = dy == 0.0
+                                    ? 0.0
+                                    : (dy > 0.0 ? 1.0 : -1.0) * max(abs(dy), 12.0) * 2.5;
+
                                 root.scroll-y =
                                     Math.max(0px, Math.min(root.max-scroll-y,
-                                        root.scroll-y + event.delta-y
+                                        root.scroll-y - step-y * 1px
                                     ));
+                                accept
                             }
-                            accept
                         }
 
                         private property <bool> painting: false;

@@ -284,24 +284,37 @@ export component PianoNoteView inherits Rectangle {
 
             if event.modifiers.control {
 
-                root.viewport-zoom(
-                    event.delta-y > 0
-                        ? 0.9
-                        : 1.1
-                );
+                let dz = event.delta-y / 1px;
+                if dz != 0.0 {
+                    root.viewport-zoom(
+                        dz > 0
+                            ? 0.9
+                            : 1.1
+                    );
+                }
 
             } else if event.modifiers.shift {
 
+                let dx = event.delta-x / 1px;
+                let step-x = dx == 0.0
+                    ? 0.0
+                    : (dx > 0.0 ? 1.0 : -1.0) * max(abs(dx), 12.0) * 2.5;
+
                 root.viewport-scroll(
-                    event.delta-x,
+                    step-x * 1px,
                     0px
                 );
 
             } else {
 
+                let dy = event.delta-y / 1px;
+                let step-y = dy == 0.0
+                    ? 0.0
+                    : (dy > 0.0 ? 1.0 : -1.0) * max(abs(dy), 12.0) * 2.5;
+
                 root.viewport-scroll(
                     0px,
-                    event.delta-y
+                    step-y * 1px
                 );
             }
 
