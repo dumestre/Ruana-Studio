@@ -251,17 +251,6 @@ export global Theme {
         #EFEFEF  // [6] PAPER (claro) ★
     ];
 
-    // GRID DA RÉGUA — transparente no tema Paper
-    private property <[color]> ruler-grid-list: [
-        #8A8A8A, // [0] Studio Dark — visível sobre surface-high #555555 e surface-step #424242
-        #2A3643, // [1] Midnight Blue
-        #332C44, // [2] Violeta Ruana
-        #2E3422, // [3] Volt
-        #3B2F1F, // [4] Sunset
-        #24383C, // [5] Ocean Teal
-        #00000000  // [6] PAPER (claro) — transparente
-    ];
-
     // TIMELINE BG — intermediário entre base e surface (mais claro que base, mais escuro que surface)
     private property <[color]> timeline-bg-list: [
         #696969, // [0] Studio Dark — entre #1E1E1E e #242424
@@ -306,7 +295,6 @@ export global Theme {
     in property <color> activ: activ-list[clamp];
     in property <color> grid-line: grid-line-list[clamp];
     in property <color> grid-sub: grid-sub-list[clamp];
-    in property <color> ruler-grid: ruler-grid-list[clamp];
     in property <color> toggle-active-bg: toggle-active-bg-list[clamp];
     in property <bool> is-paper: active == 6;
     in property <color> timeline-bg: timeline-bg-list[clamp];

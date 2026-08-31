@@ -198,8 +198,8 @@ background:
                 parent.height - 1px;
             background:
                 Math.mod(bar-rect.bar-index, 2) == 1
-                    ? (Theme.is-paper ? Theme.base : Theme.ruler-grid)
-                    : (Theme.is-paper ? Theme.base : Theme.ruler-grid).transparentize(
+                    ? (Theme.is-paper ? Theme.base : Theme.grid-line)
+                    : (Theme.is-paper ? Theme.base : Theme.grid-line).transparentize(
                         0.45
                     );
         }
