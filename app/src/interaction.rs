@@ -30,10 +30,12 @@ const MAX_ZOOM: f32 = 64.0;
 const MIN_ZOOM_Y: f32 = 0.25;
 const MAX_ZOOM_Y: f32 = 6.0;
 
-// Ganho de scroll (reproduz o multiplicador do handle antigo 2.5x com
-// piso de 12px por evento — agora aplicado ao ALVO, não ao visual cru).
+// Ganho de scroll (reproduz o multiplicador do handle antigo 2.5x).
+// SEM piso: no trackpad os deltas são pequenos e contínuos — um piso
+// amplificava a inércia residual do dedo (±30px por micro-delta) e a
+// timeline continuava rolando sozinha em vez de parar onde o usuário
+// a deixou. A roda de mouse (delta ~120/notch) não é afetada pelo piso.
 const SCROLL_GAIN: f32 = 2.5;
-const SCROLL_FLOOR: f32 = 12.0;
 
 // Quando tudo chega ao alvo, para o timer (evita tick eterno).
 const EPS: f32 = 0.05;
@@ -66,15 +68,10 @@ impl Default for State {
     }
 }
 
-/// Passo de scroll por evento (mesma semântica do handle antigo: piso
-/// para touchpad Linux + ganho, mas o resultado vai ao ALVO e é
-/// suavizado — nada de salto no visual).
+/// Passo de scroll por evento (mesma semântica do handle antigo: ganho,
+/// mas o resultado vai ao ALVO e é suavizado — nada de salto no visual).
 fn step(v: f32) -> f32 {
-    if v == 0.0 {
-        0.0
-    } else {
-        v.signum() * v.abs().max(SCROLL_FLOOR) * SCROLL_GAIN
-    }
+    v * SCROLL_GAIN
 }
 
 /// Coeficiente exponencial frame-independente: `1 - exp(-speed*dt)`.
@@ -93,7 +90,7 @@ pub fn install(ui: &MainWindow) {
     let ui_weak_input = ui.as_weak();
     let state_input = state.clone();
     let timer_input = timer.clone();
-    ui.on_scroll_input(move |dx, dy, ctrl, shift, alt, mx, my| {
+    ui.on_scroll_input(move |dx, dy, ctrl, shift, alt, mx, _my| {
         let Some(ui) = ui_weak_input.upgrade() else {
             return;
         };
