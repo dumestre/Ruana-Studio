@@ -83,8 +83,13 @@ fn trim_silence(
         return None;
     }
 
+    let trimmed_samples = data.samples[start..end].to_vec();
+    let (display_samples, mipmap) =
+        daw_media::waveform_image::build_display_wave(&trimmed_samples);
     let trimmed = daw_media::waveform::WaveformData {
-        samples: data.samples[start..end].to_vec(),
+        samples: trimmed_samples,
+        display_samples,
+        mipmap,
         interleaved: data.interleaved[start * ch..end * ch].to_vec(),
         sample_rate: data.sample_rate,
         channels: data.channels,

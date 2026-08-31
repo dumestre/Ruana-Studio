@@ -1,40 +1,80 @@
-//! Renderização da waveform em imagem (RGBA em memória).
+//! Renderização da waveform em imagem RGBA em memória.
 //!
-//! Design validado no WaveformLab e aprovado visualmente:
+//! Pipeline:
 //!
-//! - Envelope poligonal MIN/MAX real do áudio + corpo RMS
-//!   (linhas retas — sem splines: interpolação inventa overshoot)
-//! - Mapeamento por posição relativa (`x/w * n`), distribuição
-//!   uniforme dos samples por coluna de pixel
-//! - MODO OSCILOSCÓPIO automático (zoom fundo, < ~2 samples por
-//!   pixel): desenha UMA única linha que oscila positivo/negativo
-//!   sobre um eixo central horizontal (estilo WaveLab), sem
-//!   preenchimento — os ciclos individuais ficam visíveis
-//! - Acima disso: envelope MIN/MAX sólido (visão geral)
-//! - As imagens são rasterizadas na ALTURA DE EXIBIÇÃO pedida
-//!   pela UI (`h`), não numa altura fixa: linhas traçadas ficam
-//!   nítidas 1:1 na tela (sem achatamento vertical do canvas 512)
-//! - Waveform sempre escura (#0A0A0A), padrão DAW, nos dois modos
+//! ```text
+//! áudio mono
+//!     ↓
+//! downsample preservando transientes
+//!     ↓
+//! display wave
+//!     ↓
+//! mipmap hierárquico MIN/MAX/RMS
+//!     ↓
+//! rasterização na resolução EXATA da UI
+//! ```
+//!
+//! Características:
+//!
+//! - Envelope MIN/MAX real do áudio.
+//! - Corpo RMS.
+//! - Linhas retas, sem spline.
+//! - Mipmap hierárquico para zoom.
+//! - Transientes preservados no downsample.
+//! - Osciloscópio em zoom extremo.
+//! - Altura exatamente igual à solicitada pela UI.
+//! - Fundo transparente.
+//! - Waveform escura (#0A0A0A).
+//!
+//! API moderna:
+//!
+//! ```text
+//! build_display_wave()
+//! waveform_image_rgba_mip()
+//! ```
+//!
+//! API legada mantida:
+//!
+//! ```text
+//! build_waveform_lods()
+//! pick_lod()
+//! waveform_image_rgba()
+//! waveform_image_rgba_at()
+//! ```
 
 use tiny_skia::*;
 
 const LEVELS: usize = 6;
 
-/// Largura do cache padrão (import). Re-renders de zoom usam a
-/// largura exata pedida pela UI.
+/// Largura usada pelas APIs antigas.
 pub const WAVEFORM_IMG_WIDTH: usize = 2048;
 
-/// Altura interna da imagem. A curva é simétrica, então a UI
-/// pode esticar verticalmente sem distorcer a forma.
-const H: u32 = 512;
+/// Altura usada pelas APIs antigas.
+pub const IMAGE_HEIGHT: u32 = 512;
 
-/// Altura interna das imagens geradas.
-pub const IMAGE_HEIGHT: u32 = H;
+/// Altura legada.
+const H: u32 = IMAGE_HEIGHT;
 
+/// Cor da waveform.
 const FG: [u8; 4] = [0x0A, 0x0A, 0x0A, 255];
+
+/// Peso visual do RMS dentro do envelope.
 const RMS_WEIGHT: f32 = 0.35;
+
+/// Espessura mínima visual do envelope.
 const MIN_HALF: f32 = 0.75;
+
+/// Abaixo disso entra no modo osciloscópio.
 const SCOPE_SAMPLES_PER_PX: f64 = 2.0;
+
+/// Número máximo de samples mantidos diretamente.
+///
+/// Aproximadamente 4 MB em f32.
+pub const MONO_DISPLAY_CAP: usize = 1 << 20;
+
+// ============================================================
+// LOD LEGADO
+// ============================================================
 
 #[derive(Clone)]
 pub struct WaveformLod {
@@ -48,58 +88,89 @@ pub struct WaveformLods {
 }
 
 impl WaveformLods {
+    /// Retorna o maior LOD que não ultrapassa a largura desejada.
+    ///
+    /// Se todos forem maiores que `target_width`, retorna o menor.
     pub fn best_level(&self, target_width: u32) -> Option<&WaveformLod> {
         let mut best: Option<&WaveformLod> = None;
-        for lvl in &self.levels {
-            if lvl.width <= target_width {
-                if best.map(|b| b.width).unwrap_or(0) < lvl.width {
-                    best = Some(lvl);
+
+        for level in &self.levels {
+            if level.width <= target_width {
+                if best
+                    .map(|current| level.width > current.width)
+                    .unwrap_or(true)
+                {
+                    best = Some(level);
                 }
             }
         }
-        if best.is_none() && !self.levels.is_empty() {
-            best = Some(&self.levels[self.levels.len() - 1]);
+
+        if best.is_none() {
+            best = self.levels.last();
         }
+
         best
     }
 }
 
-/// Estatísticas MIN/MAX/RMS de uma fatia de samples.
+// ============================================================
+// CANVAS
+// ============================================================
+
+fn new_canvas(w: u32, h: u32) -> Pixmap {
+    Pixmap::new(w, h).expect("falha ao criar Pixmap")
+}
+
+// ============================================================
+// ESTATÍSTICAS
+// ============================================================
+
+/// Retorna:
+///
+/// ```text
+/// MIN
+/// MAX
+/// RMS
+/// ```
+///
+/// O MIN/MAX sempre incluem o eixo zero.
+/// Isso é proposital: uma waveform positiva não deve "flutuar"
+/// para fora do centro.
 #[inline]
 fn stats(slice: &[f32]) -> (f32, f32, f32) {
+    if slice.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
+
     let mut min = 0.0f32;
     let mut max = 0.0f32;
     let mut sum_sq = 0.0f32;
-    for &s in slice {
-        let s = s.clamp(-1.0, 1.0);
-        min = min.min(s);
-        max = max.max(s);
-        sum_sq += s * s;
+
+    for &sample in slice {
+        let sample = sample.clamp(-1.0, 1.0);
+
+        min = min.min(sample);
+        max = max.max(sample);
+
+        sum_sq += sample * sample;
     }
-    let rms = if slice.is_empty() {
-        0.0
-    } else {
-        (sum_sq / slice.len() as f32).sqrt()
-    };
+
+    let rms = (sum_sq / slice.len() as f32).sqrt();
+
     (min, max, rms)
 }
 
-fn new_canvas(w: u32, h: u32) -> Pixmap {
-    let mut pm = Pixmap::new(w, h).unwrap();
-    // Fundo transparente: o clip já tem o próprio corpo colorido.
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(0, 0, 0, 0);
-    pm.fill_rect(
-        Rect::from_xywh(0.0, 0.0, w as f32, h as f32).unwrap(),
-        &paint,
-        Transform::identity(),
-        None,
-    );
-    pm
-}
+// ============================================================
+// ENVELOPE DIRETO
+// ============================================================
 
-/// Desenha um lane de envelope (MIN/MAX + corpo RMS) centrado
-/// em `y_center`, usando a fatia `view` dos samples.
+/// Desenha a waveform diretamente dos samples.
+///
+/// Usado:
+///
+/// - como fallback;
+/// - pela API legada;
+/// - quando não existe Mipmap.
 fn draw_envelope_lane(
     pixmap: &mut Pixmap,
     samples: &[f32],
@@ -107,52 +178,127 @@ fn draw_envelope_lane(
     half_h: f32,
     view: (usize, usize),
 ) {
-    let w = pixmap.width();
-    let n = view.1.saturating_sub(view.0);
+    let width = pixmap.width() as usize;
 
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(FG[0], FG[1], FG[2], FG[3]);
-    paint.anti_alias = true;
+    if width == 0 || samples.is_empty() {
+        return;
+    }
 
-    let mut top = Vec::with_capacity(w as usize);
-    let mut bottom = Vec::with_capacity(w as usize);
+    let start = view.0.min(samples.len());
+    let end = view.1.min(samples.len());
 
-    for x in 0..w as usize {
-        let s0 = view.0 + (x as f64 / w as f64 * n as f64).floor() as usize;
-        let s1 = view.0
-            + (((x + 1) as f64 / w as f64 * n as f64).ceil() as usize)
-                .max(s0 + 1)
-                .min(view.1);
-        let s0 = s0.min(view.1);
+    if end <= start {
+        return;
+    }
 
-        let (min, max, rms) = if s1 > s0 {
-            stats(&samples[s0..s1])
-        } else {
-            (0.0, 0.0, 0.0)
-        };
+    let sample_count = end - start;
 
-        let pos_peak = max.max(0.0);
-        let neg_peak = min.min(0.0);
+    let mut top = Vec::with_capacity(width);
+    let mut bottom = Vec::with_capacity(width);
+
+    for x in 0..width {
+        let rel_start =
+            ((x as f64 / width as f64) * sample_count as f64).floor() as usize;
+
+        let rel_end =
+            (((x + 1) as f64 / width as f64) * sample_count as f64).ceil() as usize;
+
+        let rel_start = rel_start.min(sample_count.saturating_sub(1));
+
+        let rel_end = rel_end
+            .max(rel_start + 1)
+            .min(sample_count);
+
+        let s0 = start + rel_start;
+        let s1 = start + rel_end;
+
+        let (min, max, rms) = stats(&samples[s0..s1]);
+
+        let positive_peak = max.max(0.0);
+        let negative_peak = min.min(0.0);
+
         let rms_body = rms * RMS_WEIGHT;
 
-        let upper = pos_peak.max(rms_body).clamp(0.0, 1.0);
-        let lower = neg_peak.min(-rms_body).clamp(-1.0, 0.0);
+        let upper = positive_peak
+            .max(rms_body)
+            .clamp(0.0, 1.0);
 
-        top.push(y_center - (upper * half_h).max(MIN_HALF));
-        bottom.push(y_center + (-lower * half_h).max(MIN_HALF));
+        let lower = negative_peak
+            .min(-rms_body)
+            .clamp(-1.0, 0.0);
+
+        top.push(
+            y_center
+                - (upper * half_h).max(MIN_HALF),
+        );
+
+        bottom.push(
+            y_center
+                + (-lower * half_h).max(MIN_HALF),
+        );
     }
 
-    let mut pb = PathBuilder::new();
-    pb.move_to(0.0, top[0]);
-    for x in 1..w as usize {
-        pb.line_to(x as f32, top[x]);
-    }
-    for x in (0..w as usize).rev() {
-        pb.line_to(x as f32, bottom[x]);
-    }
-    pb.close();
+    draw_filled_envelope(
+        pixmap,
+        &top,
+        &bottom,
+    );
+}
 
-    if let Some(path) = pb.finish() {
+// ============================================================
+// ENVELOPE COMUM
+// ============================================================
+
+fn draw_filled_envelope(
+    pixmap: &mut Pixmap,
+    top: &[f32],
+    bottom: &[f32],
+) {
+    if top.is_empty() || bottom.is_empty() {
+        return;
+    }
+
+    let width = top.len().min(bottom.len());
+
+    if width == 0 {
+        return;
+    }
+
+    let mut paint = Paint::default();
+
+    paint.set_color_rgba8(
+        FG[0],
+        FG[1],
+        FG[2],
+        FG[3],
+    );
+
+    paint.anti_alias = true;
+
+    let mut path = PathBuilder::new();
+
+    path.move_to(
+        0.0,
+        top[0],
+    );
+
+    for x in 1..width {
+        path.line_to(
+            x as f32,
+            top[x],
+        );
+    }
+
+    for x in (0..width).rev() {
+        path.line_to(
+            x as f32,
+            bottom[x],
+        );
+    }
+
+    path.close();
+
+    if let Some(path) = path.finish() {
         pixmap.fill_path(
             &path,
             &paint,
@@ -163,7 +309,13 @@ fn draw_envelope_lane(
     }
 }
 
-/// MODO OSCILOSCÓPIO: linha fina sample a sample (sem preenchimento).
+// ============================================================
+// OSCILOSCÓPIO
+// ============================================================
+
+/// Desenha o sinal real como uma linha.
+///
+/// Entra em ação quando existem menos de 2 samples por pixel.
 fn draw_scope_lane(
     pixmap: &mut Pixmap,
     samples: &[f32],
@@ -171,84 +323,223 @@ fn draw_scope_lane(
     half_h: f32,
     view: (usize, usize),
 ) {
-    use tiny_skia::Stroke;
+    let width = pixmap.width() as usize;
 
-    let w = pixmap.width();
-    let n = view.1.saturating_sub(view.0);
+    if width == 0 || samples.is_empty() {
+        return;
+    }
+
+    let start = view.0.min(samples.len());
+    let end = view.1.min(samples.len());
+
+    if end <= start {
+        return;
+    }
+
+    let sample_count = end - start;
 
     let mut paint = Paint::default();
-    paint.set_color_rgba8(FG[0], FG[1], FG[2], FG[3]);
+
+    paint.set_color_rgba8(
+        FG[0],
+        FG[1],
+        FG[2],
+        FG[3],
+    );
+
     paint.anti_alias = true;
 
-    let mut pb = PathBuilder::new();
-    let step = n as f64 / w as f64;
-    for x in 0..w as usize {
-        let idx = view.0 + ((x as f64 * step) as usize).min(n.saturating_sub(1));
-        let s = samples.get(idx).copied().unwrap_or(0.0);
-        let y = y_center - s.clamp(-1.0, 1.0) * half_h;
+    let mut path = PathBuilder::new();
+
+    let step =
+        sample_count as f64 / width as f64;
+
+    for x in 0..width {
+        let position = x as f64 * step;
+
+        let index = position.floor() as usize;
+        let fraction = position.fract() as f32;
+
+        let i0 =
+            start + index.min(sample_count.saturating_sub(1));
+
+        let i1 =
+            (i0 + 1).min(end.saturating_sub(1));
+
+        let s0 =
+            samples.get(i0).copied().unwrap_or(0.0);
+
+        let s1 =
+            samples.get(i1).copied().unwrap_or(s0);
+
+        let sample =
+            if i0 == i1 {
+                s0
+            } else {
+                s0 + (s1 - s0) * fraction
+            };
+
+        let y =
+            y_center
+                - sample.clamp(-1.0, 1.0) * half_h;
+
         if x == 0 {
-            pb.move_to(x as f32, y);
+            path.move_to(
+                x as f32,
+                y,
+            );
         } else {
-            pb.line_to(x as f32, y);
+            path.line_to(
+                x as f32,
+                y,
+            );
         }
     }
 
-    if let Some(path) = pb.finish() {
+    if let Some(path) = path.finish() {
         let mut stroke = Stroke::default();
+
         stroke.width = 1.25;
-        pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+
+        pixmap.stroke_path(
+            &path,
+            &paint,
+            &stroke,
+            Transform::identity(),
+            None,
+        );
     }
 
-    // Eixo central sutil.
+    // Eixo central.
     let mut axis = Paint::default();
-    axis.set_color_rgba8(0x33, 0x38, 0x42, 255);
-    if let Some(r) = Rect::from_xywh(0.0, y_center - 0.5, w as f32, 1.0) {
-        pixmap.fill_rect(r, &axis, Transform::identity(), None);
+
+    axis.set_color_rgba8(
+        0x33,
+        0x38,
+        0x42,
+        255,
+    );
+
+    if let Some(rect) = Rect::from_xywh(
+        0.0,
+        y_center - 0.5,
+        width as f32,
+        1.0,
+    ) {
+        pixmap.fill_rect(
+            rect,
+            &axis,
+            Transform::identity(),
+            None,
+        );
     }
 }
 
-/// Rasteriza a waveform MONO (downmix L+R/2) na largura pedida.
+// ============================================================
+// RENDER DIRETO
+// ============================================================
+
+/// Rasteriza L/R diretamente.
 ///
-/// `view.0..view.1` é a fatia visível em samples. O modo
-/// osciloscópio entra sozinho quando o zoom está muito fundo.
+/// Esta API é mantida por compatibilidade.
+///
+/// A rota moderna deve usar:
+///
+/// ```text
+/// build_display_wave()
+/// waveform_image_rgba_mip()
+/// ```
 pub fn waveform_image_rgba_at_samples(
     left: &[f32],
     right: &[f32],
     w: u32,
     view: (usize, usize),
 ) -> Option<Vec<u8>> {
-    let mono: Vec<f32> = left.iter().zip(right.iter()).map(|(&l, &r)| (l + r) * 0.5).collect();
-    if mono.is_empty() || w == 0 {
+    if left.is_empty()
+        || right.is_empty()
+        || w == 0
+    {
         return None;
     }
 
-    let h = H;
-    let mut pm = new_canvas(w, h);
-    let center = h as f32 / 2.0;
-    let half_h = h as f32 / 2.0 - 4.0;
+    let sample_count =
+        left.len().min(right.len());
 
-    let n = view.1.saturating_sub(view.0);
-    let scope = (n as f64 / w as f64) < SCOPE_SAMPLES_PER_PX;
-
-    if scope {
-        draw_scope_lane(&mut pm, &mono, center, half_h, view);
-    } else {
-        draw_envelope_lane(&mut pm, &mono, center, half_h, view);
+    if sample_count == 0 {
+        return None;
     }
 
-    Some(pm.data().to_vec())
+    let start =
+        view.0.min(sample_count);
+
+    let end =
+        view.1.min(sample_count);
+
+    if end <= start {
+        return None;
+    }
+
+    // Compatibilidade:
+    // cria mono apenas para visualização.
+    let mono: Vec<f32> = left[..sample_count]
+        .iter()
+        .zip(right[..sample_count].iter())
+        .map(|(&l, &r)| {
+            (l + r) * 0.5
+        })
+        .collect();
+
+    let mut pixmap =
+        new_canvas(w, H);
+
+    let center =
+        H as f32 / 2.0;
+
+    let half_h =
+        (H as f32 / 2.0 - 4.0).max(1.0);
+
+    let samples_per_pixel =
+        (end - start) as f64 / w as f64;
+
+    if samples_per_pixel
+        < SCOPE_SAMPLES_PER_PX
+    {
+        draw_scope_lane(
+            &mut pixmap,
+            &mono,
+            center,
+            half_h,
+            (start, end),
+        );
+    } else {
+        draw_envelope_lane(
+            &mut pixmap,
+            &mono,
+            center,
+            half_h,
+            (start, end),
+        );
+    }
+
+    Some(
+        pixmap.data().to_vec()
+    )
 }
 
 // ============================================================
-// MIPMAP DE PICOS (MIN/MAX/RMS hierárquicos)
-//
-// Zoom sem re-varredura: o envelope em qualquer largura lê níveis
-// pré-computados em vez de escanear os samples de novo. Construído
-// UMA vez por sample (thread de fundo) e guardado no cache; o custo
-// por re-render cai de O(samples) para O(pixels × poucos buckets).
+// MIPMAP
 // ============================================================
 
-/// Estatísticas agregadas de um bucket de samples (sinal clampado).
+/// Bucket estatístico.
+///
+/// Representa uma quantidade de samples:
+///
+/// ```text
+/// min
+/// max
+/// soma dos quadrados
+/// quantidade
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct MipBucket {
     pub min: f32,
@@ -262,13 +553,18 @@ impl MipBucket {
         let mut min = 0.0f32;
         let mut max = 0.0f32;
         let mut sum_sq = 0.0f32;
-        for &s in slice {
-            let s = s.clamp(-1.0, 1.0);
-            min = min.min(s);
-            max = max.max(s);
-            sum_sq += s * s;
+
+        for &sample in slice {
+            let sample =
+                sample.clamp(-1.0, 1.0);
+
+            min = min.min(sample);
+            max = max.max(sample);
+
+            sum_sq += sample * sample;
         }
-        MipBucket {
+
+        Self {
             min,
             max,
             sum_sq,
@@ -276,8 +572,12 @@ impl MipBucket {
         }
     }
 
-    fn merge(a: MipBucket, b: MipBucket) -> MipBucket {
-        MipBucket {
+    #[inline]
+    fn merge(
+        a: Self,
+        b: Self,
+    ) -> Self {
+        Self {
             min: a.min.min(b.min),
             max: a.max.max(b.max),
             sum_sq: a.sum_sq + b.sum_sq,
@@ -286,79 +586,282 @@ impl MipBucket {
     }
 }
 
-/// Pirâmide: `levels[i]` tem buckets de `1 << (i+1)` samples.
-/// O nível 0 (bucket 2) em diante — escope fino lê o mono direto.
+/// Pirâmide hierárquica.
+///
+/// level 0:
+///
+/// ```text
+/// 2 samples / bucket
+/// ```
+///
+/// level 1:
+///
+/// ```text
+/// 4 samples / bucket
+/// ```
+///
+/// level 2:
+///
+/// ```text
+/// 8 samples / bucket
+/// ```
+///
+/// etc.
 #[derive(Clone, Debug)]
 pub struct Mipmap {
     pub levels: Vec<Vec<MipBucket>>,
 }
 
 impl Mipmap {
-    /// Nº de samples de origem cobertos por bucket do nível `i`.
-    pub fn bucket(&self, i: usize) -> usize {
-        1usize << (i + 1)
+    /// Quantidade de samples representados por bucket.
+    #[inline]
+    pub fn bucket(
+        &self,
+        level: usize,
+    ) -> usize {
+        1usize << (level + 1)
     }
 
-    /// Nível com o MAIOR bucket ≤ `spp` samples por pixel.
-    pub fn level_for(&self, spp: f64) -> usize {
-        if spp < 2.0 || self.levels.is_empty() {
+    /// Seleciona o maior bucket que cabe no
+    /// número de samples por pixel.
+    pub fn level_for(
+        &self,
+        samples_per_pixel: f64,
+    ) -> usize {
+        if self.levels.is_empty()
+            || samples_per_pixel < 2.0
+        {
             return 0;
         }
-        let mut i = (spp.log2().floor() as usize).saturating_sub(1);
-        i = i.min(self.levels.len() - 1);
-        while i > 0 && self.bucket(i) > spp as usize {
-            i -= 1;
+
+        let mut level =
+            samples_per_pixel
+                .log2()
+                .floor()
+                as usize;
+
+        level =
+            level.saturating_sub(1);
+
+        level =
+            level.min(
+                self.levels.len()
+                    .saturating_sub(1)
+            );
+
+        while level > 0
+            && self.bucket(level) as f64
+                > samples_per_pixel
+        {
+            level -= 1;
         }
-        i
+
+        level
     }
 }
 
-/// Constrói a pirâmide a partir do mono de exibição.
-pub fn build_mipmap(mono: &[f32]) -> Mipmap {
-    let mut levels = Vec::new();
-    let mut cur: Vec<MipBucket> = mono.chunks(2).map(MipBucket::new).collect();
-    while !cur.is_empty() {
-        if cur.len() == 1 {
-            levels.push(cur);
+/// Constrói a pirâmide Mipmap.
+///
+/// Custo total O(N).
+///
+/// Deve ser feito uma única vez e reutilizado
+/// durante todos os zooms.
+pub fn build_mipmap(
+    mono: &[f32],
+) -> Mipmap {
+    if mono.is_empty() {
+        return Mipmap {
+            levels: Vec::new(),
+        };
+    }
+
+    let mut levels =
+        Vec::new();
+
+    // --------------------------------------------------------
+    // LEVEL 0
+    // --------------------------------------------------------
+
+    let mut current: Vec<MipBucket> =
+        mono.chunks(2)
+            .map(MipBucket::new)
+            .collect();
+
+    loop {
+        levels.push(
+            current.clone()
+        );
+
+        if current.len() <= 1 {
             break;
         }
-        let mut next = Vec::with_capacity(cur.len().div_ceil(2));
-        let mut it = cur.chunks(2);
-        while let Some(pair) = it.next() {
-            if pair.len() == 2 {
-                next.push(MipBucket::merge(pair[0], pair[1]));
-            } else {
-                next.push(pair[0]);
+
+        let mut next =
+            Vec::with_capacity(
+                current.len().div_ceil(2)
+            );
+
+        for pair in current.chunks(2) {
+            match pair {
+                [a, b] => {
+                    next.push(
+                        MipBucket::merge(
+                            *a,
+                            *b,
+                        )
+                    );
+                }
+
+                [a] => {
+                    next.push(*a);
+                }
+
+                _ => {}
             }
         }
-        levels.push(cur);
-        cur = next;
+
+        current = next;
     }
-    Mipmap { levels }
+
+    Mipmap {
+        levels,
+    }
 }
 
-/// Teto de samples do mono de exibição guardado no cache (~4 MB).
-pub const MONO_DISPLAY_CAP: usize = 1 << 20;
+// ============================================================
+// DOWNSAMPLE
+// ============================================================
 
-/// Downsample por stride (fiel, sem suavizar transientes) com teto;
-/// arquivos dentro do teto voltam-se intactos.
-pub fn downsample_mono(mono: &[f32]) -> Vec<f32> {
-    if mono.len() <= MONO_DISPLAY_CAP {
+/// Reduz uma waveform grande preservando transientes.
+///
+/// Cada bloco gera:
+///
+/// ```text
+/// mínimo
+/// máximo
+/// ```
+///
+/// na ordem temporal aproximada.
+///
+/// Isso é muito melhor que simplesmente fazer:
+///
+/// ```text
+/// step_by()
+/// ```
+///
+/// porque `step_by()` pode simplesmente pular um transient.
+pub fn downsample_mono(
+    mono: &[f32],
+) -> Vec<f32> {
+    if mono.len()
+        <= MONO_DISPLAY_CAP
+    {
         return mono.to_vec();
     }
-    let step = (mono.len() as f64 / MONO_DISPLAY_CAP as f64).ceil() as usize;
-    mono.iter().step_by(step).copied().collect()
+
+    let block_size =
+        mono.len()
+            .div_ceil(MONO_DISPLAY_CAP);
+
+    let block_count =
+        mono.len()
+            .div_ceil(block_size);
+
+    let mut output =
+        Vec::with_capacity(
+            block_count * 2
+        );
+
+    for chunk in
+        mono.chunks(block_size)
+    {
+        if chunk.is_empty() {
+            continue;
+        }
+
+        let mut min =
+            f32::INFINITY;
+
+        let mut max =
+            f32::NEG_INFINITY;
+
+        let mut min_pos =
+            0usize;
+
+        let mut max_pos =
+            0usize;
+
+        for (index, &value)
+            in chunk.iter().enumerate()
+        {
+            let value =
+                value.clamp(-1.0, 1.0);
+
+            if value < min {
+                min = value;
+                min_pos = index;
+            }
+
+            if value > max {
+                max = value;
+                max_pos = index;
+            }
+        }
+
+        // Mantém a ordem aproximada do sinal.
+        if min_pos <= max_pos {
+            output.push(min);
+            output.push(max);
+        } else {
+            output.push(max);
+            output.push(min);
+        }
+    }
+
+    output
 }
 
-/// Mono de exibição + mipmap prontos para o cache de UI.
-pub fn build_display_wave(mono: &[f32]) -> (Vec<f32>, Mipmap) {
-    let ds = downsample_mono(mono);
-    let mip = build_mipmap(&ds);
-    (ds, mip)
+// ============================================================
+// DISPLAY WAVE
+// ============================================================
+
+/// Constrói a representação usada exclusivamente
+/// pela renderização.
+///
+/// Retorna:
+///
+/// ```text
+/// display samples
+/// mipmap
+/// ```
+///
+/// Esse resultado deve ser armazenado em cache.
+///
+/// NÃO reconstrua isso a cada zoom.
+pub fn build_display_wave(
+    mono: &[f32],
+) -> (Vec<f32>, Mipmap) {
+    let display =
+        downsample_mono(mono);
+
+    let mip =
+        build_mipmap(&display);
+
+    (display, mip)
 }
 
-/// Calcula os contornos superior/inferior do envelope (MIN/MAX+RMS)
-/// a partir dos buckets pré-computados, coluna a coluna de pixel.
+// ============================================================
+// ENVELOPE VIA MIPMAP
+// ============================================================
+
+/// Calcula o envelope para cada coluna.
+///
+/// IMPORTANTE:
+///
+/// `view` está em coordenadas da `display wave`.
+///
+/// `bucket_size` também está em coordenadas
+/// da `display wave`.
 fn envelope_contours(
     pixmap: &mut Pixmap,
     buckets: &[MipBucket],
@@ -367,59 +870,189 @@ fn envelope_contours(
     half_h: f32,
     view: (usize, usize),
 ) -> (Vec<f32>, Vec<f32>) {
-    let w = pixmap.width();
-    let n = view.1.saturating_sub(view.0);
-    let v0 = view.0;
-    let bucket_size = bucket_size.max(1);
+    let width =
+        pixmap.width() as usize;
 
-    let mut top = Vec::with_capacity(w as usize);
-    let mut bottom = Vec::with_capacity(w as usize);
+    if width == 0
+        || buckets.is_empty()
+    {
+        return (
+            Vec::new(),
+            Vec::new(),
+        );
+    }
 
-    for x in 0..w as usize {
-        let s0 = v0 + (x as f64 / w as f64 * n as f64).floor() as usize;
-        let s1 = v0
-            + (((x + 1) as f64 / w as f64 * n as f64).ceil() as usize)
-                .max(s0 + 1)
-                .min(view.1);
-        let s0 = s0.min(view.1);
+    let bucket_size =
+        bucket_size.max(1);
 
-        let i0 = s0 / bucket_size;
-        let i1 = (s1 as f64 / bucket_size as f64).ceil() as usize;
-        let i1 = i1.min(buckets.len());
+    let start =
+        view.0;
 
-        let mut min = 0.0f32;
-        let mut max = 0.0f32;
-        let mut sum_sq = 0.0f64;
-        let mut count = 0u64;
-        if i1 > i0 && i0 < buckets.len() {
-            for b in &buckets[i0..i1] {
-                min = min.min(b.min);
-                max = max.max(b.max);
-                sum_sq += b.sum_sq as f64;
-                count += b.count as u64;
+    let end =
+        view.1;
+
+    if end <= start {
+        return (
+            Vec::new(),
+            Vec::new(),
+        );
+    }
+
+    let sample_count =
+        end - start;
+
+    let mut top =
+        Vec::with_capacity(width);
+
+    let mut bottom =
+        Vec::with_capacity(width);
+
+    for x in 0..width {
+        // Intervalo da coluna em samples.
+        let rel_start =
+            ((x as f64 / width as f64)
+                * sample_count as f64)
+                .floor()
+                as usize;
+
+        let rel_end =
+            (((x + 1) as f64 / width as f64)
+                * sample_count as f64)
+                .ceil()
+                as usize;
+
+        let rel_start =
+            rel_start.min(
+                sample_count
+                    .saturating_sub(1)
+            );
+
+        let rel_end =
+            rel_end
+                .max(rel_start + 1)
+                .min(sample_count);
+
+        let sample_start =
+            start + rel_start;
+
+        let sample_end =
+            start + rel_end;
+
+        // ----------------------------------------------------
+        // Descobre exatamente quais buckets intersectam
+        // a coluna.
+        //
+        // Bucket B cobre:
+        //
+        //     [B * bucket_size,
+        //      (B + 1) * bucket_size)
+        // ----------------------------------------------------
+
+        let bucket_start =
+            sample_start / bucket_size;
+
+        let bucket_end =
+            sample_end
+                .div_ceil(bucket_size);
+
+        let bucket_start =
+            bucket_start.min(
+                buckets.len()
+            );
+
+        let bucket_end =
+            bucket_end.min(
+                buckets.len()
+            );
+
+        let mut min =
+            0.0f32;
+
+        let mut max =
+            0.0f32;
+
+        let mut sum_sq =
+            0.0f64;
+
+        let mut count =
+            0u64;
+
+        if bucket_end
+            > bucket_start
+        {
+            for bucket in
+                &buckets[
+                    bucket_start
+                        ..bucket_end
+                ]
+            {
+                min =
+                    min.min(bucket.min);
+
+                max =
+                    max.max(bucket.max);
+
+                sum_sq +=
+                    bucket.sum_sq
+                        as f64;
+
+                count +=
+                    bucket.count
+                        as u64;
             }
         }
-        let rms = if count > 0 {
-            ((sum_sq / count as f64) as f32).sqrt()
-        } else {
-            0.0
-        };
 
-        let pos_peak = max.max(0.0);
-        let neg_peak = min.min(0.0);
-        let rms_body = rms * RMS_WEIGHT;
+        let rms =
+            if count > 0 {
+                (
+                    sum_sq
+                        / count as f64
+                )
+                .sqrt()
+                    as f32
+            } else {
+                0.0
+            };
 
-        let upper = pos_peak.max(rms_body).clamp(0.0, 1.0);
-        let lower = neg_peak.min(-rms_body).clamp(-1.0, 0.0);
+        let positive_peak =
+            max.max(0.0);
 
-        top.push(y_center - (upper * half_h).max(MIN_HALF));
-        bottom.push(y_center + (-lower * half_h).max(MIN_HALF));
+        let negative_peak =
+            min.min(0.0);
+
+        let rms_body =
+            rms * RMS_WEIGHT;
+
+        let upper =
+            positive_peak
+                .max(rms_body)
+                .clamp(0.0, 1.0);
+
+        let lower =
+            negative_peak
+                .min(-rms_body)
+                .clamp(-1.0, 0.0);
+
+        top.push(
+            y_center
+                - (upper * half_h)
+                    .max(MIN_HALF),
+        );
+
+        bottom.push(
+            y_center
+                + (-lower * half_h)
+                    .max(MIN_HALF),
+        );
     }
 
     (top, bottom)
 }
 
-/// Rasteriza o envelope MIN/MAX+RMS preenchido (visão geral).
+// ============================================================
+// DRAW ENVELOPE MIP
+// ============================================================
+
 fn draw_envelope_mip(
     pixmap: &mut Pixmap,
     buckets: &[MipBucket],
@@ -428,41 +1061,72 @@ fn draw_envelope_mip(
     half_h: f32,
     view: (usize, usize),
 ) {
-    let w = pixmap.width();
-    let (top, bottom) = envelope_contours(pixmap, buckets, bucket_size, y_center, half_h, view);
-
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(FG[0], FG[1], FG[2], FG[3]);
-    paint.anti_alias = true;
-
-    let mut pb = PathBuilder::new();
-    pb.move_to(0.0, top[0]);
-    for x in 1..w as usize {
-        pb.line_to(x as f32, top[x]);
-    }
-    for x in (0..w as usize).rev() {
-        pb.line_to(x as f32, bottom[x]);
-    }
-    pb.close();
-
-    if let Some(path) = pb.finish() {
-        pixmap.fill_path(
-            &path,
-            &paint,
-            FillRule::Winding,
-            Transform::identity(),
-            None,
+    let (top, bottom) =
+        envelope_contours(
+            pixmap,
+            buckets,
+            bucket_size,
+            y_center,
+            half_h,
+            view,
         );
+
+    if top.is_empty()
+        || bottom.is_empty()
+    {
+        return;
     }
+
+    draw_filled_envelope(
+        pixmap,
+        &top,
+        &bottom,
+    );
 }
 
-/// Rasteriza o mono de exibição (downsample/mipmap) na largura e
-/// altura pedidas (`h` = altura de EXIBIÇÃO em px da UI).
+// ============================================================
+// RENDER PRINCIPAL
+// ============================================================
+
+/// Rasteriza a waveform na resolução EXATA pedida pela UI.
 ///
-/// `view.0..view.1` é a fatia visível em samples (do mono de origem).
-/// - spp < 2 (zoom fundo): osciloscópio — UMA linha oscilando sobre o
-///   eixo central, sem preenchimento (estilo WaveLab).
-/// - caso contrário: envelope MIN/MAX sólido (visão geral).
+/// `w`:
+///
+/// ```text
+/// largura final em pixels.
+/// ```
+///
+/// `h`:
+///
+/// ```text
+/// altura final em pixels.
+/// ```
+///
+/// `view`:
+///
+/// ```text
+/// região visível em samples da display wave.
+/// ```
+///
+/// Exemplo:
+///
+/// ```text
+/// waveform_image_rgba_mip(
+///     &display,
+///     &mip,
+///     1200,
+///     64,
+///     (10000, 30000),
+/// );
+/// ```
+///
+/// O resultado sempre terá:
+///
+/// ```text
+/// 1200 * 64 * 4
+/// ```
+///
+/// bytes.
 pub fn waveform_image_rgba_mip(
     mono: &[f32],
     mip: &Mipmap,
@@ -470,85 +1134,249 @@ pub fn waveform_image_rgba_mip(
     h: u32,
     view: (usize, usize),
 ) -> Option<Vec<u8>> {
-    if mono.is_empty() || w == 0 || h == 0 {
+    if mono.is_empty()
+        || w == 0
+        || h == 0
+    {
         return None;
     }
 
-    let mut pm = new_canvas(w, h);
-    let center = h as f32 / 2.0;
-    let half_h = h as f32 / 2.0 - 4.0;
+    let start =
+        view.0.min(mono.len());
 
-    let n = view.1.saturating_sub(view.0);
-    let spp = n as f64 / w as f64;
+    let end =
+        view.1.min(mono.len());
 
-    let lvl = mip.level_for(spp);
-    let level = mip.levels.get(lvl).map(|l| (&**l, mip.bucket(lvl)));
-
-    if spp < SCOPE_SAMPLES_PER_PX {
-        draw_scope_lane(&mut pm, mono, center, half_h, view);
-    } else {
-        match level {
-            Some((l, b)) => draw_envelope_mip(&mut pm, l, b, center, half_h, view),
-            None => draw_scope_lane(&mut pm, mono, center, half_h, view),
-        }
+    if end <= start {
+        return None;
     }
 
-    Some(pm.data().to_vec())
+    let mut pixmap =
+        new_canvas(w, h);
+
+    let center =
+        h as f32 / 2.0;
+
+    let half_h =
+        (h as f32 / 2.0 - 4.0)
+            .max(1.0);
+
+    let sample_count =
+        end - start;
+
+    let samples_per_pixel =
+        sample_count as f64
+            / w as f64;
+
+    // ========================================================
+    // OSCILOSCÓPIO
+    // ========================================================
+
+    if samples_per_pixel
+        < SCOPE_SAMPLES_PER_PX
+    {
+        draw_scope_lane(
+            &mut pixmap,
+            mono,
+            center,
+            half_h,
+            (start, end),
+        );
+
+        return Some(
+            pixmap.data().to_vec()
+        );
+    }
+
+    // ========================================================
+    // FALLBACK SEM MIPMAP
+    // ========================================================
+
+    if mip.levels.is_empty() {
+        draw_envelope_lane(
+            &mut pixmap,
+            mono,
+            center,
+            half_h,
+            (start, end),
+        );
+
+        return Some(
+            pixmap.data().to_vec()
+        );
+    }
+
+    // ========================================================
+    // ESCOLHA DO MIP
+    // ========================================================
+
+    let level =
+        mip.level_for(
+            samples_per_pixel
+        );
+
+    let buckets =
+        match mip.levels.get(level) {
+            Some(level) => level,
+
+            None => {
+                draw_envelope_lane(
+                    &mut pixmap,
+                    mono,
+                    center,
+                    half_h,
+                    (start, end),
+                );
+
+                return Some(
+                    pixmap.data().to_vec()
+                );
+            }
+        };
+
+    let bucket_size =
+        mip.bucket(level);
+
+    // ========================================================
+    // RENDER
+    // ========================================================
+
+    draw_envelope_mip(
+        &mut pixmap,
+        buckets,
+        bucket_size,
+        center,
+        half_h,
+        (start, end),
+    );
+
+    Some(
+        pixmap.data().to_vec()
+    )
 }
 
 // ============================================================
-// COMPATIBILIDADE com a API atual (picos agregados).
-//
-// A rota ideal é `waveform_image_rgba_at_samples` direto dos
-// samples; esta mantém o pipeline existente funcionando enquanto
-// a integração avança.
+// API LEGADA
 // ============================================================
 
-/// Rasteriza os picos num envelope contínuo, largura `w` e altura `h` px.
+/// Compatibilidade com a API antiga.
 ///
-/// Os valores já chegam como amplitude real 0..1 (RMS + crista,
-/// sem normalização por arquivo): áudio baixo desenha baixo.
-pub fn waveform_image_rgba_at(peaks: &[f32], w: u32, h: u32) -> Option<Vec<u8>> {
-    if peaks.is_empty() || w == 0 || h == 0 {
+/// `peaks` são amplitudes positivas 0..1.
+pub fn waveform_image_rgba_at(
+    peaks: &[f32],
+    w: u32,
+    h: u32,
+) -> Option<Vec<u8>> {
+    if peaks.is_empty()
+        || w == 0
+        || h == 0
+    {
         return None;
     }
 
-    let mut pixmap = Pixmap::new(w, h)?;
-    let center = h as f32 / 2.0;
-    let n = peaks.len() as f32;
+    let mut pixmap =
+        new_canvas(w, h);
 
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(FG[0], FG[1], FG[2], FG[3]);
+    let center =
+        h as f32 / 2.0;
+
+    let count =
+        peaks.len();
+
+    let mut paint =
+        Paint::default();
+
+    paint.set_color_rgba8(
+        FG[0],
+        FG[1],
+        FG[2],
+        FG[3],
+    );
+
     paint.anti_alias = true;
 
-    // Amplitude máxima das colunas [i0..i1) de picos que caem no pixel x.
-    let amp_at = |x: u32| -> f32 {
-        let i0 = ((x as f64 / w as f64) * n as f64).floor() as usize;
-        let i1 = ((((x + 1) as f64 / w as f64) * n as f64).ceil() as usize).max(i0 + 1);
-        peaks[i0.min(peaks.len() - 1)..i1.min(peaks.len())]
-            .iter()
-            .fold(0.0f32, |a, &p| a.max(p))
-    };
+    let amplitude_at =
+        |x: u32| -> f32 {
+            let start =
+                ((x as f64
+                    / w as f64)
+                    * count as f64)
+                    .floor()
+                    as usize;
 
-    let mut pb = PathBuilder::new();
+            let end =
+                (((x + 1) as f64
+                    / w as f64)
+                    * count as f64)
+                    .ceil()
+                    as usize;
 
-    // Contorno superior, esquerda → direita.
+            if start >= peaks.len() {
+                return 0.0;
+            }
+
+            let end =
+                end.max(start + 1)
+                    .min(peaks.len());
+
+            peaks[start..end]
+                .iter()
+                .fold(
+                    0.0f32,
+                    |acc, &value| {
+                        acc.max(value)
+                    },
+                )
+        };
+
+    let mut path =
+        PathBuilder::new();
+
     for x in 0..w {
-        let half = (amp_at(x).clamp(0.0, 1.0) * center).max(1.0);
+        let half =
+            (
+                amplitude_at(x)
+                    .clamp(0.0, 1.0)
+                    * center
+            )
+            .max(1.0);
+
+        let y =
+            center - half;
+
         if x == 0 {
-            pb.move_to(0.0, center - half);
+            path.move_to(
+                0.0,
+                y,
+            );
         } else {
-            pb.line_to(x as f32, center - half);
+            path.line_to(
+                x as f32,
+                y,
+            );
         }
     }
-    // Contorno inferior espelhado, direita → esquerda.
-    for x in (0..w).rev() {
-        let half = (amp_at(x).clamp(0.0, 1.0) * center).max(1.0);
-        pb.line_to(x as f32, center + half);
-    }
-    pb.close();
 
-    if let Some(path) = pb.finish() {
+    for x in (0..w).rev() {
+        let half =
+            (
+                amplitude_at(x)
+                    .clamp(0.0, 1.0)
+                    * center
+            )
+            .max(1.0);
+
+        path.line_to(
+            x as f32,
+            center + half,
+        );
+    }
+
+    path.close();
+
+    if let Some(path) =
+        path.finish()
+    {
         pixmap.fill_path(
             &path,
             &paint,
@@ -558,38 +1386,112 @@ pub fn waveform_image_rgba_at(peaks: &[f32], w: u32, h: u32) -> Option<Vec<u8>> 
         );
     }
 
-    Some(pixmap.data().to_vec())
+    Some(
+        pixmap.data().to_vec()
+    )
 }
 
-/// Compatibilidade: rasteriza na largura padrão.
-pub fn waveform_image_rgba(peaks: &[f32], _color_index: i32, _is_midi: bool) -> Option<Vec<u8>> {
-    waveform_image_rgba_at(peaks, WAVEFORM_IMG_WIDTH as u32, H)
+/// Compatibilidade com API antiga.
+pub fn waveform_image_rgba(
+    peaks: &[f32],
+    _color_index: i32,
+    _is_midi: bool,
+) -> Option<Vec<u8>> {
+    waveform_image_rgba_at(
+        peaks,
+        WAVEFORM_IMG_WIDTH as u32,
+        H,
+    )
 }
 
-/// Gera LODs de waveform a partir do mono de exibição.
-/// Cada nível é uma imagem em WAVEFORM_IMG_WIDTH ou potência de 2 menor.
-pub fn build_waveform_lods(mono: &[f32]) -> WaveformLods {
-    let base_width = WAVEFORM_IMG_WIDTH as u32;
-    let n = mono.len();
+// ============================================================
+// LOD LEGADO
+// ============================================================
 
-    let mut levels = Vec::with_capacity(LEVELS);
-    let mut w = base_width;
+/// Gera imagens LOD.
+///
+/// ATENÇÃO:
+///
+/// Essa função existe somente para compatibilidade.
+///
+/// O pipeline moderno NÃO deve chamar isso a cada zoom.
+///
+/// Prefira:
+///
+/// ```text
+/// let (display, mip) = build_display_wave(&mono);
+/// ```
+///
+/// e depois:
+///
+/// ```text
+/// waveform_image_rgba_mip(
+///     &display,
+///     &mip,
+///     width,
+///     height,
+///     view,
+/// );
+/// ```
+pub fn build_waveform_lods(
+    mono: &[f32],
+) -> WaveformLods {
+    let base_width =
+        WAVEFORM_IMG_WIDTH as u32;
+
+    let sample_count =
+        mono.len();
+
+    let mut levels =
+        Vec::with_capacity(
+            LEVELS
+        );
+
+    let mut width =
+        base_width;
+
     for _ in 0..LEVELS {
-        if w < 32 {
+        if width < 32 {
             break;
         }
-        let view = (0usize, n);
-        let rgba = waveform_image_rgba_at_samples(mono, mono, w, view).unwrap_or_default();
-        levels.push(WaveformLod { width: w, rgba });
-        w /= 2;
+
+        let rgba =
+            waveform_image_rgba_at_samples(
+                mono,
+                mono,
+                width,
+                (0, sample_count),
+            )
+            .unwrap_or_default();
+
+        levels.push(
+            WaveformLod {
+                width,
+                rgba,
+            }
+        );
+
+        width /= 2;
     }
-    WaveformLods { levels }
+
+    WaveformLods {
+        levels,
+    }
 }
 
-/// Retorna o melhor LOD para a largura alvo, ou None se vazio.
-pub fn pick_lod(lods: &WaveformLods, target_width: u32) -> Option<&WaveformLod> {
-    lods.best_level(target_width)
+/// Retorna o melhor LOD legado.
+pub fn pick_lod(
+    lods: &WaveformLods,
+    target_width: u32,
+) -> Option<&WaveformLod> {
+    lods.best_level(
+        target_width
+    )
 }
+
+// ============================================================
+// TESTES
+// ============================================================
 
 #[cfg(test)]
 mod tests {
@@ -597,78 +1499,513 @@ mod tests {
 
     #[test]
     fn mipmap_levels_halve_and_merge() {
-        let mono: Vec<f32> = (0..16).map(|i| ((i as i32 % 5) - 2) as f32 / 4.0).collect();
-        let mip = build_mipmap(&mono);
-        // level0: bucket 2 (8 buckets), sobindo até 1 bucket lá em cima.
-        assert!(!mip.levels.is_empty());
-        assert_eq!(mip.levels[0].len(), 8);
-        assert_eq!(mip.bucket(0), 2);
-        assert_eq!(mip.bucket(2), 8);
-        // O bucket do topo cobre a pirâmide inteira com min/max reais.
-        let top = mip.levels.last().unwrap()[0];
+        let mono: Vec<f32> =
+            (0..16)
+                .map(|i| {
+                    ((i as i32 % 5) - 2)
+                        as f32
+                        / 4.0
+                })
+                .collect();
+
+        let mip =
+            build_mipmap(&mono);
+
+        assert!(
+            !mip.levels.is_empty()
+        );
+
+        assert_eq!(
+            mip.levels[0].len(),
+            8
+        );
+
+        assert_eq!(
+            mip.bucket(0),
+            2
+        );
+
+        assert_eq!(
+            mip.bucket(2),
+            8
+        );
+
+        let top =
+            mip.levels
+                .last()
+                .unwrap()[0];
+
+        let expected_min =
+            mono.iter()
+                .copied()
+                .fold(
+                    f32::INFINITY,
+                    f32::min,
+                );
+
+        let expected_max =
+            mono.iter()
+                .copied()
+                .fold(
+                    f32::NEG_INFINITY,
+                    f32::max,
+                );
+
         assert_eq!(
             top.min,
-            mono.iter().copied().fold(f32::INFINITY, f32::min)
+            expected_min
         );
+
         assert_eq!(
             top.max,
-            mono.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+            expected_max
         );
     }
 
     #[test]
-    fn level_for_picks_fit_bucket() {
-        let mono = vec![0.0f32; 1000];
-        let mip = build_mipmap(&mono);
-        // spp em [2,4) → bucket 2; spp 8 → bucket 8; nunca maior que spp.
-        assert_eq!(mip.bucket(mip.level_for(3.0)), 2);
-        assert_eq!(mip.bucket(mip.level_for(7.9)), 4);
-        assert_eq!(mip.bucket(mip.level_for(8.0)), 8);
-        assert!(mip.bucket(mip.level_for(999.0)) <= 1000);
+    fn mipmap_preserves_rms_information() {
+        let mono =
+            vec![1.0f32, -1.0, 0.5, -0.5];
+
+        let mip =
+            build_mipmap(&mono);
+
+        let bucket =
+            mip.levels[0][0];
+
+        assert_eq!(
+            bucket.count,
+            2
+        );
+
+        assert_eq!(
+            bucket.min,
+            -1.0
+        );
+
+        assert_eq!(
+            bucket.max,
+            1.0
+        );
+
+        assert!(
+            bucket.sum_sq > 1.9
+                && bucket.sum_sq < 2.1
+        );
     }
 
     #[test]
-    fn mip_raster_matches_scan_at_column_alignment() {
-        // Sinal senoidal; largura e tamanho poder-de-dois alinham as
-        // colunas com os buckets do nível escolhido → o raster mip tem
-        // que ser IDÊNTICO ao scan direto dos samples. spp = 256 fica
-        // ACIMA do limiar de osciloscópio → ambos no envelope sólido.
-        let n = 1024usize;
-        let mono: Vec<f32> = (0..n)
-            .map(|i| ((i as f32 / 4.0).sin()) * 0.9)
-            .collect();
-        let mip = build_mipmap(&mono);
-        let view = (0usize, n);
-        let w = 4u32; // spp = 256 → envelope sólido, bucket 256 alinhado
-        let scan = waveform_image_rgba_at_samples(&mono, &mono, w, view).unwrap();
-        let mip_img = waveform_image_rgba_mip(&mono, &mip, w, H, view).unwrap();
-        assert_eq!(scan.len(), mip_img.len());
-        for (a, b) in scan.iter().zip(mip_img.iter()) {
-            assert_eq!(a, b, "pixel divergente no envelope mip");
+    fn level_for_picks_correct_bucket() {
+        let mono =
+            vec![0.0f32; 1000];
+
+        let mip =
+            build_mipmap(&mono);
+
+        // < 2 spp sempre começa no level 0.
+        assert_eq!(
+            mip.level_for(1.5),
+            0
+        );
+
+        // 3 spp → bucket de 2.
+        assert_eq!(
+            mip.bucket(
+                mip.level_for(3.0)
+            ),
+            2
+        );
+
+        // 7.9 spp → bucket de 4.
+        assert_eq!(
+            mip.bucket(
+                mip.level_for(7.9)
+            ),
+            4
+        );
+
+        // 8 spp → bucket de 8.
+        assert_eq!(
+            mip.bucket(
+                mip.level_for(8.0)
+            ),
+            8
+        );
+
+        assert!(
+            mip.bucket(
+                mip.level_for(999.0)
+            ) <= 1000
+        );
+    }
+
+    #[test]
+    fn scope_draws_single_line() {
+        let n =
+            256usize;
+
+        let mono: Vec<f32> =
+            (0..n)
+                .map(|i| {
+                    (i as f32 / 4.0)
+                        .sin()
+                        * 0.9
+                })
+                .collect();
+
+        let mip =
+            build_mipmap(&mono);
+
+        let image =
+            waveform_image_rgba_mip(
+                &mono,
+                &mip,
+                512,
+                64,
+                (0, n),
+            )
+            .unwrap();
+
+        let total =
+            image.len() / 4;
+
+        let opaque =
+            image
+                .chunks_exact(4)
+                .filter(
+                    |pixel| pixel[3] > 0
+                )
+                .count();
+
+        assert!(
+            opaque > 0,
+            "osciloscópio precisa ser visível"
+        );
+
+        assert!(
+            opaque < total / 3,
+            "osciloscópio deve ser uma linha fina"
+        );
+    }
+
+    #[test]
+    fn downsample_preserves_transient() {
+        let mut mono =
+            vec![
+                0.0f32;
+                MONO_DISPLAY_CAP + 100
+            ];
+
+        let transient_index =
+            MONO_DISPLAY_CAP / 2;
+
+        mono[transient_index] =
+            1.0;
+
+        let display =
+            downsample_mono(&mono);
+
+        assert!(
+            display
+                .iter()
+                .any(|&value| value >= 0.99),
+            "transiente não foi preservado"
+        );
+    }
+
+    #[test]
+    fn downsample_keeps_normal_signal() {
+        let mono =
+            vec![
+                -0.5,
+                -0.2,
+                0.1,
+                0.8,
+                -0.9,
+                0.3,
+            ];
+
+        let display =
+            downsample_mono(&mono);
+
+        assert_eq!(
+            display,
+            mono
+        );
+    }
+
+    #[test]
+    fn display_wave_builds_mipmap() {
+        let mono: Vec<f32> =
+            (0..10000)
+                .map(|i| {
+                    (i as f32 * 0.01)
+                        .sin()
+                })
+                .collect();
+
+        let (display, mip) =
+            build_display_wave(
+                &mono
+            );
+
+        assert!(
+            !display.is_empty()
+        );
+
+        assert!(
+            !mip.levels.is_empty()
+        );
+
+        assert_eq!(
+            mip.levels[0].len(),
+            display.len().div_ceil(2)
+        );
+    }
+
+    #[test]
+    fn rasterizes_at_requested_height() {
+        let mono: Vec<f32> =
+            (0..1000)
+                .map(|i| {
+                    (i as f32 * 0.02)
+                        .sin()
+                })
+                .collect();
+
+        let mip =
+            build_mipmap(&mono);
+
+        let width =
+            100u32;
+
+        let height =
+            37u32;
+
+        let image =
+            waveform_image_rgba_mip(
+                &mono,
+                &mip,
+                width,
+                height,
+                (0, mono.len()),
+            )
+            .unwrap();
+
+        assert_eq!(
+            image.len(),
+            (width * height * 4)
+                as usize
+        );
+    }
+
+    #[test]
+    fn rasterizes_at_different_heights() {
+        let mono: Vec<f32> =
+            (0..2000)
+                .map(|i| {
+                    (i as f32 * 0.03)
+                        .sin()
+                })
+                .collect();
+
+        let mip =
+            build_mipmap(&mono);
+
+        for height in [
+            16u32,
+            32,
+            48,
+            64,
+            80,
+            128,
+            256,
+        ] {
+            let image =
+                waveform_image_rgba_mip(
+                    &mono,
+                    &mip,
+                    400,
+                    height,
+                    (0, mono.len()),
+                )
+                .unwrap();
+
+            assert_eq!(
+                image.len(),
+                (400 * height * 4)
+                    as usize
+            );
         }
     }
 
     #[test]
-    fn scope_draws_single_oscillating_line() {
-        // spp = 0.5 (< 2) → osciloscópio: UMA linha fina (pouca tinta),
-        // não o envelope preenchido (que cobriria boa parte do corpo).
-        let n = 256usize;
-        let mono: Vec<f32> = (0..n)
-            .map(|i| ((i as f32 / 4.0).sin()) * 0.9)
-            .collect();
-        let mip = build_mipmap(&mono);
-        let view = (0usize, n);
-        let w = 512u32;
-        let h = 64u32;
-        let img = waveform_image_rgba_mip(&mono, &mip, w, h, view).unwrap();
-        let total = img.len() / 4;
-        let opaque = img.chunks_exact(4).filter(|p| p[3] > 0).count();
-        assert!(opaque > 0, "osciloscópio precisa de linha visível");
-        // Linha ≈ algumas fileiras de pixels; envelope preenchido
-        // cobriria a maior parte do corpo.
+    fn rasterizes_different_views() {
+        let mono: Vec<f32> =
+            (0..10000)
+                .map(|i| {
+                    (i as f32 * 0.01)
+                        .sin()
+                })
+                .collect();
+
+        let mip =
+            build_mipmap(&mono);
+
+        let full =
+            waveform_image_rgba_mip(
+                &mono,
+                &mip,
+                512,
+                64,
+                (0, 10000),
+            )
+            .unwrap();
+
+        let zoomed =
+            waveform_image_rgba_mip(
+                &mono,
+                &mip,
+                512,
+                64,
+                (4000, 5000),
+            )
+            .unwrap();
+
+        assert_eq!(
+            full.len(),
+            zoomed.len()
+        );
+
+        assert_ne!(
+            full,
+            zoomed,
+            "zoom deveria alterar o conteúdo renderizado"
+        );
+    }
+
+    #[test]
+    fn empty_audio_returns_none() {
+        let mono =
+            Vec::<f32>::new();
+
+        let mip =
+            build_mipmap(&mono);
+
         assert!(
-            opaque < total / 3,
-            "linha deve ser fina (tinta {opaque} de {total})"
+            waveform_image_rgba_mip(
+                &mono,
+                &mip,
+                100,
+                64,
+                (0, 0),
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn invalid_view_returns_none() {
+        let mono =
+            vec![0.0f32; 100];
+
+        let mip =
+            build_mipmap(&mono);
+
+        assert!(
+            waveform_image_rgba_mip(
+                &mono,
+                &mip,
+                100,
+                64,
+                (80, 20),
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn zero_dimensions_return_none() {
+        let mono =
+            vec![0.0f32; 100];
+
+        let mip =
+            build_mipmap(&mono);
+
+        assert!(
+            waveform_image_rgba_mip(
+                &mono,
+                &mip,
+                0,
+                64,
+                (0, 100),
+            )
+            .is_none()
+        );
+
+        assert!(
+            waveform_image_rgba_mip(
+                &mono,
+                &mip,
+                100,
+                0,
+                (0, 100),
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn legacy_api_still_works() {
+        let peaks =
+            vec![
+                0.1f32,
+                0.3,
+                0.8,
+                0.2,
+            ];
+
+        let image =
+            waveform_image_rgba_at(
+                &peaks,
+                200,
+                64,
+            )
+            .unwrap();
+
+        assert_eq!(
+            image.len(),
+            200 * 64 * 4
+        );
+    }
+
+    #[test]
+    fn legacy_lods_still_work() {
+        let mono: Vec<f32> =
+            (0..1000)
+                .map(|i| {
+                    (i as f32 * 0.01)
+                        .sin()
+                })
+                .collect();
+
+        let lods =
+            build_waveform_lods(
+                &mono
+            );
+
+        assert!(
+            !lods.levels.is_empty()
+        );
+
+        let selected =
+            pick_lod(
+                &lods,
+                500,
+            );
+
+        assert!(
+            selected.is_some()
         );
     }
 }

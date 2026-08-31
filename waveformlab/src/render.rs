@@ -1,4 +1,4 @@
-//! Renderizador do laboratório — baseado no design do AGENST.md.
+//! Renderizador do laboratório
 //!
 //! Duas rotas, ambas rasterizando com tiny-skia:
 //!
