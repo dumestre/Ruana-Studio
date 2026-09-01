@@ -140,6 +140,13 @@ export component Workspace inherits Rectangle {
         0
     ];
 
+    in-out property <[float]> track-meter-left-levels: [];
+    in-out property <[float]> track-meter-right-levels: [];
+    in-out property <[float]> track-meter-left-peaks: [];
+    in-out property <[float]> track-meter-right-peaks: [];
+    in-out property <[bool]> track-meter-left-clipped: [];
+    in-out property <[bool]> track-meter-right-clipped: [];
+
     in-out property <[ClipData]> clips: [
         {
             id: 0,
@@ -1060,37 +1067,14 @@ export component Workspace inherits Rectangle {
                         meter-timeline := MeterTimeline {
 
                             ruler-height:
-                                timeline.ruler-height;
+                                30px;
 
-                            row-height:
-                                timeline.row-height;
+                            
 
-                            track-count:
-                                root.track-names.length;
-
+                           
                             scroll-y:
                                 timeline.scroll-y;
 
-                            max-scroll-y:
-                                timeline.max-scroll-y;
-
-                            left-levels:
-                                root.track-meter-left-levels;
-
-                            right-levels:
-                                root.track-meter-right-levels;
-
-                            left-peaks:
-                                root.track-meter-left-peaks;
-
-                            right-peaks:
-                                root.track-meter-right-peaks;
-
-                            left-clipped:
-                                root.track-meter-left-clipped;
-
-                            right-clipped:
-                                root.track-meter-right-clipped;
                         }
 
 

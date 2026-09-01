@@ -1,60 +1,35 @@
 import { Theme } from "../theme.slint";
-import "components/meter_reuse.slint";
+import { TimelineHeader } from "header.slint";
+import { StereoMeter } from "../components/meter_reuse.slint";
+
 
 export component MeterTimeline inherits Rectangle {
-    in property <length> ruler-height: 24px;
-    in property <length> row-height: 32px;
-    in property <int> track-count: 0;
 
-    in property <float> scroll-y: 0px;
-    in property <float> max-scroll-y: 0px;
+    // =====================================================
+    // DADOS
+    // =====================================================
+    
 
-    in property <[float]> left-levels: [];
-    in property <[float]> right-levels: [];
-    in property <[float]> left-peaks: [];
-    in property <[float]> right-peaks: [];
-    in property <[bool]> left-clipped: [];
-    in property <[bool]> right-clipped: [];
+    in property <length> ruler-height: 30px;
 
-    background: Theme.surface-base;
-    border-width: 1px;
-    border-color: Theme.border;
+    in property <float> zoom-y: 1.0;
 
-    height: root.track-count * root.row-height;
-    width: 52px;
+    in property <length> scroll-y: 0px;
 
-    VerticalLayout {
-        spacing: 0px;
-        y: -root.scroll-y;
+    // Zoom vertical (Alt+roda) vindo das rows do header.
+    callback zoom-y-scrolled(float);
 
-        for track-id in [
-            track-id * root.row-height
-            for track-id in root.track-count
-        ]: Rectangle {
-            height: root.row-height;
-            width: parent.width;
 
-            border-width: 1px;
-            border-color: Theme.border;
-            background: track-id % 2 == 0 ? Theme.surface-base : Theme.surface-raised;
+    // =====================================================
+    // FUNDO
+    // =====================================================
 
-            StereoMeter {
-                x: 0px;
-                y: 0px;
-                width: parent.width;
-                height: parent.height;
+    background:
+        Theme.surface-high;
 
-                meter-width: 7px;
-                channel-gap: 2px;
-                label-width: 22px;
+    border-radius:
+        6px;
 
-                left-level: root.left-levels[track-id] else 0.0;
-                right-level: root.right-levels[track-id] else 0.0;
-                left-peak: root.left-peaks[track-id] else 0.0;
-                right-peak: root.right-peaks[track-id] else 0.0;
-                left-clipped: root.left-clipped[track-id] else false;
-                right-clipped: root.right-clipped[track-id] else false;
-            }
-        }
-    }
+        StereoMeter { }
+    
 }
