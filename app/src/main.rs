@@ -36,6 +36,7 @@ mod playback;
 mod timeline;
 mod theme;
 mod waveform;
+mod waveform_gpu;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -49,6 +50,7 @@ use crate::cursors::{
 use crate::mixer::MixerModels;
 use crate::models::{bars_for_end_beat, bind_document_events, initial_bind};
 use crate::waveform::WaveformCache;
+use crate::waveform_gpu::renderer::WaveformGpuRenderer;
 use daw_core::mixer::MixerParam;
 use daw_core::project::Project;
 use daw_core::transport::Transport;
@@ -174,7 +176,81 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Cache de waveforms (LRU): clip_id → CachedWave (LODs min/max).
     const WAVEFORM_CACHE_CAP: usize = 256;
-    let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(crate::waveform::WaveformCache::new(WAVEFORM_CACHE_CAP)));
+    let waveforms_rc: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(crate::waveform::WaveformCache::new(WAVEFORM_CACHE_CAP)));
+    // Também guardamos como Arc<Mutex> para o GPU renderer
+    let waveforms: Arc<Mutex<WaveformCache>> = Arc::new(Mutex::new(crate::waveform::WaveformCache::new(WAVEFORM_CACHE_CAP)));
+    
+    // GPU Waveform Renderer (lazy init na main thread via timer)
+    let gpu_renderer: Arc<Mutex<Option<WaveformGpuRenderer>>> = Arc::new(Mutex::new(None));
+    let gpu_renderer_init = gpu_renderer.clone();
+    let waveforms_for_gpu = waveforms.clone();
+    let ui_for_gpu = ui.as_weak();
+    
+    // Inicializa GPU renderer quando janela Slint estiver pronta (via timer na main thread)
+    let init_gpu_renderer = move || {
+        let Some(ui) = ui_for_gpu.upgrade() else { return; };
+        let window = ui.window();
+        let handle = window.window_handle();
+        if let Ok(raw_handle) = handle.window_handle() {
+            // Extrai dados na main thread
+            let raw_handle = raw_handle.as_raw();
+            let size = window.size();
+            let scale = window.scale_factor() as f64;
+            
+            // Cria contexto GL compartilhado
+            let waveforms_for_gpu = waveforms_for_gpu.clone();
+            let gpu_renderer_init = gpu_renderer_init.clone();
+            
+            match crate::waveform_gpu::overlay::create_shared_gl_context(raw_handle) {
+                Ok((gl, hwnd)) => {
+                    match WaveformGpuRenderer::new(
+                        gl,
+                        hwnd,
+                        (size.width, size.height),
+                        waveforms_for_gpu,
+                    ) {
+                        Ok(renderer) => {
+                            *gpu_renderer_init.lock().unwrap() = Some(renderer);
+                            eprintln!("[waveform_gpu] Renderer initialized successfully");
+                        }
+                        Err(e) => {
+                            eprintln!("[waveform_gpu] Failed to create renderer: {e}");
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[waveform_gpu] Failed to create shared GL context: {e}");
+                }
+            }
+        }
+    };
+    
+    // Tenta inicializar após breve delay (main thread)
+    {
+        let init_gpu = init_gpu_renderer.clone();
+        slint::Timer::single_shot(std::time::Duration::from_millis(500), move || {
+            init_gpu();
+        });
+    }
+    
+    // Timer de render GPU (60 FPS = ~16ms)
+    {
+        let gpu_renderer_render = gpu_renderer.clone();
+        fn schedule_render(gpu_renderer: Arc<Mutex<Option<WaveformGpuRenderer>>>) {
+            if let Ok(mut renderer_guard) = gpu_renderer.lock() {
+                if let Some(renderer) = renderer_guard.as_mut() {
+                    renderer.render();
+                }
+            }
+            slint::Timer::single_shot(std::time::Duration::from_millis(16), move || {
+                schedule_render(gpu_renderer);
+            });
+        }
+        schedule_render(gpu_renderer_render);
+    }
+    
+    // Para o resto do código, usamos o waveforms_rc (Rc<RefCell>)
+    let waveforms = waveforms_rc;
 
     // Cache de samples em RAM (path → decodificado + waveform):
     // alimenta colagem instantânea (Ctrl+C / Shift+clique) e o
@@ -342,7 +418,7 @@ fn main() -> Result<(), slint::PlatformError> {
     interaction::install(&ui);
 
     // Waveform: re-render na resolução exata quando o zoom muda.
-    waveform::wire_resolution_requests(&ui, waveforms.clone(), clips_model.clone());
+    waveform::wire_resolution_requests(&ui, waveforms.clone(), clips_model.clone(), Some(gpu_renderer.clone()));
 
     // Explorador de arquivos: navegação, histórico e filtro.
     explorer::wire_explorer(&ui);
@@ -565,15 +641,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 if let Ok(handle) = ui.window().window_handle().window_handle() {
                     if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
                         unsafe {
-                            use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-                            use windows::Win32::UI::WindowsAndMessaging::{
+                            use windows_sys::Win32::Foundation::{HWND, LPARAM, WPARAM};
+                            use windows_sys::Win32::UI::WindowsAndMessaging::{
                                 HTCAPTION, SendMessageW, WM_NCLBUTTONDOWN,
                             };
                             SendMessageW(
                                 HWND(h.hwnd.get() as *mut _),
                                 WM_NCLBUTTONDOWN,
-                                Some(WPARAM(HTCAPTION as usize)),
-                                Some(LPARAM(0)),
+                                WPARAM(HTCAPTION as usize),
+                                LPARAM(0),
                             );
                         }
                     }

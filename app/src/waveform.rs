@@ -15,6 +15,7 @@
 // O cache é um LRU simples (clip_id → CachedWave) — o decode acontece
 // uma única vez na worker thread e o LOD inteiro fica em RAM.
 use crate::MainWindow;
+use crate::waveform_gpu::renderer::{WaveformGpuRenderer, ClipBounds};
 
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -315,6 +316,7 @@ pub fn wire_resolution_requests(
     ui: &MainWindow,
     waveforms: Rc<RefCell<WaveformCache>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
+    gpu_renderer: Option<std::sync::Arc<std::sync::Mutex<Option<WaveformGpuRenderer>>>>,
 ) {
     // Pedidos pendentes por clip + flag de coalescing (timer ativo).
     let pending: Rc<RefCell<HashMap<u64, PendingWave>>> =
@@ -345,28 +347,50 @@ pub fn wire_resolution_requests(
 
             slint::Timer::single_shot(
                 std::time::Duration::from_millis(40),
-                move || {
-                    *scheduled_shot.borrow_mut() = false;
-                    // Consome TODOS os clips pedidos (não só o último):
-                    // ao parar o scroll, cada clip recebe sua waveform.
-                    let batch = std::mem::take(&mut *pending_shot.borrow_mut());
+                {
+                    let gpu_renderer_clone = gpu_renderer.clone();
+                    move || {
+                        *scheduled_shot.borrow_mut() = false;
+                        // Consome TODOS os clips pedidos (não só o último):
+                        // ao parar o scroll, cada clip recebe sua waveform.
+                        let batch = std::mem::take(&mut *pending_shot.borrow_mut());
 
-                    for (req_id, req) in batch {
-                        // Escolhe o nível cujas colunas cobrem a largura
-                        // exata de exibição e publica as barras (gain/fade
-                        // baked). Sem worker: só cópia + aritmética.
-                        let Some(cw) = waves_shot.borrow().get(&req_id).cloned() else {
-                            continue;
-                        };
-                        let Some(idx) = clip_row(&clips_shot, req_id as i32) else {
-                            continue;
-                        };
-                        let level = pick_level(&cw.lods, req.w as usize);
-                        let (mins, maxs) = bake_bars(level, req.w, req.gain, req.fi, req.fo);
-                        if let Some(mut data) = clips_shot.row_data(idx) {
-                            data.waveform_mins = Rc::new(slint::VecModel::from(mins)).into();
-                            data.waveform_maxes = Rc::new(slint::VecModel::from(maxs)).into();
-                            clips_shot.set_row_data(idx, data);
+                        for (req_id, req) in batch {
+                            // Escolhe o nível cujas colunas cobrem a largura
+                            // exata de exibição e publica as barras (gain/fade
+                            // baked). Sem worker: só cópia + aritmética.
+                            let Some(cw) = waves_shot.borrow().get(&req_id).cloned() else {
+                                continue;
+                            };
+                            let Some(idx) = clip_row(&clips_shot, req_id as i32) else {
+                                continue;
+                            };
+                            let level = pick_level(&cw.lods, req.w as usize);
+                            let (mins, maxs) = bake_bars(level, req.w, req.gain, req.fi, req.fo);
+                            if let Some(mut data) = clips_shot.row_data(idx) {
+                                data.waveform_mins = Rc::new(slint::VecModel::from(mins.clone())).into();
+                                data.waveform_maxes = Rc::new(slint::VecModel::from(maxs.clone())).into();
+                                clips_shot.set_row_data(idx, data);
+                            }
+                            
+                            // GPU Renderer update
+                            if let Some(gpu_renderer) = &gpu_renderer_clone {
+                                if let Ok(mut renderer) = gpu_renderer.lock() {
+                                    if let Some(r) = renderer.as_mut() {
+                                        // Precisamos dos bounds do clip para o GPU renderer
+                                        // Por enquanto, usamos valores aproximados baseados no req
+                                        // TODO: obter bounds reais do clip
+                                        let bounds = ClipBounds {
+                                            x: 0.0, // TODO: posição real do clip
+                                            y: 0.0, // TODO: posição real do clip  
+                                            width: req.w as f32,
+                                            height: 100.0, // altura aproximada do corpo do clip
+                                        };
+                                        let color = [0.04, 0.04, 0.04, 1.0]; // #0A0A0A
+                                        r.update_clip(req_id, bounds, color, req.gain, req.fi, req.fo);
+                                    }
+                                }
+                            }
                         }
                     }
                 },

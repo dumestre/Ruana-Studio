@@ -1,12 +1,3 @@
 # Todos
 
-[•] Design novo CachedWave (lods min/max por coluna, chunk=samples/width, sobras no último) + WaveformCache LRU em waveform.rs; build_lods; nivel_por_largura; bake gain+fades; to_clip_data com mins/maxes
-[ ] waveform.rs: reescrever wire_resolution_requests sem raster (só publicar lods do nível certo), reproject_clip, split/merge/trim_por_lods
-[ ] decode_worker.rs: remover Raster/apply_gain_and_fade/imagem; DecodedWave/ImportedWave com lods (app type); import_wave build_lods; schedule_import
-[ ] clip_cache.rs: CachedSample.wave com lods (build_lods); remover peaks/imagem/mono/mip
-[ ] importer.rs: import_audio_file/async/from_entry/untrimmed com lods; beat.rs schedule_decode sem with_image
-[ ] clip_data.slint: trocar waveform-points/image/src-x/w por waveform-mins/waveform-maxes
-[ ] audio_waveform.slint: desenhar barras min→max por coluna (fallback peaks p/ sampler)
-[ ] track_clip.slint: remover imagem, usar waveform-mins/maxes, guards, ClipDragState mins/maxes
-[ ] track_row.slint, clip_drag_state.slint, clip_drag_overlay.slint: wire mins/maxes
-[ ] timeline.rs:294/reproject/wire_resolution call sites; main.rs WaveformCache::new(cap); cargo check + tests
+agora precsiamo planeja femtovg para gpu, vamos mandar em paocts caixa e usa vbo, para valores min e max, e usando VAO, a etiqueta pore xemplos, olhe os 4 priemrio bytes  sao min, e os promixo s 4 sao max. usar insatcend rendering eu ves de zier denhso, 1 desnheo 2, diz assim . dis dei um reatnhulo base, agora se vire e qubre sieal como e 1000 pares e de min e max e que eu te envie e carimbe so esticando altura conforme dados envidaos , nao recrai vbo a caad frame  nao chaamr genbuffer toda vez que a tela rdesenhar. o certo e criar VBO uma vez  quando a daw abre e so chamar  bufferSubData.  nao usar instancerd rendering para calcular 4 canto de cada renatuglo de milahres dele na cpu, o instaced amdna somentes os dados  brtuos min e max e madna a gpu se virar para cirar os retangulos
