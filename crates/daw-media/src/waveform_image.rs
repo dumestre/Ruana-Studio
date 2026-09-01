@@ -1085,6 +1085,72 @@ fn draw_envelope_mip(
 }
 
 // ============================================================
+// SINGLE LINE MIP — linha única oscilante mas estável
+// ============================================================
+
+fn draw_single_line_mip(
+    pixmap: &mut Pixmap,
+    buckets: &[MipBucket],
+    bucket_size: usize,
+    y_center: f32,
+    half_h: f32,
+    view: (usize, usize),
+) {
+    let width = pixmap.width() as usize;
+    if width == 0 || buckets.is_empty() {
+        return;
+    }
+    let bucket_size = bucket_size.max(1);
+    let start = view.0;
+    let end = view.1;
+    if end <= start {
+        return;
+    }
+    let sample_count = end - start;
+
+    let mut paint = Paint::default();
+    paint.set_color_rgba8(FG[0], FG[1], FG[2], FG[3]);
+    paint.anti_alias = true;
+    let mut path = PathBuilder::new();
+
+    for x in 0..width {
+        let rel_start = ((x as f64 / width as f64) * sample_count as f64).floor() as usize;
+        let rel_end = (((x + 1) as f64 / width as f64) * sample_count as f64).ceil() as usize;
+        let rel_start = rel_start.min(sample_count.saturating_sub(1));
+        let rel_end = rel_end.max(rel_start + 1).min(sample_count);
+        let sample_start = start + rel_start;
+        let sample_end = start + rel_end;
+        let bucket_start = sample_start / bucket_size;
+        let bucket_end = sample_end.div_ceil(bucket_size);
+        let bucket_start = bucket_start.min(buckets.len());
+        let bucket_end = bucket_end.min(buckets.len());
+
+        let mut min = 0.0f32;
+        let mut max = 0.0f32;
+        if bucket_end > bucket_start {
+            for bucket in &buckets[bucket_start..bucket_end] {
+                min = min.min(bucket.min);
+                max = max.max(bucket.max);
+            }
+        }
+        // Linha única: pega pico dominante (preserva oscilação e envelope)
+        let sample = if max.abs() > min.abs() { max } else { min };
+        let y = y_center - sample.clamp(-1.0, 1.0) * half_h;
+        if x == 0 {
+            path.move_to(x as f32, y);
+        } else {
+            path.line_to(x as f32, y);
+        }
+    }
+
+    if let Some(path) = path.finish() {
+        let mut stroke = Stroke::default();
+        stroke.width = 1.25;
+        pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+}
+
+// ============================================================
 // RENDER PRINCIPAL
 // ============================================================
 
@@ -1189,66 +1255,44 @@ pub fn waveform_image_rgba_mip(
     }
 
     // ========================================================
-    // FALLBACK SEM MIPMAP
+    // MODO LINHA ÚNICA FIXA — envelope preenchido trocado por
+    // linha oscilante estável (usa Mipmap, não scope puro)
     // ========================================================
+    // Scope puro oscilava com scroll/zoom porque interpolava
+    // amostras distantes. Aqui usamos buckets MIN/MAX do Mipmap
+    // para a linha ficar ancorada dentro do clip (fixa).
 
     if mip.levels.is_empty() {
-        draw_envelope_lane(
+        // Sem MIP: fallback scope (ainda linha única)
+        draw_scope_lane(
             &mut pixmap,
             mono,
             center,
             half_h,
             (start, end),
         );
-
-        return Some(
-            pixmap.data().to_vec()
-        );
+    } else {
+        let level = mip.level_for(samples_per_pixel);
+        if let Some(buckets) = mip.levels.get(level) {
+            let bucket_size = mip.bucket(level);
+            draw_single_line_mip(
+                &mut pixmap,
+                buckets,
+                bucket_size,
+                center,
+                half_h,
+                (start, end),
+            );
+        } else {
+            draw_scope_lane(
+                &mut pixmap,
+                mono,
+                center,
+                half_h,
+                (start, end),
+            );
+        }
     }
-
-    // ========================================================
-    // ESCOLHA DO MIP
-    // ========================================================
-
-    let level =
-        mip.level_for(
-            samples_per_pixel
-        );
-
-    let buckets =
-        match mip.levels.get(level) {
-            Some(level) => level,
-
-            None => {
-                draw_envelope_lane(
-                    &mut pixmap,
-                    mono,
-                    center,
-                    half_h,
-                    (start, end),
-                );
-
-                return Some(
-                    pixmap.data().to_vec()
-                );
-            }
-        };
-
-    let bucket_size =
-        mip.bucket(level);
-
-    // ========================================================
-    // RENDER
-    // ========================================================
-
-    draw_envelope_mip(
-        &mut pixmap,
-        buckets,
-        bucket_size,
-        center,
-        half_h,
-        (start, end),
-    );
 
     Some(
         pixmap.data().to_vec()

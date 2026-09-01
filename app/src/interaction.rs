@@ -20,10 +20,14 @@ use crate::MainWindow;
 
 // Quão rápido cada valor persegue o seu alvo (maior = mais rígido).
 const SPEED: f32 = 18.0;
+// Zoom mais rígido que scroll para não ter delay, mas ainda suavizado
+const SPEED_ZOOM: f32 = 28.0;
 
-// Ganho de zoom: sensibilidade por pixel de delta (roda ~60px/notch).
-const ZOOM_GAIN_H: f32 = 0.022;
-const ZOOM_GAIN_V: f32 = 0.022;
+// Ganho de zoom: sensibilidade por pixel de delta.
+// Natural sem pulos: clamp pequeno + ganho moderado → ~3-6% por evento de 2 dedos,
+// roda continua com ~60px → fator maior mas clampado.
+const ZOOM_GAIN_H: f32 = 0.018;
+const ZOOM_GAIN_V: f32 = 0.018;
 
 const MIN_ZOOM: f32 = 0.25;
 const MAX_ZOOM: f32 = 64.0;
@@ -107,35 +111,40 @@ pub fn install(ui: &MainWindow) {
             s.active = true;
         }
 
+        let dz_raw = dx + dy;
         if ctrl {
+            if dz_raw.abs() < 0.05 {
+                return;
+            }
+            // Clamp pequeno → sem pulos mesmo com swipe rápido do touchpad
+            let dz = dz_raw.clamp(-18.0, 18.0);
             // -----------------------------------------------------------------
-            // ZOOM HORIZONTAL (Ctrl+roda ou botão do meio segurado)
+            // ZOOM HORIZONTAL (Ctrl+arrasto 2 dedos)
             // -----------------------------------------------------------------
-            // Zoom EXPONENCIAL contínuo: fator = exp(gain * delta). Direção
-            // preservada do app atual: delta positivo → afastar (zoom out).
-            let dz = dx + dy;
+            // Natural: acumula no alvo e deixa o timer interpolar (SPEED_ZOOM)
+            // com âncora no cursor — sem salto instantâneo
             let factor = (-dz * ZOOM_GAIN_H).exp();
             let new_tz = (s.tz * factor).clamp(MIN_ZOOM, MAX_ZOOM);
 
-            // ÂNCORA NO CURSOR: o ponto de conteúdo sob o cursor NÃO move.
-            // Usa a view ATUAL (que o usuário vê) para achar o conteúdo,
-            // e deriva o scroll-alvo para a nova zoom-alvo.
             let pad = ui.get_timeline_left_padding();
-            let cur_zoom = ui.get_zoom_level();
-            let cur_sx = ui.get_timeline_scroll_x();
-            let content_x = (mx + cur_sx - pad).max(0.0) / cur_zoom;
+            // Usa alvo atual para âncora estável durante o gesto
+            let content_x = (mx + s.tsx - pad).max(0.0) / s.tz.max(0.01);
             let new_tsx = pad + content_x * new_tz - mx;
 
             s.tz = new_tz;
             s.tsx = new_tsx;
             s.anchor_mx = mx;
         } else if alt {
+            if dz_raw.abs() < 0.05 {
+                return;
+            }
+            let dz = dz_raw.clamp(-18.0, 18.0);
             // -----------------------------------------------------------------
-            // ZOOM VERTICAL (Alt+roda) — ancorado no topo (régua).
+            // ZOOM VERTICAL (Alt+arrasto 2 dedos) — ancorado no topo
             // -----------------------------------------------------------------
-            let dz = dx + dy;
             let factor = (-dz * ZOOM_GAIN_V).exp();
-            s.tzy = (s.tzy * factor).clamp(MIN_ZOOM_Y, MAX_ZOOM_Y);
+            let new_tzy = (s.tzy * factor).clamp(MIN_ZOOM_Y, MAX_ZOOM_Y);
+            s.tzy = new_tzy;
         } else if shift {
             // -----------------------------------------------------------------
             // SCROLL HORIZONTAL (Shift+roda)
@@ -177,11 +186,12 @@ pub fn install(ui: &MainWindow) {
                         let cur_zoom = ui.get_zoom_level();
                         let cur_tzy = ui.get_zoom_y_level();
 
-                        let a = smooth_alpha(SPEED, dt);
-                        let nsx = lerp(cur_sx, s.tsx, a);
-                        let nsy = lerp(cur_sy, s.tsy, a);
-                        let nz = lerp(cur_zoom, s.tz, a);
-                        let nzy = lerp(cur_tzy, s.tzy, a);
+                        let a_scroll = smooth_alpha(SPEED, dt);
+                        let a_zoom = smooth_alpha(SPEED_ZOOM, dt);
+                        let nsx = lerp(cur_sx, s.tsx, a_scroll);
+                        let nsy = lerp(cur_sy, s.tsy, a_scroll);
+                        let nz = lerp(cur_zoom, s.tz, a_zoom);
+                        let nzy = lerp(cur_tzy, s.tzy, a_zoom);
 
                         // Clamp com os máximos ATUAIS da view.
                         let max_sx = ui.get_timeline_max_scroll_x().max(0.0);
