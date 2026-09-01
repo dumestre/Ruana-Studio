@@ -30,49 +30,15 @@ export component AudioWaveform inherits Rectangle {
     }
 
     // =====================================================
-    // WAVEFORM
-    //
-    // ESCALA 1:1 — SEM ACHATAMENTO.
-    //
-    // Cada barra é desenhada com a amplitude REAL do áudio
-    // (o Rust já manda RMS + pico por trecho, sem normalizar
-    // por arquivo). Nada de multiplicador fixo nem piso de
-    // 1px que transformava arquivo baixo em bloco cheio:
-    // sample baixo desenha baixo, sample alto desenha alto.
+    // WAVEFORM — LINHA PURA SEM RASTER (1px por pico)
     // =====================================================
 
-    Rectangle {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: parent.height;
-
-        clip: true;
-
-        for peak[i] in root.peaks: Rectangle {
-            x: i * (parent.width / Math.max(1, root.peaks.length));
-
-            // Amplitude real, centrada na linha do meio.
-            y: (parent.height - peak * parent.height) / 2;
-
-            // Largura sem gap para formar desenho contínuo.
-            width: max(
-                1px,
-                parent.width / Math.max(1, root.peaks.length)
-            );
-
-            // Sem esticamento artificial: o silêncio fica
-            // invisível (altura mínima só evita retângulo de
-            // altura zero, que alguns backends ignoram).
-            height: max(
-                0.5px,
-                peak * parent.height
-            );
-
-            background: root.waveform-color;
-
-            // border-radius removido! O Ableton usa renderização de áudio afiada e retangular.
-        }
+    for peak[i] in root.peaks: Rectangle {
+        x: i * parent.width / root.peaks.length;
+        y: parent.height / 2 - peak * parent.height / 2;
+        width: parent.width / root.peaks.length + 0.5px;
+        height: 1.25px;
+        background: root.waveform-color;
     }
 
     // =====================================================
