@@ -121,6 +121,9 @@ export component TrackClip inherits Rectangle {
 
     changed width => {
         if !root.resizing
+            && !root.dragging
+            && !ClipDragState.active
+            && !root.ghost
             && !root.is-midi
             && root.interactive
             && root.waveform-peaks.length > 0
@@ -141,27 +144,15 @@ export component TrackClip inherits Rectangle {
     }
 
     // Scroll horizontal / zoom: a janela muda sem a largura mudar
-    // (wave-w1 depende de viewport-x, viewport-width e px-per-beat),
-    // então este changed re-dispara o pedido com o novo recorte.
+    // (wave-w1 depende de viewport-x, viewport-width e px-per-beat).
+    // NOTA: durante MOVE puro (só beat/track muda) a largura não
+    // muda e o raster atual já cobre o corpo inteiro (view ignorada
+    // em waveform.rs), então NÃO re-renderiza aqui — evita o
+    // "trocar" de imagem e o custo de raster durante o arrasto.
+    // Re-render só por width/resizing/gain/fade.
     changed wave-w1 => {
-        if !root.resizing
-            && !root.is-midi
-            && root.interactive
-            && root.waveform-peaks.length > 0
-            && root.width > 4px
-            && root.wave-w1 > root.wave-w0 + 0.5 {
-
-            TimelineMetrics.waveform-resolution-requested(
-                root.clip-id,
-                (root.width - 4px) / 1px,
-                root.wave-w0,
-                root.wave-w1,
-                root.wave-body-px,
-                root.gain-linear,
-                fade_ctrl.fade-in-w / 1px,
-                fade_ctrl.fade-out-w / 1px,
-            );
-        }
+        // Intencionalmente sem request (ver nota acima).
+        root.slice-preview-x = root.slice-preview-x;
     }
 
     // RESIZE: não existe RE-RENDER durante o gesto (guards acima).
@@ -170,6 +161,9 @@ export component TrackClip inherits Rectangle {
     // resizing pede o raster do trecho novo assim que o gesto solta.
     changed resizing => {
         if !root.resizing
+            && !root.dragging
+            && !ClipDragState.active
+            && !root.ghost
             && !root.is-midi
             && root.interactive
             && root.waveform-peaks.length > 0
