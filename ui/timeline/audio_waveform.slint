@@ -12,6 +12,14 @@ export component AudioWaveform inherits Rectangle {
 
     in property <[float]> peaks: [];
 
+    // Janela rasterizada dentro do clip, em px do corpo.
+    // 0 = corpo inteiro. Quando > 0, só o trecho [src-x, src-x+src-w]
+    // é desenhado (scroll/zoom). O deslocamento mantém a onda
+    // exatamente ancorada no clip, sem mover por zoom/scroll.
+    in property <float> waveform-src-x: 0.0;
+
+    in property <float> waveform-src-w: 0.0;
+
     background: transparent;
     clip: true;
 
@@ -26,15 +34,19 @@ export component AudioWaveform inherits Rectangle {
         height: 1px;
 
         background: root.waveform-color;
-        opacity: 0.35; // Linha central mais sutil no Ableton
+        opacity: 0.35;
     }
 
     // =====================================================
     // WAVEFORM — LINHA PURA SEM RASTER (1px por pico)
     // =====================================================
+    // O deslocamento por `waveform-src-x` garante que a
+    // waveform permanece exatamente no clip durante zoom,
+    // scroll e arrasto — sem deslocamento visual.
+    // =====================================================
 
     for peak[i] in root.peaks: Rectangle {
-        x: i * parent.width / root.peaks.length;
+        x: i * parent.width / root.peaks.length - root.waveform-src-x * 1px;
         y: parent.height / 2 - peak * parent.height / 2;
         width: parent.width / root.peaks.length + 0.5px;
         height: 1.25px;
@@ -51,7 +63,6 @@ export component AudioWaveform inherits Rectangle {
         width: parent.width;
         height: parent.height;
 
-        // No Ableton, o hover geralmente cria uma camada branca/clara sobre o clip
         background: #FFFFFF;
         opacity: 0.12;
     }

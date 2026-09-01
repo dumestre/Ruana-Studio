@@ -626,7 +626,10 @@ export component TrackClip inherits Rectangle {
                 y:
                     0px;
 
-                width: root.resizing ? root.waveform-anchor-w : parent.width - 4px;
+                width:
+                    root.waveform-src-w > 0.0
+                        ? root.waveform-src-w * 1px
+                        : (root.resizing ? root.waveform-anchor-w : parent.width - 4px);
 
                 height:
                     parent.height;
@@ -639,6 +642,12 @@ export component TrackClip inherits Rectangle {
 
                 peaks:
                     root.waveform-peaks;
+
+                waveform-src-x:
+                    root.waveform-src-x;
+
+                waveform-src-w:
+                    root.waveform-src-w;
             }
     }
 

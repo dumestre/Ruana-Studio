@@ -118,3 +118,17 @@ Exibir código
 O diagrama acima ilustra: na importação do projeto, cálculos e caches (nível 0, 1, 2…) são feitos uma única vez. Durante a edição (zoom/pan), o sistema rapidamente seleciona o nível adequado e desenha quase instantaneamente. Assim, o pico de latência fica no pré-cálculo, liberando performance em uso real.
 
 Referências: Estratégias baseiam-se em documentação e fóruns oficiais (Pro Tools – cache .wfm; Studio One – cache de imagens), discussões de desenvolvedores (Audacity forum) e implementações open-source (audiowaveform, Mixxx manual). O caso de Bitwig ilustra como sacrificar qualidade para desempenho, ressaltando a importância do design de LOD. Em suma, uma arquitetura recomendada envolve caching binário de min/max, múltiplo
+
+## Mudanças de Renderização (2026-08-31)
+
+### waveform_image_rgba_mip() — wire em baixo zoom, envelope detalhado em alto zoom
+- **Antes**: `draw_single_line_mip()` em TODOS os níveis de zoom (acima do scope), desenhando apenas uma linha única
+- **Depois**: `draw_scope_lane()` (wire/linha fina) para `samples_per_pixel < 2.0`, e `draw_envelope_mip()` (envelope MIN/MAX preenchido) para alto zoom
+- Removida a função `draw_single_line_mip()` que não era mais usada
+- O threshold `SCOPE_SAMPLES_PER_PX = 2.0` controla a transição
+
+### audio_waveform.slint — waveform ancorada no clip
+- Adicionadas propriedades `waveform-src-x` e `waveform-src-w` para controlar a janela visível
+- Os picos são deslocados por `-waveform-src-x` para permanecer exatamente no clip durante zoom/scroll/drag
+- `track_clip.slint` agora passa `waveform-src-x` e `waveform-src-w` ao `AudioWaveform`
+- A largura do `AudioWaveform` usa `waveform-src-w` quando > 0 (modo zoom), senão o corpo inteiro
