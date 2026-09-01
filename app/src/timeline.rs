@@ -481,7 +481,7 @@ pub fn install(
                     .upgrade()
                     .map(|u| u.get_bpm() as f32)
                     .unwrap_or(120.0);
-                crate::clip_cache::ensure_cached(
+                crate::clip_cache::spawn_prefetch(
                     &sample_cache,
                     std::path::Path::new(&path_str),
                     bpm,

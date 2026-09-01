@@ -36,6 +36,12 @@ const DRAIN_MS: Duration = Duration::from_millis(16);
 // ============================================================
 
 /// Áudio decodificado + waveform agregada.
+///
+/// É o resultado CHEIO de um decode: a worker agrega tudo de uma vez
+/// (interleaved para o motor, samples/mono/mip/lods/imagem para a UI).
+/// Consumidores usam só o que precisam; os demais campos ficam para
+/// reuso futuro sem re-decodificar.
+#[allow(dead_code)]
 pub struct DecodedWave {
     pub name: String,
     pub path: String,
