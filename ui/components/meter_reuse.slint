@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 
 // ============================================================
-// STEREO METER
+// STEREO METER - alinhado no centro: [ L | div | R ]
 // ============================================================
 
 export component StereoMeter inherits Rectangle {
@@ -16,10 +16,10 @@ export component StereoMeter inherits Rectangle {
     in property <bool> left-clipped: false;
     in property <bool> right-clipped: false;
 
-    in property <length> meter-width: 8px;
-    in property <length> channel-gap: 3px;
+    in property <length> meter-width: 5px;
+    in property <length> channel-gap: 2px;
     in property <color> meter-background: #111111;
-    in property <color> meter-border: #2A2A2A;
+    in property <color> meter-border: transparent;
 
     // ========================================================
     // DIMENSÕES
@@ -27,99 +27,120 @@ export component StereoMeter inherits Rectangle {
 
     private property <length> meter-height: Math.max(1px, root.height);
     private property <length> channel-width: Math.max(2px, root.meter-width);
-    
-    width: root.channel-width * 2 + root.channel-gap;
+    private property <length> divider-width: 1px;
+
+    // Largura total = L + gap/2 + div + gap/2 + R = 5+1+1+1+5 = 13px
+    width: root.channel-width * 2 + root.channel-gap + root.divider-width;
     background: transparent;
+    border-radius: 15px;
 
     pure function level-clamped(value: float) -> float {
         return Math.max(0.0, Math.min(1.0, value));
     }
 
-    
-
     // ========================================================
-    // CANAL L
+    // LAYOUT CENTRALIZADO
     // ========================================================
 
-    Rectangle {
-        x: 0px;
-        y: 0px;
-        width: root.channel-width;
-        height: root.meter-height;
-        background: root.meter-background;
-        border-width: 1px;
-        border-color: root.meter-border;
-        clip: true;
+    HorizontalLayout {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        alignment: center;
+        spacing: root.channel-gap / 2;
 
-        // Máscara do Nível (Cresce de baixo para cima)
+        // ----------------------------------------------------
+        // CANAL L
+        // ----------------------------------------------------
         Rectangle {
-            x: 1px;
-            y: parent.height - self.height - 1px;
-            width: parent.width - 2px;
-            height: root.level-clamped(root.left-level) * (parent.height - 2px);
+            width: root.channel-width;
+            height: root.meter-height;
+            background: root.meter-background;
+            border-bottom-left-radius: 0px;
+            border-width: 1px;
+            border-color: root.meter-border;
+            border-radius: 6px;
             clip: true;
 
-            // Barra de Cor Estática (Fixada no fundo)
+            // Máscara do Nível (Cresce de baixo para cima)
             Rectangle {
-                x: 0px;
-                y: parent.height - (root.meter-height - 2px);
-                width: parent.width;
-                height: root.meter-height - 2px;
-                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
+                x: 1px;
+                y: parent.height - self.height - 1px;
+                width: parent.width - 2px;
+                height: root.level-clamped(root.left-level) * (parent.height - 2px);
+                clip: true;
+
+                // Barra de Cor Estática (Fixada no fundo)
+                Rectangle {
+                    x: 0px;
+                    y: parent.height - (root.meter-height - 2px);
+                    width: parent.width;
+                    height: root.meter-height - 2px;
+                    background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
+                }
+            }
+
+            // Peak Indicator
+            Rectangle {
+                x: 1px;
+                y: parent.height - (root.level-clamped(root.left-peak) * (parent.height - 2px)) - 1px;
+                width: parent.width - 2px;
+                height: 2px;
+                background: root.left-clipped ? #FF3030 : #FFFFFF;
+                visible: root.left-peak > 0.001;
             }
         }
 
-        // Peak Indicator
+        // ----------------------------------------------------
+        // DIVISOR CENTRAL
+        // ----------------------------------------------------
         Rectangle {
-            x: 1px;
-            y: parent.height - (root.level-clamped(root.left-peak) * (parent.height - 2px)) - 1px;
-            width: parent.width - 2px;
-            height: 2px;
-            background: root.left-clipped ? #FF3030 : #FFFFFF;
-            visible: root.left-peak > 0.001;
+            width: root.divider-width;
+            height: root.meter-height;
+            background: Theme.is-paper ? Theme.base.transparentize(0.6) : Theme.border;
         }
-    }
 
-    // ========================================================
-    // CANAL R
-    // ========================================================
-
-    Rectangle {
-        x: root.channel-width + root.channel-gap;
-        y: 0px;
-        width: root.channel-width;
-        height: root.meter-height;
-        background: root.meter-background;
-        border-width: 1px;
-        border-color: root.meter-border;
-        clip: true;
-
-        // Máscara do Nível (Cresce de baixo para cima)
+        // ----------------------------------------------------
+        // CANAL R
+        // ----------------------------------------------------
         Rectangle {
-            x: 1px;
-            y: parent.height - self.height - 1px;
-            width: parent.width - 2px;
-            height: root.level-clamped(root.right-level) * (parent.height - 2px);
+            width: root.channel-width;
+            height: root.meter-height;
+            background: root.meter-background;
+            border-width: 1px;
+            border-bottom-right-radius: 0px;
+            border-color: root.meter-border;
+            border-radius: 6px;
             clip: true;
 
-            // Barra de Cor Estática (Fixada no fundo)
+            // Máscara do Nível (Cresce de baixo para cima)
             Rectangle {
-                x: 0px;
-                y: parent.height - (root.meter-height - 2px);
-                width: parent.width;
-                height: root.meter-height - 2px;
-                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
-            }
-        }
+                x: 1px;
+                y: parent.height - self.height - 1px;
+                width: parent.width - 2px;
+                height: root.level-clamped(root.right-level) * (parent.height - 2px);
+                clip: true;
 
-        // Peak Indicator
-        Rectangle {
-            x: 1px;
-            y: parent.height - (root.level-clamped(root.right-peak) * (parent.height - 2px)) - 1px;
-            width: parent.width - 2px;
-            height: 2px;
-            background: root.right-clipped ? #FF3030 : #FFFFFF;
-            visible: root.right-peak > 0.001;
+                // Barra de Cor Estática (Fixada no fundo)
+                Rectangle {
+                    x: 0px;
+                    y: parent.height - (root.meter-height - 2px);
+                    width: parent.width;
+                    height: root.meter-height - 2px;
+                    background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
+                }
+            }
+
+            // Peak Indicator
+            Rectangle {
+                x: 1px;
+                y: parent.height - (root.level-clamped(root.right-peak) * (parent.height - 2px)) - 1px;
+                width: parent.width - 2px;
+                height: 2px;
+                background: root.right-clipped ? #FF3030 : #FFFFFF;
+                visible: root.right-peak > 0.001;
+            }
         }
     }
 }

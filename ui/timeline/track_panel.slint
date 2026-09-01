@@ -12,6 +12,13 @@ export component TrackPanel inherits Rectangle {
 
     in property <[int]> track-colors: [];
 
+    in property <[float]> track-meter-left-levels: [];
+    in property <[float]> track-meter-right-levels: [];
+    in property <[float]> track-meter-left-peaks: [];
+    in property <[float]> track-meter-right-peaks: [];
+    in property <[bool]> track-meter-left-clipped: [];
+    in property <[bool]> track-meter-right-clipped: [];
+
     in-out property <int> selected-track: 0;
 
     in property <length> ruler-height: 30px;
@@ -81,6 +88,19 @@ export component TrackPanel inherits Rectangle {
 
         track-colors:
             root.track-colors;
+
+        track-meter-left-levels:
+            root.track-meter-left-levels;
+        track-meter-right-levels:
+            root.track-meter-right-levels;
+        track-meter-left-peaks:
+            root.track-meter-left-peaks;
+        track-meter-right-peaks:
+            root.track-meter-right-peaks;
+        track-meter-left-clipped:
+            root.track-meter-left-clipped;
+        track-meter-right-clipped:
+            root.track-meter-right-clipped;
 
         selected-track:
             root.selected-track;

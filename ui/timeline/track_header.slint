@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Button } from "../components/button.slint";
 import { TimelineVolume } from "../components/timeline_fader.slint";
+import { StereoMeter } from "../components/meter_reuse.slint";
 
 // ================================================================
 // TRACK HEADER ROW
@@ -26,6 +27,13 @@ in-out property <bool> solo: false;
 in-out property <bool> record-armed: false;
 
 in-out property <bool> automation-enabled: false;
+
+in property <float> left-level: 0.0;
+in property <float> right-level: 0.0;
+in property <float> left-peak: 0.0;
+in property <float> right-peak: 0.0;
+in property <bool> left-clipped: false;
+in property <bool> right-clipped: false;
 
 // Acumulador do zoom vertical (Alt+roda): mesmo esquema de passos
 // fixos da timeline -> fluidez uniforme p/ roda e touchpad.
@@ -216,7 +224,7 @@ HorizontalLayout {
     x: 10px;
     y: 0;
 
-    width: parent.width - 20px;
+    width: parent.width - 34px;
     height: parent.height;
 
     cross-axis-alignment: CrossAxisAlignment.center;
@@ -472,5 +480,26 @@ HorizontalLayout {
             );
         }
     }
+}
+
+// ============================================================
+// METER STEREO - colado na borda direita
+// ============================================================
+
+meter := StereoMeter {
+    x: parent.width - self.width;
+    y: 2px;
+    width: 12px;
+    height: parent.height - 4px;
+
+    channel-gap: 1px;
+    meter-background: Theme.base;
+
+    left-level: root.left-level;
+    right-level: root.right-level;
+    left-peak: root.left-peak;
+    right-peak: root.right-peak;
+    left-clipped: root.left-clipped;
+    right-clipped: root.right-clipped;
 }
 }

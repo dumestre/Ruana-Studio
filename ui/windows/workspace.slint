@@ -29,7 +29,6 @@ import {
     ScrollBarVertical
 } from "../components/scrollbar.slint";
 import { TrackPanel } from "../timeline/track_panel.slint";
-import { MeterTimeline } from "../timeline/meter_timeline.slint";
 import { BottomToolbar } from "../components/bottom_toolbar.slint";
 import { ClipDragState, TimelineMetrics, SamplerMetrics, SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
 
@@ -1024,6 +1023,19 @@ export component Workspace inherits Rectangle {
                             track-colors:
                                 root.track-colors;
 
+                            track-meter-left-levels:
+                                root.track-meter-left-levels;
+                            track-meter-right-levels:
+                                root.track-meter-right-levels;
+                            track-meter-left-peaks:
+                                root.track-meter-left-peaks;
+                            track-meter-right-peaks:
+                                root.track-meter-right-peaks;
+                            track-meter-left-clipped:
+                                root.track-meter-left-clipped;
+                            track-meter-right-clipped:
+                                root.track-meter-right-clipped;
+
                             zoom-y:
                                 root.zoom-y-level;
 
@@ -1059,23 +1071,31 @@ export component Workspace inherits Rectangle {
                             }
                         }
 
+                        // =================================================
+                // TRACK SPLITTER
+                // =================================================
 
-                        // =====================================
-                        // METER TIMELINE
-                        // =====================================
+                SplitterVerticalGrowLeft {
 
-                        meter-timeline := MeterTimeline {
 
-                            ruler-height:
-                                30px;
+                    width:
+                        5px;
 
-                            
+                    height:
+                        100%;
 
-                           
-                            scroll-y:
-                                timeline.scroll-y;
+                    value <=>
+                        root.tracks-header-width;
 
-                        }
+                    min-value:
+                        120px;
+
+                    max-value:
+                        420px;
+
+                    z:
+                        50;
+                }
 
 
                         // =====================================
@@ -1405,36 +1425,7 @@ export component Workspace inherits Rectangle {
                 }
 
 
-                // =================================================
-                // TRACK SPLITTER
-                // =================================================
-
-                SplitterVerticalGrowLeft {
-
-                    x:
-                        root.tracks-header-width;
-
-                    y:
-                        0px;
-
-                    width:
-                        5px;
-
-                    height:
-                        100%;
-
-                    value <=>
-                        root.tracks-header-width;
-
-                    min-value:
-                        120px;
-
-                    max-value:
-                        420px;
-
-                    z:
-                        50;
-                }
+              
 
 
                 // =================================================
