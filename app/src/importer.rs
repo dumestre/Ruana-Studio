@@ -3,15 +3,15 @@
 //! Caminho único usado pelo drop do explorador interno e pelo
 //! drop do Sistema Operacional.
 
+use crate::clip_cache::CachedSample;
+use crate::decode_worker::DecodeWorker;
+use crate::models::clip_row;
+use crate::waveform::{CachedWave, WaveformCache, build_lods, to_clip_data_from_id};
 use daw_core::clip::ClipKind;
 use daw_core::project::Project;
-use std::cell::RefCell;
-
-use crate::ClipData;
-use crate::models::clip_row;
-use crate::waveform::{CachedWave, WaveformCache, to_clip_data_from_id};
 use daw_media::waveform::{decode_audio, waveform_points};
-use daw_media::waveform_image::waveform_image_rgba;
+use std::cell::RefCell;
+use std::rc::Rc;
 use slint::Model;
 
 /// Extensões de áudio que o `daw-media` sabe decodificar.
@@ -28,31 +28,15 @@ pub fn is_audio_path(path: &std::path::Path) -> bool {
 }
 
 /// Quantos beats um trecho de `seconds` ocupa a `bpm`.
-///
-/// É isto que impede a waveform de ser achatada: o clip passa a ter o
-/// comprimento real do arquivo em vez de um valor fixo em que o
-/// desenho tinha que caber.
 fn beats_for_seconds(seconds: f32, bpm: f32) -> f32 {
     let bpm = if bpm > 0.0 { bpm } else { 120.0 };
     (seconds * bpm / 60.0).max(0.01)
 }
 
 /// Detecta silêncio nas bordas e devolve o áudio RECORTADO.
-///
-/// Volta `Some((dados recortados, frame inicial do recorte))` quando
-/// há silêncio significativo no início/fim — o "aparar até o sinal
-/// zero" da importação: o clip não fica com um vão vazio de áudio
-/// zero. `None` = nada a aparar (conteúdo presente nas duas bordas
-/// ou arquivo todo em silêncio).
-///
-/// A detecção usa o buffer INTERLEAVED (fonte do motor): stereo em
-/// fase oposta cancela no mono de exibição, mas é audível — aparar
-/// pelo mono apagaria o sample.
 fn trim_silence(
     data: &daw_media::waveform::WaveformData,
 ) -> Option<(daw_media::waveform::WaveformData, usize)> {
-    // Limiar de "sinal" (~ -60 dBFS) e silêncio mínimo para valer a
-    // pena aparar. Micro-silêncios são ruído do fim de transiente.
     const THRESHOLD: f32 = 0.001;
     const MIN_TRIM_SECS: f32 = 0.05;
 
@@ -75,7 +59,6 @@ fn trim_silence(
         return None;
     }
 
-    // Respiro de ~2 ms nas bordas: não cortar o ataque/decay rente.
     let pad = ((0.002 * data.sample_rate as f32) as usize).max(1);
     let start = first.saturating_sub(pad);
     let end = (last + 1 + pad).min(frames);
@@ -84,12 +67,10 @@ fn trim_silence(
     }
 
     let trimmed_samples = data.samples[start..end].to_vec();
-    let (display_samples, mipmap) =
-        daw_media::waveform_image::build_display_wave(&trimmed_samples);
     let trimmed = daw_media::waveform::WaveformData {
         samples: trimmed_samples,
-        display_samples,
-        mipmap,
+        display_samples: Vec::new(),
+        mipmap: daw_media::waveform_image::Mipmap { levels: Vec::new() },
         interleaved: data.interleaved[start * ch..end * ch].to_vec(),
         sample_rate: data.sample_rate,
         channels: data.channels,
@@ -98,15 +79,7 @@ fn trim_silence(
     Some((trimmed, start))
 }
 
-/// Importa um arquivo de áudio para a timeline.
-///
-/// Caminho ÚNICO de importação: o drop do explorador interno e o drop
-/// do Sistema Operacional passam os dois por aqui, então as duas rotas
-/// ganham a mesma duração real, o mesmo waveform e a mesma garantia de
-/// não empilhar clip em cima de clip.
-///
-/// Retorna o id do clip criado, ou `None` se o arquivo não decodificou
-/// / não havia trilha com espaço.
+/// Importa um arquivo de áudio para a timeline (síncrono).
 pub fn import_audio_file(
     path: &std::path::Path,
     track_hint: i32,
@@ -114,7 +87,7 @@ pub fn import_audio_file(
     bpm: f32,
     project: &RefCell<Project>,
     waveforms: &RefCell<WaveformCache>,
-    clips_model: &slint::VecModel<ClipData>,
+    clips_model: &slint::VecModel<crate::ClipData>,
     track_colors_model: &slint::VecModel<i32>,
 ) -> Option<u64> {
     let name = path
@@ -123,9 +96,6 @@ pub fn import_audio_file(
         .unwrap_or("Audio Clip")
         .to_string();
 
-    // Decodifica ANTES de tocar no documento: sem duração real não há
-    // como saber o comprimento do clip, e um arquivo quebrado não deve
-    // deixar um clip morto na timeline.
     let decoded = match decode_audio(path) {
         Ok(data) => data,
         Err(err) => {
@@ -133,9 +103,7 @@ pub fn import_audio_file(
             return None;
         }
     };
-    // Apara silêncio nas bordas: o clip cobre a parte audível do
-    // arquivo, não um vão cheio de zeros (source_start_beats marca o
-    // deslocamento dentro do arquivo; o motor continua certo).
+
     let (source, first_frame) = match trim_silence(&decoded) {
         Some((trimmed, first)) => (trimmed, first),
         None => (decoded, 0usize),
@@ -146,28 +114,12 @@ pub fn import_audio_file(
         bpm,
     );
 
-    // Resolução proporcional à duração: com um número fixo de pontos,
-    // um loop de 1 s e um take de 3 min viravam o mesmo borrão. O teto
-    // existe porque cada ponto é um retângulo no desenho do clip.
-    // Resolução alta: com poucos pontos, um take denso virava
-    // um tijolo cheio sem forma. O teto existe porque cada
-    // ponto é um retângulo no desenho do clip.
-    let points = ((length * 24.0) as usize).clamp(256, 2048);
-    let peaks = waveform_points(&source, points);
-    // Pré-renderiza a waveform em RGBA (cor padrão de áudio) uma
-    // única vez; a UI desenha um Image em vez de ~1000 retângulos.
-    // Se o usuário trocar a cor do clip, re-renderizamos adiante
-    // (ver on_clip_color_cycle_requested).
-    let img = waveform_image_rgba(&peaks, 0, false);
-    let lods = daw_media::waveform_image::build_waveform_lods(&source.samples);
+    // Constrói LODs do trecho aparado.
+    let lods = build_lods(&source.samples);
 
     let clip_id = {
         let mut proj = project.borrow_mut();
         let preferred = track_hint.max(0) as u64;
-        // Prefere a trilha onde o usuário soltou; se ela já está
-        // ocupada naquele instante, tenta outra trilha antes de
-        // empurrar no tempo — é o que uma DAW faz ao importar vários
-        // arquivos de uma vez.
         let track_id = proj
             .track_with_room(preferred, beat_hint.max(0.0), length)
             .or_else(|| proj.track(preferred).map(|t| t.id))?;
@@ -181,8 +133,6 @@ pub fn import_audio_file(
             source_start_beats,
             Some(path.to_string_lossy().to_string()),
         )?;
-        // Cor herdada do SAMPLE (definida no add_clip_with_path):
-        // sincroniza a cor da track com a cor primária do arquivo.
         let color = proj
             .clips
             .iter()
@@ -198,20 +148,11 @@ pub fn import_audio_file(
         id
     };
 
-    // `ClipAdded` já disparou e leu o cache ainda vazio; preenche
-    // agora (picos + mono de exibição + pirâmide + imagem) e
-    // reprojeta só a linha desse clip.
-    if !peaks.is_empty() {
-        let (mono_ds, mip) = daw_media::waveform_image::build_display_wave(&source.samples);
+    if !lods.is_empty() {
+        let _points = waveform_points(&source, ((length * 24.0) as usize).clamp(256, 2048));
         waveforms.borrow_mut().insert(
             clip_id,
-            CachedWave {
-                peaks,
-                mono_ds,
-                mip,
-                lods,
-                image: img,
-            },
+            CachedWave { lods, frames: source.samples.len() },
         );
         let wf = waveforms.borrow();
         if let Some(i) = clip_row(clips_model, clip_id as i32) {
@@ -224,24 +165,16 @@ pub fn import_audio_file(
 }
 
 /// Importa um arquivo de áudio para a timeline com DECODE NA WORKER.
-///
-/// Rota assíncrona: decodifica (symphonia/hound), apara silêncio e
-/// agrega a waveform numa thread de fundo (`DecodeWorker`). Quando o
-/// resultado chega (event loop da UI), só a MUTAÇÃO de documento —
-/// barata — roda na thread da UI. A UI nunca bloqueia em decode.
-///
-/// Substitui o caminho síncrono nas rotas de interação (drop do SO e
-/// drop interno da timeline).
 pub fn import_audio_file_async(
     path: &std::path::Path,
     track_hint: i32,
     beat_hint: f32,
     bpm: f32,
-    project: std::rc::Rc<RefCell<Project>>,
-    waveforms: std::rc::Rc<RefCell<WaveformCache>>,
-    clips_model: std::rc::Rc<slint::VecModel<ClipData>>,
-    track_colors_model: std::rc::Rc<slint::VecModel<i32>>,
-    worker: &crate::decode_worker::DecodeWorker,
+    project: Rc<RefCell<Project>>,
+    waveforms: Rc<RefCell<WaveformCache>>,
+    clips_model: Rc<slint::VecModel<crate::ClipData>>,
+    track_colors_model: Rc<slint::VecModel<i32>>,
+    worker: &DecodeWorker,
 ) {
     let path_str = path.to_string_lossy().to_string();
     let err_label = path
@@ -255,7 +188,6 @@ pub fn import_audio_file_async(
             return;
         };
 
-        // ---- mutação do documento (barata, na thread da UI) ----
         let clip_id = {
             let mut proj = project.borrow_mut();
             let preferred = track_hint.max(0) as u64;
@@ -292,16 +224,10 @@ pub fn import_audio_file_async(
             id
         };
 
-        if !imp.peaks.is_empty() {
+        if !imp.lods.is_empty() {
             waveforms.borrow_mut().insert(
                 clip_id,
-                CachedWave {
-                    peaks: imp.peaks,
-                    mono_ds: imp.mono_ds,
-                    mip: imp.mip,
-                    lods: imp.lods,
-                    image: imp.image_rgba,
-                },
+                CachedWave { lods: imp.lods, frames: imp.frames },
             );
             let wf = waveforms.borrow();
             if let Some(i) = clip_row(&clips_model, clip_id as i32) {
@@ -313,13 +239,7 @@ pub fn import_audio_file_async(
     });
 }
 
-/// Importa um arquivo de áudio usando o CACHE DE SAMPLES em RAM.
-///
-/// Rota do drop do Sistema Operacional: como o pré-decode começou no
-/// `HoveredFile` (cursor entrando na janela), normalmente a entrada
-/// já está no cache e NADA é relido do disco — a inserção é imediata.
-/// Se por acaso o decode em background ainda não terminou, cai no
-/// caminho síncrono original (nunca falha).
+/// Importa usando o CACHE DE SAMPLES em RAM.
 pub fn import_audio_file_with_cache(
     path: &std::path::Path,
     track_hint: i32,
@@ -327,11 +247,10 @@ pub fn import_audio_file_with_cache(
     bpm: f32,
     project: &RefCell<Project>,
     waveforms: &RefCell<WaveformCache>,
-    clips_model: &slint::VecModel<ClipData>,
+    clips_model: &slint::VecModel<crate::ClipData>,
     track_colors_model: &slint::VecModel<i32>,
     sample_cache: &RefCell<crate::clip_cache::SampleCache>,
 ) -> Option<u64> {
-    // Tenta pela rota cacheada (instantânea).
     if let Some(entry) = crate::clip_cache::ensure_cached(sample_cache, path, bpm) {
         return import_from_entry(
             entry,
@@ -345,8 +264,6 @@ pub fn import_audio_file_with_cache(
             track_colors_model,
         );
     }
-    // Cache indisponível (arquivo quebrado): rota antiga para dar o
-    // erro adequado / não criar clip morto.
     import_audio_file(
         path,
         track_hint,
@@ -359,23 +276,19 @@ pub fn import_audio_file_with_cache(
     )
 }
 
-/// Importa via cache quando a entrada JÁ está em RAM (instantâneo);
-/// senão agenda o decode (symphonia) na WORKER thread — a UI nunca
-/// bloqueia em leitura de disco + decode no drop do SO.
+/// Importa via cache se já em RAM; senão agenda decode na worker.
 pub fn import_audio_file_with_cache_async(
     path: &std::path::Path,
     track_hint: i32,
     beat_hint: f32,
     bpm: f32,
-    project: std::rc::Rc<RefCell<Project>>,
-    waveforms: std::rc::Rc<RefCell<WaveformCache>>,
-    clips_model: std::rc::Rc<slint::VecModel<ClipData>>,
-    track_colors_model: std::rc::Rc<slint::VecModel<i32>>,
-    sample_cache: &std::cell::RefCell<crate::clip_cache::SampleCache>,
-    worker: &crate::decode_worker::DecodeWorker,
+    project: Rc<RefCell<Project>>,
+    waveforms: Rc<RefCell<WaveformCache>>,
+    clips_model: Rc<slint::VecModel<crate::ClipData>>,
+    track_colors_model: Rc<slint::VecModel<i32>>,
+    sample_cache: &RefCell<crate::clip_cache::SampleCache>,
+    worker: &DecodeWorker,
 ) {
-    // Pré-decode já terminou (sample em RAM)? Insere instantaneamente,
-    // sem nenhuma leitura de disco (só processamento em memória).
     if crate::clip_cache::peek_cached(sample_cache, path) {
         let _ = import_audio_file_with_cache(
             path,
@@ -390,8 +303,6 @@ pub fn import_audio_file_with_cache_async(
         );
         return;
     }
-    // Ainda decodificando (ou nunca pré-buscado): decode completo na
-    // worker thread; o documento só muda quando o resultado chega.
     import_audio_file_async(
         path,
         track_hint,
@@ -406,24 +317,20 @@ pub fn import_audio_file_with_cache_async(
 }
 
 /// Cria o clip a partir de uma entrada JÁ decodificada do cache.
-/// Zero leitura de disco: metadados + waveform vêm da RAM.
 fn import_from_entry(
-    entry: crate::clip_cache::CachedSample,
+    entry: CachedSample,
     path: &std::path::Path,
     track_hint: i32,
     beat_hint: f32,
     bpm: f32,
     project: &RefCell<Project>,
     waveforms: &RefCell<WaveformCache>,
-    clips_model: &slint::VecModel<ClipData>,
+    clips_model: &slint::VecModel<crate::ClipData>,
     track_colors_model: &slint::VecModel<i32>,
 ) -> Option<u64> {
     let name = entry.name.clone();
     let bpm = if bpm > 0.0 { bpm } else { 120.0 };
 
-    // Apara silêncio nas bordas (mesma regra do import direto). O
-    // `entry.wave` cobre o arquivo INTEIRO; quando aparado, a
-    // waveform é reconstruída do trecho audível.
     let (source, first_frame) = match trim_silence(&entry.decoded) {
         Some((trimmed, first)) => (trimmed, first),
         None => {
@@ -444,10 +351,7 @@ fn import_from_entry(
     let length = (source.duration_seconds * bpm / 60.0).max(0.01);
     let source_start_beats =
         beats_for_seconds(first_frame as f32 / source.sample_rate as f32, bpm);
-    let points = ((length * 24.0) as usize).clamp(256, 2048);
-    let peaks = waveform_points(&source, points);
-    let img = waveform_image_rgba(&peaks, 0, false);
-    let lods = daw_media::waveform_image::build_waveform_lods(&source.samples);
+    let lods = build_lods(&source.samples);
 
     let clip_id = {
         let mut proj = project.borrow_mut();
@@ -465,8 +369,6 @@ fn import_from_entry(
             source_start_beats,
             Some(path.to_string_lossy().to_string()),
         )?;
-        // Cor herdada do SAMPLE (definida no add_clip_with_source):
-        // sincroniza a cor da track com a cor primária do arquivo.
         let color = proj
             .clips
             .iter()
@@ -482,19 +384,11 @@ fn import_from_entry(
         id
     };
 
-    // Waveform RECORTADA (silêncio aparado): picos + mono + pirâmide
-    // + imagem construídos do trecho, e reprojeta a linha.
-    if !peaks.is_empty() {
-        let (mono_ds, mip) = daw_media::waveform_image::build_display_wave(&source.samples);
+    if !lods.is_empty() {
+        let _points = waveform_points(&source, ((length * 24.0) as usize).clamp(256, 2048));
         waveforms.borrow_mut().insert(
             clip_id,
-            CachedWave {
-                peaks,
-                mono_ds,
-                mip,
-                lods,
-                image: img,
-            },
+            CachedWave { lods, frames: source.samples.len() },
         );
         let wf = waveforms.borrow();
         if let Some(i) = clip_row(clips_model, clip_id as i32) {
@@ -506,17 +400,16 @@ fn import_from_entry(
     Some(clip_id)
 }
 
-/// Rota "sem recorte" do import via cache: waveform já pronta em RAM,
-/// só publica no cache de UI e reprojeta (zero reprocessamento).
+/// Rota "sem recorte" do import via cache: waveform já pronta em RAM.
 fn import_from_entry_untrimmed(
-    entry: crate::clip_cache::CachedSample,
+    entry: CachedSample,
     path: &std::path::Path,
     length: f32,
     track_hint: i32,
     beat_hint: f32,
     project: &RefCell<Project>,
     waveforms: &RefCell<WaveformCache>,
-    clips_model: &slint::VecModel<ClipData>,
+    clips_model: &slint::VecModel<crate::ClipData>,
     track_colors_model: &slint::VecModel<i32>,
 ) -> Option<u64> {
     let name = entry.name.clone();
@@ -535,8 +428,6 @@ fn import_from_entry_untrimmed(
             length,
             Some(path.to_string_lossy().to_string()),
         )?;
-        // Cor herdada do SAMPLE (definida no add_clip_with_path):
-        // sincroniza a cor da track com a cor primária do arquivo.
         let color = proj
             .clips
             .iter()
@@ -552,9 +443,7 @@ fn import_from_entry_untrimmed(
         id
     };
 
-    // Waveform já pronta em RAM: só publica no cache de UI e
-    // reprojeta a linha desse clip.
-    if !entry.wave.peaks.is_empty() {
+    if !entry.wave.lods.is_empty() {
         waveforms.borrow_mut().insert(clip_id, entry.wave.clone());
         let wf = waveforms.borrow();
         if let Some(i) = clip_row(clips_model, clip_id as i32) {

@@ -10,15 +10,14 @@ export component AudioWaveform inherits Rectangle {
 
     in property <bool> hovered: false;
 
+    // Barras "Bin Visual" (timeline): arrays paralelos, um par por
+    // coluna de largura fixa. Vazios = sem waveform disponível.
+    in property <[float]> mins: [];
+    in property <[float]> maxs: [];
+
+    // Fallback do sampler: picos simétricos (1 ponto por amostra de
+    // exibição). Usado quando `mins`/`maxs` estão vazios.
     in property <[float]> peaks: [];
-
-    // Janela rasterizada dentro do clip, em px do corpo.
-    // 0 = corpo inteiro. Quando > 0, só o trecho [src-x, src-x+src-w]
-    // é desenhado (scroll/zoom). O deslocamento mantém a onda
-    // exatamente ancorada no clip, sem mover por zoom/scroll.
-    in property <float> waveform-src-x: 0.0;
-
-    in property <float> waveform-src-w: 0.0;
 
     background: transparent;
     clip: true;
@@ -45,11 +44,48 @@ export component AudioWaveform inherits Rectangle {
     // scroll e arrasto — sem deslocamento visual.
     // =====================================================
 
+    // =====================================================
+    // WAVEFORM — BARRAS MIN→MAX ("BIN VISUAL")
+    // =====================================================
+    // Uma barra vertical por coluna, ancorada na linha central: o topo
+    // vem de `maxs[i]` e a base de `mins[i]`. As colunas distribuem-se
+    // uniformemente por `parent.width` (a largura vem do DONO do
+    // elemento: corpo inteiro do clip ou corpo redimensionado), então a
+    // onda permanece ancorada no clip sem deslocamento.
+    // =====================================================
+
+    for i in root.mins.length: Rectangle {
+        x: i * parent.width / root.mins.length;
+        y: parent.height / 2
+            - Math.clamp(root.maxs[i], -1.0, 1.0)
+                * (parent.height / 2 - 0.5px);
+        width: Math.max(
+            1px,
+            parent.width / root.mins.length - 0.5px
+        );
+        height: Math.max(
+            1px,
+            (Math.clamp(root.maxs[i], -1.0, 1.0)
+                - Math.clamp(root.mins[i], -1.0, 1.0))
+                * (parent.height / 2 - 0.5px)
+        );
+        background: root.waveform-color;
+    }
+
+    // =====================================================
+    // FALLBACK — PICO SIMÉTRICO POR AMOSTRA DE EXIBIÇÃO
+    // (usado pelo sampler quando `mins`/`maxs` estão vazios)
+    // =====================================================
+    // O loop com 0 elementos não renderiza nada.
+
     for peak[i] in root.peaks: Rectangle {
-        x: i * parent.width / root.peaks.length - root.waveform-src-x * 1px;
+        x: i * parent.width / root.peaks.length;
         y: parent.height / 2 - peak * parent.height / 2;
-        width: parent.width / root.peaks.length + 0.5px;
-        height: 1.25px;
+        width: Math.max(
+            1px,
+            parent.width / root.peaks.length - 0.5px
+        );
+        height: Math.max(1px, peak * parent.height / 2);
         background: root.waveform-color;
     }
 

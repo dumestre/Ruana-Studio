@@ -291,7 +291,8 @@ pub fn install(
                 // Só os DADOS mudam aqui: a imagem anterior (ancorada)
                 // continua no lugar até o re-render do trecho novo chegar
                 // (o corpo com `clip` já mostra o crop correto no meio tempo).
-                clip.waveform_points = updated.waveform_points;
+                clip.waveform_mins = updated.waveform_mins;
+                clip.waveform_maxes = updated.waveform_maxes;
             } else {
                 clip.beat = beat;
                 clip.len = len;

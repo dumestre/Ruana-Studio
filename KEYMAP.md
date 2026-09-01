@@ -12,7 +12,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 ## Edição
 
 | Atalho | Ação |
-|---|---|
+| --- | --- |
 | `Ctrl+C` | Copia o clip selecionado para o **clipboard interno** (não é o clipboard do SO). Sustenta colar múltiplas vezes com `Shift+clique`. |
 | `Ctrl+D` | Duplica o clip selecionado (cópia imediatamente à frente, herdando cor/override e audio). |
 | `Ctrl+Z` | Desfaz (undo). `Shift+Ctrl+Z`/`Ctrl+Y` refaz (redo). |
@@ -22,7 +22,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 ## Timeline
 
 | Ação | Descrição |
-|---|---|
+| --- | --- |
 | `Shift + clique` (em área vazia) | **Cola** o conteúdo do clipboard na posição clicada (track + beat). |
 | `Ctrl + clique-arraste` | **Marquee / lasso**: seleção múltipla. Funciona começando em cima de um clip ou em área vazia. |
 | Clique em área vazia | Deseleciona a seleção única (qualquer ferramenta). |
@@ -33,7 +33,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 ## Navegação
 
 | Atalho | Ação |
-|---|---|
+| --- | --- |
 | `Espaço` | Toca / pausa o transporte (play/stop). |
 | `F` | Centraliza e faz **zoom no clip selecionado**; `F` de novo restaura o viewport ao contexto geral. |
 | Rodinha do mouse | Zoom horizontal e rolagem vertical da timeline. |
@@ -41,7 +41,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 ## Beat Sequencer
 
 | Atalho / Ação | Descrição |
-|---|---|
+| --- | --- |
 | Clique em um passo do grid | Liga/desliga a nota (`Ctrl+clique` para estender/caret). |
 | Clique num padrão na seção **BEAT PATTERNS** do Clip Pool | Seleciona o padrão no sequencer (song mode). |
 | Arraste um padrão do Clip Pool para a timeline | Cria um clip MIDI regular com a duração do padrão. |
@@ -50,7 +50,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 ## Referência rápida
 
 | Tecla | Um toque |
-|---|---|
+| --- | --- |
 | `Ctrl+C` | Copiar clip |
 | `Ctrl+D` | Duplicar clip |
 | `Ctrl+Z` / `Ctrl+Y` / `Ctrl+Shift+Z` | Undo / Redo |

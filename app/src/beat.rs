@@ -92,7 +92,6 @@ fn sync_sampler_to_beat(ui: &MainWindow, project: &Project) {
         std::path::Path::new(&path),
         0.0,
         512,
-        false,
         move |ready| {
             let Some(w) = ready else {
                 return;

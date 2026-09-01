@@ -172,8 +172,9 @@ fn main() -> Result<(), slint::PlatformError> {
     // Republica o projeto na thread RT quando algo muda (coalescido).
     let _audio_sync = audio_bridge::start_sync_timer(audio.clone(), project.clone());
 
-    // Cache de waveforms: clip_id → (picos, imagem pré-renderizada).
-    let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(HashMap::new()));
+    // Cache de waveforms (LRU): clip_id → CachedWave (LODs min/max).
+    const WAVEFORM_CACHE_CAP: usize = 256;
+    let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(crate::waveform::WaveformCache::new(WAVEFORM_CACHE_CAP)));
 
     // Cache de samples em RAM (path → decodificado + waveform):
     // alimenta colagem instantânea (Ctrl+C / Shift+clique) e o

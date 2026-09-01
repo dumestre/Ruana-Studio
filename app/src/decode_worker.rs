@@ -1,11 +1,10 @@
-//! Decode e rasterização de áudio em THREADS DE FUNDO.
+//! Decode de áudio em THREAD DE FUNDO.
 //!
 //! Reúne num só lugar todo o processamento pesado que NÃO pode rodar
 //! na thread da UI nem na thread de áudio:
 //!
 //! - Decodificação (symphonia/hound) de arquivos de áudio.
-//! - Construção da waveform (picos, display wave, mipmap, imagem RGBA).
-//! - Rasterização de waveform na resolução exata pedida pela UI.
+//! - Construção da waveform LOD multinível (barras min/max por coluna).
 //!
 //! # Modelo
 //!
@@ -16,7 +15,7 @@
 //! Slint / core / engine só acontece na event loop.
 //!
 //! A worker NÃO tem `Rc` da UI: os dados que cruzam a thread
-//! (`DecodedWave`, `Vec<u8>`) são puros e `Send`. Os callbacks capturam
+//! (`DecodedWave`, `ImportedWave`) são puros e `Send`. Os callbacks capturam
 //! `Rc`, mas só executam na thread da UI.
 
 use std::cell::{Cell, RefCell};
@@ -26,7 +25,7 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use daw_media::waveform_image::{Mipmap, WaveformLods};
+use crate::waveform::{LodBars, build_lods};
 
 /// Intervalo de drenagem dos resultados na event loop.
 const DRAIN_MS: Duration = Duration::from_millis(16);
@@ -37,10 +36,9 @@ const DRAIN_MS: Duration = Duration::from_millis(16);
 
 /// Áudio decodificado + waveform agregada.
 ///
-/// É o resultado CHEIO de um decode: a worker agrega tudo de uma vez
-/// (interleaved para o motor, samples/mono/mip/lods/imagem para a UI).
-/// Consumidores usam só o que precisam; os demais campos ficam para
-/// reuso futuro sem re-decodificar.
+/// Resultado de um decode: samples mono + peaks (para o sampler).
+/// Os campos waveform-image/mip/lods foram removidos — o LOD inteiro
+/// é construído no cache de timeline (WaveformCache) a partir de `samples`.
 #[allow(dead_code)]
 pub struct DecodedWave {
     pub name: String,
@@ -51,25 +49,21 @@ pub struct DecodedWave {
     pub channels: usize,
     pub sample_rate: u32,
     pub samples: Vec<f32>,
-    pub peaks: Vec<f32>,
-    pub mono_ds: Vec<f32>,
-    pub mip: Mipmap,
-    pub lods: WaveformLods,
-    pub image_rgba: Option<Vec<u8>>,
+    pub peaks: Vec<f32>, // sampler fallback
 }
 
-/// Resultado do import: áudio decodificado + silêncio aparado + TODA a
-/// waveform pronta (peaks, display, mipmap, lods, imagem). Computado na
-/// worker; a UI só faz a mutação de documento (barata).
+/// Resultado do import: áudio decodificado + silêncio aparado + LODs.
+///
+/// Computado na worker; a UI só faz a mutação de documento (barata).
+/// O cache de timeline (WaveformCache) recebe estes LODs prontos.
 pub struct ImportedWave {
     pub name: String,
     pub length_beats: f32,
     pub source_start_beats: f32,
-    pub peaks: Vec<f32>,
-    pub mono_ds: Vec<f32>,
-    pub mip: Mipmap,
-    pub lods: WaveformLods,
-    pub image_rgba: Option<Vec<u8>>,
+    /// LOD multinível (barras min/max por coluna).
+    pub lods: Vec<LodBars>,
+    /// Total de quadros (samples mono) deste trecho aparado.
+    pub frames: usize,
 }
 
 // ============================================================
@@ -80,19 +74,7 @@ struct DecodeJob {
     path: String,
     bpm: f32,
     points: usize,
-    with_image: bool,
     tx: mpsc::Sender<Option<DecodedWave>>,
-}
-
-struct RasterJob {
-    mono: Vec<f32>,
-    mip: Mipmap,
-    w: u32,
-    h: u32,
-    gain: f32,
-    fi: f32,
-    fo: f32,
-    tx: mpsc::Sender<Option<Vec<u8>>>,
 }
 
 struct ImportJob {
@@ -103,7 +85,6 @@ struct ImportJob {
 
 enum Job {
     Decode(DecodeJob),
-    Raster(RasterJob),
     Import(ImportJob),
 }
 
@@ -129,10 +110,6 @@ fn run_job(job: Job) {
             let out = decode_wave(&job);
             let _ = job.tx.send(out);
         }
-        Job::Raster(job) => {
-            let out = raster_wave(&job);
-            let _ = job.tx.send(out);
-        }
         Job::Import(job) => {
             let out = import_wave(&job);
             let _ = job.tx.send(out);
@@ -153,14 +130,6 @@ fn decode_wave(job: &DecodeJob) -> Option<DecodedWave> {
     };
 
     let peaks = daw_media::waveform::waveform_points(&decoded, points);
-    let (mono_ds, mip) = daw_media::waveform_image::build_display_wave(&decoded.samples);
-    let lods = daw_media::waveform_image::build_waveform_lods(&mono_ds);
-    let image_rgba = if job.with_image {
-        daw_media::waveform_image::waveform_image_rgba(&peaks, 0, false)
-            .filter(|v| !v.is_empty())
-    } else {
-        None
-    };
 
     let name = path
         .file_stem()
@@ -183,27 +152,10 @@ fn decode_wave(job: &DecodeJob) -> Option<DecodedWave> {
         sample_rate: decoded.sample_rate,
         samples: decoded.samples,
         peaks,
-        mono_ds,
-        mip,
-        lods,
-        image_rgba,
     })
 }
 
-fn raster_wave(job: &RasterJob) -> Option<Vec<u8>> {
-    let mut rgba = daw_media::waveform_image::waveform_image_rgba_mip(
-        &job.mono,
-        &job.mip,
-        job.w,
-        job.h,
-        (0, job.mono.len()),
-    )?;
-    apply_gain_and_fade(&mut rgba, job.w, job.h, job.gain, job.fi, job.fo);
-    Some(rgba)
-}
-
-/// Import: decodifica, apara silêncio nas bordas e agrega TODA a
-/// waveform (peaks, display wave, mipmap, lods, imagem) na worker.
+/// Import: decodifica, apara silêncio nas bordas e constrói LODs.
 ///
 /// Espelha a lógica de `app::importer::import_audio_file` para que a
 /// thread da UI faça só a mutação de documento.
@@ -267,28 +219,9 @@ fn import_wave(job: &ImportJob) -> Option<ImportedWave> {
         (secs * bpm / 60.0).max(0.0)
     };
 
-    let points = ((length_beats * 24.0) as usize).clamp(256, 2048);
-
-    // Construa uma WaveformData "aparada" para picos/mono corretos.
-    let trimmed_data = daw_media::waveform::WaveformData {
-        samples: trimmed,
-        display_samples: Vec::new(),
-        mipmap: daw_media::waveform_image::Mipmap { levels: Vec::new() },
-        interleaved: if end == total && start == 0 {
-            decoded.interleaved.clone()
-        } else {
-            decoded.interleaved[start * ch..end * ch].to_vec()
-        },
-        sample_rate: decoded.sample_rate,
-        channels: decoded.channels,
-        duration_seconds,
-    };
-    let peaks = daw_media::waveform::waveform_points(&trimmed_data, points);
-    let (mono_ds, mip) =
-        daw_media::waveform_image::build_display_wave(&trimmed_data.samples);
-    let lods = daw_media::waveform_image::build_waveform_lods(&mono_ds);
-    let image_rgba = daw_media::waveform_image::waveform_image_rgba(&peaks, 0, false)
-        .filter(|v| !v.is_empty());
+    // Constrói LODs a partir das samples aparadas.
+    let lods = build_lods(&trimmed);
+    let frames = trimmed.len();
 
     let name = path
         .file_stem()
@@ -300,51 +233,9 @@ fn import_wave(job: &ImportJob) -> Option<ImportedWave> {
         name,
         length_beats,
         source_start_beats,
-        peaks,
-        mono_ds,
-        mip,
         lods,
-        image_rgba,
+        frames,
     })
-}
-
-/// Aplica ganho linear e fades no RGBA (cópia pura da lógica da UI).
-fn apply_gain_and_fade(
-    rgba: &mut [u8],
-    w: u32,
-    h: u32,
-    gain_linear: f32,
-    fade_in_px: f32,
-    fade_out_px: f32,
-) {
-    let gain = gain_linear.clamp(0.0, 4.0);
-    let w = w as usize;
-    let h = h as usize;
-    if w == 0 || h == 0 {
-        return;
-    }
-    let fi = fade_in_px.clamp(0.0, w as f32) as usize;
-    let fo = fade_out_px.clamp(0.0, w as f32) as usize;
-    let fo_start = w.saturating_sub(fo);
-    for y in 0..h {
-        for x in 0..w {
-            let idx = (y * w + x) * 4;
-            if idx + 3 >= rgba.len() {
-                continue;
-            }
-            let mut factor = 1.0;
-            if fi > 0 && x < fi {
-                factor *= (x as f32 / fi as f32).clamp(0.0, 1.0);
-            }
-            if fo > 0 && x >= fo_start {
-                factor *= ((w - x) as f32 / fo as f32).clamp(0.0, 1.0);
-            }
-            let sample = factor * gain;
-            rgba[idx] = (rgba[idx] as f32 * sample).clamp(0.0, 255.0) as u8;
-            rgba[idx + 1] = (rgba[idx + 1] as f32 * sample).clamp(0.0, 255.0) as u8;
-            rgba[idx + 2] = (rgba[idx + 2] as f32 * sample).clamp(0.0, 255.0) as u8;
-        }
-    }
 }
 
 // ============================================================
@@ -356,10 +247,6 @@ enum Pending {
     Decode {
         rx: mpsc::Receiver<Option<DecodedWave>>,
         on_ready: Box<dyn FnOnce(Option<DecodedWave>) + 'static>,
-    },
-    Raster {
-        rx: mpsc::Receiver<Option<Vec<u8>>>,
-        on_ready: Box<dyn FnOnce(Option<Vec<u8>>) + 'static>,
     },
     Import {
         rx: mpsc::Receiver<Option<ImportedWave>>,
@@ -388,7 +275,7 @@ impl Default for DecodeWorker {
 }
 
 impl DecodeWorker {
-    /// Agenda decode + agregado de waveform no fundo.
+    /// Agenda decode + waveform no fundo.
     ///
     /// `on_ready(Option<DecodedWave>)` roda NA THREAD DA UI.
     pub fn schedule_decode(
@@ -396,7 +283,6 @@ impl DecodeWorker {
         path: &Path,
         bpm: f32,
         points: usize,
-        with_image: bool,
         on_ready: impl FnOnce(Option<DecodedWave>) + 'static,
     ) {
         let (tx, rx) = mpsc::channel::<Option<DecodedWave>>();
@@ -404,7 +290,6 @@ impl DecodeWorker {
             path: path.to_string_lossy().to_string(),
             bpm,
             points,
-            with_image,
             tx,
         }));
         self.queue.borrow_mut().push_back(Pending::Decode {
@@ -414,39 +299,7 @@ impl DecodeWorker {
         self.pump();
     }
 
-    /// Agenda uma rasterização de waveform (resolução exata pedida).
-    ///
-    /// `on_ready(Option<Vec<u8>>)` roda NA THREAD DA UI.
-    pub fn schedule_raster(
-        &self,
-        mono: Vec<f32>,
-        mip: Mipmap,
-        w: u32,
-        h: u32,
-        gain: f32,
-        fi: f32,
-        fo: f32,
-        on_ready: impl FnOnce(Option<Vec<u8>>) + 'static,
-    ) {
-        let (tx, rx) = mpsc::channel::<Option<Vec<u8>>>();
-        let _ = sender().send(Job::Raster(RasterJob {
-            mono,
-            mip,
-            w,
-            h,
-            gain,
-            fi,
-            fo,
-            tx,
-        }));
-        self.queue.borrow_mut().push_back(Pending::Raster {
-            rx,
-            on_ready: Box::new(on_ready),
-        });
-        self.pump();
-    }
-
-    /// Agenda um import completo (decode + aparar silêncio + waveform).
+    /// Agenda um import completo (decode + aparar silêncio + LODs).
     ///
     /// `on_ready(Option<ImportedWave>)` roda NA THREAD DA UI.
     pub fn schedule_import(
@@ -490,17 +343,6 @@ impl DecodeWorker {
                     };
                     match &mut pending {
                         Pending::Decode { rx, on_ready } => match rx.try_recv() {
-                            Ok(ready) => {
-                                let f = std::mem::replace(on_ready, Box::new(|_| {}));
-                                f(ready);
-                            }
-                            Err(mpsc::TryRecvError::Empty) => {
-                                queue.borrow_mut().push_front(pending);
-                                break;
-                            }
-                            Err(mpsc::TryRecvError::Disconnected) => {}
-                        },
-                        Pending::Raster { rx, on_ready } => match rx.try_recv() {
                             Ok(ready) => {
                                 let f = std::mem::replace(on_ready, Box::new(|_| {}));
                                 f(ready);

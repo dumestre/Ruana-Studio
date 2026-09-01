@@ -6,16 +6,12 @@ export struct ClipData {
     len: float,
     is-midi: bool,
     color: int,
-    waveform-points: [float],
-    // Waveform pré-renderizada (Rust, uma vez por import).
-    // Largura 0 = sem imagem → o clip cai no fallback de retângulos.
-    waveform-image: image,
-    // Janela rasterizada dentro do clip, em px do corpo (0 = corpo
-    // inteiro). No zoom fundo só o trecho VISÍVEL é rasterizado
-    // (puro, sample a sample) — `src-x` é a origem e `src-w` a
-    // largura. Se `src-w == 0`, a imagem cobre o corpo todo.
-    waveform-src-x: float,
-    waveform-src-w: float,
+    // Waveform "Bin Visual": barras min→max por coluna, em LOD
+    // multinível (publicadas pelo Rust — nível escolhido pela largura
+    // de exibição via waveform-resolution-requested). Arrays paralelas:
+    // `waveform-mins[i]` ≤ `waveform-maxes[i]` para todo i.
+    waveform-mins: [float],
+    waveform-maxes: [float],
     // Seleção múltipla (Ctrl+arrasto / marquee). Independente da
     // seleção simples (`selected-clip`).
     multi-selected: bool,

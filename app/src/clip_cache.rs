@@ -5,13 +5,13 @@
 //! uma cópia sem reler o disco:
 //!
 //! - metadados (nome, duração, comprimento em beats)
-//! - waveform decodificada (picos + mono + imagem RGBA)
+//! - waveform decodificada (LODs min/max por coluna)
 //! - handle de áudio pré-carregado no engine (BufferCache)
 //!
 //! A colagem/insersão vira uma operação puramente em memória:
 //! nenhum reprocessamento, nenhuma leitura de disco.
 
-use crate::waveform::CachedWave;
+use crate::waveform::{CachedWave, build_lods};
 use daw_media::waveform::WaveformData;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -33,7 +33,7 @@ pub struct CachedSample {
     /// aqui porque a colagem pode precisar recortar a fonte quando
     /// o clip copiado estava com offset (`source_start_beats`).
     pub decoded: std::sync::Arc<WaveformData>,
-    /// Waveform pronta para a UI (picos + mono + imagem RGBA).
+    /// Waveform pronta para a UI (LODs min/max).
     pub wave: CachedWave,
 }
 
@@ -64,12 +64,11 @@ pub fn ensure_cached(
 
     // Mesma resolução da importação (importer.rs): densa mas com teto.
     let points = ((length_beats * 24.0) as usize).clamp(256, 2048);
-    let peaks = daw_media::waveform::waveform_points(&decoded_raw, points);
-    let img = daw_media::waveform_image::waveform_image_rgba(&peaks, 0, false);
-    // Mono de exibição (downsample com teto) + pirâmide min/max: a
-    // cópia/colagem ganha o mesmo re-render por zoom do import.
-    let (mono_ds, mip) = daw_media::waveform_image::build_display_wave(&decoded_raw.samples);
-    let lods = daw_media::waveform_image::build_waveform_lods(&mono_ds);
+    let _peaks = daw_media::waveform::waveform_points(&decoded_raw, points);
+    let frames = decoded_raw.samples.len();
+
+    // Constrói LODs a partir das samples mono completas.
+    let lods = build_lods(&decoded_raw.samples);
 
     let name = path
         .file_stem()
@@ -82,17 +81,12 @@ pub fn ensure_cached(
         path: key.clone(),
         duration_seconds: duration,
         decoded: std::sync::Arc::new(decoded_raw),
-        wave: CachedWave {
-            peaks,
-            mono_ds,
-            mip,
-            lods,
-            image: img,
-        },
+        wave: CachedWave { lods, frames },
     };
     cache.borrow_mut().insert(key, entry.clone());
     Some(entry)
 }
+
 /// Key de cache normalizada (lowercase) — Windows é case-insensitive.
 pub fn norm_key(p: &PathBuf) -> String {
     p.to_string_lossy().to_lowercase()
@@ -164,10 +158,12 @@ fn decode_entry(path: &std::path::Path, bpm: f32) -> Option<CachedSample> {
     let bpm = if bpm > 0.0 { bpm } else { 120.0 };
     let length_beats = (duration * bpm / 60.0).max(0.01);
     let points = ((length_beats * 24.0) as usize).clamp(256, 2048);
-    let peaks = daw_media::waveform::waveform_points(&decoded_raw, points);
-    let img = daw_media::waveform_image::waveform_image_rgba(&peaks, 0, false);
-    let (mono_ds, mip) = daw_media::waveform_image::build_display_wave(&decoded_raw.samples);
-    let lods = daw_media::waveform_image::build_waveform_lods(&mono_ds);
+    let _peaks = daw_media::waveform::waveform_points(&decoded_raw, points);
+    let frames = decoded_raw.samples.len();
+
+    // Constrói LODs a partir das samples mono completas.
+    let lods = build_lods(&decoded_raw.samples);
+
     let name = path
         .file_stem()
         .and_then(|n| n.to_str())
@@ -178,12 +174,6 @@ fn decode_entry(path: &std::path::Path, bpm: f32) -> Option<CachedSample> {
         path: path.to_string_lossy().to_string(),
         duration_seconds: duration,
         decoded: std::sync::Arc::new(decoded_raw),
-        wave: CachedWave {
-            peaks,
-            mono_ds,
-            mip,
-            lods,
-            image: img,
-        },
+        wave: CachedWave { lods, frames },
     })
 }

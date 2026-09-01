@@ -49,48 +49,13 @@ export component TrackClip inherits Rectangle {
     // escreve via live-gain e comita no release (clip-gain-committed).
     in property <float> gain-db: 0.0;
 
-    in property <[float]> waveform-peaks: [];
+    in property <[float]> waveform-mins: [];
 
-    // Waveform pré-renderizada (Rust). width 0 = sem imagem.
-    in property <image> clip-waveform-image;
-
-    // Janela rasterizada (px do corpo). src-w == 0 → a imagem
-    // cobre o corpo inteiro; senão só o trecho [src-x, src-x+src-w]
-    // foi rasterizado (zoom fundo = janela visível, pura e leve).
-    in property <float> waveform-src-x: 0.0;
-    in property <float> waveform-src-w: 0.0;
-
-    // Viewport horizontal (origem e largura visíveis), no mesmo
-    // sistema de conteúdo do clip. Scroll/zoom acordam o re-render
-    // da janela da waveform.
-    in property <length> viewport-x: 0px;
-    in property <length> viewport-width: 1920px;
-
-    // =====================================================
-    // RE-RENDER POR JANELA
-    //
-    // Só o trecho do clip que cruza a viewport é pedido ao Rust:
-    // (id, largura total do corpo em px, janela x0/x1 em px). O
-    // raster na thread de fundo cobre APENAS essa janela — no zoom
-    // fundo só os samples visíveis (poucas waves) são desenhados,
-    // sample a sample: nítido e leve, sem varrer o arquivo inteiro.
-    // handler: app/src/waveform.rs::wire_resolution_requests.
-    // =====================================================
-
-    private property <float> wave-area-origin:
-        root.bw / 1px + 2.0;
-
-    // Altura de EXIBIÇÃO do corpo do clip (px). O re-render rasteriza
-    // a waveform nesta altura real — contornos e linhas ficam nítidos
-    // 1:1 na tela (sem achatamento vertical).
-    private property <float> wave-body-px:
-        (root.row-height - root.header-height - root.bw) / 1px;
+    in property <[float]> waveform-maxes: [];
 
     // PROFISSIONAL: ancoragem da waveform durante o TRIM (resize).
-    // Antes a waveform esticava com a largura do clip (escala),
-    // encurtando visualmente. Agora a waveform mantém a escala
-    // original (amostra-por-pixel) e o corpo apenas RECORTA (crop
-    // ancorado no grid) — exatamente como FL Studio/Ableton.
+    // A waveform mantém a escala original (amostra-por-coluna) e o
+    // corpo apenas RECORTA (crop ancorado no grid).
     private property <length> waveform-anchor-w:
         root.resize-start-len * root.px-per-beat - 4px;
     private property <length> waveform-live-offset:
@@ -98,26 +63,14 @@ export component TrackClip inherits Rectangle {
             ? (root.resize-start-beat - root.live-beat) * root.px-per-beat
             : 0px;
 
-    // Início da janela visível, em px do trecho da waveform
-    // (0 = borda esquerda do corpo). Recorta [0, largura-px].
-    private property <float> wave-w0:
-        Math.clamp(
-            (root.viewport-x / 1px)
-                - root.beat * (root.px-per-beat / 1px)
-                - root.wave-area-origin,
-            0.0,
-            (root.width / 1px) - 4.0
-        );
+    // Origem da área da waveform dentro do corpo (em px, 2px = border).
+    private property <float> wave-area-origin:
+        root.bw / 1px + 2.0;
 
-    private property <float> wave-w1:
-        Math.clamp(
-            (root.viewport-x / 1px)
-                + (root.viewport-width / 1px)
-                - root.beat * (root.px-per-beat / 1px)
-                - root.wave-area-origin,
-            root.wave-w0,
-            (root.width / 1px) - 4.0
-        );
+    // Altura de EXIBIÇÃO do corpo do clip (px) para o pedido de
+    // resolução.
+    private property <float> wave-body-px:
+        (root.row-height - root.header-height - root.bw) / 1px;
 
     changed width => {
         if !root.resizing
@@ -126,33 +79,21 @@ export component TrackClip inherits Rectangle {
             && !root.ghost
             && !root.is-midi
             && root.interactive
-            && root.waveform-peaks.length > 0
-            && root.width > 4px
-            && root.wave-w1 > root.wave-w0 + 0.5 {
+            && root.waveform-mins.length > 0
+            && root.waveform-maxes.length > 0
+            && root.width > 4px {
 
             TimelineMetrics.waveform-resolution-requested(
                 root.clip-id,
                 (root.width - 4px) / 1px,
-                root.wave-w0,
-                root.wave-w1,
+                0.0,
+                0.0,
                 root.wave-body-px,
                 root.gain-linear,
                 fade_ctrl.fade-in-w / 1px,
                 fade_ctrl.fade-out-w / 1px,
             );
         }
-    }
-
-    // Scroll horizontal / zoom: a janela muda sem a largura mudar
-    // (wave-w1 depende de viewport-x, viewport-width e px-per-beat).
-    // NOTA: durante MOVE puro (só beat/track muda) a largura não
-    // muda e o raster atual já cobre o corpo inteiro (view ignorada
-    // em waveform.rs), então NÃO re-renderiza aqui — evita o
-    // "trocar" de imagem e o custo de raster durante o arrasto.
-    // Re-render só por width/resizing/gain/fade.
-    changed wave-w1 => {
-        // Intencionalmente sem request (ver nota acima).
-        root.slice-preview-x = root.slice-preview-x;
     }
 
     // RESIZE: não existe RE-RENDER durante o gesto (guards acima).
@@ -166,15 +107,15 @@ export component TrackClip inherits Rectangle {
             && !root.ghost
             && !root.is-midi
             && root.interactive
-            && root.waveform-peaks.length > 0
-            && root.width > 4px
-            && root.wave-w1 > root.wave-w0 + 0.5 {
+            && root.waveform-mins.length > 0
+            && root.waveform-maxes.length > 0
+            && root.width > 4px {
 
             TimelineMetrics.waveform-resolution-requested(
                 root.clip-id,
                 (root.width - 4px) / 1px,
-                root.wave-w0,
-                root.wave-w1,
+                0.0,
+                0.0,
                 root.wave-body-px,
                 root.gain-linear,
                 fade_ctrl.fade-in-w / 1px,
@@ -581,73 +522,38 @@ export component TrackClip inherits Rectangle {
             true;
 
 
+// =================================================
+        // WAVEFORM — Bin Visual (barras min→max por coluna)
         // =================================================
-        // WAVEFORM
-        //
-        // Caminho rápido: imagem pré-renderizada no Rust (1
-        // elemento). Fallback: retângulos por pico — usado pelo
-        // fantasma do drag e quando não há imagem.
+        // Uma barra vertical por coluna, ancorada na largura do
+        // corpo do clip (parent.width). Durante resize, a largura
+        // acompanha live-len/anchor-w e as barras redistribuem-se
+        // uniformemente — a onda mantém-se ancorada no clip sem
+        // deslocamento visual.
         // =================================================
 
         if !root.is-midi
-            && (clip-waveform-image.width > 0
-                || root.wave-w1 > 0.0):
-
-                Image {
-                    // A imagem já vem rasterizada na resolução EXATA
-                    // da largura do corpo do clip pelo Rust.
-                    // image-fit: ImageFit.contain evita qualquer stretch — a
-                    // waveform gruda no clip sem distorcer,
-                    // mesmo durante zoom/scroll. O crop do
-                    // conteúdo excedente fica por conta do
-                    // clip: true do Rectangle pai.
-                    image-fit: ImageFit.contain;
-                    x: root.resizing
-                    ? 2px + root.waveform-live-offset + root.waveform-src-x * 1px
-                    : 2px + root.waveform-src-x * 1px;
-                y: 0px;
-                width:
-                    root.waveform-src-w > 0.0
-                        ? root.waveform-src-w * 1px
-                        : parent.width - 4px;
-                height: parent.height;
-                source: clip-waveform-image;
-                image-rendering: pixelated;
-            }
-
-        if !root.is-midi
-            && clip-waveform-image.width == 0
-            && root.waveform-peaks.length > 0:
+            && root.waveform-mins.length > 0
+            && root.waveform-maxes.length > 0:
 
             AudioWaveform {
-
                 x: root.resizing ? 2px + root.waveform-live-offset : 2px;
 
-                y:
-                    0px;
+                y: 0px;
 
                 width:
-                    root.waveform-src-w > 0.0
-                        ? root.waveform-src-w * 1px
-                        : (root.resizing ? root.waveform-anchor-w : parent.width - 4px);
+                    root.resizing
+                        ? root.waveform-anchor-w
+                        : parent.width - 4px;
 
-                height:
-                    parent.height;
+                height: parent.height;
 
-                waveform-color:
-                    #0A0A0A;
+                waveform-color: #0A0A0A;
 
-                hovered:
-                    root.hovered;
+                hovered: root.hovered;
 
-                peaks:
-                    root.waveform-peaks;
-
-                waveform-src-x:
-                    root.waveform-src-x;
-
-                waveform-src-w:
-                    root.waveform-src-w;
+                mins: root.waveform-mins;
+                maxs: root.waveform-maxes;
             }
     }
 
@@ -1379,8 +1285,11 @@ export component TrackClip inherits Rectangle {
                         ClipDragState.is-midi =
                             root.is-midi;
 
-                        ClipDragState.waveform-peaks =
-                            root.waveform-peaks;
+                        ClipDragState.waveform-mins =
+                            root.waveform-mins;
+
+                        ClipDragState.waveform-maxes =
+                            root.waveform-maxes;
 
                         ClipDragState.px-per-beat =
                             root.px-per-beat;
