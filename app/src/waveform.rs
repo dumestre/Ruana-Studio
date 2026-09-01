@@ -55,38 +55,6 @@ pub fn waveform_image_to_slint(rgba: Option<Vec<u8>>) -> slint::Image {
     }
 }
 
-/// Aplica ganho linear e fade in/out no RGBA da waveform.
-fn apply_gain_and_fade_to_rgba(rgba: &mut [u8], w: u32, h: u32, gain_linear: f32, fade_in_px: f32, fade_out_px: f32) {
-    let gain = gain_linear.clamp(0.0, 4.0);
-    let w = w as usize;
-    let h = h as usize;
-    if w == 0 || h == 0 {
-        return;
-    }
-    let fi = fade_in_px.clamp(0.0, w as f32) as usize;
-    let fo = fade_out_px.clamp(0.0, w as f32) as usize;
-    let fo_start = w.saturating_sub(fo);
-    for y in 0..h {
-        for x in 0..w {
-            let idx = (y * w + x) * 4;
-            if idx + 3 >= rgba.len() {
-                continue;
-            }
-            let mut factor = 1.0;
-            if fi > 0 && x < fi {
-                factor *= (x as f32 / fi as f32).clamp(0.0, 1.0);
-            }
-            if fo > 0 && x >= fo_start {
-                factor *= ((w - x) as f32 / fo as f32).clamp(0.0, 1.0);
-            }
-            let sample = factor * gain;
-            rgba[idx] = (rgba[idx] as f32 * sample).clamp(0.0, 255.0) as u8;
-            rgba[idx + 1] = (rgba[idx + 1] as f32 * sample).clamp(0.0, 255.0) as u8;
-            rgba[idx + 2] = (rgba[idx + 2] as f32 * sample).clamp(0.0, 255.0) as u8;
-        }
-    }
-}
-
 /// Atualiza apenas os pontos/imagem de um ClipData existente a partir do cache.
 pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache) -> ClipData {
     let (peaks, img) = match waveforms.get(&id) {
@@ -156,6 +124,7 @@ pub fn wire_resolution_requests(
     let pending: Rc<RefCell<std::collections::HashMap<u64, PendingWave>>> =
         Rc::new(RefCell::new(std::collections::HashMap::new()));
     let scheduled: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+    let worker = crate::decode_worker::DecodeWorker::default();
 
     ui.global::<TimelineMetrics>()
         .on_waveform_resolution_requested(move |id, width_px, _wx0, _wx1, hh, gain_linear, fi, fo| {
@@ -179,6 +148,7 @@ pub fn wire_resolution_requests(
             let scheduled_shot = scheduled.clone();
             let waves_shot = waveforms.clone();
             let clips_shot = clips_model.clone();
+            let worker_shot = worker.clone();
 
             slint::Timer::single_shot(
                 std::time::Duration::from_millis(40),
@@ -188,32 +158,49 @@ pub fn wire_resolution_requests(
                     // ao parar o scroll, cada clip recebe sua waveform.
                     let batch = std::mem::take(&mut *pending_shot.borrow_mut());
 
-                    for (&req_id, req) in &batch {
-                        let img = waves_shot.borrow().get(&req_id).and_then(|c| {
-                            let mono = &c.mono_ds;
-                            if mono.is_empty() {
-                                return None;
-                            }
-                            let mut rgba =
-                                daw_media::waveform_image::waveform_image_rgba_mip(
-                                    mono,
-                                    &c.mip,
-                                    req.w,
-                                    req.h,
-                                    (0, mono.len()),
-                                )?;
-                            apply_gain_and_fade_to_rgba(&mut rgba, req.w, req.h, req.gain, req.fi, req.fo);
-                            Some(image_from_rgba(&rgba, req.w, req.h))
-                        });
+                    for (req_id, req) in batch {
+                        // Tira os dados do cache e agenda a rasterização
+                        // na WORKER thread. O raster (tiny_skia) é
+                        // processamento pesado e NÃO roda na UI.
+                        let mono = waves_shot
+                            .borrow()
+                            .get(&req_id)
+                            .map(|c| c.mono_ds.clone())
+                            .filter(|m| !m.is_empty());
+                        let mip = waves_shot
+                            .borrow()
+                            .get(&req_id)
+                            .map(|c| c.mip.clone());
+                        let Some((mono, mip)) = mono.zip(mip) else {
+                            continue;
+                        };
 
-                        if let Some(i) = clip_row(&clips_shot, req_id as i32) {
-                            if let Some(mut data) = clips_shot.row_data(i) {
-                                data.waveform_image = img.unwrap_or_default();
-                                data.waveform_src_x = 0.0;
-                                data.waveform_src_w = req.w as f32;
-                                clips_shot.set_row_data(i, data);
-                            }
-                        }
+                        let clips_shot = clips_shot.clone();
+                        worker_shot.schedule_raster(
+                            mono,
+                            mip,
+                            req.w,
+                            req.h,
+                            req.gain,
+                            req.fi,
+                            req.fo,
+                            move |rgba| {
+                                let img = match rgba {
+                                    Some(rgba) if !rgba.is_empty() => {
+                                        image_from_rgba(&rgba, req.w, req.h)
+                                    }
+                                    _ => slint::Image::default(),
+                                };
+                                if let Some(i) = clip_row(&clips_shot, req_id as i32) {
+                                    if let Some(mut data) = clips_shot.row_data(i) {
+                                        data.waveform_image = img;
+                                        data.waveform_src_x = 0.0;
+                                        data.waveform_src_w = req.w as f32;
+                                        clips_shot.set_row_data(i, data);
+                                    }
+                                }
+                            },
+                        );
                     }
                 },
             );

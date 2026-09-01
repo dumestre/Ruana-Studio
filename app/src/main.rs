@@ -21,6 +21,7 @@ mod async_sampler;
 mod beat;
 mod clip_cache;
 mod cursors;
+mod decode_worker;
 mod explorer;
 mod floats;
 mod icon;

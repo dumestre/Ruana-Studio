@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use crate::ClipData;
 use crate::MainWindow;
-use crate::importer::{import_audio_file, is_audio_path};
+use crate::importer::{import_audio_file_async, is_audio_path};
 use crate::models::clip_row;
 use crate::waveform::WaveformCache;
 use daw_core::clip::{Clip, ClipKind};
@@ -31,6 +31,7 @@ pub fn install(
         let project = project.clone();
         let waveforms = waveforms.clone();
         let clips_model = clips_model.clone();
+        let worker = crate::decode_worker::DecodeWorker::default();
         let drop_track_colors = track_colors_model.clone();
         let ui_weak = ui.as_weak();
         ui.on_clip_dropped(move |track, beat, name, is_midi, path| {
@@ -41,18 +42,20 @@ pub fn install(
 
             // Arquivo real de áudio → mesma rota do drop do Sistema
             // Operacional: duração real, waveform e vaga livre.
+            // Decode na worker thread; a UI segue fluida.
             if !is_midi && !path.is_empty() {
                 let file = std::path::PathBuf::from(path.as_str());
                 if is_audio_path(&file) && file.is_file() {
-                    import_audio_file(
+                    import_audio_file_async(
                         &file,
                         track,
                         beat,
                         bpm,
-                        &project,
-                        &waveforms,
-                        &clips_model,
-                        &drop_track_colors,
+                        project.clone(),
+                        waveforms.clone(),
+                        clips_model.clone(),
+                        drop_track_colors.clone(),
+                        &worker,
                     );
                     return;
                 }

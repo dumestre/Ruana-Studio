@@ -121,6 +121,17 @@ pub fn drain_pending(cache: &RefCell<SampleCache>) {
     }
 }
 
+/// A entrada do sample JÁ está em RAM (sem I/O, sem decode)?
+///
+/// `false` para arquivos que ainda estão decodificando em background
+/// ou que nunca foram vistos. Usado para decidir entre inserção
+/// instantânea e agendamento de decode na worker.
+pub fn peek_cached(cache: &RefCell<SampleCache>, path: &std::path::Path) -> bool {
+    drain_pending(cache);
+    let key = norm_key(&path.to_path_buf());
+    cache.borrow().contains_key(&key)
+}
+
 pub fn spawn_prefetch(cache: &RefCell<SampleCache>, path: &std::path::Path, bpm: f32) {
     let key = norm_key(&path.to_path_buf());
     // Já cacheado ou já decodificando? Não repete (requisito:

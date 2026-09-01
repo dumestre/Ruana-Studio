@@ -223,6 +223,96 @@ pub fn import_audio_file(
     Some(clip_id)
 }
 
+/// Importa um arquivo de áudio para a timeline com DECODE NA WORKER.
+///
+/// Rota assíncrona: decodifica (symphonia/hound), apara silêncio e
+/// agrega a waveform numa thread de fundo (`DecodeWorker`). Quando o
+/// resultado chega (event loop da UI), só a MUTAÇÃO de documento —
+/// barata — roda na thread da UI. A UI nunca bloqueia em decode.
+///
+/// Substitui o caminho síncrono nas rotas de interação (drop do SO e
+/// drop interno da timeline).
+pub fn import_audio_file_async(
+    path: &std::path::Path,
+    track_hint: i32,
+    beat_hint: f32,
+    bpm: f32,
+    project: std::rc::Rc<RefCell<Project>>,
+    waveforms: std::rc::Rc<RefCell<WaveformCache>>,
+    clips_model: std::rc::Rc<slint::VecModel<ClipData>>,
+    track_colors_model: std::rc::Rc<slint::VecModel<i32>>,
+    worker: &crate::decode_worker::DecodeWorker,
+) {
+    let path_str = path.to_string_lossy().to_string();
+    let err_label = path
+        .file_stem()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Audio Clip")
+        .to_string();
+    worker.schedule_import(path, bpm, move |ready| {
+        let Some(imp) = ready else {
+            eprintln!("[import] {err_label} não decodificou");
+            return;
+        };
+
+        // ---- mutação do documento (barata, na thread da UI) ----
+        let clip_id = {
+            let mut proj = project.borrow_mut();
+            let preferred = track_hint.max(0) as u64;
+            let track_id = proj
+                .track_with_room(preferred, beat_hint.max(0.0), imp.length_beats)
+                .or_else(|| proj.track(preferred).map(|t| t.id));
+            let Some(track_id) = track_id else {
+                return;
+            };
+            let start = proj.find_free_slot(track_id, beat_hint.max(0.0), imp.length_beats);
+            let Some(id) = proj.add_clip_with_source(
+                track_id,
+                ClipKind::Audio,
+                imp.name.as_str(),
+                start,
+                imp.length_beats,
+                imp.source_start_beats,
+                Some(path_str.clone()),
+            ) else {
+                return;
+            };
+            let color = proj
+                .clips
+                .iter()
+                .find(|c| c.id == id)
+                .map(|c| c.color)
+                .unwrap_or(0);
+            if let Some(track_index) = proj.tracks.iter().position(|t| t.id == track_id) {
+                proj.tracks[track_index].color = color;
+                if track_index < track_colors_model.row_count() {
+                    track_colors_model.set_row_data(track_index, color as i32);
+                }
+            }
+            id
+        };
+
+        if !imp.peaks.is_empty() {
+            waveforms.borrow_mut().insert(
+                clip_id,
+                CachedWave {
+                    peaks: imp.peaks,
+                    mono_ds: imp.mono_ds,
+                    mip: imp.mip,
+                    lods: imp.lods,
+                    image: imp.image_rgba,
+                },
+            );
+            let wf = waveforms.borrow();
+            if let Some(i) = clip_row(&clips_model, clip_id as i32) {
+                if let Some(data) = clips_model.row_data(i) {
+                    clips_model.set_row_data(i, to_clip_data_from_id(clip_id, &data, &wf));
+                }
+            }
+        }
+    });
+}
+
 /// Importa um arquivo de áudio usando o CACHE DE SAMPLES em RAM.
 ///
 /// Rota do drop do Sistema Operacional: como o pré-decode começou no
@@ -267,6 +357,52 @@ pub fn import_audio_file_with_cache(
         clips_model,
         track_colors_model,
     )
+}
+
+/// Importa via cache quando a entrada JÁ está em RAM (instantâneo);
+/// senão agenda o decode (symphonia) na WORKER thread — a UI nunca
+/// bloqueia em leitura de disco + decode no drop do SO.
+pub fn import_audio_file_with_cache_async(
+    path: &std::path::Path,
+    track_hint: i32,
+    beat_hint: f32,
+    bpm: f32,
+    project: std::rc::Rc<RefCell<Project>>,
+    waveforms: std::rc::Rc<RefCell<WaveformCache>>,
+    clips_model: std::rc::Rc<slint::VecModel<ClipData>>,
+    track_colors_model: std::rc::Rc<slint::VecModel<i32>>,
+    sample_cache: &std::cell::RefCell<crate::clip_cache::SampleCache>,
+    worker: &crate::decode_worker::DecodeWorker,
+) {
+    // Pré-decode já terminou (sample em RAM)? Insere instantaneamente,
+    // sem nenhuma leitura de disco (só processamento em memória).
+    if crate::clip_cache::peek_cached(sample_cache, path) {
+        let _ = import_audio_file_with_cache(
+            path,
+            track_hint,
+            beat_hint,
+            bpm,
+            &*project,
+            &*waveforms,
+            &clips_model,
+            &track_colors_model,
+            sample_cache,
+        );
+        return;
+    }
+    // Ainda decodificando (ou nunca pré-buscado): decode completo na
+    // worker thread; o documento só muda quando o resultado chega.
+    import_audio_file_async(
+        path,
+        track_hint,
+        beat_hint,
+        bpm,
+        project,
+        waveforms,
+        clips_model,
+        track_colors_model,
+        worker,
+    );
 }
 
 /// Cria o clip a partir de uma entrada JÁ decodificada do cache.

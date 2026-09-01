@@ -55,48 +55,12 @@ fn sample_label(path: &str) -> String {
         .to_string()
 }
 
-/// Decodifica (uma vez por path) e devolve a vista do sampler.
-fn sampler_view_data(path: &str) -> Option<Arc<SamplerViewData>> {
-    if let Some(hit) = sample_cache()
+/// Vista do sampler CACHEADA (sem decode, sem I/O).
+fn sampler_view_cached(path: &str) -> Option<Arc<SamplerViewData>> {
+    sample_cache()
         .lock()
         .ok()
         .and_then(|m| m.get(path).cloned())
-    {
-        return Some(hit);
-    }
-    let path_buf = std::path::PathBuf::from(path);
-    let decoded = daw_media::waveform::decode_audio(&path_buf).ok()?;
-    let name = path_buf
-        .file_stem()
-        .and_then(|n| n.to_str())
-        .unwrap_or("Sample")
-        .to_string();
-    let format = path_buf
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_uppercase();
-    let duration = format!("{:.2}s", decoded.duration_seconds);
-    let peaks = daw_media::waveform::waveform_points(&decoded, 512);
-    let entry = Arc::new(SamplerViewData {
-        name,
-        format,
-        duration,
-        peaks,
-    });
-    if let Ok(mut map) = sample_cache().lock() {
-        map.insert(path.to_string(), entry.clone());
-    }
-    Some(entry)
-}
-
-/// Limpa o painel Sampler (linha sem sample / sem padrão).
-fn clear_sampler(ui: &MainWindow) {
-    ui.set_sampler_sample_name(SharedString::default());
-    ui.set_sampler_sample_loaded(false);
-    ui.set_sampler_sample_format(SharedString::default());
-    ui.set_sampler_sample_duration(SharedString::default());
-    ui.set_sampler_sample_peaks(Rc::new(VecModel::<f32>::default()).into());
 }
 
 /// Sincroniza o painel Sampler com a linha selecionada do beat.
@@ -114,15 +78,57 @@ fn sync_sampler_to_beat(ui: &MainWindow, project: &Project) {
         clear_sampler(ui);
         return;
     };
-    let Some(view) = sampler_view_data(&path) else {
-        clear_sampler(ui);
+    // Já decodificado? Aplica na hora.
+    if let Some(view) = sampler_view_cached(&path) {
+        apply_sampler_view(ui, &view);
         return;
-    };
+    }
+    // Ainda não: mostra vazio e decodifica NA WORKER thread. Quando o
+    // resultado chega (event loop), o painel é atualizado aqui mesmo.
+    clear_sampler(ui);
+    let ui_weak = ui.as_weak();
+    let cache_path = path.clone();
+    crate::decode_worker::DecodeWorker::default().schedule_decode(
+        std::path::Path::new(&path),
+        0.0,
+        512,
+        false,
+        move |ready| {
+            let Some(w) = ready else {
+                return;
+            };
+            let entry = Arc::new(SamplerViewData {
+                name: w.name,
+                format: w.format,
+                duration: format!("{:.2}s", w.duration_seconds),
+                peaks: w.peaks,
+            });
+            if let Ok(mut map) = sample_cache().lock() {
+                map.insert(cache_path, entry.clone());
+            }
+            if let Some(ui) = ui_weak.upgrade() {
+                apply_sampler_view(&ui, &entry);
+            }
+        },
+    );
+}
+
+/// Aplica uma vista decodificada nos models do painel Sampler.
+fn apply_sampler_view(ui: &MainWindow, view: &SamplerViewData) {
     ui.set_sampler_sample_name(view.name.clone().into());
     ui.set_sampler_sample_loaded(true);
     ui.set_sampler_sample_format(view.format.clone().into());
     ui.set_sampler_sample_duration(view.duration.clone().into());
     ui.set_sampler_sample_peaks(Rc::new(VecModel::from(view.peaks.clone())).into());
+}
+
+/// Limpa o painel Sampler (linha sem sample / sem padrão).
+fn clear_sampler(ui: &MainWindow) {
+    ui.set_sampler_sample_name(SharedString::default());
+    ui.set_sampler_sample_loaded(false);
+    ui.set_sampler_sample_format(SharedString::default());
+    ui.set_sampler_sample_duration(SharedString::default());
+    ui.set_sampler_sample_peaks(Rc::new(VecModel::<f32>::default()).into());
 }
 
 /// Aplica uma mutação no projeto e re-projeta o beat na sequência.

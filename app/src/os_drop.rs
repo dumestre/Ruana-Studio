@@ -14,7 +14,7 @@ use crate::MainWindow;
 use crate::SamplerMetrics;
 use crate::BeatMetrics;
 use crate::clip_cache;
-use crate::importer::{import_audio_file_with_cache, is_audio_path};
+use crate::importer::{import_audio_file_with_cache_async, is_audio_path};
 use crate::waveform::WaveformCache;
 use daw_core::project::Project;
 use std::cell::RefCell;
@@ -193,16 +193,17 @@ pub fn install(
                                 let coords =
                                     ui.invoke_map_window_coords_to_timeline(logical_x, logical_y);
 
-                                import_audio_file_with_cache(
+                                import_audio_file_with_cache_async(
                                     &path,
                                     coords.track,
                                     coords.beat,
                                     ui.get_bpm() as f32,
-                                    &project,
-                                    &waveforms,
-                                    &clips_model,
-                                    &track_colors_model,
+                                    project.clone(),
+                                    waveforms.clone(),
+                                    clips_model.clone(),
+                                    track_colors_model.clone(),
                                     &sample_cache,
+                                    &crate::decode_worker::DecodeWorker::default(),
                                 );
                             }
 
