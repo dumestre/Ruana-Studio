@@ -46,8 +46,28 @@ where
     PianoRollData::get(ui).set_notes(Rc::new(slint::VecModel::from(notes)).into());
 }
 
+/// Substitui as notas do editor pelas de um clip (abrindo o piano roll
+/// para editar um clip MIDI específico).
+pub fn seed_editor(
+    editor: &RefCell<NoteEditor>,
+    clip_notes: &[daw_midi::Note],
+) {
+    let mut e = editor.borrow_mut();
+    e.clear_notes();
+    for n in clip_notes {
+        e.add(n.pitch, n.start, n.length, n.velocity);
+    }
+}
+
 /// Semeia os globals do piano roll e assina as ações de edição de notas.
-pub fn wire_piano_roll<C: slint::ComponentHandle + 'static>(ui: &C, editor: Rc<RefCell<NoteEditor>>)
+///
+/// `on_mutated` é chamado após qualquer mutação de notas — permite
+/// persistir o estado do editor de volta ao clip ativo (janela principal).
+pub fn wire_piano_roll<C: slint::ComponentHandle + 'static>(
+    ui: &C,
+    editor: Rc<RefCell<NoteEditor>>,
+    on_mutated: &Rc<dyn Fn()>,
+)
 where
     for<'a> PianoRollData<'a>: slint::Global<'a, C>,
     for<'a> PianoRollActions<'a>: slint::Global<'a, C>,
@@ -75,39 +95,46 @@ where
     {
         let editor = editor.clone();
         let ui_weak = ui.as_weak();
+        let on_mutated = on_mutated.clone();
         actions.on_note_added(move |note, start, length, velocity| {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
             };
             editor.borrow_mut().add(note, start, length, velocity);
             refresh_notes(&ui, &editor);
+            on_mutated();
         });
     }
     {
         let editor = editor.clone();
         let ui_weak = ui.as_weak();
+        let on_mutated = on_mutated.clone();
         actions.on_note_moved(move |id, start| {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
             };
             editor.borrow_mut().move_note(id, start);
             refresh_notes(&ui, &editor);
+            on_mutated();
         });
     }
     {
         let editor = editor.clone();
         let ui_weak = ui.as_weak();
+        let on_mutated = on_mutated.clone();
         actions.on_note_resized(move |id, length| {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
             };
             editor.borrow_mut().resize_note(id, length);
             refresh_notes(&ui, &editor);
+            on_mutated();
         });
     }
     {
         let editor = editor.clone();
         let ui_weak = ui.as_weak();
+        let on_mutated = on_mutated.clone();
         actions.on_note_deleted(move |id| {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
@@ -117,6 +144,7 @@ where
                 PianoRollData::get(&ui).set_selected_note(-1);
             }
             refresh_notes(&ui, &editor);
+            on_mutated();
         });
     }
     {
@@ -153,12 +181,14 @@ where
     {
         let editor = editor.clone();
         let ui_weak = ui.as_weak();
+        let on_mutated = on_mutated.clone();
         actions.on_note_velocity_changed(move |id, velocity| {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
             };
             editor.borrow_mut().change_note_velocity(id, velocity);
             refresh_notes(&ui, &editor);
+            on_mutated();
         });
     }
     {
@@ -172,6 +202,7 @@ where
     {
         let editor = editor.clone();
         let ui_weak = ui.as_weak();
+        let on_mutated = on_mutated.clone();
         actions.on_quantize_requested(move |denom| {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
@@ -184,11 +215,13 @@ where
                 editor.borrow_mut().quantize_selected(denom, &ids);
             }
             refresh_notes(&ui, &editor);
+            on_mutated();
         });
     }
     {
         let editor = editor.clone();
         let ui_weak = ui.as_weak();
+        let on_mutated = on_mutated.clone();
         actions.on_delete_selection_requested(move || {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
@@ -201,6 +234,7 @@ where
                 PianoRollData::get(&ui)
                     .set_selected_notes(Rc::new(slint::VecModel::from(Vec::<i32>::new())).into());
                 refresh_notes(&ui, &editor);
+                on_mutated();
             } else {
                 let single = PianoRollData::get(&ui).get_selected_note();
                 if single >= 0 {
@@ -210,6 +244,7 @@ where
                         Rc::new(slint::VecModel::from(Vec::<i32>::new())).into(),
                     );
                     refresh_notes(&ui, &editor);
+                    on_mutated();
                 }
             }
         });

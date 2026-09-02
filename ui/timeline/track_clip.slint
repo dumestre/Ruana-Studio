@@ -233,6 +233,8 @@ export component TrackClip inherits Rectangle {
         float
     );
 
+    callback piano-roll-open-requested(int);
+
 
     // =====================================================
     // DIMENSÕES
@@ -1015,7 +1017,16 @@ export component TrackClip inherits Rectangle {
 
         double-clicked => {
 
+            // Clip MIDI: duplo clique abre o piano roll dockado vinculado
+            // às notas do clip.
             if root.active-tool == 0
+                && root.is-midi {
+
+                root.piano-roll-open-requested(
+                    root.clip-id
+                );
+
+            } else if root.active-tool == 0
                 && self.mouse-y <= root.header-height {
 
                 root.rename-buffer =

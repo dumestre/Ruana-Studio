@@ -14,6 +14,7 @@ import { Mixer } from "../mixer/mixer.slint";
 import { SamplerArea } from "../components/sampler_area.slint";
 import { PianoRollArea } from "../piano_roll/piano_roll.slint";
 import { BarProperties } from "../components/bar_properties.slint";
+import { VerticalBar } from "../components/vertical_bar.slint";
 
 import {
     SplitterVerticalGrowLeft,
@@ -31,6 +32,7 @@ import {
 import { TrackPanel } from "../timeline/track_panel.slint";
 import { BottomToolbar } from "../components/bottom_toolbar.slint";
 import { ClipDragState, TimelineMetrics, SamplerMetrics, SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
+import { HorizontalBarTool } from "../components/horizontal_bar.slint";
 
 
 export component Workspace inherits Rectangle {
@@ -381,6 +383,8 @@ export component Workspace inherits Rectangle {
 
     callback clip-copy-requested(int);
 
+    callback piano-roll-open-requested(int);
+
     callback clip-fade-committed(
         int,
         float,
@@ -393,6 +397,8 @@ export component Workspace inherits Rectangle {
     );
 
     callback clip-paste-requested(float, int);
+
+    callback pencil-created(float, int, float);
 
     callback marquee-select(float, float, int, int);
 
@@ -1374,6 +1380,18 @@ export component Workspace inherits Rectangle {
 
 
                             // ---------------------------------
+                            // PIANO ROLL (clipe MIDI)
+                            // ---------------------------------
+
+                            piano-roll-open-requested(id) => {
+
+                                root.piano-roll-open-requested(
+                                    id
+                                );
+                            }
+
+
+                            // ---------------------------------
                             // FADE COMMIT
                             // ---------------------------------
 
@@ -1420,6 +1438,20 @@ export component Workspace inherits Rectangle {
                                     track
                                 );
                             }
+
+                            pencil-created(
+                                beat,
+                                track,
+                                len
+                            ) => {
+
+                                root.pencil-created(
+                                    beat,
+                                    track,
+                                    len
+                                );
+                            }
+                            
                         }
                     }
                 }
@@ -1432,175 +1464,13 @@ export component Workspace inherits Rectangle {
                 // HORIZONTAL SCROLLBAR
                 // =================================================
 
-                ScrollBarHorizontal {
-
-                    x:
-                        root.tracks-header-width;
-
-                    y:
-                        parent.height - 14px;
-
-                    width:
-                        parent.width
-                        - root.tracks-header-width
-                        - 32px;
-
-                    height:
-                        14px;
-
-                    value <=>
-                        timeline.scroll-x;
-
-                    max-value:
-                        timeline.max-scroll-x;
-
-                    thumb-size:
-                        parent.width
-                        * parent.width
-                        / (
-                            parent.width
-                            + timeline.max-scroll-x
-                        );
-
-                    z:
-                        60;
-                }
+              
+                
+            
 
 
-                // =================================================
-                // HORIZONTAL ZOOM
-                // =================================================
 
-                ZoomBarHorizontal {
-
-                    x:
-                        root.tracks-header-width;
-
-                    y:
-                        parent.height
-                        - 14px
-                        - 16px;
-
-                    width:
-                        parent.width
-                        - root.tracks-header-width
-                        - 32px;
-
-                    height:
-                        16px;
-
-                    value:
-                        root.zoom-level;
-
-                    min-value:
-                        0.5;
-
-                    max-value:
-                        4.0;
-
-
-                    zoom-requested(new-zoom) => {
-
-                        let old-zoom =
-                            timeline.zoom;
-
-                        root.zoom-level =
-                            new-zoom;
-
-                        timeline.zoom =
-                            new-zoom;
-
-                        timeline.scroll-x =
-                            max(
-                                0px,
-                                min(
-                                    timeline.max-scroll-x,
-                                    (
-                                        (
-                                            timeline.width / 2
-                                            + timeline.scroll-x
-                                        )
-                                        / old-zoom
-                                    )
-                                    * new-zoom
-                                    - timeline.width / 2
-                                )
-                            );
-                    }
-
-
-                    z:
-                        60;
-                }
-
-
-                // =================================================
-                // VERTICAL SCROLLBAR
-                // =================================================
-
-                ScrollBarVertical {
-
-                    x:
-                        parent.width - 14px;
-
-                    y:
-                        0px;
-
-                    width:
-                        14px;
-
-                    height:
-                        parent.height - 30px;
-
-                    value <=>
-                        timeline.scroll-y;
-
-                    max-value:
-                        timeline.max-scroll-y;
-
-                    thumb-size:
-                        parent.height
-                        * parent.height
-                        / (
-                            parent.height
-                            + timeline.max-scroll-y
-                        );
-
-                    z:
-                        60;
-                }
-
-
-                // =================================================
-                // VERTICAL ZOOM
-                // =================================================
-
-                ZoomBarVertical {
-
-                    x:
-                        parent.width - 30px;
-
-                    y:
-                        0px;
-
-                    width:
-                        16px;
-
-                    height:
-                        parent.height - 30px;
-
-                    value <=>
-                        root.zoom-y-level;
-
-                    min-value:
-                        0.4;
-
-                    max-value:
-                        3.0;
-
-                    z:
-                        60;
-                }
+            
             }
 
 
@@ -1608,6 +1478,7 @@ export component Workspace inherits Rectangle {
             // BOTTOM SPLITTER
             // =================================================
 
+           
             SplitterHorizontal {
 
                 visible:
@@ -1641,6 +1512,7 @@ export component Workspace inherits Rectangle {
                 z:
                     30;
             }
+            
 
 
             // =================================================
@@ -1906,6 +1778,8 @@ export component Workspace inherits Rectangle {
                 visible:
                     root.explorer-visible;
 
+                    
+
 
                 SplitterVerticalGrowRight {
 
@@ -1933,6 +1807,7 @@ export component Workspace inherits Rectangle {
                     z:
                         40;
                 }
+                
 
 
                 Explorer {
@@ -2396,3 +2271,4 @@ export component Workspace inherits Rectangle {
         }
     }
 }
+

@@ -34,7 +34,7 @@ export component Timeline inherits Rectangle {
 
     in property <float> current-time-seconds: 0;
 
-    in property <bool> playing: false;
+    in property <bool> playing: true;
 
     in-out property <float> zoom: 1.0;
 
@@ -160,6 +160,8 @@ export component Timeline inherits Rectangle {
 
     callback clip-copy-requested(int);
 
+    callback piano-roll-open-requested(int);
+
     callback clip-fade-committed(
         int,
         float,
@@ -172,6 +174,8 @@ export component Timeline inherits Rectangle {
     );
 
     callback paste-requested(float, int);
+
+    callback pencil-created(float, int, float);
 
 
     // =====================================================
@@ -209,7 +213,7 @@ export component Timeline inherits Rectangle {
     // DIMENSÕES
     // =====================================================
 
-    out property <length> ruler-height: 30px;
+    out property <length> ruler-height: 25px;
 
 
     out property <length> row-height:
@@ -411,6 +415,18 @@ export component Timeline inherits Rectangle {
                 false;
 
 
+            property <bool> pencil-drawing:
+                false;
+
+
+            property <float> pencil-start-beat:
+                0.0;
+
+
+            property <int> pencil-track:
+                -1;
+
+
             // =============================================
             // POINTER
             // =============================================
@@ -500,6 +516,37 @@ export component Timeline inherits Rectangle {
                             ClipDragState.marquee-y1 =
                                 ClipDragState.marquee-y0;
 
+                        } else if root.active-tool == 4 {
+
+                            // LÁPIS: começa a desenhar um clip MIDI.
+                            // Não altera a seleção.
+
+                            self.pencil-drawing =
+                                true;
+
+
+                            self.pencil-start-beat =
+                                (
+                                    self.mouse-x
+                                    + root.scroll-x
+                                    - root.timeline-left-padding
+                                )
+                                / root.px-per-beat;
+
+
+                            self.pencil-track =
+                                Math.max(
+                                    0,
+                                    Math.floor(
+                                        (
+                                            self.mouse-y
+                                            + root.scroll-y
+                                            - root.ruler-height
+                                        )
+                                        / root.row-height
+                                    )
+                                );
+
                         } else {
 
                             root.selected-clip =
@@ -518,6 +565,69 @@ export component Timeline inherits Rectangle {
 
                         self.shift-pressed =
                             event.modifiers.shift;
+
+
+                        // ---------------------------------
+                        // LÁPIS (clip MIDI desenhado)
+                        // ---------------------------------
+
+                        if self.pencil-drawing {
+
+                            self.pencil-drawing =
+                                false;
+
+
+                            let end-beat =
+                                (
+                                    self.mouse-x
+                                    + root.scroll-x
+                                    - root.timeline-left-padding
+                                )
+                                / root.px-per-beat;
+
+
+                            let track =
+                                self.pencil-track;
+
+
+                            let start =
+                                min(
+                                    self.pencil-start-beat,
+                                    end-beat
+                                );
+
+
+                            let len =
+                                max(
+                                    0.25,
+                                    abs(
+                                        end-beat
+                                        - self.pencil-start-beat
+                                    )
+                                );
+
+
+                            root.selected-clip =
+                                -1;
+
+
+                            if track >= 0
+                                && start >= 0.0 {
+
+                                self.pencil-track =
+                                    -1;
+
+
+                                root.pencil-created(
+                                    start,
+                                    track,
+                                    len
+                                );
+                            }
+
+
+                            return;
+                        }
 
 
                         // ---------------------------------
@@ -1241,6 +1351,18 @@ export component Timeline inherits Rectangle {
 
 
                     // -------------------------------------
+                    // PIANO ROLL (clipe MIDI)
+                    // -------------------------------------
+
+                    piano-roll-open-requested(id) => {
+
+                        root.piano-roll-open-requested(
+                            id
+                        );
+                    }
+
+
+                    // -------------------------------------
                     // FADE
                     // -------------------------------------
 
@@ -1388,7 +1510,7 @@ export component Timeline inherits Rectangle {
 
 
             ruler-height:
-                root.ruler-height;
+                25px;
 
 
             viewport-width:
@@ -1469,7 +1591,7 @@ export component Timeline inherits Rectangle {
 
 
             ruler-h:
-                root.ruler-height;
+                25px;
 
 
             tracks-h:

@@ -148,7 +148,14 @@ pub fn install(
             p.set_mixer_meters(meter_model_for_float.clone().into());
 
             // Piano roll próprio da janela flutuante.
-            wire_piano_roll(&p, Rc::new(RefCell::new(NoteEditor::new())));
+            // Janelas flutuantes são voltadas ao uso em múltiplas telas:
+            // mantêm um editor de notas local, não vinculado a clips.
+            let no_persist: Rc<dyn Fn()> = Rc::new(|| {});
+            wire_piano_roll(
+                &p,
+                Rc::new(RefCell::new(NoteEditor::new())),
+                &no_persist,
+            );
 
             // Fecha via botão da própria janela flutuante.
             {

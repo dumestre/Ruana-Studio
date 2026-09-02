@@ -77,6 +77,12 @@ impl NoteEditor {
         self.notes.retain(|n| n.id != id);
     }
 
+    /// Remove todas as notas.
+    pub fn clear_notes(&mut self) {
+        self.notes.clear();
+        self.next_id = 1;
+    }
+
     /// Remove todas as notas cujo id está na lista.
     pub fn delete_many(&mut self, ids: &[i32]) {
         self.notes.retain(|n| !ids.contains(&n.id));

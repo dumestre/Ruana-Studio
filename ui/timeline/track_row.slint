@@ -88,6 +88,8 @@ export component TrackRow inherits Rectangle {
 
     callback clip-copy-requested(int);
 
+    callback piano-roll-open-requested(int);
+
     callback clip-fade-committed(
         int,
         float,
@@ -413,6 +415,20 @@ export component TrackRow inherits Rectangle {
         ) => {
 
             root.clip-copy-requested(
+                id
+            );
+        }
+
+
+        // =============================================
+        // PIANO ROLL (clipe MIDI)
+        // =============================================
+
+        piano-roll-open-requested(
+            id
+        ) => {
+
+            root.piano-roll-open-requested(
                 id
             );
         }

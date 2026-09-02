@@ -303,7 +303,52 @@ fn main() -> Result<(), slint::PlatformError> {
         Rc::new(RefCell::new(vec![0.0; project.borrow().tracks.len() + 1]));
 
     // Piano roll da janela principal (estado por janela; cada float tem o seu).
-    piano_roll::wire_piano_roll(&ui, Rc::new(RefCell::new(NoteEditor::new())));
+    // O editor da janela principal é VINCULADO ao clip MIDI ativo: abrir um
+    // clip carrega as notas dele e cada edição grava de volta (on_mutated).
+    let piano_editor: Rc<RefCell<NoteEditor>> = Rc::new(RefCell::new(NoteEditor::new()));
+    let active_midi_clip: Rc<RefCell<Option<u64>>> = Rc::new(RefCell::new(None));
+    {
+        let project = project.clone();
+        let active = active_midi_clip.clone();
+        let editor = piano_editor.clone();
+        let on_mutated: Rc<dyn Fn()> = Rc::new(move || {
+            let Some(id) = *active.borrow() else {
+                return;
+            };
+            let notes = editor.borrow().notes().to_vec();
+            project.borrow_mut().set_clip_notes(id, notes);
+        });
+        piano_roll::wire_piano_roll(&ui, piano_editor.clone(), &on_mutated);
+    }
+
+    // Duplo clique em clip MIDI → abre o piano roll dockado e carrega as
+    // notas do clip no editor (vínculo clip ↔ piano roll).
+    {
+        let project = project.clone();
+        let active = active_midi_clip.clone();
+        let editor = piano_editor.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_piano_roll_open_requested(move |id| {
+            let id = id as u64;
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            // Clip precisa existir e ser MIDI.
+            let notes = {
+                let proj = project.borrow();
+                match proj.clip(id) {
+                    Some(c) if c.is_midi() => c.notes().to_vec(),
+                    _ => return,
+                }
+            };
+            *active.borrow_mut() = Some(id);
+            piano_roll::seed_editor(&editor, &notes);
+            piano_roll::refresh_notes(&ui, &editor);
+            // Mostra o piano roll dockado (aba 2).
+            ui.set_bottom_panel_open(true);
+            ui.set_bottom_active_tab(2);
+        });
+    }
 
     // Beat sequencer: projeção inicial + persistência no core.
     {

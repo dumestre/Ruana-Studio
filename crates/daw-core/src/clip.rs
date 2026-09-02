@@ -77,6 +77,8 @@ pub struct Clip {
     /// Controlado pela barrinha central do clip e pelo campo GAIN do
     /// BarProperties quando o clip está selecionado.
     pub gain_db: f32,
+    /// Notas MIDI do clip (apenas clips MIDI). Vazio = clip sem conteúdo.
+    pub notes: Vec<daw_midi::Note>,
 }
 
 impl Clip {
@@ -103,6 +105,7 @@ impl Clip {
             fade_in_beats: 0.0,
             fade_out_beats: 0.0,
             gain_db: 0.0,
+            notes: Vec::new(),
         }
     }
 
@@ -165,6 +168,16 @@ impl Clip {
     pub fn with_file_path(mut self, path: impl Into<String>) -> Self {
         self.file_path = Some(path.into());
         self
+    }
+
+    /// Notas MIDI do clip (somente clips MIDI).
+    pub fn notes(&self) -> &[daw_midi::Note] {
+        &self.notes
+    }
+
+    /// Substitui as notas MIDI do clip.
+    pub fn set_notes(&mut self, notes: Vec<daw_midi::Note>) {
+        self.notes = notes;
     }
 }
 

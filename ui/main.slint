@@ -315,7 +315,9 @@ export component MainWindow inherits Window {
     callback clip-rename-requested(int, string);
     callback clip-color-cycle-requested(int);
     callback clip-copy-requested(int);
+    callback piano-roll-open-requested(int);
     callback clip-paste-requested(float, int);
+    callback pencil-created(float, int, float);
     callback clip-fade-committed(int, float, float);
     callback clip-gain-committed(int, float);
     callback marquee-select(float, float, int, int);
@@ -870,9 +872,11 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
         clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
         clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
         clip-copy-requested(id) => { root.clip-copy-requested(id); }
+        piano-roll-open-requested(id) => { root.piano-roll-open-requested(id); }
         clip-fade-committed(id, fi, fo) => { root.clip-fade-committed(id, fi, fo); }
         clip-gain-committed(id, db) => { root.clip-gain-committed(id, db); }
         clip-paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }
+        pencil-created(beat, track, len) => { root.pencil-created(beat, track, len); }
         marquee-select(b0, b1, t0, t1) => { root.marquee-select(b0, b1, t0, t1); }
         mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
         mixer-insert-added(ch) => { root.mixer-insert-added(ch); }

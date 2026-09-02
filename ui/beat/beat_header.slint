@@ -150,7 +150,9 @@ export component BeatHeader inherits Rectangle {
     }
 
     TouchArea {
+        height: 18px;
         mouse-cursor: pointer;
+        width: 18px;
 
         clicked => {
             root.playing = !root.playing;
@@ -260,8 +262,8 @@ export component BeatHeader inherits Rectangle {
 
         steps-button := Rectangle {
 
-            width: 32px;
-            height: 26px;
+            width: 25px;
+            height: 18px;
 
             background:
                 root.grid-dropdown-open
@@ -320,7 +322,7 @@ export component BeatHeader inherits Rectangle {
         add-track-button := Rectangle {
 
             width: 74px;
-            height: 26px;
+            height: 18px;
 
             background:
                 touch.has-hover
@@ -376,9 +378,10 @@ export component BeatHeader inherits Rectangle {
 
         menu-button := Button {
 
-            width: 24px;
-            height: 24px;
+            width: 18px;
+            height: 18px;
 
+            background: Theme.base;
             border-radius: 12px;
 
             icon:
@@ -387,6 +390,7 @@ export component BeatHeader inherits Rectangle {
                 );
 
             icon-size: 14px;
+            preferred-width: 18px;
 
             icon-color:
                 Theme.text-dim;
@@ -406,8 +410,8 @@ export component BeatHeader inherits Rectangle {
 
         Button {
 
-            width: 24px;
-            height: 24px;
+            width: 18px;
+            height: 18px;
 
             border-radius: 12px;
 
@@ -417,6 +421,7 @@ export component BeatHeader inherits Rectangle {
                 );
 
             icon-size: 14px;
+            preferred-width: 0px;
 
             icon-color:
                 Theme.text-primary;

@@ -14,6 +14,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     LoadImageW, SetCursor, WM_SETCURSOR,
 };
 #[cfg(windows)]
+use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+#[cfg(windows)]
 use windows_sys::core::PCWSTR;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -154,6 +156,10 @@ impl CursorManager {
         };
 
         if hcursor.is_null() {
+            eprintln!(
+                "[cursor] LoadImageW falhou para {} (file existe, load retornou null)",
+                cur_path.display()
+            );
             None
         } else {
             Some(CursorHandle { hcursor })
@@ -194,6 +200,8 @@ impl CursorManager {
         unsafe {
             let _ = ACTIVE_CURSOR.get_or_init(|| Mutex::new(None));
             let _ = TIMELINE_BOUNDS.get_or_init(|| Mutex::new(TimelineBounds::default()));
+            let _ = CURSOR_OVER_TIMELINE_ENABLED
+                .get_or_init(|| std::sync::atomic::AtomicBool::new(true));
             let _ = SetWindowSubclass(hwnd, Some(cursor_subclass_proc), SUBCLASS_ID, 0);
         }
     }
@@ -282,6 +290,12 @@ static ACTIVE_CURSOR: OnceLock<Mutex<Option<isize>>> = OnceLock::new();
 #[cfg(windows)]
 static TIMELINE_BOUNDS: OnceLock<Mutex<TimelineBounds>> = OnceLock::new();
 
+// Quando true, o cursor customizado só é aplicado sobre a área da timeline
+// (compara coordenadas lógicas do Slint vs. físicas do ScreenToClient, frágil
+// em DPI≠100%). Padrão: true — o cursor customizado só deve aparecer na timeline.
+#[cfg(windows)]
+static CURSOR_OVER_TIMELINE_ENABLED: OnceLock<std::sync::atomic::AtomicBool> = OnceLock::new();
+
 #[cfg(windows)]
 #[derive(Clone, Copy)]
 struct TimelineBounds {
@@ -326,8 +340,14 @@ unsafe fn is_cursor_over_timeline(hwnd: HWND) -> bool {
         return false;
     }
 
-    let cx = pt.x as f32;
-    let cy = pt.y as f32;
+    // `ScreenToClient` retorna pixels físicos; os bounds da timeline são
+    // publicados pelo Slint em unidades lógicas. Em telas com DPI≠100% essa
+    // diferença faria a checagem falhar (cursor nunca aplicado). Converte o
+    // ponto do mouse de físico → lógico usando o scale factor da janela.
+    let dpi = unsafe { GetDpiForWindow(hwnd) }.max(1) as f32;
+    let scale = dpi / 96.0;
+    let cx = pt.x as f32 / scale;
+    let cy = pt.y as f32 / scale;
     cx >= bounds.x && cx <= bounds.x + bounds.w && cy >= bounds.y && cy <= bounds.y + bounds.h
 }
 
@@ -341,12 +361,18 @@ unsafe extern "system" fn cursor_subclass_proc(
     _ref_data: usize,
 ) -> LRESULT {
     if msg == WM_SETCURSOR && (lparam & 0xFFFF) as u32 == 1 {
-        if unsafe { is_cursor_over_timeline(hwnd) } {
-            if let Some(active) = ACTIVE_CURSOR
-                .get()
-                .and_then(|m| m.lock().ok())
-                .and_then(|c| *c)
-            {
+        if let Some(active) = ACTIVE_CURSOR
+            .get()
+            .and_then(|m| m.lock().ok())
+            .and_then(|c| *c)
+        {
+            if let Some(i) = CURSOR_OVER_TIMELINE_ENABLED.get() {
+                let must_check = i.load(std::sync::atomic::Ordering::Relaxed);
+                if !must_check || unsafe { is_cursor_over_timeline(hwnd) } {
+                    unsafe { SetCursor(active as HCURSOR) };
+                    return 1 as LRESULT;
+                }
+            } else {
                 unsafe { SetCursor(active as HCURSOR) };
                 return 1 as LRESULT;
             }

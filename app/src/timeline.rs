@@ -560,6 +560,23 @@ pub fn install(
         });
     }
 
+    // Lápis (ferramenta desenho): cria um clip MIDI vazio na posição
+    // e comprimento desenhados na timeline (mesma rota do drop MIDI).
+    {
+        let project = project.clone();
+        ui.on_pencil_created(move |beat, track, len| {
+            let track_count = project.borrow().tracks.len();
+            if track_count == 0 {
+                return;
+            }
+            let track_id = (track.max(0) as usize).min(track_count - 1) as u64;
+            let len = len.max(0.25);
+            let mut proj = project.borrow_mut();
+            let start = proj.find_free_slot(track_id, beat.max(0.0), len);
+            proj.add_clip(track_id, ClipKind::Midi, "MIDI", start, len);
+        });
+    }
+
     // Marquee (Ctrl+arrasto): marca multi-selected nos clips
     // que intersectam o retângulo (beats × trilhas).
     {

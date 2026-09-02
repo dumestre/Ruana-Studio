@@ -81,6 +81,11 @@ pub enum DocumentEvent {
         old: Clip,
         new: Clip,
     },
+    /// Mudança de notas MIDI do clip (piano roll).
+    ClipNotesChanged {
+        old: Clip,
+        new: Clip,
+    },
 }
 
 /// Um projeto da DAW.
@@ -287,6 +292,11 @@ impl Project {
                     *existing = new.clone();
                 }
             }
+            DocumentEvent::ClipNotesChanged { new, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == new.id) {
+                    *existing = new.clone();
+                }
+            }
         }
         self.emit(event, ChangeKind::Apply);
     }
@@ -347,6 +357,11 @@ impl Project {
                 }
             }
             DocumentEvent::ClipGainChanged { old, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
+                    *existing = old.clone();
+                }
+            }
+            DocumentEvent::ClipNotesChanged { old, .. } => {
                 if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
                     *existing = old.clone();
                 }
@@ -844,6 +859,25 @@ impl Project {
         let new = self.clips[index].clone();
 
         let event = DocumentEvent::ClipGainChanged { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// Substitui as notas MIDI de um clip (edição no piano roll),
+    /// com undo unitário via histórico do core.
+    pub fn set_clip_notes(&mut self, clip_id: u64, notes: Vec<daw_midi::Note>) -> bool {
+        let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
+            return false;
+        };
+        if !self.clips[index].is_midi() {
+            return false;
+        }
+        let old = self.clips[index].clone();
+        self.clips[index].notes = notes;
+        let new = self.clips[index].clone();
+
+        let event = DocumentEvent::ClipNotesChanged { old, new };
         self.emit(&event, ChangeKind::Apply);
         self.history.record(event);
         true

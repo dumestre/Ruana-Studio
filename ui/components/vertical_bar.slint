@@ -1,0 +1,93 @@
+import { Theme } from "../theme.slint";
+import { ScrollBarVertical } from "../components/scrollbar.slint";
+import { ZoomBarVertical } from "../components/zoom_bar.slint";
+
+export component VerticalBar inherits Rectangle {
+
+
+// =====================================================
+// SCROLL VERTICAL
+// =====================================================
+
+in-out property <length> scroll-y: 0px;
+
+in property <length> scroll-max-y: 0px;
+
+in property <length> scroll-thumb-size-y: 100px;
+
+
+// =====================================================
+// ZOOM VERTICAL
+// =====================================================
+
+in-out property <float> zoom-y: 1.0;
+
+in property <float> zoom-min-y: 0.4;
+
+in property <float> zoom-max-y: 3.0;
+
+
+// =====================================================
+// TAMANHO
+// =====================================================
+
+in property <length> zoom-height: 160px;
+
+
+background: Theme.surface;
+
+border-radius: 3px;
+
+
+HorizontalLayout {
+
+  
+
+    
+
+
+    alignment: LayoutAlignment.stretch;
+    cross-axis-alignment: CrossAxisAlignment.center;
+    height: parent.height ;
+
+    spacing: 2px;
+
+
+    // =================================================
+    // ZOOM VERTICAL
+    // =================================================
+
+    ZoomBarVertical {
+
+
+        height: root.zoom-height;
+
+        value <=> root.zoom-y;
+
+        min-value:
+            root.zoom-min-y;
+
+        max-value:
+            root.zoom-max-y;
+    }
+
+
+    // =================================================
+    // SCROLL VERTICAL
+    // =================================================
+
+    ScrollBarVertical {
+
+
+        
+
+        value <=> root.scroll-y;
+
+        max-value:
+            root.scroll-max-y;
+
+        thumb-size:
+            root.scroll-thumb-size-y;
+    }
+}
+}
