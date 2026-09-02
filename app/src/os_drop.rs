@@ -98,8 +98,8 @@ pub fn install(
                         if is_audio_path(&path) {
                             #[cfg(windows)]
                             let (phys_x, phys_y) = {
-                                use windows::Win32::Foundation::POINT;
-                                use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+                                use windows_sys::Win32::Foundation::POINT;
+                                use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
                                 let mut pt = POINT { x: 0, y: 0 };
                                 unsafe {
                                     let _ = GetCursorPos(&mut pt);

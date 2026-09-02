@@ -7,6 +7,7 @@ pub mod instance_pool;
 pub mod overlay;
 pub mod renderer;
 pub mod shader;
+pub mod win32_gdi;
 
 pub use instance_pool::{InstancePool, ClipRange, WaveInstance};
 pub use renderer::{WaveformGpuRenderer, ClipBounds, GpuClipState};

@@ -8,7 +8,7 @@ pub fn app_icon() -> Option<winit::window::Icon> {
     let mut decoder = png::Decoder::new(std::io::Cursor::new(ICON_PNG));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;
-    let mut data = vec![0; reader.output_buffer_size()];
+    let mut data = vec![0; reader.output_buffer_size().unwrap_or(0)];
     reader.next_frame(&mut data).ok()?;
     let info = reader.info();
     winit::window::Icon::from_rgba(data, info.width, info.height).ok()

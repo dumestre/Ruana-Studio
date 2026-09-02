@@ -181,12 +181,10 @@ impl WaveformGpuRenderer {
             // Swap buffers no Windows
             #[cfg(windows)]
             {
-                use windows_sys::Win32::Graphics::Gdi::GetDC;
-                use windows_sys::Win32::Graphics::OpenGL::wglSwapLayerBuffers;
-                use windows_sys::Win32::Foundation::HWND;
+                use crate::waveform_gpu::win32_gdi::{get_dc, wgl_swap_layer_buffers, WGL_SWAP_MAIN_PLANE};
                 
-                let dc = GetDC(Some(self.hwnd as HWND));
-                wglSwapLayerBuffers(dc, 1); // WGL_SWAP_MAIN_PLANE
+                let dc = get_dc(self.hwnd);
+                wgl_swap_layer_buffers(dc, WGL_SWAP_MAIN_PLANE);
             }
         }
     }

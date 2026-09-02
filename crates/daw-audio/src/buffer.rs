@@ -13,21 +13,17 @@
 //!   sequencer compartilham o mesmo buffer.
 //! - **`Arc`**: a thread de áudio recebe um ponteiro clonado junto
 //!   com o snapshot. Ela nunca trava o cache nem toca em disco.
+//! - **Memory Mapping**: para WAV PCM, usa mmap/MapViewOfFile — o SO
+//!   carrega páginas sob demanda, sem copiar o arquivo inteiro para RAM.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
-use daw_media::waveform::decode_audio;
-
-use crate::resample::resample_sinc;
-
-/// Rampa anti-clique aplicada ao fim de qualquer buffer, em frames.
-///
-/// Um sample cortado no meio de um ciclo produz um degrau — e degrau
-/// é clique. ~1ms de fade resolve sem alterar o ataque.
-const TAIL_FADE: usize = 48;
+use crate::mapped_buffer::{load_audio_buffer, AudioBufferKind};
 
 /// Buffer stereo já no sample rate de saída.
+#[derive(Clone)]
 pub struct AudioBuffer {
     pub left: Vec<f32>,
     pub right: Vec<f32>,
@@ -35,6 +31,11 @@ pub struct AudioBuffer {
 }
 
 impl AudioBuffer {
+    /// Um sample cortado no meio de um ciclo produz um degrau — e degrau
+    /// é clique. ~1ms de fade resolve sem alterar o ataque.
+    const TAIL_FADE: usize = 48;
+
+    /// Frames (samples por canal).
     /// Frames (samples por canal).
     #[inline]
     pub fn frames(&self) -> usize {
@@ -71,8 +72,8 @@ impl AudioBuffer {
     }
 
     /// Aplica a rampa anti-clique no fim do buffer.
-    fn fade_tail(&mut self) {
-        let n = TAIL_FADE.min(self.frames());
+    pub fn fade_tail(&mut self) {
+        let n = Self::TAIL_FADE.min(self.frames());
         if n == 0 {
             return;
         }
@@ -89,8 +90,10 @@ impl AudioBuffer {
 ///
 /// Guarda também as falhas (`None`): sem isso, um path inválido
 /// tentaria decodificar de novo a cada sincronização de snapshot.
+/// 
+/// Agora suporta tanto buffers em memória quanto memory-mapped (WAV PCM).
 pub struct BufferCache {
-    cache: HashMap<String, Option<Arc<AudioBuffer>>>,
+    cache: HashMap<String, Option<AudioBufferKind>>,
     output_sample_rate: u32,
 }
 
@@ -121,7 +124,7 @@ impl BufferCache {
     ///
     /// Roda na thread principal (decodificar pode levar centenas de
     /// milissegundos) — NUNCA chamar da thread de áudio.
-    pub fn load(&mut self, path: &str) -> Option<Arc<AudioBuffer>> {
+    pub fn load(&mut self, path: &str) -> Option<AudioBufferKind> {
         if let Some(hit) = self.cache.get(path) {
             return hit.clone();
         }
@@ -135,42 +138,13 @@ impl BufferCache {
     }
 
     /// Só consulta — não decodifica.
-    pub fn get(&self, path: &str) -> Option<Arc<AudioBuffer>> {
+    pub fn get(&self, path: &str) -> Option<AudioBufferKind> {
         self.cache.get(path).cloned().flatten()
     }
 
-    fn decode(path: &str, output_rate: u32) -> Option<Arc<AudioBuffer>> {
-        let data = decode_audio(path).ok()?;
-        if data.interleaved.is_empty() {
-            return None;
-        }
-
-        let src_left = data.channel(0);
-        // Mono: o mesmo conteúdo nos dois lados (centro real, sem
-        // metade do ganho de um lado só).
-        let src_right = if data.channels <= 1 {
-            src_left.clone()
-        } else {
-            data.channel(1)
-        };
-
-        let mut buffer = AudioBuffer {
-            left: resample_sinc(&src_left, data.sample_rate, output_rate),
-            right: resample_sinc(&src_right, data.sample_rate, output_rate),
-            sample_rate: output_rate,
-        };
-
-        // Os dois canais precisam ter exatamente o mesmo tamanho:
-        // a leitura indexa os dois com o mesmo cursor.
-        let len = buffer.left.len().min(buffer.right.len());
-        buffer.left.truncate(len);
-        buffer.right.truncate(len);
-        if len == 0 {
-            return None;
-        }
-
-        buffer.fade_tail();
-        Some(Arc::new(buffer))
+    fn decode(path: &str, output_rate: u32) -> Option<AudioBufferKind> {
+        // Usa o novo sistema unificado (tenta mmap primeiro, depois fallback)
+        load_audio_buffer(Path::new(path), output_rate)
     }
 
     /// Remove um buffer do cache (arquivo trocado em disco).
@@ -252,7 +226,7 @@ mod tests {
         let mut cache = BufferCache::new(48000);
         cache
             .cache
-            .insert("x.wav".into(), Some(Arc::new(buf(vec![0.0], vec![0.0]))));
+            .insert("x.wav".into(), Some(AudioBufferKind::Memory(Arc::new(buf(vec![0.0], vec![0.0])))));
         assert_eq!(cache.len(), 1);
         cache.set_output_sample_rate(44100);
         assert_eq!(cache.len(), 0);

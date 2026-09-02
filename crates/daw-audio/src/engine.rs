@@ -33,7 +33,7 @@ use std::sync::{Arc, Mutex};
 use daw_core::Transport;
 
 use crate::backend::{AudioConfig, AudioError, CpalBackend};
-use crate::buffer::{AudioBuffer, BufferCache};
+use crate::{AudioBufferKind, buffer::BufferCache};
 use crate::mixer::{
     limit_stereo, mix_stereo_source, soft_clip, stereo_gains, stereo_gains_bipolar, track_is_active,
 };
@@ -68,7 +68,7 @@ struct ClipSlot {
     start_beat: f64,
     length_beats: f64,
     source_start_beats: f64,
-    buffer: Arc<AudioBuffer>,
+    buffer: AudioBufferKind,
     /// Fade de entrada em BEATS (multiplicamos por frames_per_beat no
     /// render; o snapshot não tem o bpm/rate, então guardamos em beats).
     fade_in_beats: f64,
@@ -92,7 +92,7 @@ struct TrackSlot {
 #[derive(Clone)]
 struct BeatRow {
     steps: Vec<bool>,
-    buffer: Option<Arc<AudioBuffer>>,
+    buffer: Option<AudioBufferKind>,
     volume: f32,
     /// Pan bipolar (-1..1), convenção do `DrumTrackParams`.
     pan: f32,
@@ -201,7 +201,7 @@ impl ProjectSnapshot {
 
 /// Uma voz one-shot do sampler.
 struct Voice {
-    buffer: Option<Arc<AudioBuffer>>,
+    buffer: Option<AudioBufferKind>,
     /// Posição de leitura em frames.
     pos: f64,
     gain_l: f32,
@@ -232,7 +232,7 @@ impl Voice {
 
 /// Disparo pedido pela UI (preview de sample).
 struct PreviewCmd {
-    buffer: Arc<AudioBuffer>,
+    buffer: AudioBufferKind,
     volume: f32,
     pan: f32,
 }
@@ -365,7 +365,7 @@ impl RtState {
         i
     }
 
-    fn trigger(&mut self, buffer: Arc<AudioBuffer>, gain_l: f32, gain_r: f32, delay: u32) {
+    fn trigger(&mut self, buffer: AudioBufferKind, gain_l: f32, gain_r: f32, delay: u32) {
         let i = self.alloc_voice();
         self.voices[i] = Voice {
             buffer: Some(buffer),

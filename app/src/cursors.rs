@@ -3,18 +3,18 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(windows)]
-use windows::Win32::Foundation::{HINSTANCE, HWND, LRESULT, POINT};
+use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LRESULT, POINT};
 #[cfg(windows)]
-use windows::Win32::Graphics::Gdi::ScreenToClient;
+use windows_sys::Win32::Graphics::Gdi::ScreenToClient;
 #[cfg(windows)]
-use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
+use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 #[cfg(windows)]
-use windows::Win32::UI::WindowsAndMessaging::{
+use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, HCURSOR, IDC_ARROW, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, LoadCursorW,
     LoadImageW, SetCursor, WM_SETCURSOR,
 };
 #[cfg(windows)]
-use windows::core::PCWSTR;
+use windows_sys::core::PCWSTR;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ToolCursor {
@@ -144,7 +144,7 @@ impl CursorManager {
 
         let hcursor = unsafe {
             LoadImageW(
-                Some(HINSTANCE::default()),
+                HINSTANCE(0),
                 PCWSTR::from_raw(path_wide.as_ptr()),
                 IMAGE_CURSOR,
                 0,
@@ -254,7 +254,7 @@ impl CursorManager {
             if let Some(mut active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()) {
                 *active = None;
             }
-            if let Ok(default) = unsafe { LoadCursorW(Some(HINSTANCE::default()), IDC_ARROW) } {
+            if let Ok(default) = unsafe { LoadCursorW(HINSTANCE(0), IDC_ARROW) } {
                 unsafe {
                     SetCursor(Some(HCURSOR(default.0)));
                 }
@@ -332,8 +332,8 @@ unsafe fn is_cursor_over_timeline(hwnd: HWND) -> bool {
 unsafe extern "system" fn cursor_subclass_proc(
     hwnd: HWND,
     msg: u32,
-    wparam: windows::Win32::Foundation::WPARAM,
-    lparam: windows::Win32::Foundation::LPARAM,
+    wparam: windows_sys::Win32::Foundation::WPARAM,
+    lparam: windows_sys::Win32::Foundation::LPARAM,
     _subclass_id: usize,
     _ref_data: usize,
 ) -> LRESULT {

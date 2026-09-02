@@ -61,23 +61,23 @@ use slint::Model;
 #[cfg(windows)]
 fn choose_audio_file() -> Option<String> {
     use std::mem::size_of;
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::Controls::Dialogs::{
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::Controls::Dialogs::{
         GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST, OPENFILENAMEW,
     };
-    use windows::core::PCWSTR;
+    use windows_sys::core::PCWSTR;
     let filter: Vec<u16> = "Audio Files\0*.wav;*.mp3;*.flac;*.ogg;*.oga\0All Files\0*.*\0\0"
         .encode_utf16()
         .collect();
     let mut path = vec![0u16; 32768];
     let mut dialog = OPENFILENAMEW::default();
     dialog.lStructSize = size_of::<OPENFILENAMEW>() as u32;
-    dialog.hwndOwner = HWND::default();
+    dialog.hwndOwner = HWND(0);
     dialog.lpstrFilter = PCWSTR(filter.as_ptr());
-    dialog.lpstrFile = windows::core::PWSTR(path.as_mut_ptr());
+    dialog.lpstrFile = PWSTR(path.as_mut_ptr());
     dialog.nMaxFile = path.len() as u32;
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-    if unsafe { GetOpenFileNameW(&mut dialog) }.as_bool() {
+    if unsafe { GetOpenFileNameW(&mut dialog) } != 0 {
         let len = path.iter().position(|c| *c == 0).unwrap_or(0);
         Some(String::from_utf16_lossy(&path[..len]))
     } else {
@@ -592,13 +592,13 @@ fn main() -> Result<(), slint::PlatformError> {
                 #[cfg(windows)]
                 {
                     use raw_window_handle::HasWindowHandle;
-                    use windows::Win32::Foundation::HWND;
-                    use windows::Win32::UI::WindowsAndMessaging::{IsZoomed, ShowWindow, SW_MAXIMIZE};
+                    use windows_sys::Win32::Foundation::HWND;
+                    use windows_sys::Win32::UI::WindowsAndMessaging::{IsZoomed, ShowWindow, SW_MAXIMIZE};
                     if let Ok(handle) = ui.window().window_handle().window_handle() {
                         if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
                             unsafe {
-                                let hwnd = HWND(h.hwnd.get() as *mut _);
-                                if IsZoomed(hwnd).as_bool() == false {
+                                let hwnd = HWND(h.hwnd.get() as isize);
+                                if IsZoomed(hwnd) != 0 {
                                     let _ = ShowWindow(hwnd, SW_MAXIMIZE);
                                 }
                             }
@@ -627,7 +627,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     use windows::Win32::UI::WindowsAndMessaging::IsZoomed;
                     if let Ok(handle) = ui.window().window_handle().window_handle() {
                         if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                            unsafe { IsZoomed(HWND(h.hwnd.get() as *mut _)).as_bool() }
+                            unsafe { IsZoomed(HWND(h.hwnd.get() as isize)) != 0 }
                         } else {
                             false
                         }
@@ -646,7 +646,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 HTCAPTION, SendMessageW, WM_NCLBUTTONDOWN,
                             };
                             SendMessageW(
-                                HWND(h.hwnd.get() as *mut _),
+                                HWND(h.hwnd.get() as isize),
                                 WM_NCLBUTTONDOWN,
                                 WPARAM(HTCAPTION as usize),
                                 LPARAM(0),

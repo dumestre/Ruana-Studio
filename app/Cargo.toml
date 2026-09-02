@@ -12,10 +12,10 @@ daw-midi = { path = "../crates/daw-midi" }
 slint = { workspace = true, features = ["renderer-skia", "raw-window-handle-06"] }
 i-slint-backend-winit = "1.17.1"
 raw-window-handle = "0.6"
-png = "0.17"
-glow = "0.14"
+png = "0.18.1"
+glow = "0.18"
 bytemuck = "1.14"
-glutin = "0.30"
+glutin = "0.32.3"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
@@ -25,17 +25,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_Graphics_Gdi",
     "Win32_Graphics_OpenGL",
 ] }
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_Controls_Dialogs",
-    "Win32_UI_Shell",
-    "Win32_System_LibraryLoader",
-    "Win32_Graphics_Gdi",
-    "Win32_Graphics_OpenGL",
-] }
+libloading = "0.9.0"
 
 [target.'cfg(not(windows))'.dependencies]
 rfd = "0.17"
