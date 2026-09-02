@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 /// Estado de um clip no renderer GPU
 #[derive(Debug, Clone)]
 pub struct GpuClipState {
+    #[allow(dead_code)]
     pub clip_id: u64,
     pub range: ClipRange,
     pub mvp: [f32; 16],
@@ -69,6 +70,7 @@ impl WaveformGpuRenderer {
     }
 
     /// Atualiza tamanho da janela (chamado no resize)
+    #[allow(dead_code)]
     pub fn resize(&mut self, window_size: (u32, u32)) {
         self.window_size = window_size;
         for clip in self.clips.values_mut() {
@@ -135,6 +137,7 @@ impl WaveformGpuRenderer {
     }
 
     /// Remove clip
+    #[allow(dead_code)]
     pub fn remove_clip(&mut self, clip_id: u64) {
         self.clips.remove(&clip_id);
         self.pool.release(clip_id);

@@ -5,9 +5,9 @@ layout(location = 0) in vec2 a_pos;      // quad unitário: (-1,-1) a (1,1)
 layout(location = 1) in float a_min;     // instance: min (-1.0 a 0.0)
 layout(location = 2) in float a_max;     // instance: max (0.0 a 1.0)
 
-layout(location = 0) out float v_min;
-layout(location = 1) out float v_max;
-layout(location = 2) out float v_y_rel;  // posição Y relativa no quad (0..1)
+out float v_min;
+out float v_max;
+out float v_y_rel;  // posição Y relativa no quad (0..1)
 
 uniform mat4 u_mvp;                      // model-view-projection por clip
 uniform int u_instance_count;            // total de instâncias deste clip

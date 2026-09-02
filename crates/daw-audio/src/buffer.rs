@@ -18,6 +18,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+#[cfg(test)]
 use std::sync::Arc;
 
 use crate::mapped_buffer::{load_audio_buffer, AudioBufferKind};
@@ -204,7 +205,7 @@ mod tests {
 
     #[test]
     fn fade_tail_ends_at_zero() {
-        let n = TAIL_FADE + 10;
+        let n = AudioBuffer::TAIL_FADE + 10;
         let mut b = buf(vec![1.0; n], vec![1.0; n]);
         b.fade_tail();
         assert_eq!(b.left[0], 1.0);

@@ -140,7 +140,7 @@ impl InstancePool {
         unsafe {
             self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.instance_vbo));
             let byte_offset = (range.offset * size_of::<WaveInstance>()) as i32;
-            let byte_size = (instances.len() * size_of::<WaveInstance>()) as i32;
+            let _byte_size = (instances.len() * size_of::<WaveInstance>()) as i32;
             let bytes = bytemuck::cast_slice(instances);
             self.gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, byte_offset, bytes);
             self.gl.bind_buffer(glow::ARRAY_BUFFER, None);
@@ -154,6 +154,7 @@ impl InstancePool {
         }
     }
 
+    #[allow(dead_code)]
     pub fn unbind(&self) {
         unsafe {
             self.gl.bind_vertex_array(None);
@@ -161,14 +162,17 @@ impl InstancePool {
     }
 
     /// Libera slot de um clip
+    #[allow(dead_code)]
     pub fn release(&mut self, clip_id: u64) {
         self.clip_ranges.retain(|r| r.clip_id != clip_id);
     }
 
+    #[allow(dead_code)]
     pub fn get_range(&self, clip_id: u64) -> Option<ClipRange> {
         self.clip_ranges.iter().find(|r| r.clip_id == clip_id).copied()
     }
 
+    #[allow(dead_code)]
     pub fn stats(&self) -> (usize, usize, usize) {
         (self.used, self.capacity, self.clip_ranges.len())
     }

@@ -195,7 +195,7 @@ fn main() -> Result<(), slint::PlatformError> {
             // Extrai dados na main thread
             let raw_handle = raw_handle.as_raw();
             let size = window.size();
-            let scale = window.scale_factor() as f64;
+            let _scale = window.scale_factor() as f64;
             
             // Cria contexto GL compartilhado
             let waveforms_for_gpu = waveforms_for_gpu.clone();

@@ -13,9 +13,11 @@ use std::sync::Arc;
 #[cfg(unix)]
 use memmap2::Mmap;
 
+#[cfg(unix)]
 use hound;
 use crate::resample::resample_sinc;
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum SampleFormat {
     Int,
@@ -31,6 +33,7 @@ pub struct MappedAudioBuffer {
     channels: u16,
     bits_per_sample: u16,
     sample_format: SampleFormat,
+    #[allow(dead_code)]
     data_offset: usize,
     data_size: usize,
     total_frames: usize,
@@ -39,6 +42,7 @@ pub struct MappedAudioBuffer {
     dst_sample_rate: u32,
     needs_resample: bool,
 
+    #[allow(dead_code)]
     tail_fade_applied: bool,
 }
 
@@ -115,6 +119,7 @@ impl MappedAudioBuffer {
     }
 
     /// Encontra o chunk "data" no arquivo WAV.
+    #[allow(dead_code)]
     fn find_data_chunk(data: &[u8]) -> Option<usize> {
         // WAV: RIFF header (12 bytes) + fmt chunk + data chunk
         // Procura por "data" (0x64617461)
@@ -280,6 +285,7 @@ impl MappedAudioBuffer {
     }
 
     /// Aplica fade tail no final do buffer (anti-clique).
+    #[allow(dead_code)]
     fn apply_tail_fade(&mut self) {
         if self.tail_fade_applied {
             return;

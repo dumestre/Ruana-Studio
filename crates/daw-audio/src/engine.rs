@@ -764,6 +764,7 @@ impl AudioEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AudioBuffer;
 
     #[test]
     fn steps_per_beat_is_sixteenth() {
@@ -780,9 +781,9 @@ mod tests {
             right: vec![1.0; 8],
             sample_rate: 48000,
         });
+        let buffer = AudioBufferKind::Memory(buffer);
         rt.trigger(buffer.clone(), 1.0, 1.0, 0);
         assert_eq!(rt.voices.iter().filter(|v| !v.is_free()).count(), 1);
-
         // Estouro do pool rouba voz em vez de crescer.
         for _ in 0..MAX_VOICES * 2 {
             rt.trigger(buffer.clone(), 1.0, 1.0, 0);

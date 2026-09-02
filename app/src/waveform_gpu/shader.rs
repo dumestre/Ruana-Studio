@@ -1,13 +1,15 @@
 //! Shader Program wrapper para waveform instanced rendering.
 
-use glow::{Context, HasContext, NativeUniformLocation};
+use glow::{Context, HasContext};
 use std::sync::Arc;
 
 // Include shader sources
 const VERTEX_SHADER_SRC: &str = include_str!("shader.vert");
 const FRAGMENT_SHADER_SRC: &str = include_str!("shader.frag");
 
+#[allow(dead_code)]
 pub const VERTEX_SHADER: &str = VERTEX_SHADER_SRC;
+#[allow(dead_code)]
 pub const FRAGMENT_SHADER: &str = FRAGMENT_SHADER_SRC;
 
 pub struct WaveformShader {
@@ -126,6 +128,7 @@ impl WaveformShader {
         }
     }
 
+    #[allow(dead_code)]
     pub fn program_id(&self) -> glow::Program {
         self.program
     }

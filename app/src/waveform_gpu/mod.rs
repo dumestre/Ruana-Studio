@@ -9,6 +9,9 @@ pub mod renderer;
 pub mod shader;
 pub mod win32_gdi;
 
+#[allow(unused_imports)]
 pub use instance_pool::{InstancePool, ClipRange, WaveInstance};
+#[allow(unused_imports)]
 pub use renderer::{WaveformGpuRenderer, ClipBounds, GpuClipState};
+#[allow(unused_imports)]
 pub use shader::WaveformShader;

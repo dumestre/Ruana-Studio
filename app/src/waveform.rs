@@ -199,10 +199,12 @@ impl WaveformCache {
         }
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
@@ -238,6 +240,7 @@ impl WaveformCache {
         removed
     }
 
+    #[allow(dead_code)]
     pub fn contains_key(&self, id: &u64) -> bool {
         self.map.contains_key(id)
     }
