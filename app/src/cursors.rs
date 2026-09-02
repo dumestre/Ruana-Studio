@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LRESULT, POINT};
+use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LRESULT, POINT, WPARAM, LPARAM};
 #[cfg(windows)]
 use windows_sys::Win32::Graphics::Gdi::ScreenToClient;
 #[cfg(windows)]
@@ -144,8 +144,8 @@ impl CursorManager {
 
         let hcursor = unsafe {
             LoadImageW(
-                HINSTANCE(0),
-                PCWSTR::from_raw(path_wide.as_ptr()),
+                0 as HINSTANCE,
+                PCWSTR::from(path_wide.as_ptr()),
                 IMAGE_CURSOR,
                 0,
                 0,
@@ -153,9 +153,11 @@ impl CursorManager {
             )
         };
 
-        hcursor.ok().map(|h| CursorHandle {
-            hcursor: HCURSOR(h.0),
-        })
+        if hcursor.is_null() {
+            None
+        } else {
+            Some(CursorHandle { hcursor })
+        }
     }
 
     #[cfg(windows)]
@@ -240,10 +242,10 @@ impl CursorManager {
         };
         if let Some(cursor_handle) = map.get(&tool) {
             if let Some(mut active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()) {
-                *active = Some(cursor_handle.hcursor.0 as isize);
+                *active = Some(cursor_handle.hcursor as isize);
             }
             unsafe {
-                SetCursor(Some(cursor_handle.hcursor));
+                SetCursor(cursor_handle.hcursor);
             }
         }
     }
@@ -254,9 +256,10 @@ impl CursorManager {
             if let Some(mut active) = ACTIVE_CURSOR.get().and_then(|m| m.lock().ok()) {
                 *active = None;
             }
-            if let Ok(default) = unsafe { LoadCursorW(HINSTANCE(0), IDC_ARROW) } {
+            let default = unsafe { LoadCursorW(core::ptr::null_mut(), IDC_ARROW as usize as *const u16) };
+            if !default.is_null() {
                 unsafe {
-                    SetCursor(Some(HCURSOR(default.0)));
+                    SetCursor(default);
                 }
             }
             self.current_tool = None;
@@ -316,10 +319,10 @@ unsafe fn is_cursor_over_timeline(hwnd: HWND) -> bool {
     }
 
     let mut pt = POINT::default();
-    if unsafe { GetCursorPos(&mut pt) }.is_err() {
+    if unsafe { GetCursorPos(&mut pt) } == 0 {
         return false;
     }
-    if !unsafe { ScreenToClient(hwnd, &mut pt) }.as_bool() {
+    if unsafe { ScreenToClient(hwnd, &mut pt) } == 0 {
         return false;
     }
 
@@ -332,20 +335,20 @@ unsafe fn is_cursor_over_timeline(hwnd: HWND) -> bool {
 unsafe extern "system" fn cursor_subclass_proc(
     hwnd: HWND,
     msg: u32,
-    wparam: windows_sys::Win32::Foundation::WPARAM,
-    lparam: windows_sys::Win32::Foundation::LPARAM,
+    wparam: WPARAM,
+    lparam: LPARAM,
     _subclass_id: usize,
     _ref_data: usize,
 ) -> LRESULT {
-    if msg == WM_SETCURSOR && (lparam.0 & 0xFFFF) as u32 == 1 {
+    if msg == WM_SETCURSOR && (lparam & 0xFFFF) as u32 == 1 {
         if unsafe { is_cursor_over_timeline(hwnd) } {
             if let Some(active) = ACTIVE_CURSOR
                 .get()
                 .and_then(|m| m.lock().ok())
                 .and_then(|c| *c)
             {
-                unsafe { SetCursor(Some(HCURSOR(active as *mut core::ffi::c_void))) };
-                return LRESULT(1);
+                unsafe { SetCursor(active as HCURSOR) };
+                return 1 as LRESULT;
             }
         }
     }
@@ -403,7 +406,7 @@ pub fn set_cursor_window_handle(hwnd: *mut std::ffi::c_void) {
     #[cfg(windows)]
     {
         if let Some(mut mgr) = get_cursor_manager_lock() {
-            mgr.set_window_handle(HWND(hwnd));
+            mgr.set_window_handle(hwnd as HWND);
         }
     }
 }

@@ -34,15 +34,15 @@ pub fn create_shared_gl_context(
 
         // Pixel format
         let mut pfd = PIXELFORMATDESCRIPTOR {
-            nSize: std::mem::size_of::<PIXELFORMATDESCRIPTOR>() as u16,
-            nVersion: 1,
-            dwFlags: PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
-            iPixelType: PFD_TYPE_RGBA,
-            cColorBits: 32,
-            cAlphaBits: 8,
-            cDepthBits: 24,
-            cStencilBits: 8,
-            iLayerType: 0,
+            n_size: std::mem::size_of::<PIXELFORMATDESCRIPTOR>() as u16,
+            n_version: 1,
+            dw_flags: PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+            i_pixel_type: PFD_TYPE_RGBA,
+            c_color_bits: 32,
+            c_alpha_bits: 8,
+            c_depth_bits: 24,
+            c_stencil_bits: 8,
+            i_layer_type: 0,
             ..Default::default()
         };
 
