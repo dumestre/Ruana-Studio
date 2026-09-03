@@ -5699,6 +5699,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "timeline-render"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "pollster",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "tiny-skia"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

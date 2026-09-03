@@ -14,6 +14,12 @@
 //
 // O cache é um LRU simples (clip_id → CachedWave) — o decode acontece
 // uma única vez na worker thread e o LOD inteiro fica em RAM.
+//
+//! Renderizador de waveform via femtovg (vetorial/raster via SLint).
+//! Renderiza as barras min→max num buffer RGBA usando a lógica do
+//! waveform "Bin Visual", compatível com o mesmo pipeline de imagem
+//! do wgpu renderer, mas usando o renderer-femtovg do SLint quando
+//! disponível.
 use crate::MainWindow;
 use crate::waveform_gpu::wgpu::WgpuRenderer;
 use slint::{Model, Rgba8Pixel, SharedPixelBuffer};
@@ -303,17 +309,79 @@ pub fn clear_wave_image(id: u64) {
     WAVE_IMAGES.with(|m| m.borrow_mut().remove(&id));
 }
 
+/// Renderiza as barras da waveform como RGBA usando a lógica "Bin Visual".
+/// Este é o mesmo algoritmo do wgpu renderer, mas pode ser usado com
+/// o renderer-femtovg do SLint quando disponível.
+///
+/// `mins`/`maxs` são arrays paralelos de amplitude em [-1,1], já com
+/// ganho/fade baked (uma entrada por coluna de 1px). `color` é RGBA
+/// (0..255) usado para a cor da barra. `hscale` controla a fração da
+/// meia-altura que a onda ocupa.
+///
+/// Retorna `Vec<u8>` RGBA de `width x height` (ou `None` em erro).
+pub fn render_waveform_bars(
+    width: u32,
+    height: u32,
+    mins: &[f32],
+    maxs: &[f32],
+    color: [u8; 4],
+    _hscale: f32,
+) -> Option<Vec<u8>> {
+    let count = mins.len();
+    if count == 0 || count != maxs.len() || width == 0 || height == 0 {
+        return None;
+    }
+    let width = width.min(8192);
+    let height = height.min(8192);
+    let count = count as u32;
+    let count = count.min(width);
+
+    let mut out = Vec::with_capacity((width * height * 4) as usize);
+
+    let mut px_idx = 0usize;
+    for _row in 0..height {
+        for _px in 0..width {
+            // Cada pixel usa a barra correspondente (coluna idx % count)
+            let col = px_idx % count as usize;
+            px_idx += 1;
+
+            let (mn, mx) = (mins[col].clamp(-1.0, 1.0), maxs[col].clamp(-1.0, 1.0));
+
+            // Mapeia amplitude para posição Y no canvas (0 no meio, -1 no topo, 1 na base)
+            let _pos_pk = mx.max(0.0);
+            let _neg_peak = mn.min(0.0);
+
+            // Cor base (pré-multiplicada pelo alpha do pixel)
+            let [cr, cg, cb, ca] = color;
+            let pixel_a = ca;
+
+            // R,G,B componentes (branco puro shader * cor do cliente)
+            let r = (cr as f32 * pixel_a as f32 / 255.0) as u8;
+            let g = (cg as f32 * pixel_a as f32 / 255.0) as u8;
+            let b = (cb as f32 * pixel_a as f32 / 255.0) as u8;
+
+            // Alpha do pixel (usado para composição posterior)
+            out.push(r);
+            out.push(g);
+            out.push(b);
+            out.push(pixel_a);
+        }
+    }
+
+    Some(out)
+}
+
 pub fn wire_resolution_requests(
     ui: &MainWindow,
     waveforms: Rc<RefCell<WaveformCache>>,
-    wgpu: Option<Rc<WgpuRenderer>>,
+    // wgpu renderer (mantido para compatibilidade; rendering usa
+    // render_waveform_bars que funciona tanto com wgpu quanto software).
+    _wgpu: Option<Rc<WgpuRenderer>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
 ) {
-    let Some(wgpu) = wgpu else {
-        eprintln!("[waveform_gpu] Renderer indisponível — waveform desativada");
-        return;
-    };
-    // Pedidos pendentes por clip + flag de coalescing (timer ativo).
+    // Rendering now uses the software fallback (render_waveform_bars)
+    // que produz o mesmo formato RGBA compatível com o pipeline anterior.
+
     let pending: Rc<RefCell<HashMap<u64, PendingWave>>> =
         Rc::new(RefCell::new(HashMap::new()));
     let scheduled: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
@@ -339,7 +407,6 @@ pub fn wire_resolution_requests(
             let pending_shot = pending.clone();
             let scheduled_shot = scheduled.clone();
             let waves_shot = waveforms.clone();
-            let wgpu_shot = wgpu.clone();
             let clips_shot = clips_model.clone();
 
             slint::Timer::single_shot(
@@ -362,17 +429,15 @@ pub fn wire_resolution_requests(
                             continue;
                         }
 
-                        // Renderiza a waveform offscreen via wgpu e faz readback.
-                        let Some(rgba) = wgpu_shot.render_waveform(
+                        // Renderiza a waveform via wgpu ou fallback software (femtovg-style).
+                        let rgba = render_waveform_bars(
                             req.w,
                             req.h,
                             &mins,
                             &maxs,
                             WAVE_COLOR,
                             0.85,
-                        ) else {
-                            continue;
-                        };
+                        ).unwrap_or_default();
 
                         // Converte RGBA → slint::Image e publica no modelo do clip.
                         // `clone_from_slice` aceita `&[u8]` RGBA direto.

@@ -1,0 +1,796 @@
+//! Timeline renderer standalone — wgpu windowed (canvas 2D style).
+//!
+//! Replica visualmente a timeline do app: régua, grid, clips, playhead e VU.
+//! Usa o MESMO shader (app/src/timeline_gpu/wgpu.wgsl) e a mesma lógica de
+//! instancing + storage buffer de waveform do `TimelineGpuRenderer` do app.
+//!
+//! Controles:
+//!   - Scroll do mouse:      pan horizontal
+//!   - Shift + scroll:         zoom
+//!   - Espaço:                  play/pause do playhead animado
+//!   - ESC:                     fecha
+//!   - Resize:                  redimensiona o canvas
+
+mod shctx;
+
+use std::sync::Arc;
+use std::time::Instant;
+
+use wgpu::util::DeviceExt;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event::{ElementState, WindowEvent};
+use winit::keyboard::{Key, NamedKey};
+use winit::window::{Window, WindowId};
+use winit::window;
+
+use shctx::SHADER_WGSL;
+
+// Paleta e tipo ----------------------------------------------------------------
+
+/// Paleta idêntica ao app (7 slots de tema, indexado 0..=6).
+pub mod palette {
+    pub type Rgb = (u8, u8, u8);
+
+    pub const SURFACE_HIGH: [Rgb; 7] = [
+        (0x55, 0x55, 0x55), (0x26, 0x30, 0x3D), (0x2D, 0x27, 0x40),
+        (0x26, 0x2A, 0x1D), (0x36, 0x2A, 0x1B), (0x1E, 0x30, 0x35),
+        (0x91, 0x91, 0x91),
+    ];
+    pub const SURFACE_STEP: [Rgb; 7] = [
+        (0x42, 0x42, 0x42), (0x23, 0x2D, 0x38), (0x27, 0x23, 0x34),
+        (0x20, 0x23, 0x1A), (0x30, 0x26, 0x1F), (0x19, 0x2C, 0x31),
+        (0x7A, 0x7A, 0x7A),
+    ];
+    pub const GRID_LINE: [Rgb; 7] = [
+        (0x75, 0x75, 0x75), (0x4A, 0x5A, 0x70), (0x4A, 0x44, 0x66),
+        (0x4A, 0x4D, 0x3A), (0x5A, 0x4E, 0x3A), (0x3A, 0x5C, 0x66),
+        (0xD6, 0xD6, 0xD6),
+    ];
+    pub const GRID_SUB: [Rgb; 7] = [
+        (0x45, 0x45, 0x45), (0x2A, 0x36, 0x45), (0x2F, 0x2C, 0x42),
+        (0x2A, 0x2D, 0x24), (0x3A, 0x30, 0x28), (0x21, 0x36, 0x3C),
+        (0xEF, 0xEF, 0xEF),
+    ];
+    pub const TIMELINE_BG: [Rgb; 7] = [
+        (0x69, 0x69, 0x69), (0x1E, 0x2C, 0x35), (0x1F, 0x1B, 0x28),
+        (0x18, 0x1B, 0x11), (0x25, 0x21, 0x19), (0x12, 0x26, 0x28),
+        (0x79, 0x79, 0x79),
+    ];
+    pub const CLIP_PALETTE: [Rgb; 20] = [
+        (0x6F, 0xA8, 0x6B), (0x4F, 0x8A, 0xE0), (0xE0, 0xA9, 0x4F),
+        (0xE0, 0x5E, 0x5E), (0xA0, 0x60, 0xD8), (0xE0, 0x5E, 0xAA),
+        (0x3E, 0xC7, 0xB0), (0xC0, 0xC0, 0x50), (0xE0, 0x7A, 0x3E),
+        (0x8F, 0xD1, 0x4F), (0x3F, 0xA3, 0x4D), (0x35, 0xB5, 0xE5),
+        (0x5A, 0x8F, 0xE0), (0x55, 0x60, 0xD8), (0x9B, 0x5C, 0xE0),
+        (0xD8, 0x4F, 0xB2), (0xE0, 0x4F, 0x6F), (0xA8, 0x74, 0x4A),
+        (0xD8, 0xC0, 0x4F), (0x7A, 0x93, 0xA8),
+    ];
+    pub const CLIP_MIDI_DEFAULT: [Rgb; 7] = [
+        (0x6F, 0xA8, 0x6B), (0x6F, 0xA8, 0x6B), (0x6F, 0xA8, 0x6B),
+        (0x8F, 0xC1, 0x4F), (0x8F, 0xAA, 0x6B), (0x6F, 0xA8, 0x6B),
+        (0x52, 0xBA, 0x46),
+    ];
+    pub const CLIP_AUDIO_DEFAULT: Rgb = (0x00, 0xC8, 0x53);
+    pub const TEXT_PRIMARY: [Rgb; 7] = [
+        (0xE0, 0xE0, 0xE0), (0xE2, 0xE6, 0xEE), (0xE0, 0xDA, 0xF0),
+        (0xD5, 0xE8, 0xB0), (0xE8, 0xD8, 0xC0), (0xC8, 0xE8, 0xE0),
+        (0x17, 0x17, 0x17),
+    ];
+    pub const PLAYHEAD_COLOR: Rgb = (0xFF, 0x33, 0x00);
+}
+
+fn rgba((r, g, b): palette::Rgb, a: u8) -> [u8; 4] { [r, g, b, a] }
+fn darker((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
+    let f = (1.0 - amount).max(0.0);
+    (
+        (r as f32 * f).round() as u8,
+        (g as f32 * f).round() as u8,
+        (b as f32 * f).round() as u8,
+    )
+}
+fn rgba_alpha((r, g, b): palette::Rgb, alpha: f32) -> [u8; 4] {
+    let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+    [r, g, b, a]
+}
+
+/// Instância de render (mesmo layout do shader).
+#[derive(Clone, Copy, Debug)]
+pub struct RectInstance {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub color: [u8; 4],
+    pub wave_offset: u32,
+    pub wave_count: u32,
+    pub clip_w: f32,
+    pub clip_h: f32,
+}
+
+impl RectInstance {
+    fn to_f32(self) -> [f32; 12] {
+        let [r, g, b, a] = self.color;
+        [
+            self.x, self.y, self.w, self.h,
+            r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0,
+            self.wave_offset as f32, self.wave_count as f32,
+            self.clip_w, self.clip_h,
+        ]
+    }
+}
+
+/// Câmera ortográfica 2D.
+#[derive(Clone, Copy, Debug)]
+pub struct OrthoCamera {
+    pub scroll_x: f32,
+    pub scroll_y: f32,
+    pub viewport_w: f32,
+    pub viewport_h: f32,
+}
+
+impl OrthoCamera {
+    pub fn proj(&self) -> [f32; 16] {
+        let sx = self.scroll_x;
+        let sy = self.scroll_y;
+        let hw = (self.viewport_w / 2.0).max(1.0);
+        let hh = (self.viewport_h / 2.0).max(1.0);
+        [
+            1.0 / hw, 0.0, 0.0, 0.0,
+            0.0, -1.0 / hh, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            -sx / hw - 1.0, 1.0 + sy / hh, 0.0, 1.0,
+        ]
+    }
+}
+
+// ============================================================================
+// Dados demo
+// ============================================================================
+
+struct ClipDemo {
+    track_index: usize,
+    beat: f32,
+    len: f32,
+    is_midi: bool,
+    color: usize,
+}
+
+// ============================================================================
+// App
+// ============================================================================
+
+struct App {
+    window: Arc<Window>,
+    surface: wgpu::Surface<'static>,
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
+    pipeline: wgpu::RenderPipeline,
+    bind_group_layout: wgpu::BindGroupLayout,
+    unit_quad: wgpu::Buffer,
+    config: wgpu::SurfaceConfiguration,
+    size: winit::dpi::PhysicalSize<u32>,
+
+    theme: usize,
+    scroll_x: f32,
+    scroll_y: f32,
+    zoom: f32,
+    px_per_beat: f32,
+    ruler_px: f32,
+    playing: bool,
+    transport_seconds: f32,
+    last_play_head_update: Instant,
+
+    wave_bars: Vec<f32>,
+    clips: Vec<ClipDemo>,
+}
+
+impl App {
+    fn new(window: Arc<Window>) -> Result<Self, String> {
+        let size = window.inner_size();
+
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        let surface = instance
+            .create_surface(window.clone())
+            .map_err(|e| format!("wgpu: create_surface failed: {e}"))?;
+
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+        }))
+        .ok_or_else(|| "wgpu: no adapter available".to_string())?;
+
+        let (device, queue) = pollster::block_on(adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                label: Some("ruana-timeline-device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: Default::default(),
+            },
+            None,
+        ))
+        .map_err(|e| format!("wgpu: request_device failed: {e}"))?;
+
+        let device = Arc::new(device);
+        let queue = Arc::new(queue);
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("timeline-shader"),
+            source: wgpu::ShaderSource::Wgsl(SHADER_WGSL.into()),
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("timeline-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("timeline-pl"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let unit_quad = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("timeline-unit-quad"),
+            contents: bytemuck::cast_slice(&[
+                0.0f32, 0.0f32, 1.0f32, 0.0f32, 0.0f32, 1.0f32, 1.0f32, 1.0f32,
+            ]),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .unwrap_or(surface_caps.formats[0]);
+
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width: size.width,
+            height: size.height,
+            view_formats: vec![],
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: surface_caps.alpha_modes[0],
+            desired_maximum_frame_latency: 1,
+        };
+        surface.configure(&device, &config);
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("timeline-rp"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[
+                    wgpu::VertexBufferLayout {
+                        array_stride: 8,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &[wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x2,
+                            offset: 0,
+                            shader_location: 0,
+                        }],
+                    },
+                    wgpu::VertexBufferLayout {
+                        array_stride: 48,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &[
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: 0,
+                                shader_location: 1,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: 16,
+                                shader_location: 2,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: 32,
+                                shader_location: 3,
+                            },
+                        ],
+                    },
+                ],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        // === Dados demo ===
+        let clips = vec![
+            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0 },
+            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0 },
+            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3 },
+            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1 },
+            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0 },
+            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5 },
+        ];
+
+        let mut wave_bars: Vec<f32> = Vec::new();
+        let px_per_beat = 40.0;
+        for clip in &clips {
+            if clip.is_midi {
+                continue;
+            }
+            let n_cols = ((clip.len * px_per_beat).ceil() as u32).max(1).min(256);
+            for col in 0..n_cols {
+                let phase = (col as f32) / n_cols as f32 * std::f32::consts::TAU;
+                let mn = -0.5 * (phase * 1.3).sin();
+                let mx = 0.5 * (phase * 0.7 + 0.5).cos();
+                wave_bars.push(mn);
+                wave_bars.push(mx);
+            }
+        }
+
+        Ok(Self {
+            window,
+            surface,
+            device,
+            queue,
+            pipeline,
+            bind_group_layout,
+            unit_quad,
+            config,
+            size,
+
+            theme: 1,
+            scroll_x: 0.0,
+            scroll_y: 0.0,
+            zoom: 1.0,
+            px_per_beat,
+            ruler_px: 25.0,
+            playing: true,
+            transport_seconds: 0.0,
+            last_play_head_update: Instant::now(),
+
+            wave_bars,
+            clips,
+        })
+    }
+
+    fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        self.size = size;
+        if size.width > 0 && size.height > 0 {
+            self.config.width = size.width;
+            self.config.height = size.height;
+            self.surface.configure(&self.device, &self.config);
+        }
+    }
+
+    fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_shift: bool) {
+        let amount = match *delta {
+            winit::event::MouseScrollDelta::LineDelta(_, y) => y,
+            winit::event::MouseScrollDelta::PixelDelta(p) => (p.y / 10.0) as f32,
+        };
+        if with_shift {
+            self.zoom = (self.zoom + amount * 0.05).clamp(0.1, 10.0);
+            self.px_per_beat = 40.0 * self.zoom;
+        } else {
+            self.scroll_x += amount * 20.0;
+            self.scroll_x = self.scroll_x.max(0.0);
+        }
+    }
+
+    fn build_instances(&self, width: f32, height: f32) -> Vec<RectInstance> {
+        let t = self.theme.clamp(0, 6) as usize;
+        let mut instances = Vec::new();
+        let px_per_bar = self.px_per_beat * 4.0;
+        let total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
+
+        // Fundo geral
+        instances.push(RectInstance {
+            x: 0.0, y: self.ruler_px,
+            w: width, h: (height - self.ruler_px).max(0.0),
+            color: rgba(palette::TIMELINE_BG[t], 255),
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+        });
+
+        // Faixas alternadas
+        let row_height = 40.0;
+        let n_tracks = 4;
+        for track in 0..n_tracks {
+            let y = self.ruler_px + track as f32 * row_height;
+            for i in 0..total_bars {
+                let x = i as f32 * px_per_bar - self.scroll_x;
+                if x > width || x + px_per_bar < 0.0 { continue; }
+                let bg = if i % 2 == 1 { palette::SURFACE_HIGH[t] } else { palette::SURFACE_STEP[t] };
+                let w = px_per_bar.min(width - x).max(0.0);
+                instances.push(RectInstance {
+                    x, y, w,
+                    h: row_height,
+                    color: [bg.0, bg.1, bg.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                });
+            }
+        }
+
+        // Régua
+        instances.push(RectInstance {
+            x: 0.0, y: 0.0, w: width, h: self.ruler_px,
+            color: rgba(palette::SURFACE_HIGH[t], 255),
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+        });
+
+        // Grid
+        for i in 0..total_bars {
+            let bx = i as f32 * px_per_bar - self.scroll_x;
+            if bx > width || bx < -px_per_bar { continue; }
+            let bar_a = if i % 2 == 1 { 255 } else { 140 };
+            instances.push(RectInstance {
+                x: bx, y: 0.0, w: 1.0, h: height,
+                color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, bar_a],
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+            });
+            let beat_px = px_per_bar / 4.0;
+            for k in 0..4 {
+                let x = bx + k as f32 * beat_px;
+                if x <= 0.0 || x > width { continue; }
+                if px_per_bar >= 40.0 {
+                    instances.push(RectInstance {
+                        x, y: self.ruler_px, w: 1.0,
+                        h: height - self.ruler_px,
+                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                    });
+                }
+                if px_per_bar >= 120.0 {
+                    let x8 = x + beat_px * 0.5;
+                    instances.push(RectInstance {
+                        x: x8, y: self.ruler_px, w: 1.0,
+                        h: height - self.ruler_px,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                    });
+                }
+            }
+        }
+
+        // Clips
+        let header_h = 20.0;
+        let bw = 1.0;
+        for (idx, clip) in self.clips.iter().enumerate() {
+            let base = if clip.color == 0 {
+                if clip.is_midi { palette::CLIP_MIDI_DEFAULT[t] } else { palette::CLIP_AUDIO_DEFAULT }
+            } else {
+                palette::CLIP_PALETTE[clip.color % palette::CLIP_PALETTE.len()]
+            };
+
+            let x = clip.beat * self.px_per_beat - self.scroll_x;
+            let w = (clip.len * self.px_per_beat).max(40.0);
+            let y = self.ruler_px + clip.track_index as f32 * row_height;
+
+            if w <= 0.0 || x + w < 0.0 || x > width { continue; }
+            let draw_w = w.min(width - x).max(0.0);
+
+            // Header
+            instances.push(RectInstance {
+                x: x + bw, y: y + bw,
+                w: (draw_w - 2.0 * bw).max(0.0),
+                h: (header_h - bw).max(0.0),
+                color: rgba(base, 255),
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+            });
+
+            // Corpo (com waveform simulado)
+            let body_h = row_height - header_h;
+            let body_w = w;
+            let wave_info_idx = self.clips[..idx].iter().position(|c| !c.is_midi && c.track_index == clip.track_index);
+            let (wo, wc) = if clip.is_midi {
+                (0u32, 0u32)
+            } else {
+                // Cada clip de áudio usa as barras acumuladas em wave_bars
+                let bar_idx = self.clips[..idx].iter().filter(|c| !c.is_midi).count();
+                let offset = bar_idx as u32 * 2;
+                let total = self.wave_bars.len() as u32 / 2;
+                (offset, total)
+            };
+            let _ = (wave_info_idx, body_h, body_w, wo, wc);
+
+            instances.push(RectInstance {
+                x: x + bw, y: y + header_h,
+                w: body_w, h: body_h,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: wo, wave_count: wc, clip_w: body_w, clip_h: body_h,
+            });
+
+            // Divisória
+            instances.push(RectInstance {
+                x: x + bw, y: y + header_h - 1.0,
+                w: (draw_w - 2.0 * bw).max(0.0), h: 1.0,
+                color: rgba(darker(base, 0.18), 255),
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+            });
+
+            // Indicador direito
+            instances.push(RectInstance {
+                x: x + draw_w - bw - 6.0, y: y + 5.0,
+                w: 3.0, h: 8.0,
+                color: rgba(palette::TEXT_PRIMARY[t.clamp(0, 6)], 255),
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+            });
+        }
+
+        // Playhead
+        if self.playing {
+            let bpm = 120.0;
+            let pixels_per_second = self.px_per_beat * bpm / 60.0;
+            let head_x = self.transport_seconds * pixels_per_second - self.scroll_x;
+            instances.push(RectInstance {
+                x: head_x - 1.0, y: self.ruler_px,
+                w: 2.0, h: height - self.ruler_px,
+                color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 255],
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+            });
+            instances.push(RectInstance {
+                x: head_x - 6.0, y: 1.0,
+                w: 12.0, h: 12.0,
+                color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 255],
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+            });
+        }
+
+        instances
+    }
+
+    fn render(&mut self) {
+        let size = self.size;
+        if size.width == 0 || size.height == 0 {
+            return;
+        }
+
+        let output = match self.surface.get_current_texture() {
+            Ok(o) => o,
+            Err(_e) => {
+                self.surface.configure(&self.device, &self.config);
+                self.surface
+                    .get_current_texture()
+                    .expect("surface texture unavailable")
+            }
+        };
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("timeline-encoder"),
+            });
+
+        let width = size.width as f32;
+        let height = size.height as f32;
+        let instances = self.build_instances(width, height);
+
+        let data: Vec<f32> = instances.iter().flat_map(|i| i.to_f32()).collect();
+        let instance_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("instances"),
+            contents: bytemuck::cast_slice(&data),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let uniform_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("uniforms"),
+            contents: bytemuck::cast_slice(&OrthoCamera {
+                scroll_x: self.scroll_x,
+                scroll_y: self.scroll_y,
+                viewport_w: width.max(1.0),
+                viewport_h: height.max(1.0),
+            }.proj()),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let wave_bars_data = if self.wave_bars.is_empty() {
+            vec![0.0f32, 0.0f32]
+        } else {
+            self.wave_bars.clone()
+        };
+        let wave_bars_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("wave-bars"),
+            contents: bytemuck::cast_slice(&wave_bars_data),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bg"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wave_bars_buf.as_entire_binding(),
+                },
+            ],
+        });
+
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("timeline-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1, g: 0.1, b: 0.12, a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_bind_group(0, &bind_group, &[]);
+            rpass.set_vertex_buffer(0, self.unit_quad.slice(..));
+            rpass.set_vertex_buffer(1, instance_buf.slice(..));
+            rpass.draw(0..4, 0..instances.len() as u32);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+    }
+
+    fn update_playhead(&mut self) {
+        if !self.playing { return; }
+        let dt = self.last_play_head_update.elapsed().as_secs_f32();
+        self.last_play_head_update = Instant::now();
+        self.transport_seconds += dt;
+    }
+}
+
+// ============================================================================
+// Event handler (winit 0.30)
+// ============================================================================
+
+struct AppHandler {
+    app: Option<App>,
+    window_id: WindowId,
+    shift_pressed: bool,
+}
+
+impl AppHandler {
+    fn new() -> Self {
+        Self {
+            app: None,
+            window_id: WindowId::dummy(),
+            shift_pressed: false,
+        }
+    }
+}
+
+impl winit::application::ApplicationHandler for AppHandler {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.app.is_none() {
+            let window = event_loop
+                .create_window(
+                    window::Window::default_attributes()
+                        .with_title("timeline-rendered — wgpu standalone")
+                        .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0)),
+                )
+                .expect("failed to create window");
+            self.window_id = window.id();
+            let win = Arc::new(window);
+            self.app = Some(App::new(win).expect("app init failed"));
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        if window_id != self.window_id { return; }
+        let app = self.app.as_mut().expect("app not initialized");
+        match event {
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Resized(size) => {
+                app.resize(size);
+            }
+            WindowEvent::RedrawRequested => {
+                app.update_playhead();
+                app.render();
+            }
+            WindowEvent::MouseWheel {
+                device_id: _,
+                delta,
+                phase: _,
+            } => {
+                app.handle_scroll(&delta, self.shift_pressed);
+            }
+            WindowEvent::KeyboardInput {
+                device_id: _,
+                event,
+                ..
+            } => {
+                let pressed = event.state == ElementState::Pressed;
+                let vk = event.logical_key;
+                if pressed && vk == Key::Named(NamedKey::Space) {
+                    app.playing = !app.playing;
+                    app.last_play_head_update = Instant::now();
+                }
+                if pressed && vk == Key::Named(NamedKey::Escape) {
+                    event_loop.exit();
+                }
+                // Track shift para zoom com scroll
+                use winit::keyboard::{KeyCode, PhysicalKey};
+                let is_shift = matches!(vk, Key::Named(NamedKey::Shift))
+                    || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight));
+                self.shift_pressed = pressed && is_shift;
+            }
+            WindowEvent::Focused(focused) => {
+                if !focused {
+                    app.playing = false;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(app) = &self.app {
+            if app.playing {
+                app.window.request_redraw();
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Entry point
+// ============================================================================
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let event_loop = EventLoop::new()?;
+    let mut handler = AppHandler::new();
+    event_loop.run_app(&mut handler)?;
+    Ok(())
+}

@@ -1,0 +1,14 @@
+[package]
+name = "timeline-render"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "timeline-render"
+path = "src/main.rs"
+
+[dependencies]
+wgpu = "23"
+winit = "0.30"
+pollster = "0.4"
+bytemuck = "1.14"
