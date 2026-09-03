@@ -482,6 +482,67 @@ fn build_playhead_instances(
 }
 
 // =====================================================
+// VU METERS (barras horizontais por track, à direita)
+// =====================================================
+
+/// Monta as instâncias dos VU meters: uma barra horizontal por track
+/// à direita da área de conteúdo, com largura proporcional ao nível (0.0-1.0).
+fn build_vu_meter_instances(
+    levels: &[f32],
+    ruler_px: f32,
+    row_height: f32,
+    canvas_width: f32,
+    canvas_height: f32,
+    theme: i32,
+) -> Vec<RectInstance> {
+    let mut out = Vec::new();
+    let t = theme.clamp(0, 6) as usize;
+
+    // Posição X: um pouco antes da borda direita do canvas.
+    // O canvas width é a viewport width; colocamos os meters em [w-60, w-10].
+    let meter_x = canvas_width - 60.0;
+    let meter_w_max = 50.0;
+    let meter_h = (row_height * 0.6).max(4.0); // 60% da altura da track, mín 4px
+    let meter_y_offset = (row_height - meter_h) / 2.0; // centralizado verticalmente na track
+
+    // Cor do meter: verde brilhante (padrão) ou vermelho se clipping (>0.9)
+    let meter_green: Rgb = (0x00, 0xE0, 0x00);
+    let meter_red: Rgb = (0xE0, 0x20, 0x20);
+    let meter_bg: Rgb = GRID_SUB[t]; // fundo sutil
+
+    for (track_idx, &level) in levels.iter().enumerate() {
+        let y = track_idx as f32 * row_height + ruler_px + meter_y_offset;
+        if y > canvas_height {
+            break;
+        }
+        let lvl = level.clamp(0.0, 1.0);
+        let color = if lvl > 0.9 { meter_red } else { meter_green };
+
+        // Fundo do meter (track bg)
+        out.push(RectInstance {
+            x: meter_x,
+            y,
+            w: meter_w_max,
+            h: meter_h,
+            color: rgba(meter_bg, 180),
+        });
+        // Nível atual
+        if lvl > 0.01 {
+            out.push(RectInstance {
+                x: meter_x,
+                y,
+                w: meter_w_max * lvl,
+                h: meter_h,
+                color: rgba(color, 230),
+            });
+        }
+        // Pico (linha fina no topo) - opcional, simplificado
+    }
+
+    out
+}
+
+// =====================================================
 // WIRING
 // =====================================================
 
@@ -489,7 +550,12 @@ fn build_playhead_instances(
 ///
 /// `project` é o core (`Project`) fonte dos clips — lemos o corpo/header
 /// dos clips direto do modelo Rust (não duplicamos estado pelo Slint).
-pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
+/// `meter_state` é o estado dos VU meters (níveis por track, 0.0-1.0).
+pub fn wire(
+    ui: &MainWindow,
+    project: Rc<std::cell::RefCell<Project>>,
+    meter_state: Rc<std::cell::RefCell<Vec<f32>>>,
+) {
     let Some(renderer) = TimelineGpuRenderer::new().ok() else {
         eprintln!("[timeline_canvas] Renderer indisponível — fundo desativado");
         return;
@@ -504,6 +570,7 @@ pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
     let last_shot = last.clone();
     let project_shot = project.clone();
     let renderer_shot = renderer.clone();
+    let meter_state_shot = meter_state.clone();
 
     // Função de renderização compartilhada.
     // `force = true` ignora o check de render-on-change (usado pelo timer de playhead).
@@ -638,6 +705,18 @@ pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
                 h as f32,
             ));
         }
+
+        // VU meters: barras horizontais pequenas à direita de cada track.
+        // Lê os níveis do estado compartilhado (atualizado pelo timer de 80ms).
+        let meter_levels = meter_state_shot.borrow();
+        instances.extend(build_vu_meter_instances(
+            &meter_levels,
+            ruler_px,
+            row_height,
+            w as f32,
+            h as f32,
+            theme,
+        ));
 
         let camera = OrthoCamera {
             scroll_x: key.scroll_x,

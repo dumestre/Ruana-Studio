@@ -412,8 +412,9 @@ fn main() -> Result<(), slint::PlatformError> {
     waveform::wire_resolution_requests(&ui, waveforms.clone(), wgpu_renderer.clone(), clips_model.clone());
 
     // TimelineCanvas: fundo da timeline (grid + faixas) via wgpu + clips
-    // (corpo/header) lidos direto do core, render-on-change.
-    timeline_canvas::wire(&ui, project.clone());
+    // (corpo/header) lidos direto do core + playhead 60fps + VU meters,
+    // render-on-change.
+    timeline_canvas::wire(&ui, project.clone(), meter_state.clone());
 
     // Explorador de arquivos: navegação, histórico e filtro.
     explorer::wire_explorer(&ui);
