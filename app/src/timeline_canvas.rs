@@ -19,10 +19,13 @@
 
 use std::rc::Rc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Timer, TimerMode};
 use crate::MainWindow;
 use crate::timeline_gpu::wgpu::{OrthoCamera, RectInstance, TimelineGpuRenderer};
 use daw_core::project::Project;
+
+// Cor do playhead (crimson #DC143C = 220, 20, 60) - igual ao Slint.
+const PLAYHEAD_COLOR: (u8, u8, u8) = (0xDC, 0x14, 0x3C);
 
 // =====================================================
 // PALETA (espelho do global Theme, por índice do tema)
@@ -177,6 +180,10 @@ struct FrameKey {
     // mudança de conteúdo/posição/len/cor/ordem invalida o frame.
     clips_len: u32,
     clips_hash: u64,
+    // Playhead state (for render-on-change when playing).
+    playing: bool,
+    transport_time_seconds: f32,
+    bpm: i32,
 }
 
 impl Default for FrameKey {
@@ -194,6 +201,9 @@ impl Default for FrameKey {
             theme: -1,
             clips_len: 0,
             clips_hash: 0,
+            playing: false,
+            transport_time_seconds: -1.0,
+            bpm: -1,
         }
     }
 }
@@ -439,6 +449,38 @@ fn build_clip_instances(
     out
 }
 
+/// Monta as instâncias do playhead (linha vertical + cabeça circular).
+///
+/// Coordenadas de CONTEÚDO. A linha vai do topo da régua até o fim
+/// das tracks. A cabeça (bolinha) fica centralizada na régua.
+fn build_playhead_instances(
+    head_x: f32,
+    ruler_px: f32,
+    tracks_height: f32,
+) -> Vec<RectInstance> {
+    vec![
+        // Linha vertical (2px largura) da régua até fim das tracks.
+        RectInstance {
+            x: head_x - 1.0,
+            y: ruler_px,
+            w: 2.0,
+            h: tracks_height,
+            color: [PLAYHEAD_COLOR.0, PLAYHEAD_COLOR.1, PLAYHEAD_COLOR.2, 255],
+        },
+        // Cabeça (bolinha 12px) na régua (y=1px, centrada verticalmente ~7px).
+        // Desenhada como quadrado; o shader faz quadrados. Para círculo real
+        // precisaria SDF no fragment shader. Por enquanto quadrado —
+        // aceitável no playhead fino.
+        RectInstance {
+            x: head_x - 6.0,
+        y: 1.0,
+        w: 12.0,
+        h: 12.0,
+        color: [PLAYHEAD_COLOR.0, PLAYHEAD_COLOR.1, PLAYHEAD_COLOR.2, 255],
+    },
+]
+}
+
 // =====================================================
 // WIRING
 // =====================================================
@@ -458,12 +500,15 @@ pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
     let last: Rc<std::cell::RefCell<FrameKey>> =
         Rc::new(std::cell::RefCell::new(FrameKey::default()));
 
-    let ui_shot = ui.clone_strong();
+    let ui_shot = ui.as_weak();
     let last_shot = last.clone();
     let project_shot = project.clone();
+    let renderer_shot = renderer.clone();
 
-    ui.on_timeline_canvas_render_requested(move || {
-        let ui = &ui_shot;
+    // Função de renderização compartilhada.
+    // `force = true` ignora o check de render-on-change (usado pelo timer de playhead).
+    let do_render = move |force: bool| {
+        let Some(ui) = ui_shot.upgrade() else { return; };
 
         // Coleta os parâmetros do estado atual.
         //
@@ -481,6 +526,11 @@ pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
         let width = ui.get_timeline_canvas_content_width().max(0.0);
         let height = ui.get_timeline_canvas_content_height().max(0.0);
         let theme = ui.get_theme_index();
+
+        // Estado do playhead.
+        let playing = ui.get_playing();
+        let transport_time_seconds = ui.get_transport_time_seconds();
+        let bpm = ui.get_bpm();
 
         // Lê os clips do CORE (fonte autoritativa) e projeta a geometria.
         // Mapeia track_id → índice da row percorrendo `project.tracks`.
@@ -539,10 +589,13 @@ pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
             theme,
             clips_len,
             clips_hash: h,
+            playing,
+            transport_time_seconds,
+            bpm,
         };
 
-        // Render-on-change: ignora se nada mudou.
-        if *last_shot.borrow() == key {
+        // Render-on-change: ignora se nada mudou (exceto quando forçado).
+        if !force && *last_shot.borrow() == key {
             return;
         }
         *last_shot.borrow_mut() = key;
@@ -568,6 +621,24 @@ pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
             &clip_visuals,
         ));
 
+        // Playhead: desenha por cima de tudo quando tocando.
+        if playing {
+            // playhead-x em coordenadas de CONTEÚDO (igual ao Slint):
+            // timeline-left-padding + current-time-seconds * pixels-per-second
+            // pixels-per-second = px_per_beat / (60.0 / bpm)
+            let secs = transport_time_seconds.max(0.0);
+            let bpm_f = bpm.max(1) as f32;
+            let pixels_per_second = px_per_beat * bpm_f / 60.0;
+            let head_x = ui.get_timeline_left_padding() + secs * pixels_per_second;
+
+            // A linha do playhead vai da régua até o fim do canvas (height).
+            instances.extend(build_playhead_instances(
+                head_x,
+                ruler_px,
+                h as f32,
+            ));
+        }
+
         let camera = OrthoCamera {
             scroll_x: key.scroll_x,
             scroll_y: key.scroll_y,
@@ -576,7 +647,7 @@ pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
         };
 
         // Renderiza offscreen → readback.
-        let Some(rgba) = renderer.render_frame(w, h, &camera, &instances) else {
+        let Some(rgba) = renderer_shot.render_frame(w, h, &camera, &instances) else {
             return;
         };
 
@@ -584,5 +655,32 @@ pub fn wire(ui: &MainWindow, project: Rc<std::cell::RefCell<Project>>) {
         let buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&rgba, w, h);
         let img = slint::Image::from_rgba8(buf);
         ui.set_timeline_canvas_background(img);
+    };
+
+    // Clone do_render para poder usar em ambos os closures.
+    let do_render_for_callback = do_render.clone();
+    let do_render_for_timer = do_render.clone();
+
+    // Callback do timer de bounds (50ms) — render-on-change normal.
+    ui.on_timeline_canvas_render_requested(move || {
+        do_render_for_callback(false);
     });
+
+    // Timer dedicado para playhead a ~60fps (16ms) quando tocando.
+    // Roda no Rust para não depender do timer Slint de 50ms.
+    let playhead_timer = Timer::default();
+    let ui_timer = ui.as_weak();
+    playhead_timer.start(
+        TimerMode::Repeated,
+        std::time::Duration::from_millis(16),
+        move || {
+            if let Some(ui) = ui_timer.upgrade()
+                && ui.get_playing()
+            {
+                do_render_for_timer(true);
+            }
+        },
+    );
+    // Mantém o timer vivo (o closure captura a referência).
+    std::mem::forget(playhead_timer);
 }
