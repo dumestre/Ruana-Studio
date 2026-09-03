@@ -15,7 +15,8 @@
 // O cache é um LRU simples (clip_id → CachedWave) — o decode acontece
 // uma única vez na worker thread e o LOD inteiro fica em RAM.
 use crate::MainWindow;
-use crate::waveform_gpu::renderer::{WaveformGpuRenderer, ClipBounds};
+use crate::waveform_gpu::wgpu::WgpuRenderer;
+use slint::{Model, Rgba8Pixel, SharedPixelBuffer};
 
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -244,6 +245,7 @@ pub fn to_clip_data_from_id(_id: u64, base: &ClipData, _waveforms: &WaveformCach
         fade_in: base.fade_in,
         fade_out: base.fade_out,
         gain_db: base.gain_db,
+        waveform: wave_image(base.id as u64),
     }
 }
 
@@ -267,26 +269,61 @@ use slint::ComponentHandle;
 struct PendingWave {
     id: u64,
     w: u32,
+    h: u32,
     gain: f32,
     fi: f32,
     fo: f32,
 }
 
+/// Cor padrão das barras da waveform (escura, estilo DAW).
+const WAVE_COLOR: [u8; 4] = [0x0A, 0x0A, 0x0A, 0xFF];
+
+// Cache de imagens de waveform já geradas (clip_id → slint::Image).
+//
+// Rebuilds do modelo (move/resize/color) reconstroem o `ClipData` e não
+// sabem da waveform; este mapa preserva a última imagem renderizada para
+// que o clip não "perca" a onda a cada evento de documento. As imagens
+// são re-geradas sob demanda quando o zoom muda.
+//
+// `thread_local!` (não `static`): `slint::Image` não é `Send`, e todo o
+// acesso ocorre na main thread (timers, callsites do modelo).
+thread_local! {
+    static WAVE_IMAGES: RefCell<HashMap<u64, slint::Image>> = RefCell::new(HashMap::new());
+}
+
+fn wave_image(id: u64) -> slint::Image {
+    WAVE_IMAGES.with(|m| m.borrow().get(&id).cloned().unwrap_or_default())
+}
+
+fn cache_wave_image(id: u64, img: slint::Image) {
+    WAVE_IMAGES.with(|m| m.borrow_mut().insert(id, img));
+}
+
+pub fn clear_wave_image(id: u64) {
+    WAVE_IMAGES.with(|m| m.borrow_mut().remove(&id));
+}
+
 pub fn wire_resolution_requests(
     ui: &MainWindow,
     waveforms: Rc<RefCell<WaveformCache>>,
-    gpu_renderer: Option<std::sync::Arc<std::sync::Mutex<Option<WaveformGpuRenderer>>>>,
+    wgpu: Option<Rc<WgpuRenderer>>,
+    clips_model: Rc<slint::VecModel<ClipData>>,
 ) {
+    let Some(wgpu) = wgpu else {
+        eprintln!("[waveform_gpu] Renderer indisponível — waveform desativada");
+        return;
+    };
     // Pedidos pendentes por clip + flag de coalescing (timer ativo).
     let pending: Rc<RefCell<HashMap<u64, PendingWave>>> =
         Rc::new(RefCell::new(HashMap::new()));
     let scheduled: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
 
     ui.global::<TimelineMetrics>()
-        .on_waveform_resolution_requested(move |id, width_px, _wx0, _wx1, _hh, gain_linear, fi, fo| {
+        .on_waveform_resolution_requested(move |id, width_px, _wx0, _wx1, hh, gain_linear, fi, fo| {
             let req = PendingWave {
                 id: id.max(0) as u64,
                 w: (width_px.round() as u32).clamp(16, FINEST_COLS as u32),
+                h: hh.max(1.0).round() as u32,
                 gain: gain_linear,
                 fi,
                 fo,
@@ -302,43 +339,59 @@ pub fn wire_resolution_requests(
             let pending_shot = pending.clone();
             let scheduled_shot = scheduled.clone();
             let waves_shot = waveforms.clone();
+            let wgpu_shot = wgpu.clone();
+            let clips_shot = clips_model.clone();
 
             slint::Timer::single_shot(
                 std::time::Duration::from_millis(40),
-                {
-                    let gpu_renderer_clone = gpu_renderer.clone();
-                    move || {
-                        *scheduled_shot.borrow_mut() = false;
-                        // Consome TODOS os clips pedidos (não só o último):
-                        // ao parar o scroll, cada clip recebe sua waveform.
-                        let batch = std::mem::take(&mut *pending_shot.borrow_mut());
+                move || {
+                    *scheduled_shot.borrow_mut() = false;
+                    // Consome TODOS os clips pedidos (não só o último):
+                    // ao parar o scroll, cada clip recebe sua waveform.
+                    let batch = std::mem::take(&mut *pending_shot.borrow_mut());
 
-                        for (req_id, req) in batch {
-                            // Pega o LOD do cache e repassa ao renderer GPU.
-                            // O wgpu/usurario do cache escolhe o nível e faz o
-                            // bake de gain/fade no próprio renderer.
-                            let Some(cw) = waves_shot.borrow().get(&req_id).cloned() else {
+                    for (req_id, req) in batch {
+                        // Escolhe o nível de LOD que cobre a largura pedida e
+                        // bakeia ganho/fade nas barras min→max (CPU, barato).
+                        let Some(cw) = waves_shot.borrow().get(&req_id).cloned() else {
+                            continue;
+                        };
+                        let level = pick_level(&cw.lods, req.w as usize);
+                        let (mins, maxs) = bake_bars(level, req.w, req.gain, req.fi, req.fo);
+                        if mins.is_empty() {
+                            continue;
+                        }
+
+                        // Renderiza a waveform offscreen via wgpu e faz readback.
+                        let Some(rgba) = wgpu_shot.render_waveform(
+                            req.w,
+                            req.h,
+                            &mins,
+                            &maxs,
+                            WAVE_COLOR,
+                            0.85,
+                        ) else {
+                            continue;
+                        };
+
+                        // Converte RGBA → slint::Image e publica no modelo do clip.
+                        // `clone_from_slice` aceita `&[u8]` RGBA direto.
+                        let buf =
+                            SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&rgba, req.w, req.h);
+                        let img = slint::Image::from_rgba8(buf);
+
+                        // Preserva no cache global p/ rebuilds do modelo.
+                        cache_wave_image(req_id, img.clone());
+
+                        let clips = clips_shot.clone();
+                        for i in 0..clips.row_count() {
+                            let Some(mut d) = clips.row_data(i) else {
                                 continue;
                             };
-                            let _ = cw; // dados disponíveis para o renderer
-
-                            // GPU Renderer update
-                            if let Some(gpu_renderer) = &gpu_renderer_clone {
-                                if let Ok(mut renderer) = gpu_renderer.lock() {
-                                    if let Some(r) = renderer.as_mut() {
-                                        // Precisamos dos bounds do clip para o GPU renderer
-                                        // Por enquanto, usamos valores aproximados baseados no req
-                                        // TODO: obter bounds reais do clip
-                                        let bounds = ClipBounds {
-                                            x: 0.0, // TODO: posição real do clip
-                                            y: 0.0, // TODO: posição real do clip
-                                            width: req.w as f32,
-                                            height: 100.0, // altura aproximada do corpo do clip
-                                        };
-                                        let color = [0.04, 0.04, 0.04, 1.0]; // #0A0A0A
-                                        r.update_clip(req_id, bounds, color, req.gain, req.fi, req.fo);
-                                    }
-                                }
+                            if d.id as u64 == req_id {
+                                d.waveform = img;
+                                clips.set_row_data(i, d);
+                                break;
                             }
                         }
                     }
@@ -462,5 +515,6 @@ pub fn to_clip_data(clip: &Clip, _waveforms: &WaveformCache) -> ClipData {
         multi_selected: false,
         fade_in: clip.fade_in_beats,
         fade_out: clip.fade_out_beats,
+        waveform: wave_image(clip.id),
     }
 }

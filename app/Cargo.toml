@@ -16,6 +16,7 @@ png = "0.18.1"
 glow = "0.18"
 wgpu = "23"
 bytemuck = "1.14"
+pollster = "0.4"
 glutin = "0.32.3"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",

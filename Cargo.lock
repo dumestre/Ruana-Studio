@@ -4777,6 +4777,7 @@ dependencies = [
  "i-slint-backend-winit",
  "libloading 0.9.0",
  "png 0.18.1",
+ "pollster",
  "raw-window-handle",
  "resvg 0.48.1",
  "rfd",

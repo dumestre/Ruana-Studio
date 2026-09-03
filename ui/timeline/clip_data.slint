@@ -15,4 +15,7 @@ export struct ClipData {
     // Ganho do clip em dB (-24..+12). 0 = unidade. Vem do core e é
     // controlado pela barrinha central do clip ou pelo BarProperties.
     gain-db: float,
+    // Waveform renderizada via wgpu (offscreen + readback) na resolução
+    // de exibição exata. O Slint apenas exibe a imagem no corpo do clip.
+    waveform: image,
 }

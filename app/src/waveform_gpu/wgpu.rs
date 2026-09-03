@@ -1,16 +1,18 @@
 //! Renderer de waveform via wgpu (headless/offscreen).
 //!
-//! A janela do Slint usa Skia e não pode compartilhar a surface com o
-//! wgpu. Esta abordagem renderiza as barras min→max numa textura
-//! offscreen com wgpu, faz readback RGBA para CPU e devolve uma imagem
-//! que o Slint exibe num elemento `Image` por clip.
+//! A janela do Slint usa Skia e não compartilha surface com wgpu. Este
+//! renderer cria um dispositivo headless (sem surface) e renderiza as
+//! barras min→max numa textura offscreen, faz readback RGBA para CPU e
+//! devolve um `Vec<u8>` que o chamador converte em `slint::Image`.
 //!
-//! Estratégia GPU: um quad unitário expandido por instância. Cada
-//! coluna da waveform (1px de largura) é uma instância; a vertex shader
-//! lê (min,max) num storage buffer e mapeia amplitude [-1,1] → NDC Y.
+//! Estratégia GPU: um quad unitário expandido por instância. Cada coluna
+//! da waveform é uma instância; a vertex shader lê (min,max) num storage
+//! buffer e mapeia amplitude [-1,1] → NDC Y.
+//!
+//! O dispositivo é criado UMA vez (custoso) e reutilizado para todos os
+//! clips; cada render aloca só o necessário e devolve RGBA compacto.
 
 use std::sync::Arc;
-use std::sync::Mutex;
 use wgpu::util::DeviceExt;
 
 /// Contexto wgpu headless compartilhado (main thread).
@@ -20,15 +22,6 @@ pub struct WgpuRenderer {
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     unit_quad: wgpu::Buffer,
-    texture: Mutex<Option<RenderTarget>>,
-}
-
-struct RenderTarget {
-    texture: wgpu::Texture,
-    view: wgpu::TextureView,
-    readback: wgpu::Buffer,
-    width: u32,
-    height: u32,
 }
 
 impl WgpuRenderer {
@@ -63,7 +56,7 @@ impl WgpuRenderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("wgpu.wgsl").into()),
         });
 
-        // Bind group: uniform (count/height) + storage (bars).
+        // Bind group: uniform (count/scale) + storage (barras min/max).
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("waveform-bgl"),
             entries: &[
@@ -148,35 +141,38 @@ impl WgpuRenderer {
             pipeline,
             bind_group_layout,
             unit_quad,
-            texture: Mutex::new(None),
         })
     }
 
-    /// Renderiza barras da waveform numa textura RGBA e faz readback.
+    /// Renderiza a waveform "Bin Visual" (barras min→max) numa textura
+    /// RGBA e faz readback para CPU.
     ///
-    /// `bars[i]` = amplitude central da i-ésima coluna 1px (já com
-    /// ganho/fade aplicados, faixa [-1,1]). `color` é RGBA (0..255).
-    /// Retorna `Vec<u8>` RGBA de `width x height`, ou `None` em erro.
-    pub fn render(
+    /// `mins`/`maxs` são arrays paralelos de amplitude em [-1,1], já com
+    /// ganho/fade baked (uma entrada por coluna de 1px). `color` é RGBA
+    /// (0..255) usado para pré-multiplicar o branco do fragment shader.
+    /// `hscale` (0..1) controla a fração da meia-altura que a onda ocupa.
+    ///
+    /// Retorna `Vec<u8>` RGBA de `width x height` (ou `None` em erro).
+    pub fn render_waveform(
         &self,
         width: u32,
         height: u32,
-        bars: &[f32],
+        mins: &[f32],
+        maxs: &[f32],
         color: [u8; 4],
+        hscale: f32,
     ) -> Option<Vec<u8>> {
-        if bars.is_empty() || width == 0 || height == 0 {
+        let count = mins.len();
+        if count == 0 || count != maxs.len() || width == 0 || height == 0 {
             return None;
         }
-        let count = bars.len() as u32;
+        let count = count as u32;
 
-        // Bars em storage buffer (vec2 por bar: min/max ~ mesma amplitude).
-        // Como `bars` guarda só a amplitude por coluna, usamos (v, -v).
-        let bar_data: Vec<f32> = bars
+        // Barras em storage buffer: vec2 (min, max) por coluna.
+        let bar_data: Vec<f32> = mins
             .iter()
-            .flat_map(|&v| {
-                let v = v.clamp(-1.0, 1.0);
-                [v, -v]
-            })
+            .zip(maxs.iter())
+            .flat_map(|(&mn, &mx)| [mn.clamp(-1.0, 1.0), mx.clamp(-1.0, 1.0)])
             .collect();
 
         let bars_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -214,10 +210,10 @@ impl WgpuRenderer {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Uniforms: count e meia-altura (para mapear amplitude → NDC).
+        // Uniforms: count e hscale.
         let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("uniforms"),
-            contents: bytemuck::cast_slice(&[count as f32, 0.0f32, 0.0f32, 0.0f32]),
+            contents: bytemuck::cast_slice(&[count as f32, hscale, 0.0f32, 0.0f32]),
             usage: wgpu::BufferUsages::UNIFORM,
         });
 
@@ -242,12 +238,7 @@ impl WgpuRenderer {
                 label: Some("waveform-encoder"),
             });
 
-        let (r, g, b, a) = (
-            color[0] as f32 / 255.0,
-            color[1] as f32 / 255.0,
-            color[2] as f32 / 255.0,
-            color[3] as f32 / 255.0,
-        );
+        // Clear com a cor de fundo (alfa 0 = transparente no buffer).
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("waveform-pass"),
@@ -255,12 +246,7 @@ impl WgpuRenderer {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r,
-                            g,
-                            b,
-                            a,
-                        }),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -306,11 +292,30 @@ impl WgpuRenderer {
         self.device.poll(wgpu::Maintain::Wait);
         let _ = rx.recv();
 
+        // Shot da cor uma vez.
+        let [cr, cg, cb, ca] = color;
+        let c = [cr as f32, cg as f32, cb as f32, ca as f32];
+        let c = [
+            (c[0] * (ca as f32 / 255.0)) as u8,
+            (c[1] * (ca as f32 / 255.0)) as u8,
+            (c[2] * (ca as f32 / 255.0)) as u8,
+            ca,
+        ];
+
         let data = slice.get_mapped_range();
         let mut out = Vec::with_capacity((bytes_per_row as usize) * height as usize);
         for row in 0..height as usize {
             let start = row * padded as usize;
-            out.extend_from_slice(&data[start..start + bytes_per_row as usize]);
+            let row_src = &data[start..start + bytes_per_row as usize];
+            // O shader pinta branco puro; compomos a cor cliente por
+            // multiplicação preservando o alpha do pixel.
+            for px in row_src.chunks_exact(4) {
+                let a = px[3];
+                out.push((px[0] as u32 * c[0] as u32 / 255) as u8);
+                out.push((px[1] as u32 * c[1] as u32 / 255) as u8);
+                out.push((px[2] as u32 * c[2] as u32 / 255) as u8);
+                out.push(a);
+            }
         }
         drop(data);
         readback.unmap();

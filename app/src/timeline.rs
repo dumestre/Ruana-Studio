@@ -290,6 +290,7 @@ pub fn install(
     {
         let project = project.clone();
         ui.on_clip_delete_requested(move |id| {
+            crate::waveform::clear_wave_image(id.max(0) as u64);
             project.borrow_mut().delete_clip(id as u64);
         });
     }

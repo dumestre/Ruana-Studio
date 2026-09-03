@@ -49,6 +49,10 @@ export component TrackClip inherits Rectangle {
     // escreve via live-gain e comita no release (clip-gain-committed).
     in property <float> gain-db: 0.0;
 
+    // Waveform renderizada via wgpu (offscreen + readback). Só os clips
+    // de áudio recebem; MIDI mantém vazio.
+    in property <image> waveform: @image-url("");
+
     // Origem da área da waveform dentro do corpo (em px, 2px = border).
     private property <float> wave-area-origin:
         root.bw / 1px + 2.0;
@@ -504,6 +508,22 @@ export component TrackClip inherits Rectangle {
 
         clip:
             true;
+
+        // Waveform renderizada via wgpu na resolução exata de exibição.
+        // image-fit: fill porque a textura já nasce com as dimensões do
+        // corpo (largura = nº de colunas, altura = corpo). Só áudio.
+        Image {
+            source: root.waveform;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            image-fit: fill;
+            opacity: root.ghost-opacity;
+            visible:
+                !root.is-midi
+                && root.waveform.width > 0;
+        }
 
     }
 
