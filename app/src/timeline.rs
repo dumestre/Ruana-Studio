@@ -125,7 +125,6 @@ pub fn install(
     {
         let project = project.clone();
         let waveforms = waveforms.clone();
-        let clips_model = clips_model.clone();
         ui.on_clip_slice_requested(move |id, position| {
             let id = id as u64;
             let mut proj = project.borrow_mut();
@@ -147,11 +146,6 @@ pub fn install(
             let (left, right) = crate::waveform::split_cached_wave(&cw, fraction);
             wf.insert(id, left);
             wf.insert(right_id, right);
-            drop(wf);
-
-            let wf = waveforms.borrow();
-            crate::waveform::reproject_clip(&clips_model, &wf, id);
-            crate::waveform::reproject_clip(&clips_model, &wf, right_id);
         });
     }
 
@@ -161,7 +155,6 @@ pub fn install(
     {
         let project = project.clone();
         let waveforms = waveforms.clone();
-        let clips_model = clips_model.clone();
         ui.on_clip_glue_requested(move |id| {
             let id = id as u64;
             let removed = {
@@ -180,9 +173,6 @@ pub fn install(
             if let Some(m) = merged {
                 wf.insert(id, m);
                 wf.remove(&right_id);
-                drop(wf);
-                let wf = waveforms.borrow();
-                crate::waveform::reproject_clip(&clips_model, &wf, id);
             }
         });
     }
@@ -284,15 +274,8 @@ pub fn install(
                     wf.insert(id_u, trimmed);
                 }
                 drop(wf);
-                let wf = waveforms.borrow();
-                let updated = crate::waveform::to_clip_data_from_id(id_u, &clip, &wf);
                 clip.beat = beat;
                 clip.len = len;
-                // Só os DADOS mudam aqui: a imagem anterior (ancorada)
-                // continua no lugar até o re-render do trecho novo chegar
-                // (o corpo com `clip` já mostra o crop correto no meio tempo).
-                clip.waveform_mins = updated.waveform_mins;
-                clip.waveform_maxes = updated.waveform_maxes;
             } else {
                 clip.beat = beat;
                 clip.len = len;
@@ -495,7 +478,6 @@ pub fn install(
         let project = project.clone();
         let clipboard = clip_clipboard.clone();
         let waveforms = waveforms.clone();
-        let clips_model = clips_model.clone();
         let ui_paste = ui.as_weak();
         ui.on_clip_paste_requested(move |beat, track| {
             let Some(src) = clipboard.borrow().clone() else {
@@ -515,12 +497,10 @@ pub fn install(
             let new_id = proj.add_clip_from(&src, track_id, start);
 
             // Waveform da cópia: mesmo arquivo do clipboard →
-            // copia a entrada do cache e reprojeta a linha.
-            // (Clona FORA do borrow para não segurar o RefCell.)
+            // copia a entrada do cache.
             let src_wf = waveforms.borrow().get(&src.id).cloned();
             if let (Some(new_id), Some(cw)) = (new_id, src_wf) {
                 waveforms.borrow_mut().insert(new_id, cw);
-                crate::waveform::reproject_clip(&clips_model, &waveforms.borrow(), new_id);
             }
         });
     }
@@ -529,7 +509,6 @@ pub fn install(
     {
         let project = project.clone();
         let waveforms = waveforms.clone();
-        let clips_model = clips_model.clone();
         ui.on_clip_duplicate_requested(move |id| {
             let Some(src) = project
                 .borrow()
@@ -549,12 +528,11 @@ pub fn install(
 
             // Waveform: a duplicata aponta pro MESMO arquivo →
             // copia a entrada do cache (picos + samples + raster)
-            // do clip de origem e reprojeta a linha da cópia.
+            // do clip de origem.
             if let Some(new_id) = new_id {
                 let cached = waveforms.borrow().get(&src.id).cloned();
                 if let Some(cw) = cached {
                     waveforms.borrow_mut().insert(new_id, cw);
-                    crate::waveform::reproject_clip(&clips_model, &waveforms.borrow(), new_id);
                 }
             }
         });

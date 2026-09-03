@@ -54,9 +54,6 @@ pub struct CachedWave {
 /// Constante de build: largura (colunas) do nível mais fino.
 const FINEST_COLS: usize = 16384;
 
-/// Largura "exibida" padrão quando ainda não há pedido de resolução.
-const DEFAULT_COLS: usize = 512;
-
 /// Constrói o LOD multinível a partir das amostras mono.
 ///
 /// Algoritmo por nível: `chunk = frames / width` (no mínimo 1),
@@ -128,21 +125,6 @@ pub fn pick_level(lods: &[LodBars], width_px: usize) -> &LodBars {
 }
 
 static EMPTY_LOD: std::sync::OnceLock<LodBars> = std::sync::OnceLock::new();
-
-/// Índice do nível de "prévia" (closer à largura padrão) usado quando
-/// ainda não chegou o pedido de resolução da UI.
-fn pick_default(lods: &[LodBars]) -> usize {
-    let mut best = 0;
-    let mut best_d = usize::MAX;
-    for (i, l) in lods.iter().enumerate() {
-        let d = l.cols().abs_diff(DEFAULT_COLS);
-        if d < best_d {
-            best_d = d;
-            best = i;
-        }
-    }
-    best
-}
 
 /// Aplica ganho linear e fades (fi/fo em px da largura pedida) numa
 /// cópia das barras, prontas para publicar. Ganho/fade são "baked" nos
@@ -246,16 +228,10 @@ impl WaveformCache {
     }
 }
 
-/// Publica os mins/maxes de um `CachedWave` (nível de prévia) num
-/// `ClipData` existente, a partir do cache.
-pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache) -> ClipData {
-    let (mins, maxs) = match waveforms.get(&id) {
-        Some(c) => {
-            let i = pick_default(&c.lods);
-            (c.lods[i].mins.clone(), c.lods[i].maxs.clone())
-        }
-        None => (Vec::new(), Vec::new()),
-    };
+/// Reconstrói um `ClipData` a partir de um existente, preservando todos
+/// os campos. A waveform (mins/maxes) não é mais publicada no Slint — ela
+/// vive no `WaveformCache` e é renderizada pelo renderer GPU (wgpu).
+pub fn to_clip_data_from_id(_id: u64, base: &ClipData, _waveforms: &WaveformCache) -> ClipData {
     ClipData {
         id: base.id,
         name: base.name.clone(),
@@ -264,28 +240,11 @@ pub fn to_clip_data_from_id(id: u64, base: &ClipData, waveforms: &WaveformCache)
         len: base.len,
         is_midi: base.is_midi,
         color: base.color,
-        waveform_mins: Rc::new(slint::VecModel::from(mins)).into(),
-        waveform_maxes: Rc::new(slint::VecModel::from(maxs)).into(),
         multi_selected: base.multi_selected,
         fade_in: base.fade_in,
         fade_out: base.fade_out,
         gain_db: base.gain_db,
     }
-}
-
-/// Atualiza apenas as barras de um `ClipData` existente a partir do cache.
-pub fn reproject_clip(clips_model: &Rc<slint::VecModel<ClipData>>, waveforms: &WaveformCache, clip_id: u64) {
-    let i = match crate::models::clip_row(clips_model, clip_id as i32) {
-        Some(i) => i,
-        None => return,
-    };
-    let Some(mut data) = clips_model.row_data(i) else {
-        return;
-    };
-    let updated = to_clip_data_from_id(clip_id, &data, waveforms);
-    data.waveform_mins = updated.waveform_mins;
-    data.waveform_maxes = updated.waveform_maxes;
-    clips_model.set_row_data(i, data);
 }
 
 // Re-publica as barras na resolução exata de exibição.
@@ -301,9 +260,7 @@ pub fn reproject_clip(clips_model: &Rc<slint::VecModel<ClipData>>, waveforms: &W
 // raster de antes fazia.
 
 use crate::TimelineMetrics;
-use crate::models::clip_row;
 use slint::ComponentHandle;
-use slint::Model;
 
 /// Pedido mais recente de publicação de waveform (de-duplicado por clip).
 #[derive(Clone, Copy)]
@@ -318,7 +275,6 @@ struct PendingWave {
 pub fn wire_resolution_requests(
     ui: &MainWindow,
     waveforms: Rc<RefCell<WaveformCache>>,
-    clips_model: Rc<slint::VecModel<ClipData>>,
     gpu_renderer: Option<std::sync::Arc<std::sync::Mutex<Option<WaveformGpuRenderer>>>>,
 ) {
     // Pedidos pendentes por clip + flag de coalescing (timer ativo).
@@ -346,7 +302,6 @@ pub fn wire_resolution_requests(
             let pending_shot = pending.clone();
             let scheduled_shot = scheduled.clone();
             let waves_shot = waveforms.clone();
-            let clips_shot = clips_model.clone();
 
             slint::Timer::single_shot(
                 std::time::Duration::from_millis(40),
@@ -359,23 +314,14 @@ pub fn wire_resolution_requests(
                         let batch = std::mem::take(&mut *pending_shot.borrow_mut());
 
                         for (req_id, req) in batch {
-                            // Escolhe o nível cujas colunas cobrem a largura
-                            // exata de exibição e publica as barras (gain/fade
-                            // baked). Sem worker: só cópia + aritmética.
+                            // Pega o LOD do cache e repassa ao renderer GPU.
+                            // O wgpu/usurario do cache escolhe o nível e faz o
+                            // bake de gain/fade no próprio renderer.
                             let Some(cw) = waves_shot.borrow().get(&req_id).cloned() else {
                                 continue;
                             };
-                            let Some(idx) = clip_row(&clips_shot, req_id as i32) else {
-                                continue;
-                            };
-                            let level = pick_level(&cw.lods, req.w as usize);
-                            let (mins, maxs) = bake_bars(level, req.w, req.gain, req.fi, req.fo);
-                            if let Some(mut data) = clips_shot.row_data(idx) {
-                                data.waveform_mins = Rc::new(slint::VecModel::from(mins.clone())).into();
-                                data.waveform_maxes = Rc::new(slint::VecModel::from(maxs.clone())).into();
-                                clips_shot.set_row_data(idx, data);
-                            }
-                            
+                            let _ = cw; // dados disponíveis para o renderer
+
                             // GPU Renderer update
                             if let Some(gpu_renderer) = &gpu_renderer_clone {
                                 if let Ok(mut renderer) = gpu_renderer.lock() {
@@ -385,7 +331,7 @@ pub fn wire_resolution_requests(
                                         // TODO: obter bounds reais do clip
                                         let bounds = ClipBounds {
                                             x: 0.0, // TODO: posição real do clip
-                                            y: 0.0, // TODO: posição real do clip  
+                                            y: 0.0, // TODO: posição real do clip
                                             width: req.w as f32,
                                             height: 100.0, // altura aproximada do corpo do clip
                                         };
@@ -503,14 +449,7 @@ pub fn trim_cached_wave(cw: &CachedWave, f0: f64, f1: f64) -> CachedWave {
 }
 
 /// Mapeia um clip do core para o DTO da camada Slint.
-pub fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
-    let (mins, maxs) = match waveforms.get(&clip.id) {
-        Some(c) => {
-            let i = pick_default(&c.lods);
-            (c.lods[i].mins.clone(), c.lods[i].maxs.clone())
-        }
-        None => (Vec::new(), Vec::new()),
-    };
+pub fn to_clip_data(clip: &Clip, _waveforms: &WaveformCache) -> ClipData {
     ClipData {
         id: clip.id as i32,
         name: clip.name.clone().into(),
@@ -520,8 +459,6 @@ pub fn to_clip_data(clip: &Clip, waveforms: &WaveformCache) -> ClipData {
         is_midi: clip.is_midi(),
         color: clip.color as i32,
         gain_db: clip.gain_db,
-        waveform_mins: Rc::new(slint::VecModel::from(mins)).into(),
-        waveform_maxes: Rc::new(slint::VecModel::from(maxs)).into(),
         multi_selected: false,
         fade_in: clip.fade_in_beats,
         fade_out: clip.fade_out_beats,

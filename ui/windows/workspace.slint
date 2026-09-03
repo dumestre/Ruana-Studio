@@ -82,7 +82,6 @@ export component Workspace inherits Rectangle {
     in-out property <bool> sampler-sample-loaded: false;
     in-out property <string> sampler-sample-format: "";
     in-out property <string> sampler-sample-duration: "";
-    in-out property <[float]> sampler-sample-peaks: [];
 
     private property <bool> clip-focus-active: false;
     private property <float> clip-focus-zoom: 1.0;
@@ -1693,7 +1692,6 @@ export component Workspace inherits Rectangle {
                         sample-loaded <=> root.sampler-sample-loaded;
                         sample-format <=> root.sampler-sample-format;
                         sample-duration <=> root.sampler-sample-duration;
-                        sample-peaks <=> root.sampler-sample-peaks;
                         load-sample-requested => { root.sampler-load-requested(); }
 
                         sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
@@ -2255,9 +2253,6 @@ export component Workspace inherits Rectangle {
 
                 SamplerState.sample-duration =
                     root.sampler-sample-duration;
-
-                SamplerState.sample-peaks =
-                    root.sampler-sample-peaks;
 
                 root.timeline-bounds-changed(
                     timeline.absolute-position.x / 1px,

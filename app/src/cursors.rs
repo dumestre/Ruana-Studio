@@ -1,6 +1,9 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
+
+#[cfg(windows)]
+use std::collections::HashMap;
+#[cfg(windows)]
+use std::path::PathBuf;
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LRESULT, POINT, WPARAM, LPARAM};
@@ -41,6 +44,7 @@ impl ToolCursor {
         }
     }
 
+    #[cfg(windows)]
     pub fn cursor_file_name(&self) -> &'static str {
         match self {
             ToolCursor::Select => "select.cur",
@@ -53,6 +57,7 @@ impl ToolCursor {
     }
 
     /// Variante escura (modo Paper) — mesmo nome com sufixo `-dark`.
+    #[cfg(windows)]
     pub fn dark_cursor_file_name(&self) -> &'static str {
         match self {
             ToolCursor::Select => "select-dark.cur",
@@ -228,18 +233,19 @@ impl CursorManager {
         Ok(())
     }
 
+    #[cfg(windows)]
     pub fn set_timeline_bounds(x: f32, y: f32, w: f32, h: f32) {
-        #[cfg(windows)]
-        {
-            if let Some(mut bounds) = TIMELINE_BOUNDS.get().and_then(|m| m.lock().ok()) {
-                bounds.x = x;
-                bounds.y = y;
-                bounds.w = w;
-                bounds.h = h;
-                bounds.valid = true;
-            }
+        if let Some(mut bounds) = TIMELINE_BOUNDS.get().and_then(|m| m.lock().ok()) {
+            bounds.x = x;
+            bounds.y = y;
+            bounds.w = w;
+            bounds.h = h;
+            bounds.valid = true;
         }
     }
+
+    #[cfg(not(windows))]
+    pub fn set_timeline_bounds(_x: f32, _y: f32, _w: f32, _h: f32) {}
 
     #[cfg(windows)]
     fn apply_tool_cursor(&self, tool: ToolCursor) {
@@ -428,11 +434,9 @@ pub fn reset_cursor_to_default() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(windows)]
 pub fn set_cursor_window_handle(hwnd: *mut std::ffi::c_void) {
-    #[cfg(windows)]
-    {
-        if let Some(mut mgr) = get_cursor_manager_lock() {
-            mgr.set_window_handle(hwnd as HWND);
-        }
+    if let Some(mut mgr) = get_cursor_manager_lock() {
+        mgr.set_window_handle(hwnd as HWND);
     }
 }

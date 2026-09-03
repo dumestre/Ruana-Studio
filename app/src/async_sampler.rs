@@ -20,12 +20,11 @@ use crate::MainWindow;
 use crate::audio_bridge::AudioBridge;
 use crate::beat;
 
-/// Metadados + picos prontos (puro; atravessa a thread sem Rc da UI).
+/// Metadados prontos (puro; atravessa a thread sem Rc da UI).
 pub struct SamplerReady {
     pub name: String,
     pub format: String,
     pub duration: String,
-    pub peaks: Vec<f32>,
 }
 
 /// Origem do pedido: muda a linha-alvo no apply.
@@ -146,10 +145,9 @@ impl SamplerDecode {
     }
 }
 
-/// Decodifica + agrega os picos do painel (worker thread; puro).
+/// Decodifica + agrega os metadados do painel (worker thread; puro).
 fn decode_sampler_ready(path: &Path, name: String) -> Option<SamplerReady> {
     let decoded = daw_media::waveform::decode_audio(path).ok()?;
-    let peaks = daw_media::waveform::waveform_points(&decoded, 512);
     let format = path
         .extension()
         .and_then(|e| e.to_str())
@@ -160,7 +158,6 @@ fn decode_sampler_ready(path: &Path, name: String) -> Option<SamplerReady> {
         name,
         format,
         duration,
-        peaks,
     })
 }
 
@@ -174,7 +171,6 @@ fn apply_ready(ready: SamplerReady, job: PendingJob) {
     ui.set_sampler_sample_loaded(true);
     ui.set_sampler_sample_format(ready.format.clone().into());
     ui.set_sampler_sample_duration(ready.duration.clone().into());
-    ui.set_sampler_sample_peaks(Rc::new(slint::VecModel::from(ready.peaks)).into());
 
     // Linha-alvo: drop grava na LINHA SELECIONADA na hora do apply.
     let index = if job.source == SamplerSource::Drop {

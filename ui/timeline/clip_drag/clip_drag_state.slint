@@ -49,10 +49,6 @@ export global ClipDragState {
 
     in-out property <bool> is-midi: true;
 
-    in-out property <[float]> waveform-mins: [];
-
-    in-out property <[float]> waveform-maxes: [];
-
 
     // ========================================================
     // MÉTRICAS CAPTURADAS NO DOWN
@@ -191,8 +187,6 @@ export global ClipDragState {
         self.active = false;
         self.clip-id = -1;
         self.name = "";
-        self.waveform-mins = [];
-        self.waveform-maxes = [];
 
         self.cursor-x = self.start-cursor-x;
         self.cursor-y = self.start-cursor-y;
@@ -319,5 +313,4 @@ export global SamplerState {
 
     in-out property <string> sample-duration: "";
 
-    in-out property <[float]> sample-peaks: [];
 }

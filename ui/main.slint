@@ -146,7 +146,6 @@ export component MainWindow inherits Window {
     in-out property <bool> sampler-sample-loaded: false;
     in-out property <string> sampler-sample-format: "";
     in-out property <string> sampler-sample-duration: "";
-    in-out property <[float]> sampler-sample-peaks: [];
     in-out property <int> beat-selected-track: 0;
 
 
@@ -809,7 +808,6 @@ export component MainWindow inherits Window {
         sampler-sample-loaded <=> root.sampler-sample-loaded;
         sampler-sample-format <=> root.sampler-sample-format;
         sampler-sample-duration <=> root.sampler-sample-duration;
-        sampler-sample-peaks <=> root.sampler-sample-peaks;
         sampler-load-requested() => { root.sampler-load-requested(root.beat-selected-track); }
         sampler-sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
         theme-selected(i) => { root.theme-selected(i); }

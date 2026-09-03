@@ -11,6 +11,7 @@ fn main() {
 }
 
 /// Tamanhos gerados para o ícone do app (PNGs individuais + .ico multi-size).
+#[cfg(windows)]
 const APP_ICON_SIZES: [u32; 7] = [16, 24, 32, 48, 64, 128, 256];
 
 /// Renderiza assets/RuanaStudio.svg em PNGs (OUT_DIR) e num .ico multi-size.
@@ -23,7 +24,6 @@ const APP_ICON_SIZES: [u32; 7] = [16, 24, 32, 48, 64, 128, 256];
 fn build_app_icon() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let svg_path = manifest_dir.join("assets/RuanaStudio.svg");
-    let custom_ico = manifest_dir.join("assets/ruana-studio.ico");
     let custom_png = manifest_dir.join("assets/app_icon_64.png");
     let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR")?);
 
@@ -44,6 +44,7 @@ fn build_app_icon() -> Result<(), Box<dyn std::error::Error>> {
     // Apenas no Windows — no Linux o ícone de runtime (PNG) é suficiente.
     #[cfg(windows)]
     {
+        let custom_ico = manifest_dir.join("assets/ruana-studio.ico");
         let ico_path = if custom_ico.exists() {
             println!("cargo:rerun-if-changed={}", custom_ico.display());
             let _ = std::fs::copy(&custom_ico, out_dir.join("ruana-studio.ico"))?;

@@ -36,7 +36,7 @@ const DRAIN_MS: Duration = Duration::from_millis(16);
 
 /// Áudio decodificado + waveform agregada.
 ///
-/// Resultado de um decode: samples mono + peaks (para o sampler).
+/// Resultado de um decode: samples mono.
 /// Os campos waveform-image/mip/lods foram removidos — o LOD inteiro
 /// é construído no cache de timeline (WaveformCache) a partir de `samples`.
 #[allow(dead_code)]
@@ -49,7 +49,6 @@ pub struct DecodedWave {
     pub channels: usize,
     pub sample_rate: u32,
     pub samples: Vec<f32>,
-    pub peaks: Vec<f32>, // sampler fallback
 }
 
 /// Resultado do import: áudio decodificado + silêncio aparado + LODs.
@@ -121,16 +120,6 @@ fn decode_wave(job: &DecodeJob) -> Option<DecodedWave> {
     let path = std::path::PathBuf::from(&job.path);
     let decoded = daw_media::waveform::decode_audio(&path).ok()?;
 
-    let bpm = if job.bpm > 0.0 { job.bpm } else { 120.0 };
-    let length_beats = (decoded.duration_seconds * bpm / 60.0).max(0.01);
-    let points = if job.points > 0 {
-        job.points
-    } else {
-        ((length_beats * 24.0) as usize).clamp(256, 2048)
-    };
-
-    let peaks = daw_media::waveform::waveform_points(&decoded, points);
-
     let name = path
         .file_stem()
         .and_then(|n| n.to_str())
@@ -151,7 +140,6 @@ fn decode_wave(job: &DecodeJob) -> Option<DecodedWave> {
         channels: decoded.channels as usize,
         sample_rate: decoded.sample_rate,
         samples: decoded.samples,
-        peaks,
     })
 }
 

@@ -55,7 +55,6 @@ export component Sampler inherits Rectangle {
     in-out property <string> sample-format: "";
     in-out property <string> sample-duration: "";
 
-    in-out property <[float]> peaks: [];
     callback load-sample-requested();
 
     // ============================================================
@@ -177,7 +176,6 @@ SamplerHeader {
                 root.sample-loaded = false;
                 root.sample-format = "";
                 root.sample-duration = "";
-                root.peaks = [];
             }
         }
 
@@ -210,8 +208,6 @@ SamplerHeader {
                     - root.section-gap * 2;
 
                 height: 150px;
-
-                peaks: root.peaks;
 
                 sample-loaded: root.sample-loaded;
                 playing: root.playing;

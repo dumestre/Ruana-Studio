@@ -40,14 +40,12 @@ pub struct WaveformGpuRenderer {
     clips: HashMap<u64, GpuClipState>,
     waveforms_cache: Arc<Mutex<WaveformCache>>,
     window_size: (u32, u32),
-    hwnd: *mut std::ffi::c_void, // HWND para swap buffers
 }
 
 impl WaveformGpuRenderer {
     /// Inicializa renderer na main thread
     pub fn new(
         gl: Arc<glow::Context>,
-        hwnd: *mut std::ffi::c_void,
         window_size: (u32, u32),
         waveforms_cache: Arc<Mutex<WaveformCache>>,
     ) -> Result<Self, String> {
@@ -65,7 +63,6 @@ impl WaveformGpuRenderer {
             clips: HashMap::new(),
             waveforms_cache,
             window_size,
-            hwnd,
         })
     }
 
@@ -181,14 +178,8 @@ impl WaveformGpuRenderer {
                 );
             }
 
-            // Swap buffers no Windows
-            #[cfg(windows)]
-            {
-                use crate::waveform_gpu::win32_gdi::{get_dc, wgl_swap_layer_buffers, WGL_SWAP_MAIN_PLANE};
-                
-                let dc = get_dc(self.hwnd);
-                wgl_swap_layer_buffers(dc, WGL_SWAP_MAIN_PLANE);
-            }
+            // Swap buffers (apresenta o frame na plataforma atual)
+            crate::waveform_gpu::overlay::present_frame();
         }
     }
 

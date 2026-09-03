@@ -6,12 +6,6 @@ export struct ClipData {
     len: float,
     is-midi: bool,
     color: int,
-    // Waveform "Bin Visual": barras min→max por coluna, em LOD
-    // multinível (publicadas pelo Rust — nível escolhido pela largura
-    // de exibição via waveform-resolution-requested). Arrays paralelas:
-    // `waveform-mins[i]` ≤ `waveform-maxes[i]` para todo i.
-    waveform-mins: [float],
-    waveform-maxes: [float],
     // Seleção múltipla (Ctrl+arrasto / marquee). Independente da
     // seleção simples (`selected-clip`).
     multi-selected: bool,

@@ -7,7 +7,11 @@ pub mod instance_pool;
 pub mod overlay;
 pub mod renderer;
 pub mod shader;
+
+#[cfg(windows)]
 pub mod win32_gdi;
+#[cfg(target_os = "linux")]
+pub mod linux_egl;
 
 #[allow(unused_imports)]
 pub use instance_pool::{InstancePool, ClipRange, WaveInstance};

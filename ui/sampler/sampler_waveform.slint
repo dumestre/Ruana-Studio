@@ -2,34 +2,6 @@
 // WAVEFORM DO SAMPLER
 // ============================================================
 //
-// REUSO, NÃO REIMPLEMENTAÇÃO
-//
-// O desenho da onda vem da timeline: `AudioWaveform`
-// (ui/timeline/audio_waveform.slint), importado, não copiado. O
-// laço que existia aqui multiplicava cada pico por 0.90 e usava
-// piso de 1px, o que achatava a onda e engrossava o silêncio; o da
-// timeline é 1:1 e tem piso de 0.5px.
-//
-// DUAS ROTAS, MESMO PADRÃO DO CLIP
-//
-// Igual a ui/timeline/track_clip.slint:372-424:
-//   1. `waveform-image.width > 0` -> imagem rasterizada no Rust
-//      (rota rápida e bonita).
-//   2. senão -> `AudioWaveform` com os picos (fallback).
-//
-// O rasterizador Rust limpa o pixmap transparente e pinta o
-// envelope opaco em #0A0A0A
-// (crates/daw-media/src/waveform_image.rs), então `colorize`
-// tinge a forma para o fundo escuro daqui — sem precisar de uma
-// segunda imagem.
-//
-// PRODUZIR a imagem é território do outro agente (Rust). O
-// contrato já está exposto com default vazio: hoje roda no
-// fallback de picos e a rota por imagem acende sozinha quando
-// alguém ligar `app/src/waveform.rs::render_waveform_at_samples`
-// no callback `waveform-resolution-requested` — o debounce de
-// 120 ms já existe em `wire_resolution_requests`.
-//
 // O QUE ESTE ARQUIVO ACRESCENTA (o que diferencia de um clip)
 //
 // Poço, grade, linha de zero, região de seleção com handles que
@@ -53,13 +25,10 @@
 
 import { Theme } from "../theme.slint";
 import { SamplerStyle } from "sampler_style.slint";
-import { AudioWaveform } from "../timeline/audio_waveform.slint";
 
 export component SamplerWaveform inherits Rectangle {
 
     // --- dados ---
-    in property <[float]> peaks: [];
-    // width 0 = sem imagem -> cai no fallback de picos.
     in property <image> waveform-image;
     in property <color> waveform-color: Theme.clip-audio;
     in property <bool> sample-loaded: false;
@@ -87,8 +56,6 @@ export component SamplerWaveform inherits Rectangle {
     callback loop-start-changed(float);
     callback loop-end-changed(float);
     callback scrubbed(float);
-    // Pede re-render na largura exata (mesmo contrato do clip).
-    callback waveform-resolution-requested(float);
 
     // Altura das faixas de agarre.
     private property <length> band: root.compact ? 8px : 10px;
@@ -101,13 +68,6 @@ export component SamplerWaveform inherits Rectangle {
     border-width: 1px;
     border-color: SamplerStyle.inset-line;
     clip: true;
-
-    // Mesmo contrato do clip: pede rasterização na largura real.
-    changed width => {
-        if root.sample-loaded && self.width > 4px {
-            root.waveform-resolution-requested(self.width / 1px);
-        }
-    }
 
     // ============================================================
     // GRADE + LINHA DE ZERO
@@ -138,11 +98,6 @@ export component SamplerWaveform inherits Rectangle {
         // A forma é opaca sobre fundo transparente, então tingir
         // basta — não precisa de outra imagem por cor.
         colorize: root.waveform-color;
-    }
-
-    if root.sample-loaded && root.waveform-image.width == 0 && root.peaks.length > 0: AudioWaveform {
-        waveform-color: root.waveform-color;
-        peaks: root.peaks;
     }
 
     // ============================================================

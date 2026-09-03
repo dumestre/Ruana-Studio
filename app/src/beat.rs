@@ -35,7 +35,6 @@ struct SamplerViewData {
     name: String,
     format: String,
     duration: String,
-    peaks: Vec<f32>,
 }
 
 static SAMPLE_VIEW_CACHE: std::sync::OnceLock<
@@ -100,7 +99,6 @@ fn sync_sampler_to_beat(ui: &MainWindow, project: &Project) {
                 name: w.name,
                 format: w.format,
                 duration: format!("{:.2}s", w.duration_seconds),
-                peaks: w.peaks,
             });
             if let Ok(mut map) = sample_cache().lock() {
                 map.insert(cache_path, entry.clone());
@@ -118,7 +116,6 @@ fn apply_sampler_view(ui: &MainWindow, view: &SamplerViewData) {
     ui.set_sampler_sample_loaded(true);
     ui.set_sampler_sample_format(view.format.clone().into());
     ui.set_sampler_sample_duration(view.duration.clone().into());
-    ui.set_sampler_sample_peaks(Rc::new(VecModel::from(view.peaks.clone())).into());
 }
 
 /// Limpa o painel Sampler (linha sem sample / sem padrão).
@@ -127,7 +124,6 @@ fn clear_sampler(ui: &MainWindow) {
     ui.set_sampler_sample_loaded(false);
     ui.set_sampler_sample_format(SharedString::default());
     ui.set_sampler_sample_duration(SharedString::default());
-    ui.set_sampler_sample_peaks(Rc::new(VecModel::<f32>::default()).into());
 }
 
 /// Aplica uma mutação no projeto e re-projeta o beat na sequência.

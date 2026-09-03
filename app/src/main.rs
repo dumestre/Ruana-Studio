@@ -44,9 +44,11 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use crate::cursors::{
-    init_cursor_manager, reset_cursor_to_default, set_cursor_for_tool, set_cursor_window_handle,
-    set_dark_cursors, set_timeline_bounds,
+    init_cursor_manager, reset_cursor_to_default, set_cursor_for_tool, set_dark_cursors,
+    set_timeline_bounds,
 };
+#[cfg(windows)]
+use crate::cursors::set_cursor_window_handle;
 use crate::mixer::MixerModels;
 use crate::models::{bars_for_end_beat, bind_document_events, initial_bind};
 use crate::waveform::WaveformCache;
@@ -118,10 +120,10 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     // Cursor customizado: precisa do HWND da janela já criada.
-    let ui_weak = ui.as_weak();
-    slint::Timer::single_shot(std::time::Duration::from_millis(100), move || {
-        #[cfg(windows)]
-        {
+    #[cfg(windows)]
+    {
+        let ui_weak = ui.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(100), move || {
             if let Some(ui) = ui_weak.upgrade() {
                 let window = ui.window();
                 let handle = window.window_handle();
@@ -132,8 +134,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
             }
-        }
-    });
+        });
+    }
 
     // Estado autoritativo da DAW: vive no core, nunca na UI.
     let project = Rc::new(RefCell::new(Project::startup()));
@@ -202,10 +204,9 @@ fn main() -> Result<(), slint::PlatformError> {
             let gpu_renderer_init = gpu_renderer_init.clone();
             
             match crate::waveform_gpu::overlay::create_shared_gl_context(raw_handle) {
-                Ok((gl, hwnd)) => {
+                Ok(gl) => {
                     match WaveformGpuRenderer::new(
                         gl,
-                        hwnd,
                         (size.width, size.height),
                         waveforms_for_gpu,
                     ) {
@@ -463,7 +464,7 @@ fn main() -> Result<(), slint::PlatformError> {
     interaction::install(&ui);
 
     // Waveform: re-render na resolução exata quando o zoom muda.
-    waveform::wire_resolution_requests(&ui, waveforms.clone(), clips_model.clone(), Some(gpu_renderer.clone()));
+    waveform::wire_resolution_requests(&ui, waveforms.clone(), Some(gpu_renderer.clone()));
 
     // Explorador de arquivos: navegação, histórico e filtro.
     explorer::wire_explorer(&ui);
@@ -659,10 +660,10 @@ fn main() -> Result<(), slint::PlatformError> {
     // HiDPI (logical vs physical) e trava por flood de mensagens.
     // Agora: delega ao SO via WM_NCLBUTTONDOWN/HTCAPTION (drag nativo
     // do Windows) - suave, com AeroSnap, sem cálculo manual.
-    let ui_weak_drag_start = ui.as_weak();
-    ui.on_window_drag_started(move || {
-        #[cfg(windows)]
-        {
+    #[cfg(windows)]
+    {
+        let ui_weak_drag_start = ui.as_weak();
+        ui.on_window_drag_started(move || {
             if let Some(ui) = ui_weak_drag_start.upgrade() {
                 // Se já está maximizada, ignora arrasto (usuário deve
                 // restaurar primeiro) - evita pulo
@@ -702,8 +703,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
             }
-        }
-    });
+        });
+    }
 
     // Mantido por compatibilidade mas agora é no-op (nativo cuida)
     ui.on_window_drag_moved(|_, _| {});
