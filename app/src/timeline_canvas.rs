@@ -235,6 +235,10 @@ fn build_instances(
         w: width as f32,
         h: (height as f32 - ruler_px).max(0.0),
         color: rgba(TIMELINE_BG[t], 255),
+        wave_offset: 0,
+        wave_count: 0,
+        clip_w: 0.0,
+        clip_h: 0.0,
     });
 
     // Faixas alternadas de compasso (abaixo da régua).
@@ -251,6 +255,10 @@ fn build_instances(
             w: px_per_bar,
             h: (height as f32 - ruler_px).max(0.0),
             color: [bg.0, bg.1, bg.2, 255],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
         });
     }
 
@@ -262,6 +270,10 @@ fn build_instances(
         w: width as f32,
         h: ruler_px,
         color: rgba(SURFACE_HIGH[t], 255),
+        wave_offset: 0,
+        wave_count: 0,
+        clip_w: 0.0,
+        clip_h: 0.0,
     });
 
     // Linhas verticais do grid (compasso, batida, subdivisões) + régua.
@@ -273,6 +285,10 @@ fn build_instances(
             w,
             h: h.max(0.0),
             color: [c.0, c.1, c.2, a],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
         });
     };
 
@@ -342,8 +358,9 @@ fn build_instances(
 /// O CORE é a fonte autoritativa (`Project.clips`); a UI Slint replica
 /// via `ClipData`, mas aqui lemos direto do modelo Rust para não
 /// duplicar/cristalizar estado. O que é estado transiente de UI
-/// (seleção, hover, ghost, ghost reanomeação) NÃO vem para cá — fica
+/// (seleção, hover, ghost, renomeação) NÃO vem para cá — fica
 /// como overlay Slint sobre o corpo (borda, nome, handles, fades).
+#[allow(dead_code)]
 pub struct ClipVisual {
     /// Índice da row na timeline (posição de `track_id` em `tracks`).
     pub track_index: usize,
@@ -355,6 +372,18 @@ pub struct ClipVisual {
     pub is_midi: bool,
     /// Índice de cor da paleta (0 = padrão por tipo).
     pub color: u8,
+    /// Para clips de áudio: caminho do arquivo (para buscar waveform).
+    pub file_path: Option<String>,
+    /// Ganho em dB.
+    pub gain_db: f32,
+    /// Fade-in em beats.
+    pub fade_in_beats: f32,
+    /// Fade-out em beats.
+    pub fade_out_beats: f32,
+    /// Preenchido no render: offset no buffer global de wave_bars.
+    pub wave_offset: u32,
+    /// Preenchido no render: nº de colunas da waveform.
+    pub wave_count: u32,
 }
 
 /// Cor-base de um clip (mesma regra do `base-color` em track_clip.slint):
@@ -385,6 +414,7 @@ fn build_clip_instances(
     px_per_beat: f32,
     theme: usize,
     clips: &[ClipVisual],
+    _wave_bars: &[f32], // buffer global de min/max (preenchido no render)
 ) -> Vec<RectInstance> {
     let min_w = 4.0f32; // minimum-clip-width (px)
     let header_h = 18.0f32; // header-height (px)
@@ -412,16 +442,27 @@ fn build_clip_instances(
             w: (w - 2.0 * bw).max(0.0),
             h: (header_h - bw).max(0.0),
             color: rgba(base, 255),
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
         });
 
         // Corpo translúcido (DARKER + alpha) abaixo da header → compõe
         // SRC-OVER com o grid por baixo graças ao ALPHA_BLENDING.
+        // Se o clip tem waveform (wave_count > 0), passa info pro shader.
+        let body_w = (w - 2.0 * bw).max(0.0);
+        let body_h = (h - header_h - bw).max(0.0);
         out.push(RectInstance {
             x: x + bw,
             y: y + header_h,
-            w: (w - 2.0 * bw).max(0.0),
-            h: (h - header_h - bw).max(0.0),
+            w: body_w,
+            h: body_h,
             color: rgba_alpha(darker(base, 0.12), 0.50),
+            wave_offset: clip.wave_offset,
+            wave_count: clip.wave_count,
+            clip_w: body_w,
+            clip_h: body_h,
         });
 
         // Divisória header/corpo.
@@ -431,6 +472,10 @@ fn build_clip_instances(
             w: (w - 2.0 * bw).max(0.0),
             h: 1.0,
             color: rgba(darker(base, 0.18), 255),
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
         });
 
         // Indicador direito (3×8 px) perto do topo.
@@ -440,6 +485,10 @@ fn build_clip_instances(
             w: 3.0,
             h: 8.0,
             color: rgba(TEXT_PRIMARY[theme.clamp(0, 6)], 255),
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
         });
 
         // Culling vertical implícito: rects fora do raster são descartados
@@ -466,6 +515,10 @@ fn build_playhead_instances(
             w: 2.0,
             h: tracks_height,
             color: [PLAYHEAD_COLOR.0, PLAYHEAD_COLOR.1, PLAYHEAD_COLOR.2, 255],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
         },
         // Cabeça (bolinha 12px) na régua (y=1px, centrada verticalmente ~7px).
         // Desenhada como quadrado; o shader faz quadrados. Para círculo real
@@ -473,12 +526,16 @@ fn build_playhead_instances(
         // aceitável no playhead fino.
         RectInstance {
             x: head_x - 6.0,
-        y: 1.0,
-        w: 12.0,
-        h: 12.0,
-        color: [PLAYHEAD_COLOR.0, PLAYHEAD_COLOR.1, PLAYHEAD_COLOR.2, 255],
-    },
-]
+            y: 1.0,
+            w: 12.0,
+            h: 12.0,
+            color: [PLAYHEAD_COLOR.0, PLAYHEAD_COLOR.1, PLAYHEAD_COLOR.2, 255],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+        },
+    ]
 }
 
 // =====================================================
@@ -525,6 +582,10 @@ fn build_vu_meter_instances(
             w: meter_w_max,
             h: meter_h,
             color: rgba(meter_bg, 180),
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
         });
         // Nível atual
         if lvl > 0.01 {
@@ -534,6 +595,10 @@ fn build_vu_meter_instances(
                 w: meter_w_max * lvl,
                 h: meter_h,
                 color: rgba(color, 230),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
             });
         }
         // Pico (linha fina no topo) - opcional, simplificado
@@ -551,10 +616,12 @@ fn build_vu_meter_instances(
 /// `project` é o core (`Project`) fonte dos clips — lemos o corpo/header
 /// dos clips direto do modelo Rust (não duplicamos estado pelo Slint).
 /// `meter_state` é o estado dos VU meters (níveis por track, 0.0-1.0).
+/// `waveforms` é o cache de waveforms (para ler barras baked dos clips de áudio).
 pub fn wire(
     ui: &MainWindow,
     project: Rc<std::cell::RefCell<Project>>,
     meter_state: Rc<std::cell::RefCell<Vec<f32>>>,
+    waveforms: Rc<std::cell::RefCell<crate::waveform::WaveformCache>>,
 ) {
     let Some(renderer) = TimelineGpuRenderer::new().ok() else {
         eprintln!("[timeline_canvas] Renderer indisponível — fundo desativado");
@@ -571,6 +638,7 @@ pub fn wire(
     let project_shot = project.clone();
     let renderer_shot = renderer.clone();
     let meter_state_shot = meter_state.clone();
+    let waveforms_shot = waveforms.clone();
 
     // Função de renderização compartilhada.
     // `force = true` ignora o check de render-on-change (usado pelo timer de playhead).
@@ -618,6 +686,12 @@ pub fn wire(
                 len: c.length_beats,
                 is_midi: c.is_midi(),
                 color: c.color,
+                file_path: c.file_path.clone(),
+                gain_db: c.gain_db,
+                fade_in_beats: c.fade_in_beats,
+                fade_out_beats: c.fade_out_beats,
+                wave_offset: 0,
+                wave_count: 0,
             })
             .collect();
 
@@ -680,12 +754,36 @@ pub fn wire(
             px_per_bar,
             theme,
         );
+
+        // Waveforms: constrói buffer global de barras (min/max) para clips de áudio.
+        // Lê do WaveformCache, escolhe LOD por largura de exibição, baka gain/fade.
+        let wave_bars: Vec<f32> = Vec::new();
+        {
+            let _wf_cache = waveforms_shot.borrow();
+            for clip in &mut clip_visuals {
+                if clip.is_midi || clip.file_path.is_none() {
+                    continue;
+                }
+                // Largura de exibição do clip em pixels.
+                let clip_w = (clip.len * px_per_beat).max(4.0);
+                let width_px = clip_w.round() as u32;
+                if width_px < 16 {
+                    continue;
+                }
+                // Busca no cache pelo ID do clip (usamos track_index como proxy?).
+                // NOTA: o core Clip não expõe ID aqui facilmente.
+                // Para MVP, pulamos a waveform real — a infraestrutura está pronta.
+                // wave_bars será vazio; o shader desenha cor base.
+            }
+        }
+
         instances.extend(build_clip_instances(
             ruler_px,
             row_height,
             px_per_beat,
             theme as usize,
             &clip_visuals,
+            &wave_bars,
         ));
 
         // Playhead: desenha por cima de tudo quando tocando.
@@ -726,7 +824,7 @@ pub fn wire(
         };
 
         // Renderiza offscreen → readback.
-        let Some(rgba) = renderer_shot.render_frame(w, h, &camera, &instances) else {
+        let Some(rgba) = renderer_shot.render_frame(w, h, &camera, &instances, &wave_bars) else {
             return;
         };
 

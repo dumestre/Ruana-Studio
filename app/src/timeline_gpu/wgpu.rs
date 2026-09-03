@@ -30,6 +30,10 @@ use wgpu::util::DeviceExt;
 /// Instância retangular enviada ao shader.
 ///
 /// `rect` em pixels de conteúdo (x, y, w, h); `color` RGBA (0..255).
+/// `wave_*`: se >0, indica que este retângulo é um corpo de clip de áudio
+/// e deve desenhar waveform. `wave_offset` = índice inicial no storage buffer
+/// de barras (vec2 min/max por coluna); `wave_count` = nº de colunas;
+/// `clip_w`/`clip_h` = largura/altura do clip em px (para mapear local.x->col).
 #[derive(Clone, Copy, Debug)]
 pub struct RectInstance {
     pub x: f32,
@@ -37,10 +41,14 @@ pub struct RectInstance {
     pub w: f32,
     pub h: f32,
     pub color: [u8; 4],
+    pub wave_offset: u32,
+    pub wave_count: u32,
+    pub clip_w: f32,
+    pub clip_h: f32,
 }
 
 impl RectInstance {
-    fn to_f32(self) -> [f32; 8] {
+    fn to_f32(self) -> [f32; 12] {
         let [r, g, b, a] = self.color;
         [
             self.x,
@@ -51,6 +59,10 @@ impl RectInstance {
             g as f32 / 255.0,
             b as f32 / 255.0,
             a as f32 / 255.0,
+            self.wave_offset as f32,
+            self.wave_count as f32,
+            self.clip_w,
+            self.clip_h,
         ]
     }
 }
@@ -155,20 +167,31 @@ impl TimelineGpuRenderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("wgpu.wgsl").into()),
         });
 
-        // Bind group: uniform (matriz proj). Instâncias são atributos de
-        // vértice (step-mode Instance), então não precisam de bind group.
+        // Bind group: uniform (matriz proj) + storage (waveform bars).
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("timeline-bgl"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -204,9 +227,9 @@ impl TimelineGpuRenderer {
                             shader_location: 0,
                         }],
                     },
-                    // Traits por instância: rect (vec4) + color (vec4).
+                    // Traits por instância: rect (vec4) + color (vec4) + wave_info (vec4).
                     wgpu::VertexBufferLayout {
-                        array_stride: 32,
+                        array_stride: 48,
                         step_mode: wgpu::VertexStepMode::Instance,
                         attributes: &[
                             wgpu::VertexAttribute {
@@ -218,6 +241,11 @@ impl TimelineGpuRenderer {
                                 format: wgpu::VertexFormat::Float32x4,
                                 offset: 16,
                                 shader_location: 2,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: 32,
+                                shader_location: 3,
                             },
                         ],
                     },
@@ -263,6 +291,8 @@ impl TimelineGpuRenderer {
     /// - `width`/`height`: resolução da imagem de saída (pixels).
     /// - `camera`: câmera ortográfica (scroll + viewport).
     /// - `instances`: retângulos a desenhar (clips, grid, ruler, faixas).
+    /// - `wave_bars`: dados de waveform concatenados (vec2 min/max por coluna),
+    ///   usados pelas instâncias com wave_count > 0.
     ///
     /// Retorna `Vec<u8>` RGB(A) de `width * height * 4` (ou `None` em erro).
     pub fn render_frame(
@@ -271,6 +301,7 @@ impl TimelineGpuRenderer {
         height: u32,
         camera: &OrthoCamera,
         instances: &[RectInstance],
+        wave_bars: &[f32], // vec2 por coluna: [min0, max0, min1, max1, ...]
     ) -> Option<Vec<u8>> {
         if width == 0 || height == 0 {
             return None;
@@ -279,7 +310,7 @@ impl TimelineGpuRenderer {
         let width = width.min(max_dim);
         let height = height.min(max_dim);
 
-        // Instâncias → buffer, no layout [rect(4) | color(4)].
+        // Instâncias → buffer, no layout [rect(4) | color(4) | wave_info(4)].
         let data: Vec<f32> = instances.iter().flat_map(|i| i.to_f32()).collect();
 
         let instance_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -295,13 +326,32 @@ impl TimelineGpuRenderer {
             usage: wgpu::BufferUsages::UNIFORM,
         });
 
+        // Storage buffer: waveform bars (vec2 min/max por coluna).
+        // Se vazio, cria um buffer dummy com 1 vec2 para satisfazer o bind group.
+        let wave_bars_data = if wave_bars.is_empty() {
+            vec![0.0f32, 0.0f32]
+        } else {
+            wave_bars.to_vec()
+        };
+        let wave_bars_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("timeline-wave-bars"),
+            contents: bytemuck::cast_slice(&wave_bars_data),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("timeline-bg"),
             layout: &self.bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wave_bars_buf.as_entire_binding(),
+                },
+            ],
         });
 
         let (bytes_per_row, padded) = {
