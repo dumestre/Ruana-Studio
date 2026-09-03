@@ -166,12 +166,21 @@ impl WgpuRenderer {
         if count == 0 || count != maxs.len() || width == 0 || height == 0 {
             return None;
         }
+        // A textura não pode exceder o limite de dimensão do dispositivo
+        // (default 8192). Zoom muito aberto pode pedir larguras maiores;
+        // limitamos e o `image-fit: fill` estica no clip (degradação suave).
+        let max_dim = self.device.limits().max_texture_dimension_2d.max(1);
+        let width = width.min(max_dim);
+        let height = height.min(max_dim);
         let count = count as u32;
+        let count = count.min(width); // nº de colunas não pode passar a largura real
 
         // Barras em storage buffer: vec2 (min, max) por coluna.
+        // Apenas as primeiras `count` colunas (alinhadas à largura final).
         let bar_data: Vec<f32> = mins
             .iter()
             .zip(maxs.iter())
+            .take(count as usize)
             .flat_map(|(&mn, &mx)| [mn.clamp(-1.0, 1.0), mx.clamp(-1.0, 1.0)])
             .collect();
 
