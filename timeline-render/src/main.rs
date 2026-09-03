@@ -76,7 +76,7 @@ pub mod palette {
         (0xD5, 0xE8, 0xB0), (0xE8, 0xD8, 0xC0), (0xC8, 0xE8, 0xE0),
         (0x17, 0x17, 0x17),
     ];
-    pub const PLAYHEAD_COLOR: Rgb = (0xFF, 0x33, 0x00);
+    pub const PLAYHEAD_COLOR: Rgb = (0xDC, 0x14, 0x3C);
 }
 
 fn rgba((r, g, b): palette::Rgb, a: u8) -> [u8; 4] { [r, g, b, a] }
@@ -91,6 +91,166 @@ fn darker((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
 fn rgba_alpha((r, g, b): palette::Rgb, alpha: f32) -> [u8; 4] {
     let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
     [r, g, b, a]
+}
+
+// =====================================================
+// Bitmap font 8x8 para renderizar números na régua.
+// Cada caractere é 8px de largura, 8px de altura.
+// Cada bit (1) = pixel ligado. Bitmap é índiceado [linha][coluna].
+// =====================================================
+
+/// Fonte bitmap 8x8 para dígitos 0-9.
+const FONT_8X8: [[[u8; 8]; 8]; 10] = [
+    // '0'
+    [
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '1'
+    [
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 1, 1, 1, 0, 0, 0],
+        [0, 1, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '2'
+    [
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 1, 1, 1, 0],
+        [0, 0, 0, 1, 1, 1, 0, 0],
+        [0, 0, 1, 1, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+    ],
+    // '3'
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '4'
+    [
+        [0, 0, 0, 0, 1, 1, 0, 0],
+        [0, 0, 0, 1, 1, 1, 0, 0],
+        [0, 0, 1, 0, 1, 1, 0, 0],
+        [0, 1, 0, 0, 1, 1, 0, 0],
+        [1, 0, 0, 0, 1, 1, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 1, 1, 0],
+    ],
+    // '5'
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '6'
+    [
+        [0, 0, 1, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '7'
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 0, 1, 1, 0],
+        [0, 0, 0, 0, 1, 1, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+    ],
+    // '8'
+    [
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '9'
+    [
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 1, 1, 1, 1, 0, 0],
+    ],
+];
+
+/// Desenha um número (0-999) na régua usando a fonte bitmap 8x8.
+/// Cada dígito ocupa 8px de largura. O texto é centrado no x informado.
+fn build_text_instances(
+    text: &str,
+    center_x: f32,
+    y: f32,
+    color: [u8; 4],
+) -> Vec<RectInstance> {
+    let char_w = 8.0;
+    let gap = 1.0;
+    let total_w = (text.len() as f32 - 1.0) * gap + text.len() as f32 * char_w;
+    let start_x = center_x - total_w / 2.0;
+
+    let mut instances = Vec::new();
+    for (i, ch) in text.chars().enumerate() {
+        let digit = ch.to_digit(10);
+        if let Some(d) = digit {
+            let glyph = &FONT_8X8[d as usize];
+            for row in 0..8 {
+                for col in 0..8 {
+                    if glyph[row][col] == 1 {
+                        instances.push(RectInstance {
+                            x: start_x + i as f32 * (char_w + gap) + col as f32,
+                            y: y + row as f32,
+                            w: 1.0,
+                            h: 1.0,
+                            color,
+                            wave_offset: 0,
+                            wave_count: 0,
+                            clip_w: 0.0,
+                            clip_h: 0.0,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    instances
 }
 
 /// Instância de render (mesmo layout do shader).
@@ -403,15 +563,47 @@ impl App {
         }
     }
 
-    fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_shift: bool) {
+    fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_shift: bool, with_ctrl: bool, with_alt: bool) {
         let amount = match *delta {
             winit::event::MouseScrollDelta::LineDelta(_, y) => y,
             winit::event::MouseScrollDelta::PixelDelta(p) => (p.y / 10.0) as f32,
         };
-        if with_shift {
+
+        // Heuristic to detect touchpad vs mouse:
+        // - PixelDelta with non-zero x likely from touchpad/gesture
+        // - LineDelta or PixelDelta with x=0 likely from mouse wheel
+        let is_touchpad_like = matches!(delta, winit::event::MouseScrollDelta::PixelDelta(p) if p.x != 0.0);
+
+        // Priority: Alt > Ctrl > Shift > default
+        // Rules:
+        // - Alt+any: vertical zoom (always)
+        // - Ctrl+any: horizontal zoom (always)
+        // - Shift+any: horizontal zoom (always, or could be scroll)
+        // - Touchpad-like (PixelDelta with x!=0): vertical scroll when no modifier
+        // - Mouse wheel (no x component): horizontal scroll when no modifier
+        if with_alt {
+            // ZOOM VERTICAL (Alt+roda / Alt+arrasto 2 dedos) — instantâneo, afeta altura das faixas
+            let old_scroll_y = self.scroll_y;
+            let new_scroll_y = (old_scroll_y + amount * 20.0).clamp(0.0, 1000.0);
+            self.scroll_y = new_scroll_y;
+        } else if with_ctrl {
+            // ZOOM HORIZONTAL (Ctrl+roda / Ctrl+arrasto 2 dedos) — ajusta zoom, preservando ponto sob cursor
+            let amount_zoom = amount * 0.05;
+            self.zoom = (self.zoom + amount_zoom).clamp(0.1, 10.0);
+            self.px_per_beat = 40.0 * self.zoom;
+        } else if with_shift {
+            // ZOOM HORIZONTAL antigo (Shift+roda) — ou pode ser mantido como scroll
             self.zoom = (self.zoom + amount * 0.05).clamp(0.1, 10.0);
             self.px_per_beat = 40.0 * self.zoom;
+        } else if is_touchpad_like {
+            // Touchpad 2 dedos gesto vertical — scroll vertical
+            // (detected by PixelDelta with non-zero x component)
+            let old_scroll_y = self.scroll_y;
+            let new_scroll_y = (old_scroll_y + amount * 20.0).clamp(0.0, 1000.0);
+            self.scroll_y = new_scroll_y;
         } else {
+            // Mouse wheel sem modificadores — scroll horizontal da timeline
+            // Faz scroll horizontal da timeline
             self.scroll_x += amount * 20.0;
             self.scroll_x = self.scroll_x.max(0.0);
         }
@@ -458,6 +650,7 @@ impl App {
         });
 
         // Grid
+        let ruler_text_color = rgba(palette::TEXT_PRIMARY[t], 220);
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
             if bx > width || bx < -px_per_bar { continue; }
@@ -467,6 +660,12 @@ impl App {
                 color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, bar_a],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
             });
+
+            // Número do compasso na régua (proximos da linha da régua, não no meio da barra)
+            if bx > -px_per_bar * 0.5 && bx < width {
+                instances.extend(build_text_instances(&format!("{}", i + 1), bx + px_per_bar / 2.0, 3.0, ruler_text_color));
+            }
+
             let beat_px = px_per_bar / 4.0;
             for k in 0..4 {
                 let x = bx + k as f32 * beat_px;
@@ -479,6 +678,7 @@ impl App {
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
                     });
                 }
+                // 1/8
                 if px_per_bar >= 120.0 {
                     let x8 = x + beat_px * 0.5;
                     instances.push(RectInstance {
@@ -488,11 +688,54 @@ impl App {
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
                     });
                 }
+                // 1/16
+                if px_per_bar >= 240.0 {
+                    let x16a = x + beat_px * 0.25;
+                    let x16b = x + beat_px * 0.75;
+                    instances.push(RectInstance {
+                        x: x16a, y: self.ruler_px, w: 1.0,
+                        h: height - self.ruler_px,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                    });
+                    instances.push(RectInstance {
+                        x: x16b, y: self.ruler_px, w: 1.0,
+                        h: height - self.ruler_px,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                    });
+                }
+                // 1/32
+                if px_per_bar >= 480.0 {
+                    let sixteenth_px = beat_px / 4.0;
+                    for s in 0..3 {
+                        let xs = x + sixteenth_px * (s as f32 + 0.5);
+                        instances.push(RectInstance {
+                            x: xs, y: self.ruler_px, w: 1.0,
+                            h: height - self.ruler_px,
+                            color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 90],
+                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                        });
+                    }
+                }
+                // 1/64
+                if px_per_bar >= 960.0 {
+                    let thirtysecond_px = beat_px / 8.0;
+                    for s in 0..7 {
+                        let xs = x + thirtysecond_px * (s as f32 + 0.5);
+                        instances.push(RectInstance {
+                            x: xs, y: self.ruler_px, w: 1.0,
+                            h: height - self.ruler_px,
+                            color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 70],
+                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                        });
+                    }
+                }
             }
         }
 
         // Clips
-        let header_h = 20.0;
+        let header_h = 16.0;
         let bw = 1.0;
         for (idx, clip) in self.clips.iter().enumerate() {
             let base = if clip.color == 0 {
@@ -694,6 +937,8 @@ struct AppHandler {
     app: Option<App>,
     window_id: WindowId,
     shift_pressed: bool,
+    ctrl_pressed: bool,
+    alt_pressed: bool,
 }
 
 impl AppHandler {
@@ -702,6 +947,8 @@ impl AppHandler {
             app: None,
             window_id: WindowId::dummy(),
             shift_pressed: false,
+            ctrl_pressed: false,
+            alt_pressed: false,
         }
     }
 }
@@ -744,7 +991,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                 delta,
                 phase: _,
             } => {
-                app.handle_scroll(&delta, self.shift_pressed);
+                app.handle_scroll(&delta, self.shift_pressed, self.ctrl_pressed, self.alt_pressed);
             }
             WindowEvent::KeyboardInput {
                 device_id: _,
@@ -760,11 +1007,17 @@ impl winit::application::ApplicationHandler for AppHandler {
                 if pressed && vk == Key::Named(NamedKey::Escape) {
                     event_loop.exit();
                 }
-                // Track shift para zoom com scroll
+                // Track shift/ctrl/alt para zoom/scroll com mouse
                 use winit::keyboard::{KeyCode, PhysicalKey};
                 let is_shift = matches!(vk, Key::Named(NamedKey::Shift))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight));
+                let is_ctrl = matches!(vk, Key::Named(NamedKey::Control))
+                    || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ControlLeft | KeyCode::ControlRight));
+                let is_alt = matches!(vk, Key::Named(NamedKey::Alt))
+                    || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::AltLeft | KeyCode::AltRight));
                 self.shift_pressed = pressed && is_shift;
+                self.ctrl_pressed = pressed && is_ctrl;
+                self.alt_pressed = pressed && is_alt;
             }
             WindowEvent::Focused(focused) => {
                 if !focused {

@@ -160,6 +160,166 @@ fn rgba_alpha((r, g, b): Rgb, alpha: f32) -> [u8; 4] {
 }
 
 // =====================================================
+// Fonte bitmap 8x8 para renderizar números na régua.
+// Cada caractere é 8px de largura, 8px de altura.
+// Cada bit (1) = pixel ligado. Bitmap é índiceado [linha][coluna].
+// =====================================================
+
+/// Fonte bitmap 8x8 para dígitos 0-9.
+const FONT_8X8: [[[u8; 8]; 8]; 10] = [
+    // '0'
+    [
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '1'
+    [
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 1, 1, 1, 0, 0, 0],
+        [0, 1, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 1, 1, 1, 1, 1, 0],
+    ],
+    // '2'
+    [
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 1, 1, 1, 0],
+        [0, 0, 0, 1, 1, 1, 0, 0],
+        [0, 0, 1, 1, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+    ],
+    // '3'
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '4'
+    [
+        [0, 0, 0, 0, 1, 1, 0, 0],
+        [0, 0, 0, 1, 1, 1, 0, 0],
+        [0, 0, 1, 0, 1, 1, 0, 0],
+        [0, 1, 0, 0, 1, 1, 0, 0],
+        [1, 0, 0, 0, 1, 1, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 1, 1, 0],
+    ],
+    // '5'
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '6'
+    [
+        [0, 0, 1, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '7'
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 0, 1, 1, 0],
+        [0, 0, 0, 0, 1, 1, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0, 0, 0],
+    ],
+    // '8'
+    [
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+    ],
+    // '9'
+    [
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 0, 0, 0, 0, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 1, 1, 1, 1, 0, 0],
+    ],
+];
+
+/// Desenha um número (0-999) na régua usando a fonte bitmap 8x8.
+/// Cada dígito ocupa 8px de largura. O texto é centrado no x informado.
+fn build_text_instances(
+    text: &str,
+    center_x: f32,
+    y: f32,
+    color: [u8; 4],
+) -> Vec<RectInstance> {
+    let char_w = 8.0;
+    let gap = 1.0;
+    let total_w = (text.len() as f32 - 1.0) * gap + text.len() as f32 * char_w;
+    let start_x = center_x - total_w / 2.0;
+
+    let mut instances = Vec::new();
+    for (i, ch) in text.chars().enumerate() {
+        let digit = ch.to_digit(10);
+        if let Some(d) = digit {
+            let glyph = &FONT_8X8[d as usize];
+            for row in 0..8 {
+                for col in 0..8 {
+                    if glyph[row][col] == 1 {
+                        instances.push(RectInstance {
+                            x: start_x + i as f32 * (char_w + gap) + col as f32,
+                            y: y + row as f32,
+                            w: 1.0,
+                            h: 1.0,
+                            color,
+                            wave_offset: 0,
+                            wave_count: 0,
+                            clip_w: 0.0,
+                            clip_h: 0.0,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    instances
+}
+
+// =====================================================
 // ESTADO DE RENDER-ON-CHANGE
 // =====================================================
 
@@ -293,7 +453,7 @@ fn build_instances(
     };
 
     // Compassos: linha da barra + subdivisões adaptativas (mesma regra do
-    // ruler: ≥40px batidas, ≥120px 1/8, ≥240px 1/16).
+    // ruler: ≥40px batidas, ≥120px 1/8, ≥240px 1/16, ≥480px 1/32, ≥960px 1/64).
     for i in 0..total_bars {
         let bx = i as f32 * px_per_bar;
         if bx > width as f32 {
@@ -342,7 +502,40 @@ fn build_instances(
                 vline(x16a, ruler_px - 6.0, 6.0, 1.0, GRID_SUB[t], 160);
                 vline(x16b, ruler_px - 6.0, 6.0, 1.0, GRID_SUB[t], 160);
             }
+            // 1/32 (>=480px por compasso)
+            if px_per_bar >= 480.0 {
+                let thirty_second_px = beat_px / 8.0;
+                for s in 0..7 {
+                    let xs = x + thirty_second_px * (s as f32 + 0.5);
+                    vline(xs, ruler_px, height as f32 - ruler_px, 1.0, GRID_SUB[t], 90);
+                    vline(xs, ruler_px - 4.0, 4.0, 1.0, GRID_SUB[t], 140);
+                }
+            }
+            // 1/64 (>=960px por compasso)
+            if px_per_bar >= 960.0 {
+                let sixty_fourth_px = beat_px / 16.0;
+                for s in 0..15 {
+                    let xs = x + sixty_fourth_px * (s as f32 + 0.5);
+                    vline(xs, ruler_px, height as f32 - ruler_px, 1.0, GRID_SUB[t], 70);
+                    vline(xs, ruler_px - 2.0, 2.0, 1.0, GRID_SUB[t], 120);
+                }
+            }
         }
+    }
+
+    // Números de compasso na régua (centrado na barra).
+    let ruler_text_color = rgba(TEXT_PRIMARY[t], 220);
+    for i in 0..total_bars {
+        let bx = i as f32 * px_per_bar;
+        if bx > width as f32 || bx < -px_per_bar {
+            continue;
+        }
+        out.extend(build_text_instances(
+            &format!("{}", i + 1),
+            bx + px_per_bar / 2.0,
+            8.0,
+            ruler_text_color,
+        ));
     }
 
     out
@@ -417,7 +610,7 @@ fn build_clip_instances(
     _wave_bars: &[f32], // buffer global de min/max (preenchido no render)
 ) -> Vec<RectInstance> {
     let min_w = 4.0f32; // minimum-clip-width (px)
-    let header_h = 18.0f32; // header-height (px)
+    let header_h = 16.0f32; // header-height (px)
     let bw = 1.0f32; // border-width (px), resting
     let mut out = Vec::new();
 
@@ -851,9 +1044,8 @@ pub fn wire(
         TimerMode::Repeated,
         std::time::Duration::from_millis(16),
         move || {
-            if let Some(ui) = ui_timer.upgrade()
-                && ui.get_playing()
-            {
+            let ui = ui_timer.upgrade();
+            if ui.is_some() && ui.as_ref().unwrap().get_playing() {
                 do_render_for_timer(true);
             }
         },

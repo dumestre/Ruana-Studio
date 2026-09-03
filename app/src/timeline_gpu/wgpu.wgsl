@@ -32,7 +32,7 @@ struct Uniforms {
 struct Instance {
     @location(1) rect: vec4<f32>,        // x, y, w, h (conteúdo px)
     @location(2) color: vec4<f32>,       // RGBA base
-    @location(3) wave_info: vec4<f32>,   // x=offset, y=count, z=clip_w, w=clip_h
+    @location(3) wave_info: vec4<f32>,   // x=offset, y=count, z=clip_w, h=clip_h
 };
 
 struct VsOut {
@@ -65,8 +65,20 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let clip_width = in.wave_info.z;
     let _clip_height = in.wave_info.w;
 
+    let head_radius = in.radius;
+
     // Sem waveform: devolve cor base.
     if wave_count == 0 {
+        // Aplicar cantos arredondados se radius > 0
+        if head_radius > 0.0 {
+            let2 p = in.local; // 0..1 dentro do rect
+            // Distância do centro para criar círculo
+            let dist = distance(p, vec2(0.5, 0.5));
+            if dist > head_radius {
+                // Fora do círculo - tornar transparente
+                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+            }
+        }
         return in.frag_color;
     }
 
