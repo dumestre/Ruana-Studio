@@ -14,8 +14,6 @@
 struct Uniforms {
     // Matriz ortográfica conteúdo→NDC (já incorpora scroll/zoom/viewport).
     proj: mat4x4<f32>,
-    _pad0: vec4<f32>,
-    _pad1: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
