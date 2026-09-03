@@ -227,10 +227,22 @@ export component MainWindow inherits Window {
     in property <length> timeline-max-scroll-x: workspace.timeline-max-scroll-x;
     in property <length> timeline-max-scroll-y: workspace.timeline-max-scroll-y;
 
+    // Dimensões do canvas wgpu de fundo (resolução offscreen 1:1).
+    in property <length> timeline-canvas-content-width:
+        workspace.timeline-canvas-content-width;
+
+    in property <length> timeline-canvas-content-height:
+        workspace.timeline-canvas-content-height;
+
     callback focus-selected-clip-requested(int, float, length, length, length);
 
     // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
     callback scroll-input(float, float, bool, bool, bool, float, float);
+
+    // Canvas wgpu de fundo da timeline: publica a imagem rasterizada e
+    // pede re-render quando scroll/zoom/dimensões mudam.
+    in-out property <image> timeline-canvas-background: @image-url("");
+    callback timeline-canvas-render-requested();
 
     in-out property <[ClipData]> clips:
         [
@@ -782,6 +794,10 @@ export component MainWindow inherits Window {
         follow-playhead <=> root.follow-playhead;
         zoom-level <=> root.zoom-level;
         zoom-y-level <=> root.zoom-y-level;
+        timeline-canvas-background <=> root.timeline-canvas-background;
+        timeline-canvas-render-requested() => {
+            root.timeline-canvas-render-requested();
+        }
         loop-enabled <=> root.loop-enabled;
         loop-start-beat <=> root.loop-start-beat;
         loop-end-beat <=> root.loop-end-beat;

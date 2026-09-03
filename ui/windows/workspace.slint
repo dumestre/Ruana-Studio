@@ -328,6 +328,21 @@ export component Workspace inherits Rectangle {
 
 
     // ========================================================
+    // CANVAS WGPU DA TIMELINE
+    // ========================================================
+
+    in-out property <image> timeline-canvas-background <=> timeline.canvas;
+
+    out property <length> timeline-canvas-content-width:
+        timeline.canvas-content-width;
+
+    out property <length> timeline-canvas-content-height:
+        timeline.canvas-content-height;
+
+    callback timeline-canvas-render-requested();
+
+
+    // ========================================================
     // CALLBACKS
     // ========================================================
 
@@ -1170,6 +1185,15 @@ export component Workspace inherits Rectangle {
 
                             drop-len-beats:
                                 4.0;
+
+
+                            // ---------------------------------
+                            // CANVAS WGPU (fundo da timeline)
+                            // ---------------------------------
+
+                            canvas-render-requested() => {
+                                root.timeline-canvas-render-requested();
+                            }
 
 
                             // ---------------------------------
@@ -2218,6 +2242,11 @@ export component Workspace inherits Rectangle {
 
                 TimelineMetrics.track-count =
                     root.track-names.length;
+
+                // Pede um re-render do canvas wgpu de fundo se algo
+                // mudou. O Rust de-duplica e só renderiza quando os
+                // parâmetros (scroll/zoom/dimensões) realmente mudam.
+                root.timeline-canvas-render-requested();
 
                 // Snap compartilhado com o motor de arrasto
                 // (resize local e preview usam o mesmo flag).

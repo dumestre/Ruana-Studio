@@ -104,6 +104,30 @@ export component Timeline inherits Rectangle {
 
 
     // =====================================================
+    // CANVAS WGPU (gradiente/grade de fundo rasterizada via wgpu)
+    //
+    // Camada de fundo: é desenhada PRIMEIRO (z baixo) e todo o resto
+    // (clips, régua, playhead, marquee) fica por cima. Renderiza o grid
+    // e as faixas alternadas de compasso via TimelineGpuRenderer
+    // (câmera ortográfica + instancing), com readback → slint::Image.
+    // =====================================================
+
+    in property <image> canvas: @image-url("");
+
+    callback canvas-render-requested();
+
+// Dimensões (pixels de conteúdo) para o canvas wgpu de fundo.
+    // Espelham o retângulo de conteúdo, para o Rust saber a resolução
+    // offscreen e o Slint exibi-la em 1:1 (sem reescala).
+    out property <length> canvas-content-width:
+        self.width
+        - self.timeline-left-padding;
+
+    out property <length> canvas-content-height:
+        self.height;
+
+
+    // =====================================================
     // CLIPS
     // =====================================================
 
@@ -364,6 +388,28 @@ export component Timeline inherits Rectangle {
         border-radius: 6px;
 
         clip: true;
+
+
+        // =================================================
+        // CANVAS WGPU (fundo FIXO da viewport)
+        //
+        // Rasterizado via TimelineGpuRenderer na resolução exata da
+        // viewport (câmera ortográfica 2D). A câmera BAKES o scroll no
+        // deslocamento, então a grade alinha com os clips mesmo quando
+        // o usuário rola/zoom — este elemento fica FIXO (não participa
+        // do rect de conteúdo), como a régua e o playhead.
+        // =================================================
+
+        Image {
+            source: root.canvas;
+            x: root.timeline-left-padding;
+            y: 0;
+            width: parent.width - root.timeline-left-padding;
+            height: parent.height;
+            image-fit: fill;
+            visible: root.canvas.width > 0;
+            z: -5;
+        }
 
 
         // =================================================
@@ -913,221 +959,6 @@ export component Timeline inherits Rectangle {
 
             background:
                 transparent;
-
-
-            // =============================================
-            // FUNDO ALTERNADO
-            // =============================================
-
-            for i in root.total-bars: Rectangle {
-
-                x:
-                    i * root.px-per-bar;
-
-
-                y:
-                    root.ruler-height;
-
-
-                width:
-                    root.px-per-bar;
-
-
-                height:
-                    parent.height
-                    - root.ruler-height;
-
-
-                background:
-                    Math.mod(i, 2) == 1
-                        ? Theme.surface-high
-                        : Theme.surface-step;
-
-
-                z: -1;
-            }
-
-
-            // =============================================
-            // GRID VERTICAL
-            // =============================================
-
-            for i in root.total-bars: Rectangle {
-
-                x:
-                    i * root.px-per-bar;
-
-
-                y:
-                    root.ruler-height;
-
-
-                width:
-                    root.px-per-bar;
-
-
-                height:
-                    parent.height
-                    - root.ruler-height;
-
-
-                z: 0;
-
-
-                // -----------------------------------------
-                // LINHA DO COMPASSO
-                // -----------------------------------------
-
-                Rectangle {
-
-                    x: 0;
-
-                    y: 0;
-
-                    width: 1px;
-
-                    height:
-                        parent.height;
-
-
-                    background:
-                        Math.mod(i, 2) == 1
-                            ? (
-                                Theme.is-paper
-                                    ? Theme.base
-                                    : Theme.grid-line
-                              )
-                            : (
-                                Theme.is-paper
-                                    ? Theme.base
-                                    : Theme.grid-line
-                              ).transparentize(0.45);
-                }
-
-
-                // -----------------------------------------
-                // BATIDAS
-                // -----------------------------------------
-
-                for k in root.beats-per-bar: Rectangle {
-
-                    visible:
-                        k > 0
-                        && root.px-per-bar >= 40px;
-
-
-                    x:
-                        k * root.px-per-beat;
-
-
-                    y: 0;
-
-                    width: 1px;
-
-
-                    height:
-                        parent.height;
-
-
-                    background:
-                        Theme.is-paper
-                            ? Theme.base.transparentize(0.6)
-                            : Theme.grid-line.transparentize(0.6);
-                }
-
-
-                // -----------------------------------------
-                // 1/8
-                // -----------------------------------------
-
-                for k in root.beats-per-bar: Rectangle {
-
-                    visible:
-                        root.px-per-bar >= 120px;
-
-
-                    x:
-                        k * root.px-per-beat
-                        + root.px-per-beat * 0.5;
-
-
-                    y: 0;
-
-                    width: 1px;
-
-
-                    height:
-                        parent.height;
-
-
-                    background:
-                        Theme.is-paper
-                            ? Theme.base.transparentize(0.7)
-                            : Theme.grid-line.transparentize(0.7);
-                }
-
-
-                // -----------------------------------------
-                // 1/16 — 1/4
-                // -----------------------------------------
-
-                for k in root.beats-per-bar: Rectangle {
-
-                    visible:
-                        root.px-per-bar >= 240px;
-
-
-                    x:
-                        k * root.px-per-beat
-                        + root.px-per-beat * 0.25;
-
-
-                    y: 0;
-
-                    width: 1px;
-
-
-                    height:
-                        parent.height;
-
-
-                    background:
-                        Theme.is-paper
-                            ? Theme.base.transparentize(0.8)
-                            : Theme.grid-line.transparentize(0.8);
-                }
-
-
-                // -----------------------------------------
-                // 1/16 — 3/4
-                // -----------------------------------------
-
-                for k in root.beats-per-bar: Rectangle {
-
-                    visible:
-                        root.px-per-bar >= 240px;
-
-
-                    x:
-                        k * root.px-per-beat
-                        + root.px-per-beat * 0.75;
-
-
-                    y: 0;
-
-                    width: 1px;
-
-
-                    height:
-                        parent.height;
-
-
-                    background:
-                        Theme.is-paper
-                            ? Theme.base.transparentize(0.8)
-                            : Theme.grid-line.transparentize(0.8);
-                }
-            }
 
 
             // =============================================

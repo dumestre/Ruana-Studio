@@ -58,12 +58,10 @@ impl RectInstance {
 /// Câmera ortográfica 2D da timeline.
 ///
 /// Mapeia um pixel de CONTEÚDO `(cx, cy)` para NDC. O conteúdo é o espaço de
-/// dados (grid, clips) que se move com scroll e se escala com zoom:
-///
-/// ```text
-/// ndc.x = (cx + scroll_x) / (viewport_w / 2)  - 1
-/// ndc.y = 1 - (cy + scroll_y) / (viewport_h / 2)
-/// ```
+/// dados (grid, clips) que se move com scroll e se escala com zoom. A
+/// convenção: o canvas exibe a janela visível do conteúdo, então canvas
+/// pixel `px = cx - scroll_x` e `py = cy - scroll_y`. Ou seja, o scroll é
+/// SUBTRAÍDO (rolar para a direita mostra conteúdo mais à direita).
 #[derive(Clone, Copy, Debug)]
 pub struct OrthoCamera {
     /// Scroll (deslocamento do conteúdo) em pixels.
@@ -87,8 +85,10 @@ impl OrthoCamera {
         let hw = (self.viewport_w / 2.0).max(1.0);
         let hh = (self.viewport_h / 2.0).max(1.0);
 
-        // ndc.x = (cx + sx)/hw - 1  →  x' = cx * (1/hw) + (sx/hw - 1)
-        // ndc.y = 1 - (cy + sy)/hh  →  y' = cy * (-1/hh) + (1 - sy/hh)
+        // canvas px = cx - sx, py = cy - sy:
+        // ndc.x = (cx - sx)/hw - 1  →  x' = cx * (1/hw) + (-sx/hw - 1)
+        // ndc.y = 1 - (cy - sy)/hh  →  y' = cy * (-1/hh) + (1 + sy/hh)
+        // (viewport h usa `-` em cy porque (0,0) do canvas é o topo-esquerdo.)
         [
             // coluna 0 (eixo x)
             1.0 / hw,
@@ -106,8 +106,8 @@ impl OrthoCamera {
             1.0,
             0.0,
             // coluna 3 (translação)
-            sx / hw - 1.0,
-            1.0 - sy / hh,
+            -sx / hw - 1.0,
+            1.0 + sy / hh,
             0.0,
             1.0,
         ]

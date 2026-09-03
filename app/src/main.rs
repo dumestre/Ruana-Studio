@@ -35,6 +35,7 @@ mod piano_roll;
 mod playback;
 mod timeline;
 mod theme;
+mod timeline_canvas;
 mod timeline_gpu;
 mod waveform;
 mod waveform_gpu;
@@ -409,6 +410,9 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Waveform: re-render na resolução exata quando o zoom muda.
     waveform::wire_resolution_requests(&ui, waveforms.clone(), wgpu_renderer.clone(), clips_model.clone());
+
+    // TimelineCanvas: fundo da timeline (grid + faixas) via wgpu, render-on-change.
+    timeline_canvas::wire(&ui);
 
     // Explorador de arquivos: navegação, histórico e filtro.
     explorer::wire_explorer(&ui);
