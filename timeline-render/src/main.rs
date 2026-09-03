@@ -76,6 +76,11 @@ pub mod palette {
         (0xD5, 0xE8, 0xB0), (0xE8, 0xD8, 0xC0), (0xC8, 0xE8, 0xE0),
         (0x17, 0x17, 0x17),
     ];
+    pub const TEXT_DIM: [Rgb; 7] = [
+        (0x9A, 0x9A, 0x9A), (0x84, 0x9A, 0xB5), (0x8F, 0x8A, 0xB0),
+        (0x7A, 0x85, 0x9A), (0x9A, 0x94, 0x82), (0x82, 0xC2, 0x92),
+        (0x5A, 0x5A, 0x5A),
+    ];
     pub const PLAYHEAD_COLOR: Rgb = (0xDC, 0x14, 0x3C);
 }
 
@@ -650,7 +655,6 @@ impl App {
         });
 
         // Grid
-        let ruler_text_color = rgba(palette::TEXT_PRIMARY[t], 220);
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
             if bx > width || bx < -px_per_bar { continue; }
@@ -662,8 +666,15 @@ impl App {
             });
 
             // Número do compasso na régua (proximos da linha da régua, não no meio da barra)
+            let ruler_text_color = if i % 2 == 0 {
+                rgba(palette::TEXT_PRIMARY[t], 220)
+            } else {
+                rgba(palette::TEXT_DIM[t], 220)
+            };
             if bx > -px_per_bar * 0.5 && bx < width {
-                instances.extend(build_text_instances(&format!("{}", i + 1), bx + px_per_bar / 2.0, 3.0, ruler_text_color));
+                // Position number at grid line start (x=0 relative to bar), not centered.
+                // bx + 4.0 centers the 8px-char text ~4px right of grid line = "colado no grid".
+                instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color));
             }
 
             let beat_px = px_per_bar / 4.0;
