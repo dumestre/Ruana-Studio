@@ -229,7 +229,12 @@ impl TimelineGpuRenderer {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    // SRC-OVER: os clips (corpos translúcidos) precisam
+                    // compor com o grid por baixo DENTRO do canvas. Com
+                    // REPLACE o alpha era ignorado na composição e o corpo
+                    // apagava a grade. ALPHA_BLENDING usa SRC-OVER straight
+                    // alpha: dst = src.a*src + (1-src.a)*dst.
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),

@@ -142,6 +142,17 @@ export component TrackClip inherits Rectangle {
             ? 0.22
             : 1.0;
 
+    // O CORPO dos clips EM REPOUSO é rasterizado pelo canvas wgpu (lê o
+    // core). Mas o arrasto usa instâncias Slint vivas (o overlay que segue
+    // o mouse e o fantasma da origem) que animam posição/opacidade por
+    // binding — estas PRECISAM desenhar o próprio corpo. Discriminador:
+    // o overlay é o único TrackClip com `interactive:false`, e a origem
+    // em arrasto tem `ghost:true`. Nos dois casos o Slint assume o corpo;
+    // no repouso fica transparente e o wgpu cobre.
+    private property <bool> slint-body:
+        root.ghost
+        || !root.interactive;
+
 
     // =====================================================
     // PALETA
@@ -448,15 +459,21 @@ export component TrackClip inherits Rectangle {
     // =====================================================
 
     Rectangle {
-        background: root.clip-color.darker(
-                 root.hovered
-                     ? 0.05
-                     : 0.12
-             ).with-alpha(
-                 root.hovered
-                     ? 0.30
-                     : 0.50
-             );
+        // Repouso: corpo vindo do canvas wgpu (transparente aqui).
+        // Ghost/overlay (arrasto ativo): o Slint desenha o próprio corpo
+        // translúcido, pois a posição/opacidade animam por binding.
+        background:
+            root.slint-body
+                ? root.clip-color.darker(
+                      root.hovered
+                          ? 0.05
+                          : 0.12
+                  ).with-alpha(
+                      root.hovered
+                          ? 0.30
+                          : 0.50
+                  )
+                : #00000000;
         border-color: root.hovered
                  ? crimson.with-alpha(0.45)
                  :crimson.with-alpha(0.22);
@@ -478,21 +495,21 @@ export component TrackClip inherits Rectangle {
             - root.header-height
             - root.bw;
 
+        // Repouso: corpo via canvas wgpu (transparente); ghost/overlay
+        // desenham o corpo translúcido por cima (anima posição/opacidade).
         background:
-            root.clip-color.darker(
-                root.hovered
-                    ? 0.05
-                    : 0.12
-            ).with-alpha(
-                root.hovered
-                    ? 0.30
-                    : 0.50
-            );
+            root.slint-body
+                ? root.clip-color.darker(
+                      root.hovered
+                          ? 0.05
+                          : 0.12
+                  ).with-alpha(
+                      root.hovered
+                          ? 0.30
+                          : 0.50
+                  )
+                : #00000000;
 
-        // Brilho suave na borda da waveform: só o contorno do
-        // perímetro brilha (borda fina translúcida branca), sem
-        // afetar o interior — dá um realce sutil de "luz" evitando
-        // o contorno nítido/duro de um border opaco.
         border-width:
             1px;
 
@@ -547,8 +564,12 @@ export component TrackClip inherits Rectangle {
         height:
             root.header-height - root.bw;
 
+        // Header: repouso via canvas wgpu (transparente aqui); ghost/overlay
+        // desenham o próprio preenchimento do header.
         background:
-            root.clip-color;
+            root.slint-body
+                ? root.clip-color
+                : #00000000;
 
         opacity:
             root.ghost-opacity;
@@ -680,8 +701,11 @@ export component TrackClip inherits Rectangle {
         height:
             1px;
 
+        // Divisória: repouso via canvas wgpu; ghost/overlay desenham a própria.
         background:
-            root.clip-color.darker(0.18);
+            root.slint-body
+                ? root.clip-color.darker(0.18)
+                : #00000000;
 
         opacity:
             (
@@ -716,8 +740,11 @@ export component TrackClip inherits Rectangle {
         border-radius:
             1px;
 
+        // Indicador: repouso via canvas wgpu; ghost/overlay desenham o próprio.
         background:
-            Theme.text-primary;
+            root.slint-body
+                ? Theme.text-primary
+                : #00000000;
 
         opacity:
             (
