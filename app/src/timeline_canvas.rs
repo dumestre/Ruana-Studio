@@ -267,7 +267,13 @@ pub fn wire(ui: &MainWindow) {
         let ui = &ui_shot;
 
         // Coleta os parâmetros do estado atual.
-        let px_per_bar = 40.0 * ui.get_zoom_level();
+        //
+        // `px-per-bar` no Slint = px-per-beat (40*zoom) × beats-per-bar.
+        // O canvas precisa usar o MESMO valor para alinhar com a régua e
+        // com os steps desenhados pelo Slint; antes usava só 40*zoom, o
+        // que comprimia o grid em `beats` vezes e dessincronizava compasso.
+        let ppb = ui.get_beats_per_bar().max(1);
+        let px_per_bar = 40.0 * ui.get_zoom_level() * ppb as f32;
         let ruler_px = 25.0;
         let width = ui.get_timeline_canvas_content_width().max(0.0);
         let height = ui.get_timeline_canvas_content_height().max(0.0);
