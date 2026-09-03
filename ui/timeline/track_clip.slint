@@ -49,66 +49,10 @@ export component TrackClip inherits Rectangle {
     // escreve via live-gain e comita no release (clip-gain-committed).
     in property <float> gain-db: 0.0;
 
-    // Waveform renderizada via wgpu (offscreen + readback). Só os clips
-    // de áudio recebem; MIDI mantém vazio.
-    in property <image> waveform: @image-url("");
-
-    // Origem da área da waveform dentro do corpo (em px, 2px = border).
-    private property <float> wave-area-origin:
-        root.bw / 1px + 2.0;
-
-    // Altura de EXIBIÇÃO do corpo do clip (px) para o pedido de
-    // resolução.
-    private property <float> wave-body-px:
-        (root.row-height - root.header-height - root.bw) / 1px;
-
-    changed width => {
-        if !root.resizing
-            && !root.dragging
-            && !ClipDragState.active
-            && !root.ghost
-            && !root.is-midi
-            && root.interactive
-            && root.width > 4px {
-
-            TimelineMetrics.waveform-resolution-requested(
-                root.clip-id,
-                (root.width - 4px) / 1px,
-                0.0,
-                0.0,
-                root.wave-body-px,
-                root.gain-linear,
-                fade_ctrl.fade-in-w / 1px,
-                fade_ctrl.fade-out-w / 1px,
-            );
-        }
-    }
-
-    // RESIZE: não existe RE-RENDER durante o gesto (guards acima).
-    // No CÓRTE da borda, o Rust aparou o cache da waveform para o
-    // trecho visível (crop ancorado, sem re-escalar) e este changed
-    // resizing pede o raster do trecho novo assim que o gesto solta.
-    changed resizing => {
-        if !root.resizing
-            && !root.dragging
-            && !ClipDragState.active
-            && !root.ghost
-            && !root.is-midi
-            && root.interactive
-            && root.width > 4px {
-
-            TimelineMetrics.waveform-resolution-requested(
-                root.clip-id,
-                (root.width - 4px) / 1px,
-                0.0,
-                0.0,
-                root.wave-body-px,
-                root.gain-linear,
-                fade_ctrl.fade-in-w / 1px,
-                fade_ctrl.fade-out-w / 1px,
-            );
-        }
-    }
+    // Waveform agora é renderizada no canvas wgpu (fragment shader + storage buffer).
+    // As propriedades wave-body-px e os handlers changed width/resizing
+    // que solicitavam waveform-resolution foram removidos — o canvas
+    // wgpu lida com isso via storage buffer global.
 
     // Total de tracks do projeto (clamp vertical do arrasto).
     in property <int> track-count: 1;
@@ -525,22 +469,6 @@ export component TrackClip inherits Rectangle {
 
         clip:
             true;
-
-        // Waveform renderizada via wgpu na resolução exata de exibição.
-        // image-fit: fill porque a textura já nasce com as dimensões do
-        // corpo (largura = nº de colunas, altura = corpo). Só áudio.
-        Image {
-            source: root.waveform;
-            x: 0px;
-            y: 0px;
-            width: parent.width;
-            height: parent.height;
-            image-fit: fill;
-            opacity: root.ghost-opacity;
-            visible:
-                !root.is-midi
-                && root.waveform.width > 0;
-        }
 
     }
 

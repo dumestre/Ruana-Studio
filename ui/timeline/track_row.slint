@@ -247,9 +247,8 @@ export component TrackRow inherits Rectangle {
         color-index:
             clip.color;
 
-        // Waveform renderizada via wgpu (imagem do modelo).
-        waveform:
-            clip.waveform;
+        // Waveform agora é renderizada no canvas wgpu (fragment shader).
+        // waveform: clip.waveform;  // removido
 
 
         // =============================================
