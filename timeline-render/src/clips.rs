@@ -361,10 +361,23 @@ impl ClipInteraction {
             self.stretch_live_len = new_len;
         } else {
             let delta_beats = dx / m.px_per_beat.max(0.001);
-            let live_beat = if snap {
-                (self.drag_orig_beat + delta_beats).max(0.0).round()
+
+            // Clamp do delta para todo o grupo: o clip mais à esquerda define o limite.
+            // Se empurramos para a esquerda e o leftmost chegar a beat 0,
+            // o grupo inteiro para — mantém a adjacência do glue.
+            let min_group_beat = if self.drag_group.is_empty() {
+                self.drag_orig_beat
             } else {
-                (self.drag_orig_beat + delta_beats).max(0.0)
+                self.drag_group.iter()
+                    .map(|(_, ob, _)| *ob)
+                    .fold(f32::INFINITY, f32::min)
+            };
+            let clamped_delta = delta_beats.max(-min_group_beat);
+
+            let live_beat = if snap {
+                (self.drag_orig_beat + clamped_delta).max(0.0).round()
+            } else {
+                (self.drag_orig_beat + clamped_delta).max(0.0)
             };
             self.drag_live_beat = live_beat;
 
@@ -394,14 +407,27 @@ impl ClipInteraction {
                     // Move todos os membros do grupo pelo mesmo delta
                     let beat_delta = final_beat - self.drag_orig_beat;
                     let track_delta = self.drag_live_track as i32 - self.drag_orig_track as i32;
+                    // Clamp do delta pro leftmost do grupo não ir abaixo de 0
+                    let min_group_beat = if self.drag_group.is_empty() {
+                        self.drag_orig_beat
+                    } else {
+                        self.drag_group.iter()
+                            .map(|(_, ob, _)| *ob)
+                            .fold(f32::INFINITY, f32::min)
+                    };
+                    let clamped_delta = beat_delta.max(-min_group_beat);
+                    // Atualiza seam_beat do primary (é beat absoluto, precisa seguir o movimento)
+                    if let Some(sb) = clips[idx].seam_beat {
+                        clips[idx].seam_beat = Some((sb + clamped_delta).max(0.0));
+                    }
                     for (gi, orig_beat, orig_track) in self.drag_group.iter() {
                         if *gi == idx { continue; }
-                        clips[*gi].beat = (orig_beat + beat_delta).max(0.0);
+                        clips[*gi].beat = (orig_beat + clamped_delta).max(0.0);
                         let new_track = (*orig_track as i32 + track_delta).clamp(0, 3) as usize;
                         clips[*gi].track_index = new_track;
                         // Atualiza seam_beat para refletir a nova posição (seam é beat absoluto)
                         if let Some(sb) = clips[*gi].seam_beat {
-                            clips[*gi].seam_beat = Some((sb + beat_delta).max(0.0));
+                            clips[*gi].seam_beat = Some((sb + clamped_delta).max(0.0));
                         }
                     }
                 }
@@ -656,10 +682,15 @@ pub fn build_clip_instances(
         if !inter.stretch_mode && inter.drag_moved && !inter.drag_group.is_empty() {
             let beat_delta = inter.drag_live_beat - inter.drag_orig_beat;
             let track_delta = inter.drag_live_track as i32 - inter.drag_orig_track as i32;
+            // Clamp pro leftmost do grupo não ir abaixo de 0 (mesmo do drag_move/end_drag)
+            let min_group_beat = inter.drag_group.iter()
+                .map(|(_, ob, _)| *ob)
+                .fold(f32::INFINITY, f32::min);
+            let clamped_delta = beat_delta.max(-min_group_beat);
             for (gi, orig_beat, orig_track) in inter.drag_group.iter() {
                 if Some(*gi) == inter.drag_idx { continue; } // primary já renderizado acima
                 if let Some(clip) = clips.get(*gi) {
-                    let live_beat = (orig_beat + beat_delta).max(0.0);
+                    let live_beat = (orig_beat + clamped_delta).max(0.0);
                     let live_track = (*orig_track as i32 + track_delta).clamp(0, 3) as usize;
                     let live = ClipDemo {
                         track_index: live_track,

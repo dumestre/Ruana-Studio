@@ -1226,6 +1226,7 @@ impl App {
         let dy = self.edge_scroll_y;
 
         // Ajusta scroll horizontal
+        let prev_sx = self.scroll_x;
         self.scroll_x = (self.scroll_x + dx).max(0.0);
         // Ajusta scroll vertical
         self.scroll_y = (self.scroll_y + dy).max(0.0);
@@ -1236,9 +1237,12 @@ impl App {
         //   x = live_beat * px_per_beat - scroll_x
         // Se aumentamos scroll_x em `dx`, precisamos aumentar live_beat em
         // `dx / px_per_beat` para manter a mesma posição na tela.
+        // Usa o delta efetivo (não o pretendido) — se scroll_x foi clampado,
+        // o clip não deve ser empurrado além do limite.
         if self.clip_interaction.is_dragging() && !self.clip_interaction.is_stretching() {
             let pps = self.px_per_beat.max(0.001);
-            self.clip_interaction.drag_live_beat += dx / pps;
+            let actual_dx = self.scroll_x - prev_sx;
+            self.clip_interaction.drag_live_beat += actual_dx / pps;
         }
     }
 
