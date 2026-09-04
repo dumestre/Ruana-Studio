@@ -357,6 +357,7 @@ struct App {
     transport_seconds: f32,
     last_play_head_update: Instant,
     panning: bool,
+    scrubbing: bool,
     last_cursor: (f32, f32),
 
     wave_bars: Vec<f32>,
@@ -573,6 +574,7 @@ impl App {
             transport_seconds: 0.0,
             last_play_head_update: Instant::now(),
             panning: false,
+            scrubbing: false,
             last_cursor: (0.0, 0.0),
 
             wave_bars,
@@ -631,8 +633,33 @@ impl App {
         }
     }
 
+    fn set_playhead_from_x(&mut self, mx: f32) {
+        let bpm = 120.0;
+        let pps = self.px_per_beat * bpm / 60.0;
+        if pps <= 0.0 { return; }
+        self.transport_seconds = ((mx + self.scroll_x) / pps).max(0.0);
+    }
+
+    fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), ruler_h: f32) {
+        // Apenas interage com o playhead se o clique for dentro da régua.
+        if pos.1 < 0.0 || pos.1 > ruler_h { return; }
+        match state {
+            ElementState::Pressed => {
+                self.scrubbing = true;
+                self.set_playhead_from_x(pos.0);
+            }
+            ElementState::Released => {
+                self.scrubbing = false;
+                self.set_playhead_from_x(pos.0);
+            }
+        }
+    }
+
     fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
-        if self.panning {
+        if self.scrubbing {
+            self.set_playhead_from_x(pos.0);
+        }
+        if self.panning && !self.scrubbing {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
@@ -945,11 +972,10 @@ impl App {
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
 
-        // Playhead
-        if self.playing {
-            let bpm = 120.0;
-            let pixels_per_second = self.px_per_beat * bpm / 60.0;
-            let head_x = self.transport_seconds * pixels_per_second - self.scroll_x;
+        // Playhead — sempre visível; para de avançar quando pausado.
+        let bpm = 120.0;
+        let pixels_per_second = self.px_per_beat * bpm / 60.0;
+        let head_x = self.transport_seconds * pixels_per_second - self.scroll_x;
             instances.push(RectInstance {
                 x: head_x - 1.0, y: 1.0,
                 w: 2.0, h: height - 1.0,
@@ -964,11 +990,9 @@ impl App {
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
                 radius: 6.0,
             });
-        }
 
         instances
     }
-
     fn render(&mut self) {
         let size = self.size;
         if size.width == 0 || size.height == 0 {
@@ -1171,7 +1195,10 @@ impl winit::application::ApplicationHandler for AppHandler {
                 if button == winit::event::MouseButton::Middle {
                     let pos = Some(app.last_cursor);
                     app.handle_mouse_button(state, pos);
+                } else if button == winit::event::MouseButton::Left {
+                    app.handle_ruler_click(state, app.last_cursor, app.ruler_px);
                 }
+                app.window.request_redraw();
             }
             WindowEvent::CursorMoved {
                 device_id: _,
@@ -1179,6 +1206,9 @@ impl winit::application::ApplicationHandler for AppHandler {
                 ..
             } => {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
+                if app.scrubbing {
+                    app.window.request_redraw();
+                }
             }
             WindowEvent::Focused(focused) => {
                 if !focused {
