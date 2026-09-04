@@ -544,7 +544,7 @@ impl App {
             config,
             size,
 
-            theme: 1,
+            theme: 6,   // <- Mudança: usar Paper (claro) como tema base
             scroll_x: 0.0,
             scroll_y: 0.0,
             zoom: 1.0,
@@ -618,9 +618,10 @@ impl App {
         let t = self.theme.clamp(0, 6) as usize;
         let mut instances = Vec::new();
         let px_per_bar = self.px_per_beat * 4.0;
-        let total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
+        let _total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
+        let row_height = 40.0;
 
-        // Fundo geral
+        // Fundo geral - cobre desde a régua até o fundo
         instances.push(RectInstance {
             x: 0.0, y: self.ruler_px,
             w: width, h: (height - self.ruler_px).max(0.0),
@@ -628,31 +629,51 @@ impl App {
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
         });
 
-        // Faixas alternadas
-        let row_height = 40.0;
-        let n_tracks = 4;
-        for track in 0..n_tracks {
-            let y = self.ruler_px + track as f32 * row_height;
-            for i in 0..total_bars {
-                let x = i as f32 * px_per_bar - self.scroll_x;
-                if x > width || x + px_per_bar < 0.0 { continue; }
-                let bg = if i % 2 == 1 { palette::SURFACE_HIGH[t] } else { palette::SURFACE_STEP[t] };
-                let w = px_per_bar.min(width - x).max(0.0);
+        // Régua — com listras alternadas (igualdade das faixas/tracks)
+        // Desenha segments alternados começando com SURFACE_STEP (mais escuro)
+        let ruler_segment_w = px_per_bar; // uma "coluna" de compasso por segmento
+        let n_segments = (width / ruler_segment_w).ceil() as usize + 1;
+        for seg in 0..n_segments {
+            let seg_x = (seg as f32 * ruler_segment_w) - self.scroll_x;
+            let is_odd = seg % 2 == 1;
+            let bg_color = if is_odd {
+                palette::SURFACE_HIGH[t]   // ímpar: mais claro
+            } else {
+                palette::SURFACE_STEP[t]   // par: mais escuro (primeiro)
+            };
+            // Largura do segmento, limitado ao viewport
+            let seg_w = ruler_segment_w.min(width - seg_x).max(0.0);
+            if seg_w > 0.0 {
                 instances.push(RectInstance {
-                    x, y, w,
-                    h: row_height,
-                    color: [bg.0, bg.1, bg.2, 255],
+                    x: seg_x, y: 0.0, w: seg_w, h: self.ruler_px,
+                    color: [bg_color.0, bg_color.1, bg_color.2, 255],
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
                 });
             }
         }
 
-        // Régua
-        instances.push(RectInstance {
-            x: 0.0, y: 0.0, w: width, h: self.ruler_px,
-            color: rgba(palette::SURFACE_HIGH[t], 255),
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
-        });
+        // Fundos alternados das colunas do grid (antes das linhas do grid)
+        let px_per_bar = self.px_per_beat * 4.0;
+        let total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
+        for i in 0..total_bars {
+            let bx = i as f32 * px_per_bar - self.scroll_x;
+            if bx > width + px_per_bar || bx < -px_per_bar { continue; }
+            let is_odd_col = i % 2 == 1;
+            let bg = if is_odd_col {
+                palette::SURFACE_HIGH[t]
+            } else {
+                palette::SURFACE_STEP[t]
+            };
+            let bw = px_per_bar;
+            let bh = height; // altura total da timeline
+            if bw > 0.0 && bh > 0.0 {
+                instances.push(RectInstance {
+                    x: bx, y: 0.0, w: bw, h: bh,
+                    color: [bg.0, bg.1, bg.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                });
+            }
+        }
 
         // Grid
         for i in 0..total_bars {
