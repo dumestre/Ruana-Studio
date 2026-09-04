@@ -558,12 +558,12 @@ impl App {
 
         // === Dados demo ===
         let clips = vec![
-            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, seam_beat: None },
-            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, seam_beat: None },
-            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, seam_beat: None },
-            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, seam_beat: None },
-            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, seam_beat: None },
-            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, seam_beat: None },
+            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, seam_beat: None, pre_glue_len: None },
+            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, seam_beat: None, pre_glue_len: None },
+            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, seam_beat: None, pre_glue_len: None },
+            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, seam_beat: None, pre_glue_len: None },
+            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, seam_beat: None, pre_glue_len: None },
+            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, seam_beat: None, pre_glue_len: None },
         ];
 
         let mut wave_bars: Vec<f32> = Vec::new();
@@ -908,6 +908,7 @@ impl App {
             is_midi: false,
             color: 0,
             seam_beat: None,
+            pre_glue_len: None,
         });
         self.clip_interaction.sync_selection(self.clips.len());
     }
@@ -973,8 +974,9 @@ impl App {
 
     /// Cola clips (ferramenta Glue — tecla 6).
     /// Clicar num clip: estica a borda direita dele até o início do próximo
-    /// clip na mesma track, preenchendo o gap. O próximo é removido e o
-    /// ponto de costura (seam) é marcado como linha pontilhada para desfazer.
+    /// clip na mesma track, preenchendo o gap. Ambos permanecem como clips
+    /// separados, mas adjacentes (sem gap). O seam marca o ponto de encontro
+    /// para des-colagem (click sobre a linha pontilhada).
     fn tool_glue(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
@@ -989,16 +991,13 @@ impl App {
 
             if let Some(next_idx) = next_idx {
                 let next_beat = self.clips[next_idx].beat;
-                // Marca o seam na posição onde o próximo clip começava
+                // Marca o seam na posição onde o próximo clip começa
                 self.clips[idx].seam_beat = Some(next_beat);
-                // Estica o clip atual até o início do próximo
+                self.clips[idx].pre_glue_len = Some(clip.len);
+                // Estica o clip atual até o início do próximo (preenchendo o gap)
                 self.clips[idx].len = (next_beat - clip.beat).max(0.25);
-                // Remove o próximo (junta os dois)
-                self.clips.remove(next_idx);
-                self.clip_interaction.sync_selection(self.clips.len());
-                // Ajusta índice de seleção após remoção
-                let sel = if next_idx > idx { idx } else { idx.saturating_sub(1) };
-                self.clip_interaction.select_only(sel.min(self.clips.len().saturating_sub(1)));
+                // Seleciona o clip esticado
+                self.clip_interaction.select_only(idx);
             }
         }
     }

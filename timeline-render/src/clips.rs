@@ -13,6 +13,7 @@ pub struct ClipDemo {
     pub is_midi: bool,
     pub color: usize,
     pub seam_beat: Option<f32>,
+    pub pre_glue_len: Option<f32>,
 }
 
 /// Métricas de conversão cursor ↔ conteúdo, espelhadas do App.
@@ -147,27 +148,17 @@ impl ClipInteraction {
         }
     }
 
-    /// Splita um clip no seam: separa o clip unido em dois clips originais.
-    /// Usado pela ferramenta Glue para des-fazer (click sobre a linehazinha).
+    /// Des-cola um clip: restaura o len original (abre o gap novamente)
+    /// e limpa o seam. O clip da frente permanece no lugar.
     pub fn unglue_seam(&mut self, clips: &mut Vec<ClipDemo>, idx: usize) {
-        if let Some(seam_beat) = clips[idx].seam_beat {
-            let clip = clips[idx];
-            let left_len = (seam_beat - clip.beat).max(0.25);
-            let right_len = (clip.beat + clip.len - seam_beat).max(0.25);
-
-            // Clip da esquerda: mantém beat original, len até o seam
-            clips[idx].len = left_len;
-            clips[idx].seam_beat = None;
-
-            // Clip da direita: novo, do seam ao fim original
-            let mut right = clip;
-            right.beat = seam_beat;
-            right.len = right_len;
-            right.seam_beat = None;
-            clips.push(right);
-
-            self.sync_selection(clips.len());
-            self.select_only(idx);
+        if clips[idx].seam_beat.is_some() {
+            if let Some(orig_len) = clips[idx].pre_glue_len {
+                // Restaura o len original, reabrindo o gap
+                clips[idx].len = orig_len;
+                clips[idx].seam_beat = None;
+                clips[idx].pre_glue_len = None;
+                self.select_only(idx);
+            }
         }
     }
 
@@ -366,6 +357,7 @@ impl ClipInteraction {
                     is_midi: true,
                     color: 0,
                     seam_beat: None,
+                    pre_glue_len: None,
                 };
 
                 clips.push(clip.clone());
@@ -485,7 +477,7 @@ pub fn build_clip_instances(
         // Linha pontilhada do seam (ponto de costura Glue) — permite des-colar
         if let Some(seam_beat) = clip.seam_beat {
             let seam_x = seam_beat * m.px_per_beat - m.scroll_x;
-            if seam_x > x && seam_x < x + draw_w {
+            if seam_x >= x && seam_x <= x + draw_w {
                 let seam_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
                 let is_hovered = inter.seam_hover_idx == Some(idx);
                 let alpha: u8 = if is_hovered { 200 } else { 110 };
@@ -518,6 +510,7 @@ pub fn build_clip_instances(
                     is_midi: clip.is_midi,
                     color: clip.color,
                     seam_beat: clip.seam_beat,
+                    pre_glue_len: clip.pre_glue_len,
                 }
             } else {
                 // Stretch: posição original, len varia
@@ -528,6 +521,7 @@ pub fn build_clip_instances(
                     is_midi: clip.is_midi,
                     color: clip.color,
                     seam_beat: clip.seam_beat,
+                    pre_glue_len: clip.pre_glue_len,
                 }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
@@ -555,6 +549,7 @@ pub fn build_clip_instances(
                 is_midi: true,
                 color: 0,
                 seam_beat: None,
+                pre_glue_len: None,
             };
 
             let (x, y, w, _h) = clip_rect(&temp_clip, m);
