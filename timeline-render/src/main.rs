@@ -1114,9 +1114,7 @@ impl App {
         } else if self.clip_interaction.is_dragging() {
             let snap = true;
             self.clip_interaction.drag_move(pos, &cm, snap);
-            // Auto-scroll nas bordas durante drag de clips.
-            self.update_edge_scroll(pos);
-            self.apply_edge_scroll();
+            // Edge scroll é tratado no RedrawRequested (roda todo frame)
         } else if self.clip_interaction.is_marqueeing() {
             self.clip_interaction.marquee_move(pos);
         } else if self.scrubbing {
@@ -1182,22 +1180,31 @@ impl App {
     }
 
     /// Aplica o auto-scroll calculado no frame atual, atualizando os offsets
-    /// de scroll horizontal e vertical. Chamado após drag_move para que o
-    /// overlay do clip siga o cursor antes do scroll ser compensado.
+    /// de scroll horizontal e vertical. Compensa a posição do clip em arrasto
+    /// (drag_live_beat) para que o overlay continue colado ao cursor mesmo
+    /// após a viewport rolar.
     fn apply_edge_scroll(&mut self) {
         if self.edge_scroll_x == 0.0 && self.edge_scroll_y == 0.0 {
             return;
         }
-        // O drag_move já atualizou drag_live_beat/track com base no cursor.
-        // Agora compensamos o scroll: o clip overlay deve permanecer na mesma
-        // posição absoluta enquanto a viewport rola.
         let dx = self.edge_scroll_x * self.edge_scroll_dir as f32;
-        // Compensamos o cursor virtualmente para o próximo frame:
-        // o drag_move recalcula a partir de drag_start_cursor, então
-        // ajustamos scroll_x que afeta a conversão cursor→beat.
+        let dy = self.edge_scroll_y;
+
+        // Ajusta scroll horizontal
         self.scroll_x = (self.scroll_x + dx).max(0.0);
-        self.scroll_y = (self.scroll_y + self.edge_scroll_y).max(0.0);
+        // Ajusta scroll vertical
+        self.scroll_y = (self.scroll_y + dy).max(0.0);
         self.clamp_scroll_y(self.size.height as f32);
+
+        // Compensa o beat virtual do clip em arrasto para que ele não "salte"
+        // na tela. O overlay é renderizado em:
+        //   x = live_beat * px_per_beat - scroll_x
+        // Se aumentamos scroll_x em `dx`, precisamos aumentar live_beat em
+        // `dx / px_per_beat` para manter a mesma posição na tela.
+        if self.clip_interaction.is_dragging() {
+            let pps = self.px_per_beat.max(0.001);
+            self.clip_interaction.drag_live_beat += dx / pps;
+        }
     }
 
     fn build_instances(&self, width: f32, height: f32) -> Vec<RectInstance> {
@@ -1706,7 +1713,20 @@ impl winit::application::ApplicationHandler for AppHandler {
             }
             WindowEvent::RedrawRequested => {
                 app.update_playhead();
+                // Auto-scroll contínuo nas bordas durante drag ativo (mesmo com
+                // cursor parado). A detecção usa a última posição do cursor conhecida.
+                if app.clip_interaction.is_dragging() {
+                    app.update_edge_scroll(app.last_cursor);
+                    app.apply_edge_scroll();
+                }
                 app.render();
+                // Continua o loop de redraw enquanto o drag está ativo e há
+                // scroll ativo (para rolar continuamente na borda)
+                if app.clip_interaction.is_dragging()
+                    && (app.edge_scroll_x > 0.0 || app.edge_scroll_y > 0.0)
+                {
+                    app.window.request_redraw();
+                }
             }
             WindowEvent::MouseWheel {
                 device_id: _,
