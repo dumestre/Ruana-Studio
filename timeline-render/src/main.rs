@@ -778,19 +778,23 @@ impl App {
         }
     }
 
-    /// Cola os clips do clipboard na posição alvo (beat), com snap ao grid (1 beat).
+    /// Cola os clips do clipboard na posição alvo (beat, track), com snap ao grid (1 beat).
     /// Mantém a estrutura relativa dos clips copiados.
-    fn paste_at_beat(&mut self, target_beat: f32) {
+    fn paste_at_beat(&mut self, target_beat: f32, target_track: usize) {
         if self.clipboard.is_empty() {
             return;
         }
         // Encontra o beat mínimo dos clips copiados para manter offsets relativos
         let min_beat = self.clipboard.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
         let snap_beat = target_beat.round().max(0.0);
-        let offset = snap_beat - min_beat.round();
+        let beat_offset = snap_beat - min_beat.round();
+        // Track offset: usa a track do primeiro clip copiado como referência
+        let min_track = self.clipboard.iter().map(|c| c.track_index).min().unwrap_or(0);
+        let track_offset = target_track as i32 - min_track as i32;
         for clip in &self.clipboard {
             let mut new_clip = *clip;
-            new_clip.beat = (clip.beat + offset).max(0.0).round();
+            new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
+            new_clip.track_index = (clip.track_index as i32 + track_offset).clamp(0, 3) as usize;
             self.clips.push(new_clip);
         }
         // Seleciona os clips colados
@@ -806,7 +810,7 @@ impl App {
         }
     }
 
-    /// Duplica os clips selecionados no local (com snap ao grid).
+    /// Duplica os clips selecionados APÓS o último clip selecionado (com snap ao grid).
     fn duplicate_selected(&mut self) {
         let selected_indices: Vec<usize> = self
             .clip_interaction
@@ -819,13 +823,17 @@ impl App {
         if selected_indices.is_empty() {
             return;
         }
+        // Encontra o clip que termina mais tarde (maior beat + len)
+        let max_end = selected_indices.iter()
+            .map(|&i| self.clips[i].beat + self.clips[i].len)
+            .fold(0.0_f32, f32::max);
+        let snap_beat = max_end.round().max(0.0);
         let clips_to_dup: Vec<ClipDemo> = selected_indices.iter().map(|&i| self.clips[i]).collect();
-        // Calcula o beat mínimo para snap relativo
         let min_beat = clips_to_dup.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
-        let snap_base = min_beat.round();
+        let beat_offset = snap_beat - min_beat.round();
         for clip in &clips_to_dup {
             let mut new_clip = *clip;
-            new_clip.beat = (clip.beat - min_beat + snap_base + clip.len).round().max(0.0);
+            new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
             self.clips.push(new_clip);
         }
         // Seleciona os duplicados
@@ -1498,7 +1506,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                             app.window.request_redraw();
                         }
                         Key::Character(ref s) if s.eq_ignore_ascii_case("v") => {
-                            // Cola na posição do playhead (com snap)
+                            // Cola na posição do playhead (com snap) na track do primeiro clip selecionado ou 0
                             let bpm = 120.0;
                             let pps = app.px_per_beat * bpm / 60.0;
                             let target_beat = if pps > 0.0 {
@@ -1506,7 +1514,14 @@ impl winit::application::ApplicationHandler for AppHandler {
                             } else {
                                 0.0
                             };
-                            app.paste_at_beat(target_beat);
+                            // Tenta usar a track do primeiro clip selecionado
+                            let target_track = app.clip_interaction.selected.iter()
+                                .enumerate()
+                                .find(|&(_, &s)| s)
+                                .and_then(|(i, _)| app.clips.get(i))
+                                .map(|c| c.track_index)
+                                .unwrap_or(0);
+                            app.paste_at_beat(target_beat, target_track);
                             app.window.request_redraw();
                         }
                         Key::Character(ref s) if s.eq_ignore_ascii_case("d") => {
@@ -1542,20 +1557,19 @@ impl winit::application::ApplicationHandler for AppHandler {
                     let pos = Some(app.last_cursor);
                     app.handle_mouse_button(state, pos);
                 } else if button == winit::event::MouseButton::Left {
-                    // Shift+Left Click: cola o clipboard na posição do cursor (fora de clips/régua)
+                    // Shift+Left Click: cola o clipboard na posição do cursor (qualquer track)
                     if state == ElementState::Pressed && self.shift_pressed {
                         let pos = app.last_cursor;
                         if pos.1 >= app.ruler_px {
-                            // Verifica se não está sobre um clip
-                            let cm = app.clip_metrics();
-                            if app.clip_interaction.hit_test(&app.clips, pos, &cm).is_none() {
-                                // Converte cursor para beat com snap
-                                let beat = (pos.0 + app.scroll_x) / app.px_per_beat.max(0.001);
-                                app.paste_at_beat(beat.round().max(0.0));
-                                app.window.request_redraw();
-                            } else {
-                                app.handle_primary_button(state, app.last_cursor);
-                            }
+                            // Converte cursor para beat e track com snap
+                            let beat = (pos.0 + app.scroll_x) / app.px_per_beat.max(0.001);
+                            let row_height = 64.0 * app.zoom_y.max(0.001);
+                            let track = ((pos.1 - app.ruler_px + app.scroll_y) / row_height)
+                                .floor()
+                                .max(0.0)
+                                .min(3.0) as usize;
+                            app.paste_at_beat(beat.round().max(0.0), track);
+                            app.window.request_redraw();
                         } else {
                             app.handle_primary_button(state, app.last_cursor);
                         }
