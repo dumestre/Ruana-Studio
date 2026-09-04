@@ -376,13 +376,16 @@ fn push_clip(
     t: usize,
     row_height: f32,
 ) {
+    // Raio leve nos cantos do clip para quebrar o visual quadrado.
+    let clip_r = 6.0;
+
     // Header
     instances.push(RectInstance {
         x: x + bw, y: y + bw,
         w: (draw_w - 2.0 * bw).max(0.0),
         h: (header_h - bw).max(0.0),
         color: rgba(base, 255),
-        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: clip_r,
     });
 
     // Waveform (só para clips de áudio)
@@ -401,7 +404,7 @@ fn push_clip(
         x: x + bw, y: y + header_h,
         w: w, h: body_h,
         color: rgba_alpha(darker(base, dark_amount), body_alpha),
-        wave_offset: wo, wave_count: wc, clip_w: w, clip_h: body_h, radius: 0.0,
+        wave_offset: wo, wave_count: wc, clip_w: w, clip_h: body_h, radius: clip_r,
     });
 
     // Divisória

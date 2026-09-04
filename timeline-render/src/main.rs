@@ -664,14 +664,17 @@ impl App {
     }
 
     fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), ruler_h: f32) {
-        // Apenas interage com o playhead se o clique for dentro da régua.
-        if pos.1 < 0.0 || pos.1 > ruler_h { return; }
         match state {
             ElementState::Pressed => {
+                // Só inicia o scrub se o clique for dentro da régua.
+                if pos.1 < 0.0 || pos.1 > ruler_h { return; }
                 self.scrubbing = true;
                 self.set_playhead_from_x(pos.0);
             }
             ElementState::Released => {
+                // Finaliza o scrub sempre, mesmo se soltar fora da régua
+                // (o playhead "dispara" na posição atual como se soltasse dentro).
+                if !self.scrubbing { return; }
                 self.scrubbing = false;
                 self.set_playhead_from_x(pos.0);
             }
