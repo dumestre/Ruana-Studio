@@ -355,6 +355,7 @@ struct App {
     ruler_px: f32,
     playing: bool,
     transport_seconds: f32,
+    play_start_seconds: f32,
     last_play_head_update: Instant,
     panning: bool,
     scrubbing: bool,
@@ -572,6 +573,7 @@ impl App {
             ruler_px: 25.0,
             playing: true,
             transport_seconds: 0.0,
+            play_start_seconds: 0.0,
             last_play_head_update: Instant::now(),
             panning: false,
             scrubbing: false,
@@ -1171,8 +1173,17 @@ impl winit::application::ApplicationHandler for AppHandler {
                 let pressed = event.state == ElementState::Pressed;
                 let vk = event.logical_key;
                 if pressed && vk == Key::Named(NamedKey::Space) {
-                    app.playing = !app.playing;
+                    if app.playing {
+                        // Pausa: playhead volta para onde começou a tocar.
+                        app.transport_seconds = app.play_start_seconds;
+                        app.playing = false;
+                    } else {
+                        // Inicia o play a partir da posição atual.
+                        app.play_start_seconds = app.transport_seconds;
+                        app.playing = true;
+                    }
                     app.last_play_head_update = Instant::now();
+                    app.window.request_redraw();
                 }
                 if pressed && vk == Key::Named(NamedKey::Escape) {
                     event_loop.exit();
