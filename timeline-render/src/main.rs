@@ -859,11 +859,28 @@ impl App {
 
         // Régua fixa no topo — desenhada por cima do grid e dos clips
         // (cobre qualquer track que role por baixo dela).
-        instances.push(RectInstance {
-            x: 0.0, y: 0.0, w: width, h: ruler_h,
-            color: rgba(palette::SURFACE_HIGH[t], 255),
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-        });
+        // Fundos alternados dos compassos (par/ímpar), igual ao corpo.
+        for i in 0..total_bars {
+            let bx = i as f32 * px_per_bar - self.scroll_x;
+            if bx > width + px_per_bar || bx < -px_per_bar { continue; }
+            let bg = if i % 2 == 1 {
+                palette::SURFACE_HIGH[t]
+            } else {
+                palette::SURFACE_STEP[t]
+            };
+            let bw = px_per_bar;
+            if bx + bw > 0.0 && bx < width && bw > 0.0 {
+                let draw_x = bx.max(0.0);
+                let draw_w = (bx + bw).min(width) - draw_x;
+                if draw_w > 0.0 {
+                    instances.push(RectInstance {
+                        x: draw_x, y: 0.0, w: draw_w, h: ruler_h,
+                        color: [bg.0, bg.1, bg.2, 255],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+            }
+        }
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
             if bx > width || bx < -px_per_bar { continue; }
