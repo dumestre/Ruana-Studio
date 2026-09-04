@@ -595,6 +595,7 @@ impl App {
             self.config.height = size.height;
             self.surface.configure(&self.device, &self.config);
         }
+        self.clamp_scroll_y(size.height as f32);
     }
 
     fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_ctrl: bool, with_alt: bool) {
@@ -624,6 +625,22 @@ impl App {
             // Scroll pelos eixos reais do delta: x → horizontal, y → vertical.
             self.scroll_x = (self.scroll_x - dx).max(0.0);
             self.scroll_y = (self.scroll_y - dy).max(0.0);
+        }
+        self.clamp_scroll_y(self.size.height as f32);
+    }
+
+    /// Trava a rolagem vertical para que todos os clips fiquem visíveis:
+    /// se o conteúdo cabe na viewport, trava em 0 (grudado no topo); senão,
+    /// limita o scroll ao máximo necessário para ver o último clip.
+    fn clamp_scroll_y(&mut self, height: f32) {
+        let row_height = 40.0 * self.zoom_y.max(0.001);
+        let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
+        let content_h = (max_track as f32 + 1.0) * row_height;
+        let view_h = (height - self.ruler_px).max(0.0);
+        if content_h <= view_h {
+            self.scroll_y = 0.0;
+        } else {
+            self.scroll_y = self.scroll_y.clamp(0.0, content_h - view_h);
         }
     }
 
@@ -721,6 +738,7 @@ impl App {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
+            self.clamp_scroll_y(self.size.height as f32);
         }
         self.last_cursor = pos;
     }

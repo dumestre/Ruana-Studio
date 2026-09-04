@@ -278,12 +278,12 @@ pub fn build_clip_instances(
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
                   body_alpha, body_dark, wave_bars, idx, t, m.row_height);
 
-        // Borda accent (raio 6) para clips selecionados.
+        // Borda accent (raio 8) para clips selecionados.
         if !being_dragged && idx < inter.selected.len() && inter.selected[idx] {
             let accent = super::palette::ACCENT[t];
             let ac = [accent.0, accent.1, accent.2, 255];
-            let r = 6.0;
-            let thin = 2.0;
+            let r = 8.0;
+            let thin = 3.0;
             // superior
             instances.push(RectInstance { x, y, w, h: thin, color: ac,
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
