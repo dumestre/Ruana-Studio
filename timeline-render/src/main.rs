@@ -925,8 +925,8 @@ impl App {
             let pixels_per_second = self.px_per_beat * bpm / 60.0;
             let head_x = self.transport_seconds * pixels_per_second - self.scroll_x;
             instances.push(RectInstance {
-                x: head_x - 1.0, y: self.ruler_px,
-                w: 2.0, h: height - self.ruler_px,
+                x: head_x - 1.0, y: 1.0,
+                w: 2.0, h: height - 1.0,
                 color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
                 radius: 0.0,
