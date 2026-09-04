@@ -376,18 +376,23 @@ impl ClipInteraction {
     }
 
     /// Termina o arrasto e aplica a nova posição no modelo (commit no release).
-    pub fn end_drag(&mut self, clips: &mut [ClipDemo], _m: &ClipMetrics, _snap: bool) {
+    pub fn end_drag(&mut self, clips: &mut [ClipDemo], _m: &ClipMetrics, snap: bool) {
         if let Some(idx) = self.drag_idx {
             if self.drag_moved {
                 if self.stretch_mode {
                     clips[idx].len = self.stretch_live_len;
                 } else {
+                    let final_beat = if snap {
+                        self.drag_live_beat.round().max(0.0)
+                    } else {
+                        self.drag_live_beat
+                    };
                     // Move primary clip
-                    clips[idx].beat = self.drag_live_beat;
+                    clips[idx].beat = final_beat;
                     clips[idx].track_index = self.drag_live_track;
 
                     // Move todos os membros do grupo pelo mesmo delta
-                    let beat_delta = self.drag_live_beat - self.drag_orig_beat;
+                    let beat_delta = final_beat - self.drag_orig_beat;
                     let track_delta = self.drag_live_track as i32 - self.drag_orig_track as i32;
                     for (gi, orig_beat, orig_track) in self.drag_group.iter() {
                         if *gi == idx { continue; }
@@ -518,7 +523,7 @@ pub fn build_clip_instances(
     let body_alpha_normal = 0.50;
     let body_alpha_hover = 0.32;
     let body_alpha_ghost = 0.08; // fantasma na posição antiga: quase imperceptível
-    let body_alpha_overlay = 0.28; // clip sob o mouse durante o arrasto: transparente
+    let body_alpha_overlay = 0.40; // clip arrastado: visível mas translúcido
 
     let mut instances = Vec::new();
 
@@ -607,11 +612,10 @@ pub fn build_clip_instances(
                     pre_glue_color: clip.pre_glue_color,
                 }
             } else {
-                // Stretch: posição original, len varia
                 ClipDemo {
-                    track_index: inter.drag_orig_track,
-                    beat: inter.drag_orig_beat,
-                    len: inter.stretch_live_len,
+                    track_index: inter.drag_live_track,
+                    beat: inter.drag_live_beat,
+                    len: clip.len,
                     is_midi: clip.is_midi,
                     color: clip.color,
                     seam_beat: clip.seam_beat,
@@ -625,6 +629,17 @@ pub fn build_clip_instances(
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
                           body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height);
+                // Contorno visível no overlay do clip arrastado
+                let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
+                let th = 2.0;
+                instances.push(RectInstance { x, y, w: draw_w, h: th, color: [border_col.0, border_col.1, border_col.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0 });
+                instances.push(RectInstance { x, y: y + m.row_height - th, w: draw_w, h: th, color: [border_col.0, border_col.1, border_col.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+                instances.push(RectInstance { x, y, w: th, h: m.row_height, color: [border_col.0, border_col.1, border_col.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+                instances.push(RectInstance { x: x + draw_w - th, y, w: th, h: m.row_height, color: [border_col.0, border_col.1, border_col.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
             }
         }
 
@@ -648,6 +663,11 @@ pub fn build_clip_instances(
                         let base = clip_color(clip, t);
                         push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
                                   body_alpha_overlay, 0.12, wave_bars, *gi, t, m.row_height);
+                        // Contorno visível
+                        let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
+                        let th = 2.0;
+                        instances.push(RectInstance { x, y, w: draw_w, h: th, color: [border_col.0, border_col.1, border_col.2, 255],
+                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0 });
                     }
                 }
             }
