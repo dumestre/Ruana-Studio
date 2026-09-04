@@ -500,7 +500,7 @@ fn push_clip(
         x: x + bw, y: y + bw,
         w: (draw_w - 2.0 * bw).max(0.0),
         h: (header_h - bw).max(0.0),
-        color: rgba(base, 255),
+        color: rgba(super::lighter(base, 0.45), 255),
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: clip_r,
     });
 
