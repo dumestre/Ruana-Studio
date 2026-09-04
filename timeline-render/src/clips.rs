@@ -173,8 +173,8 @@ pub fn build_clip_instances(
     // Parametrização de transparências do corpo do clip.
     let body_alpha_normal = 0.50;
     let body_alpha_hover = 0.32;
-    let body_alpha_ghost = 0.28;
-    let body_alpha_overlay = 0.55;
+    let body_alpha_ghost = 0.30; // fantasma na posição antiga: apagado e translúcido
+    let body_alpha_overlay = 0.28; // clip sob o mouse durante o arrasto: transparente
 
     let mut instances = Vec::new();
 
@@ -197,9 +197,10 @@ pub fn build_clip_instances(
         } else {
             body_alpha_normal
         };
+        let body_dark = if being_dragged { 0.70 } else { 0.12 };
 
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
-                  body_alpha, wave_bars, idx, t, m.row_height);
+                  body_alpha, body_dark, wave_bars, idx, t, m.row_height);
     }
 
     // Overlay: clip seguindo o mouse durante o arrasto (moved).
@@ -217,7 +218,7 @@ pub fn build_clip_instances(
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, wave_bars, idx, t, m.row_height);
+                          body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height);
             }
         }
     }
@@ -250,6 +251,7 @@ fn push_clip(
     header_h: f32,
     bw: f32,
     body_alpha: f32,
+    dark_amount: f32,
     wave_bars: &[f32],
     idx: usize,
     t: usize,
@@ -275,11 +277,11 @@ fn push_clip(
     };
     let body_h = row_height - header_h;
 
-    // Corpo (com waveform) — alpha controlado por hover/drag.
+    // Corpo (com waveform) — alpha e escurecimento controlados por hover/drag.
     instances.push(RectInstance {
         x: x + bw, y: y + header_h,
         w: w, h: body_h,
-        color: rgba_alpha(darker(base, 0.12), body_alpha),
+        color: rgba_alpha(darker(base, dark_amount), body_alpha),
         wave_offset: wo, wave_count: wc, clip_w: w, clip_h: body_h, radius: 0.0,
     });
 
