@@ -76,6 +76,7 @@ pub struct ClipInteraction {
     pub stretch_orig_len: f32,
     pub stretch_live_len: f32,
     pub seam_hover_idx: Option<usize>,
+    pub drag_group: Vec<(usize, f32, usize)>,
 }
 
 /// Estado de desenho contínuo com a ferramenta de desenho (tecla 2)
@@ -109,6 +110,7 @@ impl ClipInteraction {
             stretch_orig_len: 0.0,
             stretch_live_len: 0.0,
             seam_hover_idx: None,
+            drag_group: Vec::new(),
         }
     }
 
@@ -146,6 +148,18 @@ impl ClipInteraction {
         }
         if idx < self.selected.len() {
             self.selected[idx] = true;
+        }
+    }
+
+    /// Seleciona todos os clips da cadeia de glue (grupo).
+    pub fn select_chain(&mut self, _clips: &[ClipDemo], chain: &[usize]) {
+        for s in self.selected.iter_mut() {
+            *s = false;
+        }
+        for &i in chain {
+            if i < self.selected.len() {
+                self.selected[i] = true;
+            }
         }
     }
 
@@ -228,6 +242,52 @@ impl ClipInteraction {
         });
     }
 
+    /// Encontra todos os clips ligados por glue (seam_beat) ao clip idx,
+    /// caminhando tanto para frente quanto para trás.
+    pub fn find_group(clips: &[ClipDemo], start_idx: usize) -> Vec<usize> {
+        let mut group = vec![start_idx];
+        let track = clips[start_idx].track_index;
+
+        // Walk forward: seguir cadeias de seam_beat
+        let mut current = start_idx;
+        loop {
+            let clip = &clips[current];
+            if let Some(seam_beat) = clip.seam_beat {
+                if let Some(idx) = clips.iter().enumerate()
+                    .find(|(i, c)| c.track_index == track
+                        && !group.contains(i)
+                        && (c.beat - seam_beat).abs() < 0.01)
+                    .map(|(i, _)| i) {
+                    group.push(idx);
+                    current = idx;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        // Walk backward: encontrar clips cujo seam_beat aponta para algum membro
+        loop {
+            let target_beats: Vec<f32> = group.iter()
+                .map(|&i| clips[i].beat)
+                .collect();
+            if let Some(idx) = clips.iter().enumerate()
+                .find(|(i, c)| c.track_index == track
+                    && !group.contains(i)
+                    && c.seam_beat.map_or(false, |sb| target_beats.iter().any(|&tb| (sb - tb).abs() < 0.01)))
+                .map(|(i, _)| i) {
+                group.push(idx);
+            } else {
+                break;
+            }
+        }
+
+        group.sort();
+        group
+    }
+
     /// Inicia um possível arrasto: captura a origem e o ponto de pega.
     pub fn begin_drag(&mut self, clips: &[ClipDemo], cursor: (f32, f32), m: &ClipMetrics) -> bool {
         if let Some(idx) = self.hit_test(clips, cursor, m) {
@@ -241,6 +301,12 @@ impl ClipInteraction {
             self.drag_moved = false;
             self.stretch_mode = false;
             self.hover_idx = None;
+
+            // Detecta grupo grudado (seam) — todos os membros se movem juntos
+            let group = Self::find_group(clips, idx);
+            self.drag_group = group.iter().map(|&i| {
+                (i, clips[i].beat, clips[i].track_index)
+            }).collect();
             true
         } else {
             false
@@ -264,6 +330,7 @@ impl ClipInteraction {
                 self.stretch_orig_len = clip.len;
                 self.stretch_live_len = clip.len;
                 self.hover_idx = None;
+                self.drag_group.clear();
                 return true;
             }
         }
@@ -285,8 +352,6 @@ impl ClipInteraction {
         self.drag_moved = true;
 
         if self.stretch_mode {
-            // Stretch: mantém beat e track, varia apenas o len.
-            // Usa stretch_orig_len (não acumula stretch_live_len) para evitar drift.
             let delta_beats = dx / m.px_per_beat.max(0.001);
             let new_len = if snap {
                 (self.stretch_orig_len + delta_beats).round().max(0.25)
@@ -295,11 +360,11 @@ impl ClipInteraction {
             };
             self.stretch_live_len = new_len;
         } else {
-            let raw_beat = self.drag_orig_beat + (dx + m.scroll_x) / m.px_per_beat.max(0.001);
+            let delta_beats = dx / m.px_per_beat.max(0.001);
             let live_beat = if snap {
-                raw_beat.max(0.0).round()
+                (self.drag_orig_beat + delta_beats).max(0.0).round()
             } else {
-                raw_beat.max(0.0)
+                (self.drag_orig_beat + delta_beats).max(0.0)
             };
             self.drag_live_beat = live_beat;
 
@@ -317,8 +382,19 @@ impl ClipInteraction {
                 if self.stretch_mode {
                     clips[idx].len = self.stretch_live_len;
                 } else {
+                    // Move primary clip
                     clips[idx].beat = self.drag_live_beat;
                     clips[idx].track_index = self.drag_live_track;
+
+                    // Move todos os membros do grupo pelo mesmo delta
+                    let beat_delta = self.drag_live_beat - self.drag_orig_beat;
+                    let track_delta = self.drag_live_track as i32 - self.drag_orig_track as i32;
+                    for (gi, orig_beat, orig_track) in self.drag_group.iter() {
+                        if *gi == idx { continue; }
+                        clips[*gi].beat = (orig_beat + beat_delta).max(0.0);
+                        let new_track = (*orig_track as i32 + track_delta).clamp(0, 3) as usize;
+                        clips[*gi].track_index = new_track;
+                    }
                 }
             }
         }
@@ -327,6 +403,7 @@ impl ClipInteraction {
         self.stretch_mode = false;
         self.stretch_orig_len = 0.0;
         self.stretch_live_len = 0.0;
+        self.drag_group.clear();
     }
 
     /// Inicia o desenho contínuo com a ferramenta de desenho (tecla 2)
@@ -387,6 +464,7 @@ impl ClipInteraction {
         self.marquee_active = true;
         self.marquee_start = cursor;
         self.marquee_cur = cursor;
+        self.drag_group.clear();
     }
 
     /// Atualiza o canto atual do marquee durante o movimento.
@@ -454,7 +532,8 @@ pub fn build_clip_instances(
 
         // O clip em arrasto (com `moved`) não é desenhado na origem: em seu
         // lugar fica o fantasma translúcido; o atual segue o mouse via overlay.
-        let being_dragged = inter.drag_idx == Some(idx) && inter.drag_moved;
+        let in_group = inter.drag_group.iter().any(|(gi, _, _)| *gi == idx);
+        let being_dragged = in_group && inter.drag_moved && !inter.stretch_mode;
 
         let body_alpha = if being_dragged {
             body_alpha_ghost
@@ -546,9 +625,34 @@ pub fn build_clip_instances(
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
                           body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height);
-}
-         }
-     }
+            }
+        }
+
+        // Overlay dos membros do grupo (todos se movem juntos pelo mesmo delta)
+        if !inter.stretch_mode && inter.drag_moved && !inter.drag_group.is_empty() {
+            let beat_delta = inter.drag_live_beat - inter.drag_orig_beat;
+            let track_delta = inter.drag_live_track as i32 - inter.drag_orig_track as i32;
+            for (gi, orig_beat, orig_track) in inter.drag_group.iter() {
+                if Some(*gi) == inter.drag_idx { continue; } // primary já renderizado acima
+                if let Some(clip) = clips.get(*gi) {
+                    let live_beat = (orig_beat + beat_delta).max(0.0);
+                    let live_track = (*orig_track as i32 + track_delta).clamp(0, 3) as usize;
+                    let live = ClipDemo {
+                        track_index: live_track,
+                        beat: live_beat,
+                        ..*clip
+                    };
+                    let (x, y, w, _h) = clip_rect(&live, m);
+                    if w > 0.0 && x < width && x + w > 0.0 {
+                        let draw_w = w.min(width - x).max(0.0);
+                        let base = clip_color(clip, t);
+                        push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
+                                  body_alpha_overlay, 0.12, wave_bars, *gi, t, m.row_height);
+                    }
+                }
+            }
+        }
+    }
  
      // Desenho contínuo com a ferramenta de desenho (tecla 2)
     if let Some(draw_state) = &inter.draw_state {

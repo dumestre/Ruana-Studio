@@ -977,34 +977,40 @@ impl App {
     }
 
     /// Cola clips (ferramenta Glue — tecla 6).
-    /// Clicar num clip: estica a borda direita dele até o início do próximo
-    /// clip na mesma track, preenchendo o gap. Ambos permanecem como clips
-    /// separados, mas adjacentes (sem gap). O seam marca o ponto de encontro
-    /// para des-colagem (click sobre a linha pontilhada).
+    /// Clicar num clip: estica a borda direita dele (ou do último da cadeia)
+    /// até o início do próximo clip na mesma track, preenchendo o gap.
+    /// Ambos permanecem como clips separados, mas adjacentes (sem gap),
+    /// com a mesma cor. O seam marca o ponto de encontro para des-colagem.
+    /// Clicar de novo no mesmo clip continua a cadeia grudando no próximo.
     fn tool_glue(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-            let clip = self.clips[idx];
-            let track = clip.track_index;
+            let track = self.clips[idx].track_index;
 
-            // Próximo clip na mesma track, iniciando após o fim do atual
+            // Encontra o final da cadeia de glue (último clip com seam)
+            let chain = clips::ClipInteraction::find_group(&self.clips, idx);
+            let chain_end_idx = *chain.last().unwrap();
+
+            let end_clip = self.clips[chain_end_idx];
+            let current_end = end_clip.beat + end_clip.len;
+
             let next_idx = self.clips.iter().enumerate()
-                .filter(|(i, c)| c.track_index == track && *i != idx && c.beat >= clip.beat + clip.len)
+                .filter(|(i, c)| c.track_index == track && !chain.contains(i) && c.beat >= current_end - 0.01)
                 .min_by_key(|(_, c)| (c.beat * 1000.0) as i32)
                 .map(|(i, _)| i);
 
             if let Some(next_idx) = next_idx {
                 let next_beat = self.clips[next_idx].beat;
-                // Marca o seam na posição onde o próximo clip começa
-                self.clips[idx].seam_beat = Some(next_beat);
-                self.clips[idx].pre_glue_len = Some(clip.len);
-                // Sincroniza a cor do próximo clip com o atual + salva cor original
-                self.clips[next_idx].pre_glue_color = Some(self.clips[next_idx].color);
-                self.clips[next_idx].color = clip.color;
-                // Estica o clip atual até o início do próximo (preenchendo o gap)
-                self.clips[idx].len = (next_beat - clip.beat).max(0.25);
-                // Seleciona o clip esticado
-                self.clip_interaction.select_only(idx);
+                if self.clips[chain_end_idx].pre_glue_len.is_none() {
+                    self.clips[chain_end_idx].pre_glue_len = Some(end_clip.len);
+                }
+                self.clips[chain_end_idx].seam_beat = Some(next_beat);
+                if self.clips[next_idx].pre_glue_color.is_none() {
+                    self.clips[next_idx].pre_glue_color = Some(self.clips[next_idx].color);
+                }
+                self.clips[next_idx].color = end_clip.color;
+                self.clips[chain_end_idx].len = (next_beat - end_clip.beat).max(0.25);
+                self.clip_interaction.select_chain(&self.clips, &chain);
             }
         }
     }
@@ -1062,7 +1068,9 @@ impl App {
                         Tool::Select => {
                             if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
                                 self.clip_interaction.begin_drag(&self.clips, pos, &cm);
-                                self.clip_interaction.select_only(idx);
+                                // Seleciona todo o grupo de clips grudados
+                                let chain = clips::ClipInteraction::find_group(&self.clips, idx);
+                                self.clip_interaction.select_chain(&self.clips, &chain);
                                 self.edge_scroll_x = 0.0;
                                 self.edge_scroll_y = 0.0;
                                 self.edge_scroll_dir = 0;
