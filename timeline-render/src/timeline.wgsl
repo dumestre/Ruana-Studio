@@ -105,7 +105,21 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     // Mapeia local.x (0..1) -> índice da coluna da waveform.
-    let col_f = in.local.x * f32(wave_count);
+    // wave_info.z = largura natural da waveform (antes do stretch).
+    // Se o rect for mais largo que a natural, a waveform não estica:
+    //   - dentro da largura natural: waveform normal
+    //   - além: só corpo colorido (sem waveform)
+    let rect_w = in.size.x;
+    let natural_w = in.wave_info.z;
+    if natural_w > 0.0 && in.local.x * rect_w > natural_w {
+        return in.frag_color;
+    }
+    var col_f: f32;
+    if natural_w > 0.0 {
+        col_f = (in.local.x * rect_w / natural_w) * f32(wave_count);
+    } else {
+        col_f = in.local.x * f32(wave_count);
+    }
     let col = u32(col_f);
     if col >= wave_count {
         return in.frag_color;

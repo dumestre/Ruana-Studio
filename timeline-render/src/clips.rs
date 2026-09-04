@@ -399,6 +399,10 @@ impl ClipInteraction {
                         clips[*gi].beat = (orig_beat + beat_delta).max(0.0);
                         let new_track = (*orig_track as i32 + track_delta).clamp(0, 3) as usize;
                         clips[*gi].track_index = new_track;
+                        // Atualiza seam_beat para refletir a nova posição (seam é beat absoluto)
+                        if let Some(sb) = clips[*gi].seam_beat {
+                            clips[*gi].seam_beat = Some((sb + beat_delta).max(0.0));
+                        }
                     }
                 }
             }
@@ -550,7 +554,7 @@ pub fn build_clip_instances(
         let body_dark = if being_dragged { 0.70 } else { 0.12 };
 
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
-                  body_alpha, body_dark, wave_bars, idx, t, m.row_height);
+                  body_alpha, body_dark, wave_bars, idx, t, m.row_height, w);
 
         // Borda (raio 8) para clips selecionados: crimson no Paper, accent nos demais.
         if !being_dragged && idx < inter.selected.len() && inter.selected[idx] {
@@ -624,11 +628,16 @@ pub fn build_clip_instances(
                 }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
+            let wave_natural_w = if inter.stretch_mode {
+                inter.stretch_orig_len * m.px_per_beat.max(0.001)
+            } else {
+                w
+            };
             if w > 0.0 && x < width && x + w > 0.0 {
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height);
+                          body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height, wave_natural_w);
                 // Contorno visível no overlay do clip arrastado
                 let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
                 let th = 2.0;
@@ -662,7 +671,7 @@ pub fn build_clip_instances(
                         let draw_w = w.min(width - x).max(0.0);
                         let base = clip_color(clip, t);
                         push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                                  body_alpha_overlay, 0.12, wave_bars, *gi, t, m.row_height);
+                                  body_alpha_overlay, 0.12, wave_bars, *gi, t, m.row_height, w);
                         // Contorno visível
                         let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
                         let th = 2.0;
@@ -698,7 +707,7 @@ pub fn build_clip_instances(
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(&temp_clip, t);
                 push_clip(&mut instances, clips, &temp_clip, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, wave_bars, clips.len(), t, m.row_height);
+                          body_alpha_overlay, 0.12, wave_bars, clips.len(), t, m.row_height, w);
             }
         }
     }
@@ -782,6 +791,7 @@ fn push_clip(
     idx: usize,
     t: usize,
     row_height: f32,
+    wave_natural_w: f32,
 ) {
     // Raio leve nos cantos do clip para quebrar o visual quadrado.
     let clip_r = 6.0;
@@ -820,7 +830,7 @@ fn push_clip(
         x: x + bw, y: y + header_h,
         w: w, h: body_h,
         color: rgba_alpha(darker(base, dark_amount), body_alpha),
-        wave_offset: wo, wave_count: wc, clip_w: w, clip_h: body_h, radius: clip_r,
+        wave_offset: wo, wave_count: wc,         clip_w: wave_natural_w, clip_h: body_h, radius: clip_r,
     });
 
     // Divisória
