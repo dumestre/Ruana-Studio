@@ -965,39 +965,31 @@ impl App {
         }
     }
 
-    /// Cola clips (ferramenta Glue) - junta clip esquerdo ao direito.
+    /// Cola clips (ferramenta Glue — tecla 6).
+    /// Clicar num clip: gruda a borda direita dele na borda esquerda do
+    /// próximo clip na mesma track, esticando o atual e removendo o próximo.
     fn tool_glue(&mut self, pos: (f32, f32)) {
-        let _cm = self.clip_metrics();
-        let (beat, track) = self.cursor_to_snapped_beat_track(pos);
-        
-        // Procura clips na mesma track adjacentes ao ponto
-        let clips_on_track: Vec<usize> = self.clips.iter()
-            .enumerate()
-            .filter(|(_, c)| c.track_index == track)
-            .map(|(i, _)| i)
-            .collect();
-        
-        if clips_on_track.len() < 2 { return; }
-        
-        // Ordena por beat
-        let mut sorted = clips_on_track.clone();
-        sorted.sort_by_key(|&i| (self.clips[i].beat * 1000.0) as i32);
-        
-        // Procura par adjacente onde o ponto está entre eles
-        for window in sorted.windows(2) {
-            let left_idx = window[0];
-            let right_idx = window[1];
-            let left_end = self.clips[left_idx].beat + self.clips[left_idx].len;
-            let right_start = self.clips[right_idx].beat;
-            
-            // Se o ponto está entre o fim do esquerdo e o início do direito
-            if beat >= left_end && beat <= right_start {
-                // Estica o clip esquerdo até o início do direito
-                self.clips[left_idx].len = right_start - self.clips[left_idx].beat;
-                // Remove o clip direito
-                self.clips.remove(right_idx);
+        let cm = self.clip_metrics();
+        if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+            let clip = self.clips[idx];
+            let track = clip.track_index;
+
+            // Próximo clip na mesma track, iniciando após o fim do atual
+            let next_idx = self.clips.iter().enumerate()
+                .filter(|(i, c)| c.track_index == track && *i != idx && c.beat >= clip.beat + clip.len)
+                .min_by_key(|(_, c)| (c.beat * 1000.0) as i32)
+                .map(|(i, _)| i);
+
+            if let Some(next_idx) = next_idx {
+                let next_beat = self.clips[next_idx].beat;
+                // Estica o clip atual até o início do próximo
+                self.clips[idx].len = (next_beat - clip.beat).max(0.25);
+                // Remove o próximo (junta os dois)
+                self.clips.remove(next_idx);
                 self.clip_interaction.sync_selection(self.clips.len());
-                return;
+                // Ajusta índice de seleção após remoção
+                let sel = if next_idx > idx { idx } else { idx.saturating_sub(1) };
+                self.clip_interaction.select_only(sel.min(self.clips.len().saturating_sub(1)));
             }
         }
     }
@@ -1210,13 +1202,9 @@ impl App {
         //   x = live_beat * px_per_beat - scroll_x
         // Se aumentamos scroll_x em `dx`, precisamos aumentar live_beat em
         // `dx / px_per_beat` para manter a mesma posição na tela.
-        if self.clip_interaction.is_dragging() {
+        if self.clip_interaction.is_dragging() && !self.clip_interaction.is_stretching() {
             let pps = self.px_per_beat.max(0.001);
-            if self.clip_interaction.is_stretching() {
-                self.clip_interaction.stretch_live_len += dx / pps;
-            } else {
-                self.clip_interaction.drag_live_beat += dx / pps;
-            }
+            self.clip_interaction.drag_live_beat += dx / pps;
         }
     }
 

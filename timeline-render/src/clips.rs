@@ -70,6 +70,7 @@ pub struct ClipInteraction {
     pub draw_state: Option<DrawToolState>,
     pub stretch_edge_idx: Option<usize>,
     pub stretch_mode: bool,
+    pub stretch_orig_len: f32,
     pub stretch_live_len: f32,
 }
 
@@ -101,6 +102,7 @@ impl ClipInteraction {
             draw_state: None,
             stretch_edge_idx: None,
             stretch_mode: false,
+            stretch_orig_len: 0.0,
             stretch_live_len: 0.0,
         }
     }
@@ -208,6 +210,7 @@ impl ClipInteraction {
                 self.drag_live_track = clip.track_index;
                 self.drag_moved = false;
                 self.stretch_mode = true;
+                self.stretch_orig_len = clip.len;
                 self.stretch_live_len = clip.len;
                 self.hover_idx = None;
                 return true;
@@ -232,11 +235,12 @@ impl ClipInteraction {
 
         if self.stretch_mode {
             // Stretch: mantém beat e track, varia apenas o len.
+            // Usa stretch_orig_len (não acumula stretch_live_len) para evitar drift.
             let delta_beats = dx / m.px_per_beat.max(0.001);
             let new_len = if snap {
-                (self.stretch_live_len + delta_beats).round().max(0.25)
+                (self.stretch_orig_len + delta_beats).round().max(0.25)
             } else {
-                (self.stretch_live_len + delta_beats).max(0.25)
+                (self.stretch_orig_len + delta_beats).max(0.25)
             };
             self.stretch_live_len = new_len;
         } else {
@@ -270,6 +274,8 @@ impl ClipInteraction {
         self.drag_idx = None;
         self.drag_moved = false;
         self.stretch_mode = false;
+        self.stretch_orig_len = 0.0;
+        self.stretch_live_len = 0.0;
     }
 
     /// Inicia o desenho contínuo com a ferramenta de desenho (tecla 2)
