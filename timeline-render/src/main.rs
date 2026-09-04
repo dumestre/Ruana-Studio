@@ -395,6 +395,8 @@ struct App {
     edge_scroll_x: f32, // velocidade px/frame (0 = desativado)
     edge_scroll_y: f32, // velocidade px/frame (0 = desativado)
     edge_scroll_dir: i32, // -1 = esquerda/cima, +1 = direita/baixo, 0 = nenhuma
+    bpm: f32,
+    time_ruler_h: f32,
 }
 
 impl App {
@@ -625,6 +627,8 @@ impl App {
             edge_scroll_x: 0.0,
             edge_scroll_y: 0.0,
             edge_scroll_dir: 0,
+            bpm: 120.0,
+            time_ruler_h: 30.0,
         })
     }
 
@@ -681,7 +685,7 @@ impl App {
         let row_height = 64.0 * self.zoom_y.max(0.001);
         let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
         let content_h = (max_track as f32 + 1.0) * row_height;
-        let view_h = (height - self.ruler_px).max(0.0);
+        let view_h = (height - self.ruler_px - self.time_ruler_h).max(0.0);
         if content_h <= view_h {
             self.scroll_y = 0.0;
         } else {
@@ -702,9 +706,8 @@ impl App {
     }
 
     fn set_playhead_from_x(&mut self, mx: f32) {
-        let bpm = 120.0;
+        let bpm = self.bpm;
         let pps = self.px_per_beat * bpm / 60.0;
-        if pps <= 0.0 { return; }
         self.transport_seconds = ((mx + self.scroll_x) / pps).max(0.0);
     }
 
@@ -1241,7 +1244,7 @@ impl App {
         // Fundo geral - cobre desde a régua até o fundo
         instances.push(RectInstance {
             x: 0.0, y: self.ruler_px,
-            w: width, h: (height - self.ruler_px).max(0.0),
+            w: width, h: (height - self.ruler_px - self.time_ruler_h).max(0.0),
             color: rgba(palette::TIMELINE_BG[t], 255),
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
@@ -1282,7 +1285,7 @@ impl App {
                 palette::SURFACE_STEP[t]
             };
             let bw = px_per_bar;
-            let bh = (height - self.ruler_px).max(0.0); // corpo abaixo da régua
+            let bh = (height - self.ruler_px - self.time_ruler_h).max(0.0); // corpo abaixo da régua
             if bw > 0.0 && bh > 0.0 {
                 instances.push(RectInstance {
                     x: bx, y: self.ruler_px - self.scroll_y, w: bw, h: bh,
@@ -1507,7 +1510,7 @@ impl App {
         });
 
         // Playhead — sempre visível; para de avançar quando pausado.
-        let bpm = 120.0;
+        let bpm = self.bpm;
         let pixels_per_second = self.px_per_beat * bpm / 60.0;
         let head_x = self.transport_seconds * pixels_per_second - self.scroll_x;
             instances.push(RectInstance {
@@ -1538,7 +1541,7 @@ impl App {
             let lw = (ex - sx).max(0.0);
             let bw = 6.0; // grossura das bordas laterais (alças)
             let body_top = self.ruler_px;
-            let body_h = (height - self.ruler_px).max(0.0);
+        let body_h = (height - self.ruler_px - self.time_ruler_h).max(0.0);
 
             if lw > 0.0 {
                 // Centro que desce toda a timeline — mais translúcido ainda.
@@ -1595,15 +1598,111 @@ impl App {
                 let col = if t == 6 { (0xDC, 0x14, 0x3C) } else { palette::ACCENT[t] };
                 instances.push(RectInstance {
                     x: cx - 1.0, y: self.ruler_px,
-                    w: 2.0, h: (height - self.ruler_px).max(0.0),
+                    w: 2.0, h: (height - self.ruler_px - self.time_ruler_h).max(0.0),
                     color: [col.0, col.1, col.2, 180],
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });
             }
         }
 
+        // =====================================================================
+        // Time ruler fixo na parte inferior — mostra tempo em s:ms
+        // (não recebe scroll_y, sempre visível na bottom da janela)
+        // =====================================================================
+        let tr_h = self.time_ruler_h;
+        let tr_y = height - tr_h;
+        let tr_bg = palette::SURFACE_HIGH[t];
+        let tr_border = palette::BASE[t];
+
+        // Fundo da time ruler
+        instances.push(RectInstance {
+            x: 0.0, y: tr_y, w: width, h: tr_h,
+            color: [tr_bg.0, tr_bg.1, tr_bg.2, 255],
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+        });
+
+        // Linha separadora superior da time ruler
+        instances.push(RectInstance {
+            x: 0.0, y: tr_y, w: width, h: 1.0,
+            color: [tr_border.0, tr_border.1, tr_border.2, 255],
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+        });
+
+        // Time ruler: marcas de tempo em segundos
+        let bpm = self.bpm;
+        let pixels_per_second = self.px_per_beat * bpm / 60.0;
+        if pixels_per_second > 0.0 {
+            // Escala: escolhe a granularidade baseada no zoom
+            // Se < 30px por segundo, marca a cada 1s; se < 60px, a cada 5s; etc.
+            let px_per_sec = pixels_per_second;
+            let step_seconds: f32 = if px_per_sec < 30.0 { 1.0 }
+                else if px_per_sec < 60.0 { 5.0 }
+                else if px_per_sec < 120.0 { 10.0 }
+                else { 30.0 };
+
+            // Começa do primeiro segundo visível
+            let start_sec = (self.scroll_x / pixels_per_second).floor();
+            let end_sec = ((self.scroll_x + width) / pixels_per_second).ceil();
+
+            let mut sec = start_sec;
+            while sec <= end_sec {
+                let x = sec * pixels_per_second - self.scroll_x;
+                if x >= -20.0 && x <= width + 20.0 {
+                    // Linha vertical leve
+                    instances.push(RectInstance {
+                        x, y: tr_y + 4.0, w: 1.0, h: tr_h - 6.0,
+                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 100],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                    // Texto do tempo (s:ms)
+                    let total_ms = (sec * 1000.0) as i64;
+                    let s = total_ms / 1000;
+                    let ms = total_ms % 1000;
+                    let time_str = format!("{}:{:03}", s, ms);
+                    let text_col = rgba(palette::TEXT_PRIMARY[t], 200);
+                    instances.extend(build_text_instances(&time_str, x + 2.0, tr_y + 8.0, text_col));
+                }
+                sec += step_seconds;
+            }
+        }
+
+        // Indicador do playhead na time ruler (círculo + linha)
+        let head_x = self.transport_seconds * pixels_per_second - self.scroll_x;
+        if head_x >= -20.0 && head_x <= width + 20.0 {
+            let col = palette::PLAYHEAD_COLOR;
+            // Linha vertical fina na time ruler
+            instances.push(RectInstance {
+                x: head_x - 0.5, y: tr_y,
+                w: 1.0, h: tr_h,
+                color: [col.0, col.1, col.2, 120],
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            });
+            // Bolinha indicando o tempo atual
+            instances.push(RectInstance {
+                x: head_x - 5.0, y: tr_y + tr_h / 2.0 - 5.0,
+                w: 10.0, h: 10.0,
+                color: [col.0, col.1, col.2, 255],
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 5.0,
+            });
+            // Texto do tempo atual
+            let total_ms = (self.transport_seconds * 1000.0) as i64;
+            let cur_s = total_ms / 1000;
+            let cur_ms = total_ms % 1000;
+            let cur_str = format!("{:02}:{:03}", cur_s, cur_ms);
+            let cur_col = rgba((0xFF, 0xFF, 0xFF), 255);
+            instances.extend(build_text_instances(&cur_str, head_x + 8.0, tr_y + 8.0, cur_col));
+        }
+
+        // Borda inferior da time ruler
+        instances.push(RectInstance {
+            x: 0.0, y: tr_y + tr_h - 1.0, w: width, h: 1.0,
+            color: [tr_border.0, tr_border.1, tr_border.2, 255],
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+        });
+
         instances
     }
+
     fn render(&mut self) {
         let size = self.size;
         if size.width == 0 || size.height == 0 {
@@ -1839,7 +1938,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                         }
                         Key::Character(ref s) if s.eq_ignore_ascii_case("v") => {
                             // Cola na posição do playhead (com snap) na track do primeiro clip selecionado ou 0
-                            let bpm = 120.0;
+                            let bpm = app.bpm;
                             let pps = app.px_per_beat * bpm / 60.0;
                             let target_beat = if pps > 0.0 {
                                 app.transport_seconds * bpm / 60.0
