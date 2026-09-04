@@ -17,6 +17,7 @@ pub enum Tool {
 }
 
 impl Tool {
+    #[allow(dead_code)]
     pub fn from_index(index: usize) -> Option<Self> {
         match index {
             0 => Some(Tool::Select),
@@ -51,6 +52,7 @@ impl Tool {
         }
     }
 
+    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             Tool::Select => "Select",
@@ -190,6 +192,7 @@ impl ToolManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn reset_to_default(&self) {
         let default = unsafe { LoadCursorW(core::ptr::null_mut(), IDC_ARROW as usize as *const u16) };
         if !default.is_null() {
