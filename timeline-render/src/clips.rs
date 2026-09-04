@@ -570,9 +570,17 @@ pub fn build_clip_instances(
         let in_group = inter.drag_group.iter().any(|(gi, _, _)| *gi == idx);
         let being_dragged = in_group && inter.drag_moved && !inter.stretch_mode;
 
+        // Checa se o clip está dentro do marquee ativo (real-time feedback)
+        let in_marquee = if inter.marquee_active {
+            let (mx, my, mw, mh) = inter.marquee_rect();
+            x < mx + mw && x + w > mx && y < my + mh && (y + m.row_height) > my
+        } else {
+            false
+        };
+
         let body_alpha = if being_dragged {
             body_alpha_ghost
-        } else if inter.hover_idx == Some(idx) {
+        } else if inter.hover_idx == Some(idx) || in_marquee {
             body_alpha_hover
         } else {
             body_alpha_normal
@@ -582,8 +590,8 @@ pub fn build_clip_instances(
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
                   body_alpha, body_dark, wave_bars, idx, t, m.row_height, w);
 
-        // Borda (raio 8) para clips selecionados: crimson no Paper, accent nos demais.
-        if !being_dragged && idx < inter.selected.len() && inter.selected[idx] {
+        // Borda (raio 8) para clips selecionados ou dentro do marquee ativo.
+        if !being_dragged && (idx < inter.selected.len() && inter.selected[idx] || in_marquee) {
             let col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
             let ac = [col.0, col.1, col.2, 255];
             let r = 8.0;
