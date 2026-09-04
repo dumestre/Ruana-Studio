@@ -33,6 +33,13 @@ use shctx::SHADER_WGSL;
 pub mod palette {
     pub type Rgb = (u8, u8, u8);
 
+    // Theme.base — cor usada para o grid da régua e da timeline.
+    pub const BASE: [Rgb; 7] = [
+        (0x31, 0x31, 0x31), (0x16, 0x1A, 0x21), (0x19, 0x17, 0x22),
+        (0x14, 0x16, 0x0E), (0x21, 0x1A, 0x12), (0x0F, 0x1E, 0x21),
+        (0x64, 0x64, 0x64),
+    ];
+
     pub const SURFACE_HIGH: [Rgb; 7] = [
         (0x55, 0x55, 0x55), (0x26, 0x30, 0x3D), (0x2D, 0x27, 0x40),
         (0x26, 0x2A, 0x1D), (0x36, 0x2A, 0x1B), (0x1E, 0x30, 0x35),
@@ -704,7 +711,7 @@ impl App {
             let bar_a = if i % 2 == 1 { 255 } else { 140 };
             instances.push(RectInstance {
                 x: bx, y: body_top, w: 1.0, h: body_h,
-                color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, bar_a],
+                color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, bar_a],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
 
@@ -719,7 +726,7 @@ impl App {
                     if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 70],
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 70],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
@@ -733,7 +740,7 @@ impl App {
                     if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 90],
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 90],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
@@ -747,7 +754,7 @@ impl App {
                     if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 110],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
@@ -761,7 +768,7 @@ impl App {
                     if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 130],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
@@ -775,7 +782,7 @@ impl App {
                     if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 150],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
@@ -872,7 +879,7 @@ impl App {
             // Linha vertical do compasso (1px, altura cheia da régua)
             instances.push(RectInstance {
                 x: bx, y: 0.0, w: 1.0, h: ruler_h,
-                color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 255],
+                color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
             let beat_px = px_per_bar / 4.0;
@@ -883,7 +890,7 @@ impl App {
                 if px_per_bar >= 40.0 {
                     instances.push(RectInstance {
                         x, y: 2.0, w: 1.0, h: ruler_h - 2.0,
-                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 150],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
@@ -898,7 +905,7 @@ impl App {
                     if x8 <= 0.0 || x8 > width { continue; }
                     instances.push(RectInstance {
                         x: x8, y: ruler_h - 8.0, w: 1.0, h: 8.0,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 130],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
@@ -912,7 +919,7 @@ impl App {
                     if x16 <= 0.0 || x16 > width { continue; }
                     instances.push(RectInstance {
                         x: x16, y: ruler_h - 6.0, w: 1.0, h: 6.0,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 110],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
