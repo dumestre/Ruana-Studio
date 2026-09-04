@@ -587,13 +587,24 @@ impl App {
             winit::event::MouseScrollDelta::LineDelta(x, y) => (x * 40.0, y * 40.0),
             winit::event::MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
         };
+        let (mx, my) = self.last_cursor;
 
         if with_ctrl && dy.abs() >= 1.0 {
-            // Ctrl + scroll — zoom horizontal.
-            self.px_per_beat = (self.px_per_beat + dy * 0.05).clamp(8.0, 640.0);
+            // Zoom horizontal — mantém o ponto sob o cursor fixo.
+            let old_px = self.px_per_beat;
+            let new_px = (old_px + dy * 0.05).clamp(8.0, 640.0);
+            // Beat sob o cursor antes do zoom.
+            let beat_under = (mx + self.scroll_x) / old_px.max(0.01);
+            self.px_per_beat = new_px;
+            self.scroll_x = (beat_under * new_px - mx).max(0.0);
         } else if with_alt && dy.abs() >= 1.0 {
-            // Alt + scroll — zoom vertical (altura das faixas).
-            self.zoom_y = (self.zoom_y + dy * 0.01).clamp(0.25, 6.0);
+            // Zoom vertical — mantém a linha sob o cursor fixa.
+            let old_zy = self.zoom_y;
+            let new_zy = (old_zy + dy * 0.01).clamp(0.25, 6.0);
+            // Linha sob o cursor antes do zoom (base 40px).
+            let row_under = (my - self.ruler_px + self.scroll_y) / (40.0 * old_zy.max(0.01)).max(0.01);
+            self.zoom_y = new_zy;
+            self.scroll_y = (row_under * 40.0 * new_zy - (my - self.ruler_px)).max(0.0);
         } else {
             // Scroll pelos eixos reais do delta: x → horizontal, y → vertical.
             self.scroll_x = (self.scroll_x - dx).max(0.0);
@@ -673,38 +684,29 @@ impl App {
                 palette::SURFACE_STEP[t]
             };
             let bw = px_per_bar;
-            let bh = height; // altura total da timeline
+            let bh = (height - self.ruler_px).max(0.0); // corpo abaixo da régua
             if bw > 0.0 && bh > 0.0 {
                 instances.push(RectInstance {
-                    x: bx, y: 0.0, w: bw, h: bh,
+                    x: bx, y: self.ruler_px - self.scroll_y, w: bw, h: bh,
                     color: [bg.0, bg.1, bg.2, 255],
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });
             }
         }
 
-        // Grid
+        // Grid do corpo (abaixo da régua) — rola verticalmente com scroll_y,
+        // enquanto a régua permanece fixa no topo.
+        let body_top = self.ruler_px - self.scroll_y;
+        let body_h = (height - self.ruler_px).max(0.0);
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
             if bx > width || bx < -px_per_bar { continue; }
             let bar_a = if i % 2 == 1 { 255 } else { 140 };
             instances.push(RectInstance {
-                x: bx, y: 0.0, w: 1.0, h: height,
+                x: bx, y: body_top, w: 1.0, h: body_h,
                 color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, bar_a],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
-
-            // Número do compasso na régua (proximos da linha da régua, não no meio da barra)
-            let ruler_text_color = if i % 2 == 0 {
-                rgba(palette::TEXT_PRIMARY[t], 220)
-            } else {
-                rgba(palette::TEXT_DIM[t], 220)
-            };
-            if bx > -px_per_bar * 0.5 && bx < width {
-                // Position number at grid line start (x=0 relative to bar), not centered.
-                // bx + 4.0 centers the 8px-char text ~4px right of grid line = "colado no grid".
-                instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color));
-            }
 
             let beat_px = px_per_bar / 4.0;
             for k in 0..4 {
@@ -712,8 +714,7 @@ impl App {
                 if x <= 0.0 || x > width { continue; }
                 if px_per_bar >= 40.0 {
                     instances.push(RectInstance {
-                        x, y: self.ruler_px, w: 1.0,
-                        h: height - self.ruler_px,
+                        x, y: body_top, w: 1.0, h: body_h,
                         color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
@@ -722,8 +723,7 @@ impl App {
                 if px_per_bar >= 120.0 {
                     let x8 = x + beat_px * 0.5;
                     instances.push(RectInstance {
-                        x: x8, y: self.ruler_px, w: 1.0,
-                        h: height - self.ruler_px,
+                        x: x8, y: body_top, w: 1.0, h: body_h,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
@@ -733,14 +733,12 @@ impl App {
                     let x16a = x + beat_px * 0.25;
                     let x16b = x + beat_px * 0.75;
                     instances.push(RectInstance {
-                        x: x16a, y: self.ruler_px, w: 1.0,
-                        h: height - self.ruler_px,
+                        x: x16a, y: body_top, w: 1.0, h: body_h,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                     instances.push(RectInstance {
-                        x: x16b, y: self.ruler_px, w: 1.0,
-                        h: height - self.ruler_px,
+                        x: x16b, y: body_top, w: 1.0, h: body_h,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
@@ -751,8 +749,7 @@ impl App {
                     for s in 0..3 {
                         let xs = x + sixteenth_px * (s as f32 + 0.5);
                         instances.push(RectInstance {
-                            x: xs, y: self.ruler_px, w: 1.0,
-                            h: height - self.ruler_px,
+                            x: xs, y: body_top, w: 1.0, h: body_h,
                             color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 90],
                             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                         });
@@ -764,12 +761,76 @@ impl App {
                     for s in 0..7 {
                         let xs = x + thirtysecond_px * (s as f32 + 0.5);
                         instances.push(RectInstance {
-                            x: xs, y: self.ruler_px, w: 1.0,
-                            h: height - self.ruler_px,
+                            x: xs, y: body_top, w: 1.0, h: body_h,
                             color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 70],
                             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                         });
                     }
+                }
+            }
+        }
+
+        // Régua fixa no topo — desenhada por último (por cima do grid).
+        // Com fundo próprio + linhas de escala (compasso, batida e subdivisões).
+        let ruler_h = self.ruler_px;
+        instances.push(RectInstance {
+            x: 0.0, y: 0.0, w: width, h: ruler_h,
+            color: rgba(palette::SURFACE_HIGH[t], 255),
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+        });
+        for i in 0..total_bars {
+            let bx = i as f32 * px_per_bar - self.scroll_x;
+            if bx > width || bx < -px_per_bar { continue; }
+            // Número do compasso
+            let ruler_text_color = if i % 2 == 0 {
+                rgba(palette::TEXT_PRIMARY[t], 220)
+            } else {
+                rgba(palette::TEXT_DIM[t], 220)
+            };
+            if bx > -px_per_bar * 0.5 && bx < width {
+                instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color));
+            }
+            // Linha vertical do compasso (1px, altura cheia da régua)
+            instances.push(RectInstance {
+                x: bx, y: 0.0, w: 1.0, h: ruler_h,
+                color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 255],
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            });
+            let beat_px = px_per_bar / 4.0;
+            for k in 0..4 {
+                let x = bx + k as f32 * beat_px;
+                if x <= 0.0 || x > width { continue; }
+                // Linhas de batida (quando px_per_bar >= 40)
+                if px_per_bar >= 40.0 {
+                    instances.push(RectInstance {
+                        x, y: 2.0, w: 1.0, h: ruler_h - 2.0,
+                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+                // Subdivisões 1/8 (quando px_per_bar >= 120) — tiques menores no baixo
+                if px_per_bar >= 120.0 {
+                    let x8 = x + beat_px * 0.5;
+                    instances.push(RectInstance {
+                        x: x8, y: ruler_h - 8.0, w: 1.0, h: 8.0,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+                // Subdivisões 1/16 (quando px_per_bar >= 240) — tiques ainda menores
+                if px_per_bar >= 240.0 {
+                    let x16a = x + beat_px * 0.25;
+                    let x16b = x + beat_px * 0.75;
+                    instances.push(RectInstance {
+                        x: x16a, y: ruler_h - 6.0, w: 1.0, h: 6.0,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                    instances.push(RectInstance {
+                        x: x16b, y: ruler_h - 6.0, w: 1.0, h: 6.0,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
                 }
             }
         }
@@ -901,8 +962,8 @@ impl App {
         let uniform_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("uniforms"),
             contents: bytemuck::cast_slice(&OrthoCamera {
-                scroll_x: self.scroll_x,
-                scroll_y: self.scroll_y,
+                scroll_x: 0.0,
+                scroll_y: 0.0,
                 viewport_w: width.max(1.0),
                 viewport_h: height.max(1.0),
             }.proj()),
