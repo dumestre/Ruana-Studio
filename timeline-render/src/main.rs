@@ -13,7 +13,10 @@
 //!   - ESC:                               fecha
 //!   - Resize:                            redimensiona o canvas
 
+mod clips;
 mod shctx;
+
+use clips::ClipDemo;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -93,8 +96,8 @@ pub mod palette {
     pub const PLAYHEAD_COLOR: Rgb = (0xDC, 0x14, 0x3C);
 }
 
-fn rgba((r, g, b): palette::Rgb, a: u8) -> [u8; 4] { [r, g, b, a] }
-fn darker((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
+pub(crate) fn rgba((r, g, b): palette::Rgb, a: u8) -> [u8; 4] { [r, g, b, a] }
+pub(crate) fn darker((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
     let f = (1.0 - amount).max(0.0);
     (
         (r as f32 * f).round() as u8,
@@ -102,7 +105,7 @@ fn darker((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
         (b as f32 * f).round() as u8,
     )
 }
-fn rgba_alpha((r, g, b): palette::Rgb, alpha: f32) -> [u8; 4] {
+pub(crate) fn rgba_alpha((r, g, b): palette::Rgb, alpha: f32) -> [u8; 4] {
     let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
     [r, g, b, a]
 }
@@ -324,14 +327,6 @@ impl OrthoCamera {
 // Dados demo
 // ============================================================================
 
-struct ClipDemo {
-    track_index: usize,
-    beat: f32,
-    len: f32,
-    is_midi: bool,
-    color: usize,
-}
-
 // ============================================================================
 // App
 // ============================================================================
@@ -363,6 +358,7 @@ struct App {
 
     wave_bars: Vec<f32>,
     clips: Vec<ClipDemo>,
+    clip_interaction: clips::ClipInteraction,
 }
 
 impl App {
@@ -581,6 +577,7 @@ impl App {
 
             wave_bars,
             clips,
+            clip_interaction: clips::ClipInteraction::new(),
         })
     }
 
@@ -657,11 +654,49 @@ impl App {
         }
     }
 
+    fn clip_metrics(&self) -> clips::ClipMetrics {
+        clips::ClipMetrics {
+            px_per_beat: self.px_per_beat,
+            row_height: 40.0 * self.zoom_y.max(0.001),
+            scroll_x: self.scroll_x,
+            scroll_y: self.scroll_y,
+            ruler_px: self.ruler_px,
+            theme: self.theme.clamp(0, 6) as usize,
+        }
+    }
+
+    fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
+        let cm = self.clip_metrics();
+        match state {
+            ElementState::Pressed => {
+                // Se clicou em cima de um clip, inicia o possível arrasto;
+                // senão, deixa o ponteiro agir normalmente (scrub da régua).
+                if !self.clip_interaction.begin_drag(&self.clips, pos, &cm) {
+                    self.handle_ruler_click(state, pos, self.ruler_px);
+                }
+            }
+            ElementState::Released => {
+                if self.clip_interaction.is_dragging() {
+                    let snap = true;
+                    let cm = self.clip_metrics();
+                    self.clip_interaction.end_drag(&mut self.clips, &cm, snap);
+                } else {
+                    self.handle_ruler_click(state, pos, self.ruler_px);
+                }
+            }
+        }
+    }
+
     fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
-        if self.scrubbing {
+        let cm = self.clip_metrics();
+        if self.clip_interaction.is_dragging() {
+            let snap = true;
+            self.clip_interaction.drag_move(pos, &cm, snap);
+        } else if self.scrubbing {
             self.set_playhead_from_x(pos.0);
         }
-        if self.panning && !self.scrubbing {
+        self.clip_interaction.update_hover(&self.clips, pos, &cm);
+        if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
@@ -821,70 +856,22 @@ impl App {
         // Régua fixa no topo — será desenhada por cima dos clips mais adiante.
         let ruler_h = self.ruler_px;
 
-        // Clips
-        let header_h = 16.0;
-        let bw = 1.0;
-        for (idx, clip) in self.clips.iter().enumerate() {
-            let base = if clip.color == 0 {
-                if clip.is_midi { palette::CLIP_MIDI_DEFAULT[t] } else { palette::CLIP_AUDIO_DEFAULT }
-            } else {
-                palette::CLIP_PALETTE[clip.color % palette::CLIP_PALETTE.len()]
-            };
-
-            let x = clip.beat * self.px_per_beat - self.scroll_x;
-            let w = (clip.len * self.px_per_beat).max(40.0);
-            let y = self.ruler_px + clip.track_index as f32 * row_height - self.scroll_y;
-
-            if w <= 0.0 || x + w < 0.0 || x > width { continue; }
-            let draw_w = w.min(width - x).max(0.0);
-
-            // Header
-            instances.push(RectInstance {
-                x: x + bw, y: y + bw,
-                w: (draw_w - 2.0 * bw).max(0.0),
-                h: (header_h - bw).max(0.0),
-                color: rgba(base, 255),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-            });
-
-            // Corpo (com waveform simulado)
-            let body_h = row_height - header_h;
-            let body_w = w;
-            let wave_info_idx = self.clips[..idx].iter().position(|c| !c.is_midi && c.track_index == clip.track_index);
-            let (wo, wc) = if clip.is_midi {
-                (0u32, 0u32)
-            } else {
-                // Cada clip de áudio usa as barras acumuladas em wave_bars
-                let bar_idx = self.clips[..idx].iter().filter(|c| !c.is_midi).count();
-                let offset = bar_idx as u32 * 2;
-                let total = self.wave_bars.len() as u32 / 2;
-                (offset, total)
-            };
-            let _ = (wave_info_idx, body_h, body_w, wo, wc);
-
-            instances.push(RectInstance {
-                x: x + bw, y: y + header_h,
-                w: body_w, h: body_h,
-                color: rgba_alpha(darker(base, 0.12), 0.50),
-                wave_offset: wo, wave_count: wc, clip_w: body_w, clip_h: body_h, radius: 0.0,
-            });
-
-            // Divisória
-            instances.push(RectInstance {
-                x: x + bw, y: y + header_h - 1.0,
-                w: (draw_w - 2.0 * bw).max(0.0), h: 1.0,
-                color: rgba(darker(base, 0.18), 255),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-            });
-
-            // Indicador direito
-            instances.push(RectInstance {
-                x: x + draw_w - bw - 6.0, y: y + 5.0,
-                w: 3.0, h: 8.0,
-                color: rgba(palette::TEXT_PRIMARY[t.clamp(0, 6)], 255),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-            });
-        }
+        // Clips (hover/drag/fantasma + overlay) — módulo clips
+        let cm = clips::ClipMetrics {
+            px_per_beat: self.px_per_beat,
+            row_height,
+            scroll_x: self.scroll_x,
+            scroll_y: self.scroll_y,
+            ruler_px: self.ruler_px,
+            theme: t,
+        };
+        instances.extend(clips::build_clip_instances(
+            &self.clips,
+            &self.clip_interaction,
+            &cm,
+            &self.wave_bars,
+            width,
+        ));
 
         // Régua fixa no topo — desenhada por cima do grid e dos clips
         // (cobre qualquer track que role por baixo dela).
@@ -1207,7 +1194,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                     let pos = Some(app.last_cursor);
                     app.handle_mouse_button(state, pos);
                 } else if button == winit::event::MouseButton::Left {
-                    app.handle_ruler_click(state, app.last_cursor, app.ruler_px);
+                    app.handle_primary_button(state, app.last_cursor);
                 }
                 app.window.request_redraw();
             }
@@ -1217,7 +1204,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                 ..
             } => {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
-                if app.scrubbing {
+                if app.scrubbing || app.clip_interaction.is_dragging() || app.clip_interaction.hover_idx.is_some() {
                     app.window.request_redraw();
                 }
             }
