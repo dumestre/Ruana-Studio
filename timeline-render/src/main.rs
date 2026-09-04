@@ -392,11 +392,12 @@ struct App {
     // Quando o cursor se aproxima de uma borda durante um arrasto ativo,
     // a viewport rola suavemente nessa direção para permitir arrastar
     // clips para fora da área visível.
-    edge_scroll_x: f32, // velocidade px/frame (0 = desativado)
+     edge_scroll_x: f32, // velocidade px/frame (0 = desativado)
     edge_scroll_y: f32, // velocidade px/frame (0 = desativado)
     edge_scroll_dir: i32, // -1 = esquerda/cima, +1 = direita/baixo, 0 = nenhuma
     bpm: f32,
     time_ruler_h: f32,
+    follow_playhead: bool,
 }
 
 impl App {
@@ -629,6 +630,7 @@ impl App {
             edge_scroll_dir: 0,
             bpm: 120.0,
             time_ruler_h: 30.0,
+            follow_playhead: false,
         })
     }
 
@@ -1521,6 +1523,13 @@ impl App {
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
 
+        // Indicador de follow playhead (canto superior direito)
+        if self.follow_playhead {
+            let px = width - 120.0;
+            let py = 2.0;
+            instances.extend(build_text_instances("FOLLOW", px, py, rgba(palette::ACCENT[t], 255)));
+        }
+
         // Playhead — sempre visível; para de avançar quando pausado.
         let bpm = self.bpm;
         let pixels_per_second = self.px_per_beat * bpm / 60.0;
@@ -1818,6 +1827,22 @@ impl App {
         let dt = self.last_play_head_update.elapsed().as_secs_f32();
         self.last_play_head_update = Instant::now();
         self.transport_seconds += dt;
+
+        // Follow playhead: mantém o playhead no centro da tela rolando a timeline.
+        // Só ativa quando o playhead atinge o centro — antes disso, o usuário
+        // pode posicionar o scroll manualmente para trás.
+        if self.follow_playhead {
+            let pps = self.px_per_beat * self.bpm / 60.0;
+            if pps > 0.0 {
+                let head_x = self.transport_seconds * pps - self.scroll_x;
+                let center = self.size.width as f32 / 2.0;
+                // Se o playhead passou do centro, rola a timeline para segui-lo
+                if head_x >= center {
+                    let target_scroll = self.transport_seconds * pps - center;
+                    self.scroll_x = target_scroll.max(0.0);
+                }
+            }
+        }
     }
 }
 
@@ -1924,9 +1949,13 @@ impl winit::application::ApplicationHandler for AppHandler {
                 if pressed && vk == Key::Named(NamedKey::Escape) {
                     event_loop.exit();
                 }
-                // F: foca o clip sob o cursor (alterna com o estado anterior).
+                // F: foca o clip sob o cursor; Ctrl+F: toggle follow playhead.
                 if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("f")) {
-                    app.toggle_clip_focus(app.size.width as f32);
+                    if self.ctrl_pressed {
+                        app.follow_playhead = !app.follow_playhead;
+                    } else {
+                        app.toggle_clip_focus(app.size.width as f32);
+                    }
                     app.window.request_redraw();
                 }
                 // Tool switching keys (1-6)
