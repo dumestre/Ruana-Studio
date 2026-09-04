@@ -1131,7 +1131,7 @@ impl App {
         // + centro translúcido descendo por toda a timeline.
         if self.loop_enabled {
             let r: (u8, u8, u8) = (0xA5, 0x4D, 0xFF); // roxo do loop
-            let border = [r.0, r.1, r.2, 150]; // bordas de ajuste: meio translúcido
+            let border = [r.0, r.1, r.2, 255]; // bordas de ajuste (palitos): opacas
             let fill_ruler = [r.0, r.1, r.2, 130]; // régua: pouco translúcido
             let fill_body = [r.0, r.1, r.2, 70]; // timeline: mais translúcido ainda
             let sx = self.beat_to_x(self.loop_start_beat);
