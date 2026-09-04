@@ -885,11 +885,7 @@ impl App {
             let bx = i as f32 * px_per_bar - self.scroll_x;
             if bx > width || bx < -px_per_bar { continue; }
             // Número do compasso
-            let ruler_text_color = if i % 2 == 0 {
-                rgba(palette::TEXT_PRIMARY[t], 220)
-            } else {
-                rgba(palette::TEXT_DIM[t], 220)
-            };
+            let ruler_text_color = rgba(palette::TEXT_PRIMARY[t], 220);
             if bx > -px_per_bar * 0.5 && bx < width {
                 instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color));
             }
@@ -942,6 +938,12 @@ impl App {
                 }
             }
         }
+        // Linha inferior da régua (borda entre a régua e a timeline)
+        instances.push(RectInstance {
+            x: 0.0, y: ruler_h - 1.0, w: width, h: 1.0,
+            color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+        });
 
         // Playhead
         if self.playing {
