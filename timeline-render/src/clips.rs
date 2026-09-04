@@ -166,12 +166,13 @@ impl ClipInteraction {
         }
         self.drag_moved = true;
 
-        let raw_beat = self.drag_orig_beat + dx / m.px_per_beat.max(0.001);
+        let raw_beat = self.drag_orig_beat + (dx + m.scroll_x) / m.px_per_beat.max(0.001);
         let live_beat = if snap {
             raw_beat.max(0.0).round()
         } else {
             raw_beat.max(0.0)
         };
+        self.drag_live_beat = live_beat;
         self.drag_live_beat = live_beat;
 
         let row_delta = (dy / m.row_height.max(0.001)).round();

@@ -150,9 +150,7 @@ export global ClipDragState {
     out property <float> live-beat:
         Math.max(
             0.0,
-            self.snap-enabled
-                ? Math.round(self.raw-beat)
-                : self.raw-beat
+            self.raw-beat
         );
 
 
