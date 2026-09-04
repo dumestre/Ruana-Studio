@@ -320,9 +320,10 @@ pub fn build_clip_instances(
     }
 
     // Marquee de multiseleção (caixa accent).
+    // No Paper (t==6), crimson; nos demais, accent.
     if inter.marquee_active {
         let (mx, my, mw, mh) = inter.marquee_rect();
-        let accent = super::palette::ACCENT[t];
+        let accent = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
         let ac = [accent.0, accent.1, accent.2, 255];
         let ac_fill = [accent.0, accent.1, accent.2, 60];
         if mw > 0.0 && mh > 0.0 {
