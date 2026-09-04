@@ -67,6 +67,17 @@ pub struct ClipInteraction {
     pub marquee_active: bool,
     pub marquee_start: (f32, f32),
     pub marquee_cur: (f32, f32),
+    pub draw_state: Option<DrawToolState>,
+}
+
+/// Estado de desenho contínuo com a ferramenta de desenho (tecla 2)
+#[derive(Clone, Debug)]
+pub struct DrawToolState {
+    pub active: bool,
+    pub start_beat: f32,
+    pub start_track: usize,
+    pub current_beat: f32,
+    pub current_track: usize,
 }
 
 impl ClipInteraction {
@@ -84,6 +95,7 @@ impl ClipInteraction {
             marquee_active: false,
             marquee_start: (0.0, 0.0),
             marquee_cur: (0.0, 0.0),
+            draw_state: None,
         }
     }
 
@@ -100,6 +112,10 @@ impl ClipInteraction {
 
     pub fn is_marqueeing(&self) -> bool {
         self.marquee_active
+    }
+
+    pub fn is_drawing(&self) -> bool {
+        self.draw_state.as_ref().map_or(false, |s| s.active)
     }
 
     /// Seleciona apenas o clip `idx`, apagando as demais seleções.
@@ -129,7 +145,7 @@ impl ClipInteraction {
 
     /// Atualiza o hover conforme o cursor (quando não arrastando).
     pub fn update_hover(&mut self, clips: &[ClipDemo], cursor: (f32, f32), m: &ClipMetrics) {
-        if self.is_dragging() {
+        if self.is_dragging() || self.is_drawing() {
             return;
         }
         self.hover_idx = self.hit_test(clips, cursor, m);
@@ -191,6 +207,55 @@ impl ClipInteraction {
         }
         self.drag_idx = None;
         self.drag_moved = false;
+    }
+
+    /// Inicia o desenho contínuo com a ferramenta de desenho (tecla 2)
+    pub fn begin_draw(&mut self, cursor: (f32, f32), m: &ClipMetrics) -> bool {
+        let (beat, track) = m.cursor_to_beat_track(cursor);
+        self.draw_state = Some(DrawToolState {
+            active: true,
+            start_beat: beat,
+            start_track: track,
+            current_beat: beat,
+            current_track: track,
+        });
+        true
+    }
+
+    /// Atualiza o desenho contínuo durante o movimento do mouse
+    pub fn draw_move(&mut self, cursor: (f32, f32), m: &ClipMetrics) {
+        if let Some(draw_state) = &mut self.draw_state {
+            if draw_state.active {
+                let (beat, track) = m.cursor_to_beat_track(cursor);
+                draw_state.current_beat = beat;
+                draw_state.current_track = track;
+            }
+        }
+    }
+
+    /// Finaliza o desenho contínuo e cria o clip
+    pub fn end_draw(&mut self, clips: &mut Vec<ClipDemo>, _m: &ClipMetrics) -> Option<ClipDemo> {
+        if let Some(draw_state) = self.draw_state.take() {
+            if draw_state.active {
+                let start_beat = draw_state.start_beat.min(draw_state.current_beat);
+                let end_beat = draw_state.start_beat.max(draw_state.current_beat);
+                let len = (end_beat - start_beat).max(0.25);
+                let track = draw_state.start_track;
+
+                let clip = ClipDemo {
+                    track_index: track,
+                    beat: start_beat,
+                    len,
+                    is_midi: true,
+                    color: 0,
+                };
+
+                clips.push(clip.clone());
+                self.select_only(clips.len() - 1);
+                return Some(clip);
+            }
+        }
+        None
     }
 
     /// Inicia um marquee a partir de um ponto da janela (clique em área vazia).
@@ -316,11 +381,37 @@ pub fn build_clip_instances(
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
                           body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height);
+}
+         }
+     }
+ 
+     // Desenho contínuo com a ferramenta de desenho (tecla 2)
+    if let Some(draw_state) = &inter.draw_state {
+        if draw_state.active {
+            let start_beat = draw_state.start_beat.min(draw_state.current_beat);
+            let end_beat = draw_state.start_beat.max(draw_state.current_beat);
+            let len = (end_beat - start_beat).max(0.25);
+            let track = draw_state.start_track.min(draw_state.current_track);
+
+            let temp_clip = ClipDemo {
+                track_index: track,
+                beat: start_beat,
+                len,
+                is_midi: true,
+                color: 0,
+            };
+
+            let (x, y, w, _h) = clip_rect(&temp_clip, m);
+            if w > 0.0 && x < width && x + w > 0.0 {
+                let draw_w = w.min(width - x).max(0.0);
+                let base = clip_color(&temp_clip, t);
+                push_clip(&mut instances, clips, &temp_clip, base, x, y, w, draw_w, header_h, bw,
+                          body_alpha_overlay, 0.12, wave_bars, clips.len(), t, m.row_height);
             }
         }
     }
 
-    // Marquee de multiseleção (caixa accent).
+     // Marquee de multiseleção (caixa accent).
     // No Paper (t==6), crimson; nos demais, accent.
     if inter.marquee_active {
         let (mx, my, mw, mh) = inter.marquee_rect();

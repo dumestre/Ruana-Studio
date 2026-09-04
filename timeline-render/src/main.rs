@@ -897,6 +897,7 @@ impl App {
     }
 
     /// Desenha novo clip (ferramenta Draw/Pencil).
+    #[allow(dead_code)]
     fn tool_draw(&mut self, pos: (f32, f32)) {
         let (beat, track) = self.cursor_to_snapped_beat_track(pos);
         let len = 4.0; // comprimento padrão: 1 compasso
@@ -1056,8 +1057,10 @@ impl App {
                             }
                         }
                         Tool::Draw => {
-                            // Desenha clip na posição do cursor
-                            self.tool_draw(pos);
+                            if pos.1 >= self.ruler_px {
+                                let cm = self.clip_metrics();
+                                self.clip_interaction.begin_draw(pos, &cm);
+                            }
                         }
                         Tool::Stretch => {
                             // Tenta iniciar stretch na borda direita; senão, seleciona
@@ -1096,6 +1099,10 @@ impl App {
                     self.edge_scroll_x = 0.0;
                     self.edge_scroll_y = 0.0;
                     self.edge_scroll_dir = 0;
+                } else if self.clip_interaction.is_drawing() {
+                    let cm = self.clip_metrics();
+                    self.clip_interaction.end_draw(&mut self.clips, &cm);
+                    self.clip_interaction.sync_selection(self.clips.len());
                 } else if self.clip_interaction.is_marqueeing() {
                     self.clip_interaction.marquee_move(pos);
                     let cm = self.clip_metrics();
@@ -1115,6 +1122,8 @@ impl App {
             let snap = true;
             self.clip_interaction.drag_move(pos, &cm, snap);
             // Edge scroll é tratado no RedrawRequested (roda todo frame)
+        } else if self.clip_interaction.is_drawing() {
+            self.clip_interaction.draw_move(pos, &cm);
         } else if self.clip_interaction.is_marqueeing() {
             self.clip_interaction.marquee_move(pos);
         } else if self.scrubbing {
@@ -1125,7 +1134,7 @@ impl App {
         // Atualiza cursor nativo do Windows
         update_cursor();
 
-        if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() {
+        if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() && !self.clip_interaction.is_drawing() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
@@ -1868,7 +1877,8 @@ impl winit::application::ApplicationHandler for AppHandler {
             } => {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
                 if app.loop_drag.is_some() || app.scrubbing || app.clip_interaction.is_dragging()
-                    || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some() {
+                    || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some()
+                    || app.clip_interaction.is_drawing() {
                     app.window.request_redraw();
                 }
             }
@@ -1883,7 +1893,7 @@ impl winit::application::ApplicationHandler for AppHandler {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(app) = &self.app {
-            if app.playing {
+            if app.playing || app.clip_interaction.is_drawing() {
                 app.window.request_redraw();
             }
         }
