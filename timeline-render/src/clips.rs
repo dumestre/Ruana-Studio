@@ -316,7 +316,7 @@ pub fn build_clip_instances(
     // Parametrização de transparências do corpo do clip.
     let body_alpha_normal = 0.50;
     let body_alpha_hover = 0.32;
-    let body_alpha_ghost = 0.30; // fantasma na posição antiga: apagado e translúcido
+    let body_alpha_ghost = 0.08; // fantasma na posição antiga: quase imperceptível
     let body_alpha_overlay = 0.28; // clip sob o mouse durante o arrasto: transparente
 
     let mut instances = Vec::new();
@@ -495,12 +495,21 @@ fn push_clip(
     // Raio leve nos cantos do clip para quebrar o visual quadrado.
     let clip_r = 6.0;
 
+    // Alpha do header/divisor/indicador: quando o corpo é muito translúcido
+    // (ghost durante drag), também escurece os elementos decorativos para
+    // ficar quase imperceptível. Clip normal mantém 100% opaco.
+    let decor_alpha: u8 = if body_alpha < 0.15 {
+        (body_alpha * 255.0).round() as u8
+    } else {
+        255
+    };
+
     // Header
     instances.push(RectInstance {
         x: x + bw, y: y + bw,
         w: (draw_w - 2.0 * bw).max(0.0),
         h: (header_h - bw).max(0.0),
-        color: rgba(base, 255),
+        color: rgba(base, decor_alpha),
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: clip_r,
     });
 
@@ -527,7 +536,7 @@ fn push_clip(
     instances.push(RectInstance {
         x: x + bw, y: y + header_h - 1.0,
         w: (draw_w - 2.0 * bw).max(0.0), h: 1.0,
-        color: rgba(darker(base, 0.18), 255),
+        color: rgba(darker(base, 0.18), decor_alpha),
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
 
@@ -535,7 +544,7 @@ fn push_clip(
     instances.push(RectInstance {
         x: x + draw_w - bw - 6.0, y: y + 5.0,
         w: 3.0, h: 8.0,
-        color: rgba(palette::TEXT_PRIMARY[t], 255),
+        color: rgba(palette::TEXT_PRIMARY[t], decor_alpha),
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
 }
