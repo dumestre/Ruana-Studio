@@ -708,64 +708,76 @@ impl App {
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
 
-            let beat_px = px_per_bar / 4.0;
-            for k in 0..4 {
-                let x = bx + k as f32 * beat_px;
-                if x <= 0.0 || x > width { continue; }
-                if px_per_bar >= 40.0 {
+            // Subdivisões como frações uniformes do compasso (px_per_bar), da
+            // mais fina para a mais grossa para que as linhas principais fiquem por cima.
+            // 1/64
+            if px_per_bar >= 960.0 {
+                let n = 64u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let xs = bx + m as f32 * step;
+                    if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
-                        x, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
+                        x: xs, y: body_top, w: 1.0, h: body_h,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 70],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
-                // 1/8
-                if px_per_bar >= 120.0 {
-                    let x8 = x + beat_px * 0.5;
+            }
+            // 1/32
+            if px_per_bar >= 480.0 {
+                let n = 32u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let xs = bx + m as f32 * step;
+                    if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
-                        x: x8, y: body_top, w: 1.0, h: body_h,
+                        x: xs, y: body_top, w: 1.0, h: body_h,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 90],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+            }
+            // 1/16
+            if px_per_bar >= 240.0 {
+                let n = 16u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let xs = bx + m as f32 * step;
+                    if xs <= 0.0 || xs > width { continue; }
+                    instances.push(RectInstance {
+                        x: xs, y: body_top, w: 1.0, h: body_h,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+            }
+            // 1/8
+            if px_per_bar >= 120.0 {
+                let n = 8u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let xs = bx + m as f32 * step;
+                    if xs <= 0.0 || xs > width { continue; }
+                    instances.push(RectInstance {
+                        x: xs, y: body_top, w: 1.0, h: body_h,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
-                // 1/16
-                if px_per_bar >= 240.0 {
-                    let x16a = x + beat_px * 0.25;
-                    let x16b = x + beat_px * 0.75;
+            }
+            // Batidas (1/4) — mais grossas, por cima das subdivisões
+            if px_per_bar >= 40.0 {
+                let n = 4u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let xs = bx + m as f32 * step;
+                    if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
-                        x: x16a, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        x: xs, y: body_top, w: 1.0, h: body_h,
+                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
-                    instances.push(RectInstance {
-                        x: x16b, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                    });
-                }
-                // 1/32
-                if px_per_bar >= 480.0 {
-                    let sixteenth_px = beat_px / 4.0;
-                    for s in 0..3 {
-                        let xs = x + sixteenth_px * (s as f32 + 0.5);
-                        instances.push(RectInstance {
-                            x: xs, y: body_top, w: 1.0, h: body_h,
-                            color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 90],
-                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                        });
-                    }
-                }
-                // 1/64
-                if px_per_bar >= 960.0 {
-                    let thirtysecond_px = beat_px / 8.0;
-                    for s in 0..7 {
-                        let xs = x + thirtysecond_px * (s as f32 + 0.5);
-                        instances.push(RectInstance {
-                            x: xs, y: body_top, w: 1.0, h: body_h,
-                            color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 70],
-                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                        });
-                    }
                 }
             }
         }
@@ -875,26 +887,31 @@ impl App {
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
-                // Subdivisões 1/8 (quando px_per_bar >= 120) — tiques menores no baixo
-                if px_per_bar >= 120.0 {
-                    let x8 = x + beat_px * 0.5;
+            }
+            // Subdivisões 1/8 (quando px_per_bar >= 120) — tiques menores no baixo,
+            // como frações uniformes do compasso
+            if px_per_bar >= 120.0 {
+                let n = 8u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let x8 = bx + m as f32 * step;
+                    if x8 <= 0.0 || x8 > width { continue; }
                     instances.push(RectInstance {
                         x: x8, y: ruler_h - 8.0, w: 1.0, h: 8.0,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
-                // Subdivisões 1/16 (quando px_per_bar >= 240) — tiques ainda menores
-                if px_per_bar >= 240.0 {
-                    let x16a = x + beat_px * 0.25;
-                    let x16b = x + beat_px * 0.75;
+            }
+            // Subdivisões 1/16 (quando px_per_bar >= 240) — tiques ainda menores
+            if px_per_bar >= 240.0 {
+                let n = 16u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let x16 = bx + m as f32 * step;
+                    if x16 <= 0.0 || x16 > width { continue; }
                     instances.push(RectInstance {
-                        x: x16a, y: ruler_h - 6.0, w: 1.0, h: 6.0,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                    });
-                    instances.push(RectInstance {
-                        x: x16b, y: ruler_h - 6.0, w: 1.0, h: 6.0,
+                        x: x16, y: ruler_h - 6.0, w: 1.0, h: 6.0,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
