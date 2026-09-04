@@ -382,6 +382,8 @@ struct App {
     loop_drag_start_x: f32,
     loop_drag_orig_start: f32,
     loop_drag_orig_end: f32,
+
+    focus_saved: Option<(f32, f32, f32)>,
 }
 
 impl App {
@@ -609,6 +611,8 @@ impl App {
             loop_drag_start_x: 0.0,
             loop_drag_orig_start: 0.0,
             loop_drag_orig_end: 0.0,
+
+            focus_saved: None,
         })
     }
 
@@ -740,6 +744,22 @@ impl App {
                 self.loop_end_beat = new_start + span;
             }
         }
+    }
+
+    /// Alterna o foco no clip sob o cursor: F centraliza o clip na view e
+    /// lembra o estado anterior; F de novo restaura o estado anterior ao foco.
+    fn toggle_clip_focus(&mut self, width: f32) {
+        if let Some((sx, ppb, sy)) = self.focus_saved.take() {
+            self.scroll_x = sx;
+            self.px_per_beat = ppb;
+            self.scroll_y = sy;
+            return;
+        }
+        let Some(idx) = self.clip_interaction.hover_idx else { return };
+        let Some(clip) = self.clips.get(idx) else { return };
+        self.focus_saved = Some((self.scroll_x, self.px_per_beat, self.scroll_y));
+        let clip_x = clip.beat * self.px_per_beat;
+        self.scroll_x = (clip_x - width * 0.5).max(0.0);
     }
 
     fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), ruler_h: f32) {
@@ -1325,6 +1345,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                 phase: _,
             } => {
                 app.handle_scroll(&delta, self.ctrl_pressed, self.alt_pressed);
+                app.window.request_redraw();
             }
             WindowEvent::KeyboardInput {
                 device_id: _,
@@ -1348,6 +1369,11 @@ impl winit::application::ApplicationHandler for AppHandler {
                 }
                 if pressed && vk == Key::Named(NamedKey::Escape) {
                     event_loop.exit();
+                }
+                // F: foca o clip sob o cursor (alterna com o estado anterior).
+                if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("f")) {
+                    app.toggle_clip_focus(app.size.width as f32);
+                    app.window.request_redraw();
                 }
                 // Track ctrl/alt para zoom com touchpad/mouse.
                 use winit::keyboard::{KeyCode, PhysicalKey};
