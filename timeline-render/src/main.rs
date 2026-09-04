@@ -1130,10 +1130,11 @@ impl App {
         // Seletor de loop — bordas laterais grossas na régua (alças de arrasto)
         // + centro translúcido descendo por toda a timeline.
         if self.loop_enabled {
-            let r: (u8, u8, u8) = (0xA5, 0x4D, 0xFF); // roxo do loop
+            let r: (u8, u8, u8) = (0x3A, 0x3A, 0x3A); // cinza escuro do loop
             let border = [r.0, r.1, r.2, 255]; // bordas de ajuste (palitos): opacas
-            let fill_ruler = [r.0, r.1, r.2, 130]; // régua: pouco translúcido
+            let fill_ruler = [r.0, r.1, r.2, 45]; // régua: centro bem transparente
             let fill_body = [r.0, r.1, r.2, 70]; // timeline: mais translúcido ainda
+            let border_body = [r.0, r.1, r.2, 185]; // borda que desce na timeline: menos translúcida
             let sx = self.beat_to_x(self.loop_start_beat);
             let ex = self.beat_to_x(self.loop_end_beat);
             let lw = (ex - sx).max(0.0);
@@ -1158,7 +1159,7 @@ impl App {
                     });
                 }
 
-                // Bordas laterais grossas NA RÉGUA (alças de arrasto) — roxo opaco.
+                // Bordas laterais grossas NA RÉGUA (alças de arrasto) — opacas.
                 if sx + lw >= -bw && sx <= width {
                     instances.push(RectInstance {
                         x: sx, y: 0.0, w: bw, h: self.ruler_px, color: border,
@@ -1167,7 +1168,22 @@ impl App {
                 }
                 if ex >= 0.0 && ex - bw <= width {
                     instances.push(RectInstance {
-                        x: ex - bw, y: 0.0, w: bw, h: self.ruler_px, color: border,
+                        x: ex, y: 0.0, w: bw, h: self.ruler_px, color: border,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+
+                // Bordas laterais descendo pelo CORPO da timeline — menos
+                // translúcidas que o fill (só a borda).
+                if sx + lw >= -bw && sx <= width {
+                    instances.push(RectInstance {
+                        x: sx, y: body_top, w: 2.0, h: body_h, color: border_body,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+                if ex >= 0.0 && ex - bw <= width {
+                    instances.push(RectInstance {
+                        x: ex, y: body_top, w: 2.0, h: body_h, color: border_body,
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
