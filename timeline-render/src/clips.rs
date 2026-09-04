@@ -63,6 +63,10 @@ pub struct ClipInteraction {
     pub drag_live_beat: f32,
     pub drag_live_track: usize,
     pub drag_moved: bool,
+    pub selected: Vec<bool>,
+    pub marquee_active: bool,
+    pub marquee_start: (f32, f32),
+    pub marquee_cur: (f32, f32),
 }
 
 impl ClipInteraction {
@@ -76,11 +80,36 @@ impl ClipInteraction {
             drag_live_beat: 0.0,
             drag_live_track: 0,
             drag_moved: false,
+            selected: Vec::new(),
+            marquee_active: false,
+            marquee_start: (0.0, 0.0),
+            marquee_cur: (0.0, 0.0),
+        }
+    }
+
+    /// Garante que o vetor de seleção tenha o tamanho da lista de clips.
+    pub fn sync_selection(&mut self, clip_count: usize) {
+        if self.selected.len() != clip_count {
+            self.selected.resize(clip_count, false);
         }
     }
 
     pub fn is_dragging(&self) -> bool {
         self.drag_idx.is_some()
+    }
+
+    pub fn is_marqueeing(&self) -> bool {
+        self.marquee_active
+    }
+
+    /// Seleciona apenas o clip `idx`, apagando as demais seleções.
+    pub fn select_only(&mut self, idx: usize) {
+        for s in self.selected.iter_mut() {
+            *s = false;
+        }
+        if idx < self.selected.len() {
+            self.selected[idx] = true;
+        }
     }
 
     /// Hit-test: qual clip está sob o cursor, na ordem (último por cima).
@@ -89,6 +118,13 @@ impl ClipInteraction {
         clips.iter().enumerate().rev().find(|(_, c)| {
             c.track_index == track && beat >= c.beat && beat < c.beat + c.len
         }).map(|(i, _)| i)
+    }
+
+    /// Retângulo do marquee em coordenadas normalizadas (x0<=x1, y0<=y1).
+    pub fn marquee_rect(&self) -> (f32, f32, f32, f32) {
+        let (sx, sy) = self.marquee_start;
+        let (cx, cy) = self.marquee_cur;
+        (sx.min(cx), sy.min(cy), (sx - cx).abs(), (sy - cy).abs())
     }
 
     /// Atualiza o hover conforme o cursor (quando não arrastando).
@@ -145,16 +181,56 @@ impl ClipInteraction {
     }
 
     /// Termina o arrasto e aplica a nova posição no modelo (commit no release).
-    pub fn end_drag(&mut self, clips: &mut [ClipDemo], m: &ClipMetrics, snap: bool) {
+    pub fn end_drag(&mut self, clips: &mut [ClipDemo], _m: &ClipMetrics, _snap: bool) {
         if let Some(idx) = self.drag_idx {
             if self.drag_moved {
-                self.drag_move(self.drag_start_cursor, m, snap); // recalcula live final
                 clips[idx].beat = self.drag_live_beat;
                 clips[idx].track_index = self.drag_live_track;
             }
         }
         self.drag_idx = None;
         self.drag_moved = false;
+    }
+
+    /// Inicia um marquee a partir de um ponto da janela (clique em área vazia).
+    pub fn begin_marquee(&mut self, cursor: (f32, f32)) {
+        self.marquee_active = true;
+        self.marquee_start = cursor;
+        self.marquee_cur = cursor;
+    }
+
+    /// Atualiza o canto atual do marquee durante o movimento.
+    pub fn marquee_move(&mut self, cursor: (f32, f32)) {
+        if self.marquee_active {
+            self.marquee_cur = cursor;
+        }
+    }
+
+    /// Finaliza o marquee: seleciona os clips cujo retângulo cruza a caixa.
+    /// Clique simples (tamanho ~0) em área vazia limpa a seleção.
+    pub fn end_marquee(&mut self, clips: &[ClipDemo], m: &ClipMetrics) {
+        if !self.marquee_active {
+            return;
+        }
+        let (mx, my, mw, mh) = self.marquee_rect();
+        for s in self.selected.iter_mut() {
+            *s = false;
+        }
+        // Clique simples (sem área real) apenas limpa.
+        if mw <= 3.0 && mh <= 3.0 {
+            self.marquee_active = false;
+            return;
+        }
+        for (i, clip) in clips.iter().enumerate() {
+            let (bx, by, bw, bh) = clip_rect(clip, m);
+            // Cruzamento em coordenadas de janela/box.
+            let overlap_x = bx < mx + mw && bx + bw > mx;
+            let overlap_y = by < my + mh && by + bh > my;
+            if overlap_x && overlap_y && i < self.selected.len() {
+                self.selected[i] = true;
+            }
+        }
+        self.marquee_active = false;
     }
 }
 
@@ -201,6 +277,26 @@ pub fn build_clip_instances(
 
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
                   body_alpha, body_dark, wave_bars, idx, t, m.row_height);
+
+        // Borda accent (raio 6) para clips selecionados.
+        if !being_dragged && idx < inter.selected.len() && inter.selected[idx] {
+            let accent = super::palette::ACCENT[t];
+            let ac = [accent.0, accent.1, accent.2, 255];
+            let r = 6.0;
+            let thin = 2.0;
+            // superior
+            instances.push(RectInstance { x, y, w, h: thin, color: ac,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
+            // inferior
+            instances.push(RectInstance { x, y: y + m.row_height - thin, w, h: thin, color: ac,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
+            // esquerda
+            instances.push(RectInstance { x, y, w: thin, h: m.row_height, color: ac,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
+            // direita
+            instances.push(RectInstance { x: x + w - thin, y, w: thin, h: m.row_height, color: ac,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
+        }
     }
 
     // Overlay: clip seguindo o mouse durante o arrasto (moved).
@@ -220,6 +316,29 @@ pub fn build_clip_instances(
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
                           body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height);
             }
+        }
+    }
+
+    // Marquee de multiseleção (caixa accent).
+    if inter.marquee_active {
+        let (mx, my, mw, mh) = inter.marquee_rect();
+        let accent = super::palette::ACCENT[t];
+        let ac = [accent.0, accent.1, accent.2, 255];
+        let ac_fill = [accent.0, accent.1, accent.2, 60];
+        if mw > 0.0 && mh > 0.0 {
+            // preenchimento leve
+            instances.push(RectInstance { x: mx, y: my, w: mw, h: mh, color: ac_fill,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+            // borda de 1px
+            let thin = 1.0;
+            instances.push(RectInstance { x: mx, y: my, w: mw, h: thin, color: ac,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+            instances.push(RectInstance { x: mx, y: my + mh - thin, w: mw, h: thin, color: ac,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+            instances.push(RectInstance { x: mx, y: my, w: thin, h: mh, color: ac,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+            instances.push(RectInstance { x: mx + mw - thin, y: my, w: thin, h: mh, color: ac,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
         }
     }
 

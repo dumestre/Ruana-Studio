@@ -43,6 +43,13 @@ pub mod palette {
         (0x64, 0x64, 0x64),
     ];
 
+    // Theme.accent — seleção/clips selecionados.
+    pub const ACCENT: [Rgb; 7] = [
+        (0x00, 0xC8, 0x53), (0x4F, 0xA8, 0xFF), (0xB8, 0x5C, 0xFF),
+        (0xA8, 0xFF, 0x00), (0xFF, 0x9F, 0x43), (0x2E, 0xC4, 0xB6),
+        (0x00, 0xC8, 0x53),
+    ];
+
     pub const SURFACE_HIGH: [Rgb; 7] = [
         (0x55, 0x55, 0x55), (0x26, 0x30, 0x3D), (0x2D, 0x27, 0x40),
         (0x26, 0x2A, 0x1D), (0x36, 0x2A, 0x1B), (0x1E, 0x30, 0x35),
@@ -666,21 +673,33 @@ impl App {
     }
 
     fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
+        self.clip_interaction.sync_selection(self.clips.len());
         let cm = self.clip_metrics();
         match state {
             ElementState::Pressed => {
-                // Se clicou em cima de um clip, inicia o possível arrasto;
-                // senão, deixa o ponteiro agir normalmente (scrub da régua).
-                if !self.clip_interaction.begin_drag(&self.clips, pos, &cm) {
+                if pos.1 < self.ruler_px {
+                    // Régua → scrub do playhead (não seleciona).
                     self.handle_ruler_click(state, pos, self.ruler_px);
+                } else if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+                    // Clique num clip → seleciona e inicia possível arrasto.
+                    self.clip_interaction.begin_drag(&self.clips, pos, &cm);
+                    self.clip_interaction.select_only(idx);
+                } else {
+                    // Área vazia → inicia marquee de multiseleção.
+                    self.clip_interaction.begin_marquee(pos);
                 }
             }
             ElementState::Released => {
                 if self.clip_interaction.is_dragging() {
                     let snap = true;
                     let cm = self.clip_metrics();
+                    self.clip_interaction.drag_move(pos, &cm, snap);
                     self.clip_interaction.end_drag(&mut self.clips, &cm, snap);
-                } else {
+                } else if self.clip_interaction.is_marqueeing() {
+                    self.clip_interaction.marquee_move(pos);
+                    let cm = self.clip_metrics();
+                    self.clip_interaction.end_marquee(&self.clips, &cm);
+                } else if self.scrubbing {
                     self.handle_ruler_click(state, pos, self.ruler_px);
                 }
             }
@@ -692,6 +711,8 @@ impl App {
         if self.clip_interaction.is_dragging() {
             let snap = true;
             self.clip_interaction.drag_move(pos, &cm, snap);
+        } else if self.clip_interaction.is_marqueeing() {
+            self.clip_interaction.marquee_move(pos);
         } else if self.scrubbing {
             self.set_playhead_from_x(pos.0);
         }
@@ -1204,7 +1225,8 @@ impl winit::application::ApplicationHandler for AppHandler {
                 ..
             } => {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
-                if app.scrubbing || app.clip_interaction.is_dragging() || app.clip_interaction.hover_idx.is_some() {
+                if app.scrubbing || app.clip_interaction.is_dragging()
+                    || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some() {
                     app.window.request_redraw();
                 }
             }
