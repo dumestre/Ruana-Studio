@@ -617,10 +617,10 @@ impl App {
             // Zoom vertical — mantém a linha sob o cursor fixa.
             let old_zy = self.zoom_y;
             let new_zy = (old_zy + dy * 0.01).clamp(0.25, 6.0);
-            // Linha sob o cursor antes do zoom (base 40px).
-            let row_under = (my - self.ruler_px + self.scroll_y) / (40.0 * old_zy.max(0.01)).max(0.01);
+            // Linha sob o cursor antes do zoom (base 64px).
+            let row_under = (my - self.ruler_px + self.scroll_y) / (64.0 * old_zy.max(0.01)).max(0.01);
             self.zoom_y = new_zy;
-            self.scroll_y = (row_under * 40.0 * new_zy - (my - self.ruler_px)).max(0.0);
+            self.scroll_y = (row_under * 64.0 * new_zy - (my - self.ruler_px)).max(0.0);
         } else {
             // Scroll pelos eixos reais do delta: x → horizontal, y → vertical.
             self.scroll_x = (self.scroll_x - dx).max(0.0);
@@ -633,7 +633,7 @@ impl App {
     /// se o conteúdo cabe na viewport, trava em 0 (grudado no topo); senão,
     /// limita o scroll ao máximo necessário para ver o último clip.
     fn clamp_scroll_y(&mut self, height: f32) {
-        let row_height = 40.0 * self.zoom_y.max(0.001);
+        let row_height = 64.0 * self.zoom_y.max(0.001);
         let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
         let content_h = (max_track as f32 + 1.0) * row_height;
         let view_h = (height - self.ruler_px).max(0.0);
@@ -681,7 +681,7 @@ impl App {
     fn clip_metrics(&self) -> clips::ClipMetrics {
         clips::ClipMetrics {
             px_per_beat: self.px_per_beat,
-            row_height: 40.0 * self.zoom_y.max(0.001),
+            row_height: 64.0 * self.zoom_y.max(0.001),
             scroll_x: self.scroll_x,
             scroll_y: self.scroll_y,
             ruler_px: self.ruler_px,
@@ -748,7 +748,7 @@ impl App {
         let mut instances = Vec::new();
         let px_per_bar = self.px_per_beat * 4.0;
         let _total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
-        let row_height = 40.0 * self.zoom_y;
+        let row_height = 64.0 * self.zoom_y;
 
         // Fundo geral - cobre desde a régua até o fundo
         instances.push(RectInstance {

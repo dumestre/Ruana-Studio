@@ -278,10 +278,10 @@ pub fn build_clip_instances(
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
                   body_alpha, body_dark, wave_bars, idx, t, m.row_height);
 
-        // Borda accent (raio 8) para clips selecionados.
+        // Borda (raio 8) para clips selecionados, na cor Theme.base.
         if !being_dragged && idx < inter.selected.len() && inter.selected[idx] {
-            let accent = super::palette::ACCENT[t];
-            let ac = [accent.0, accent.1, accent.2, 255];
+            let base_c = super::palette::BASE[t];
+            let ac = [base_c.0, base_c.1, base_c.2, 255];
             let r = 8.0;
             let thin = 3.0;
             // superior
