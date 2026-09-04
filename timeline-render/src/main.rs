@@ -15,8 +15,10 @@
 
 mod clips;
 mod shctx;
+mod tools;
 
 use clips::ClipDemo;
+use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor};
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -411,7 +413,6 @@ impl App {
                 label: Some("ruana-timeline-device"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
-                memory_hints: Default::default(),
             },
             None,
         ))
@@ -490,8 +491,7 @@ impl App {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
+                entry_point: "vs_main",
                 buffers: &[
                     wgpu::VertexBufferLayout {
                         array_stride: 8,
@@ -532,8 +532,7 @@ impl App {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
+                entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -547,7 +546,6 @@ impl App {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
-            cache: None,
         });
 
         // === Dados demo ===
@@ -616,6 +614,11 @@ impl App {
             focus_saved: None,
             clipboard: Vec::new(),
         })
+    }
+
+    fn init_tools(&self) {
+        let _ = init_tool_manager();
+        let _ = set_dark_mode(self.theme == 6);
     }
 
     fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
@@ -869,6 +872,120 @@ impl App {
         self.clip_interaction.sync_selection(self.clips.len());
     }
 
+    /// Converte posição do cursor para beat e track com snap ao grid.
+    fn cursor_to_snapped_beat_track(&self, pos: (f32, f32)) -> (f32, usize) {
+        let beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
+        let snapped_beat = beat.round().max(0.0);
+        let row_height = 64.0 * self.zoom_y.max(0.001);
+        let track = ((pos.1 - self.ruler_px + self.scroll_y) / row_height)
+            .floor()
+            .max(0.0)
+            .min(3.0) as usize;
+        (snapped_beat, track)
+    }
+
+    /// Desenha novo clip (ferramenta Draw/Pencil).
+    fn tool_draw(&mut self, pos: (f32, f32)) {
+        let (beat, track) = self.cursor_to_snapped_beat_track(pos);
+        let len = 4.0; // comprimento padrão: 1 compasso
+        self.clips.push(ClipDemo {
+            track_index: track,
+            beat,
+            len,
+            is_midi: false,
+            color: 0,
+        });
+        self.clip_interaction.sync_selection(self.clips.len());
+    }
+
+    /// Estica clip (ferramenta Stretch) - arrasta borda direita.
+    fn tool_stretch_start(&mut self, pos: (f32, f32)) -> bool {
+        let cm = self.clip_metrics();
+        if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+            // Verifica se clicou na borda direita do clip (últimos 10px)
+            let (cx, _, cw, _) = clips::clip_rect(&self.clips[idx], &cm);
+            if pos.0 >= cx + cw - 10.0 {
+                self.clip_interaction.begin_drag(&self.clips, pos, &cm);
+                self.clip_interaction.select_only(idx);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Corta clip (ferramenta Slice) - divide no ponto do clique.
+    fn tool_slice(&mut self, pos: (f32, f32)) {
+        let cm = self.clip_metrics();
+        if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+            let clip = self.clips[idx];
+            let click_beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
+            let click_beat_snapped = click_beat.round().max(clip.beat).min(clip.beat + clip.len);
+            
+            // Só divide se o clique não estiver na borda
+            if click_beat_snapped > clip.beat && click_beat_snapped < clip.beat + clip.len {
+                let left_len = click_beat_snapped - clip.beat;
+                let right_len = clip.beat + clip.len - click_beat_snapped;
+                
+                // Atualiza clip original para a parte esquerda
+                self.clips[idx].len = left_len;
+                
+                // Cria novo clip para a parte direita
+                let mut right_clip = clip;
+                right_clip.beat = click_beat_snapped;
+                right_clip.len = right_len;
+                self.clips.push(right_clip);
+                
+                self.clip_interaction.sync_selection(self.clips.len());
+            }
+        }
+    }
+
+    /// Apaga clip (ferramenta Erase) - clica para deletar.
+    fn tool_erase(&mut self, pos: (f32, f32)) {
+        let cm = self.clip_metrics();
+        if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+            self.clips.remove(idx);
+            self.clip_interaction.sync_selection(self.clips.len());
+        }
+    }
+
+    /// Cola clips (ferramenta Glue) - junta clip esquerdo ao direito.
+    fn tool_glue(&mut self, pos: (f32, f32)) {
+        let _cm = self.clip_metrics();
+        let (beat, track) = self.cursor_to_snapped_beat_track(pos);
+        
+        // Procura clips na mesma track adjacentes ao ponto
+        let clips_on_track: Vec<usize> = self.clips.iter()
+            .enumerate()
+            .filter(|(_, c)| c.track_index == track)
+            .map(|(i, _)| i)
+            .collect();
+        
+        if clips_on_track.len() < 2 { return; }
+        
+        // Ordena por beat
+        let mut sorted = clips_on_track.clone();
+        sorted.sort_by_key(|&i| (self.clips[i].beat * 1000.0) as i32);
+        
+        // Procura par adjacente onde o ponto está entre eles
+        for window in sorted.windows(2) {
+            let left_idx = window[0];
+            let right_idx = window[1];
+            let left_end = self.clips[left_idx].beat + self.clips[left_idx].len;
+            let right_start = self.clips[right_idx].beat;
+            
+            // Se o ponto está entre o fim do esquerdo e o início do direito
+            if beat >= left_end && beat <= right_start {
+                // Estica o clip esquerdo até o início do direito
+                self.clips[left_idx].len = right_start - self.clips[left_idx].beat;
+                // Remove o clip direito
+                self.clips.remove(right_idx);
+                self.clip_interaction.sync_selection(self.clips.len());
+                return;
+            }
+        }
+    }
+
     fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), ruler_h: f32) {
         match state {
             ElementState::Pressed => {
@@ -901,20 +1018,52 @@ impl App {
     fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
         self.clip_interaction.sync_selection(self.clips.len());
         let cm = self.clip_metrics();
+        let tool = current_tool();
+
         match state {
             ElementState::Pressed => {
                 if pos.1 < self.ruler_px {
-                    // Régua → tenta arrastar o seletor de loop; senão, scrub do playhead.
+                    // Régua → loop drag ou scrub (funciona em qualquer ferramenta)
                     if !self.begin_loop_drag(pos.0) {
                         self.handle_ruler_click(state, pos, self.ruler_px);
                     }
-                } else if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-                    // Clique num clip → seleciona e inicia possível arrasto.
-                    self.clip_interaction.begin_drag(&self.clips, pos, &cm);
-                    self.clip_interaction.select_only(idx);
                 } else {
-                    // Área vazia → inicia marquee de multiseleção.
-                    self.clip_interaction.begin_marquee(pos);
+                    match tool {
+                        Tool::Select => {
+                            if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+                                self.clip_interaction.begin_drag(&self.clips, pos, &cm);
+                                self.clip_interaction.select_only(idx);
+                            } else {
+                                self.clip_interaction.begin_marquee(pos);
+                            }
+                        }
+                        Tool::Draw => {
+                            // Desenha clip na posição do cursor
+                            self.tool_draw(pos);
+                        }
+                        Tool::Stretch => {
+                            // Tenta iniciar stretch na borda direita; senão, seleciona
+                            if !self.tool_stretch_start(pos) {
+                                if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+                                    self.clip_interaction.select_only(idx);
+                                } else {
+                                    self.clip_interaction.begin_marquee(pos);
+                                }
+                            }
+                        }
+                        Tool::Slice => {
+                            // Corta clip no ponto do clique
+                            self.tool_slice(pos);
+                        }
+                        Tool::Erase => {
+                            // Apaga clip clicado
+                            self.tool_erase(pos);
+                        }
+                        Tool::Glue => {
+                            // Cola clips adjacentes
+                            self.tool_glue(pos);
+                        }
+                    }
                 }
             }
             ElementState::Released => {
@@ -949,6 +1098,10 @@ impl App {
             self.set_playhead_from_x(pos.0);
         }
         self.clip_interaction.update_hover(&self.clips, pos, &cm);
+        
+        // Atualiza cursor nativo do Windows
+        update_cursor();
+        
         if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
@@ -1309,9 +1462,7 @@ impl App {
             Ok(o) => o,
             Err(_e) => {
                 self.surface.configure(&self.device, &self.config);
-                self.surface
-                    .get_current_texture()
-                    .expect("surface texture unavailable")
+                self.surface.get_current_texture().unwrap()
             }
         };
         let view = output
@@ -1444,6 +1595,10 @@ impl winit::application::ApplicationHandler for AppHandler {
             self.window_id = window.id();
             let win = Arc::new(window);
             self.app = Some(App::new(win).expect("app init failed"));
+            // Initialize tools and set dark mode for Paper theme
+            if let Some(app) = &self.app {
+                app.init_tools();
+            }
         }
     }
 
@@ -1497,6 +1652,18 @@ impl winit::application::ApplicationHandler for AppHandler {
                 if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("f")) {
                     app.toggle_clip_focus(app.size.width as f32);
                     app.window.request_redraw();
+                }
+                // Tool switching keys (1-6)
+                if pressed && !self.ctrl_pressed && !self.alt_pressed {
+                    match vk {
+                        Key::Character(ref s) if s == "1" => { set_tool(Tool::Select); app.window.request_redraw(); }
+                        Key::Character(ref s) if s == "2" => { set_tool(Tool::Draw); app.window.request_redraw(); }
+                        Key::Character(ref s) if s == "3" => { set_tool(Tool::Stretch); app.window.request_redraw(); }
+                        Key::Character(ref s) if s == "4" => { set_tool(Tool::Slice); app.window.request_redraw(); }
+                        Key::Character(ref s) if s == "5" => { set_tool(Tool::Erase); app.window.request_redraw(); }
+                        Key::Character(ref s) if s == "6" => { set_tool(Tool::Glue); app.window.request_redraw(); }
+                        _ => {}
+                    }
                 }
                 // Clipboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+D, Delete, Backspace)
                 if pressed && self.ctrl_pressed {
