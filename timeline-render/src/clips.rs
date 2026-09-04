@@ -212,11 +212,12 @@ impl ClipInteraction {
     /// Inicia o desenho contínuo com a ferramenta de desenho (tecla 2)
     pub fn begin_draw(&mut self, cursor: (f32, f32), m: &ClipMetrics) -> bool {
         let (beat, track) = m.cursor_to_beat_track(cursor);
+        let snapped_beat = beat.round().max(0.0);
         self.draw_state = Some(DrawToolState {
             active: true,
-            start_beat: beat,
+            start_beat: snapped_beat,
             start_track: track,
-            current_beat: beat,
+            current_beat: snapped_beat,
             current_track: track,
         });
         true
@@ -227,7 +228,7 @@ impl ClipInteraction {
         if let Some(draw_state) = &mut self.draw_state {
             if draw_state.active {
                 let (beat, track) = m.cursor_to_beat_track(cursor);
-                draw_state.current_beat = beat;
+                draw_state.current_beat = beat.round().max(0.0);
                 draw_state.current_track = track;
             }
         }
