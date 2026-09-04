@@ -583,31 +583,21 @@ impl App {
     }
 
     fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_ctrl: bool, with_alt: bool) {
-        // No Windows, roda do mouse E touchpad 2 dedos chegam como LineDelta,
-        // sem como distinguir — tratamos ambos pelo eixo real do delta:
-        //   x → scroll horizontal, y → scroll vertical.
-        // PixelDelta (ex.: macOS/outras plataformas) segue as regras de
-        // touchpad com Ctrl/Alt para zoom.
-        match *delta {
-            winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                self.scroll_x = (self.scroll_x - x * 40.0).max(0.0);
-                self.scroll_y = (self.scroll_y - y * 40.0).max(0.0);
-            }
-            winit::event::MouseScrollDelta::PixelDelta(p) => {
-                let dx = p.x as f32;
-                let dy = p.y as f32;
-                if with_ctrl && dy.abs() >= 1.0 {
-                    // Ctrl + 2 dedos arrasto vertical — zoom horizontal.
-                    self.px_per_beat = (self.px_per_beat + dy * 0.5).clamp(8.0, 640.0);
-                } else if with_alt && dy.abs() >= 1.0 {
-                    // Alt + 2 dedos arrasto vertical — zoom vertical (altura das faixas).
-                    self.zoom_y = (self.zoom_y + dy * 0.01).clamp(0.25, 6.0);
-                } else {
-                    // 2 dedos arrasto horizontal/vertical — scroll na timeline.
-                    self.scroll_x = (self.scroll_x - dx).max(0.0);
-                    self.scroll_y = (self.scroll_y - dy).max(0.0);
-                }
-            }
+        let (dx, dy) = match *delta {
+            winit::event::MouseScrollDelta::LineDelta(x, y) => (x * 40.0, y * 40.0),
+            winit::event::MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
+        };
+
+        if with_ctrl && dy.abs() >= 1.0 {
+            // Ctrl + scroll — zoom horizontal.
+            self.px_per_beat = (self.px_per_beat + dy * 0.05).clamp(8.0, 640.0);
+        } else if with_alt && dy.abs() >= 1.0 {
+            // Alt + scroll — zoom vertical (altura das faixas).
+            self.zoom_y = (self.zoom_y + dy * 0.01).clamp(0.25, 6.0);
+        } else {
+            // Scroll pelos eixos reais do delta: x → horizontal, y → vertical.
+            self.scroll_x = (self.scroll_x - dx).max(0.0);
+            self.scroll_y = (self.scroll_y - dy).max(0.0);
         }
     }
 
