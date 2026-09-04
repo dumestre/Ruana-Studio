@@ -387,6 +387,14 @@ struct App {
 
     focus_saved: Option<(f32, f32, f32)>,
     clipboard: Vec<ClipDemo>,
+
+    // Auto-scroll nas bordas durante drag de clips.
+    // Quando o cursor se aproxima de uma borda durante um arrasto ativo,
+    // a viewport rola suavemente nessa direção para permitir arrastar
+    // clips para fora da área visível.
+    edge_scroll_x: f32, // velocidade px/frame (0 = desativado)
+    edge_scroll_y: f32, // velocidade px/frame (0 = desativado)
+    edge_scroll_dir: i32, // -1 = esquerda/cima, +1 = direita/baixo, 0 = nenhuma
 }
 
 impl App {
@@ -613,6 +621,10 @@ impl App {
 
             focus_saved: None,
             clipboard: Vec::new(),
+
+            edge_scroll_x: 0.0,
+            edge_scroll_y: 0.0,
+            edge_scroll_dir: 0,
         })
     }
 
@@ -907,6 +919,9 @@ impl App {
             if pos.0 >= cx + cw - 10.0 {
                 self.clip_interaction.begin_drag(&self.clips, pos, &cm);
                 self.clip_interaction.select_only(idx);
+                self.edge_scroll_x = 0.0;
+                self.edge_scroll_y = 0.0;
+                self.edge_scroll_dir = 0;
                 return true;
             }
         }
@@ -1033,6 +1048,9 @@ impl App {
                             if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
                                 self.clip_interaction.begin_drag(&self.clips, pos, &cm);
                                 self.clip_interaction.select_only(idx);
+                                self.edge_scroll_x = 0.0;
+                                self.edge_scroll_y = 0.0;
+                                self.edge_scroll_dir = 0;
                             } else {
                                 self.clip_interaction.begin_marquee(pos);
                             }
@@ -1074,6 +1092,10 @@ impl App {
                     let cm = self.clip_metrics();
                     self.clip_interaction.drag_move(pos, &cm, snap);
                     self.clip_interaction.end_drag(&mut self.clips, &cm, snap);
+                    // Reseta auto-scroll ao finalizar o arrasto.
+                    self.edge_scroll_x = 0.0;
+                    self.edge_scroll_y = 0.0;
+                    self.edge_scroll_dir = 0;
                 } else if self.clip_interaction.is_marqueeing() {
                     self.clip_interaction.marquee_move(pos);
                     let cm = self.clip_metrics();
@@ -1092,16 +1114,19 @@ impl App {
         } else if self.clip_interaction.is_dragging() {
             let snap = true;
             self.clip_interaction.drag_move(pos, &cm, snap);
+            // Auto-scroll nas bordas durante drag de clips.
+            self.update_edge_scroll(pos);
+            self.apply_edge_scroll();
         } else if self.clip_interaction.is_marqueeing() {
             self.clip_interaction.marquee_move(pos);
         } else if self.scrubbing {
             self.set_playhead_from_x(pos.0);
         }
         self.clip_interaction.update_hover(&self.clips, pos, &cm);
-        
+
         // Atualiza cursor nativo do Windows
         update_cursor();
-        
+
         if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
@@ -1109,6 +1134,70 @@ impl App {
             self.clamp_scroll_y(self.size.height as f32);
         }
         self.last_cursor = pos;
+    }
+
+    /// Detecta quando o cursor está perto das bordas da janela durante um
+    /// arrasto de clip e ajusta a velocidade de auto-scroll proporcional à
+    /// proximidade (quanto mais perto da borda, mais rápido rola).
+    /// Zona de trigger: 40px de cada borda. Velocidade máxima: 24px/frame.
+    fn update_edge_scroll(&mut self, pos: (f32, f32)) {
+        let width = self.size.width as f32;
+        let height = self.size.height as f32;
+        let edge_zone = 40.0;
+        let max_speed = 24.0;
+
+        // Borda esquerda / direita (scroll horizontal)
+        if pos.0 < edge_zone {
+            // Quanto mais próximo da borda, mais rápido (0..1)
+            let proximity = 1.0 - (pos.0 / edge_zone).clamp(0.0, 1.0);
+            self.edge_scroll_x = proximity * max_speed;
+            self.edge_scroll_dir = -1; // rola para esquerda (conteúdo entra da direita)
+        } else if pos.0 > width - edge_zone {
+            let proximity = 1.0 - ((width - pos.0) / edge_zone).clamp(0.0, 1.0);
+            self.edge_scroll_x = proximity * max_speed;
+            self.edge_scroll_dir = 1; // rola para direita
+        } else {
+            self.edge_scroll_x = 0.0;
+        }
+
+        // Borda top / bottom (scroll vertical)
+        // Só rola verticalmente se o cursor estiver abaixo da régua
+        let body_top = self.ruler_px;
+        if pos.1 < body_top + edge_zone {
+            // Top edge: rola para cima
+            let proximity_y = if pos.1 < body_top {
+                // Cursor na régua: proximidade máxima
+                1.0
+            } else {
+                1.0 - ((pos.1 - body_top) / edge_zone).clamp(0.0, 1.0)
+            };
+            self.edge_scroll_y = proximity_y * max_speed * 0.6; // velocidade Y menor
+        } else if pos.1 > height - edge_zone {
+            // Bottom edge: rola para baixo
+            let proximity_y = 1.0 - ((height - pos.1) / edge_zone).clamp(0.0, 1.0);
+            self.edge_scroll_y = proximity_y * max_speed * 0.6;
+        } else {
+            self.edge_scroll_y = 0.0;
+        }
+    }
+
+    /// Aplica o auto-scroll calculado no frame atual, atualizando os offsets
+    /// de scroll horizontal e vertical. Chamado após drag_move para que o
+    /// overlay do clip siga o cursor antes do scroll ser compensado.
+    fn apply_edge_scroll(&mut self) {
+        if self.edge_scroll_x == 0.0 && self.edge_scroll_y == 0.0 {
+            return;
+        }
+        // O drag_move já atualizou drag_live_beat/track com base no cursor.
+        // Agora compensamos o scroll: o clip overlay deve permanecer na mesma
+        // posição absoluta enquanto a viewport rola.
+        let dx = self.edge_scroll_x * self.edge_scroll_dir as f32;
+        // Compensamos o cursor virtualmente para o próximo frame:
+        // o drag_move recalcula a partir de drag_start_cursor, então
+        // ajustamos scroll_x que afeta a conversão cursor→beat.
+        self.scroll_x = (self.scroll_x + dx).max(0.0);
+        self.scroll_y = (self.scroll_y + self.edge_scroll_y).max(0.0);
+        self.clamp_scroll_y(self.size.height as f32);
     }
 
     fn build_instances(&self, width: f32, height: f32) -> Vec<RectInstance> {
