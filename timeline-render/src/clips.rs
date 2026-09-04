@@ -69,6 +69,8 @@ pub struct ClipInteraction {
     pub marquee_cur: (f32, f32),
     pub draw_state: Option<DrawToolState>,
     pub stretch_edge_idx: Option<usize>,
+    pub stretch_mode: bool,
+    pub stretch_live_len: f32,
 }
 
 /// Estado de desenho contínuo com a ferramenta de desenho (tecla 2)
@@ -98,6 +100,8 @@ impl ClipInteraction {
             marquee_cur: (0.0, 0.0),
             draw_state: None,
             stretch_edge_idx: None,
+            stretch_mode: false,
+            stretch_live_len: 0.0,
         }
     }
 
@@ -118,6 +122,10 @@ impl ClipInteraction {
 
     pub fn is_drawing(&self) -> bool {
         self.draw_state.as_ref().map_or(false, |s| s.active)
+    }
+
+    pub fn is_stretching(&self) -> bool {
+        self.stretch_mode
     }
 
     /// Seleciona apenas o clip `idx`, apagando as demais seleções.
@@ -178,6 +186,7 @@ impl ClipInteraction {
             self.drag_live_beat = clip.beat;
             self.drag_live_track = clip.track_index;
             self.drag_moved = false;
+            self.stretch_mode = false;
             self.hover_idx = None;
             true
         } else {
@@ -185,8 +194,31 @@ impl ClipInteraction {
         }
     }
 
+    /// Inicia um stretch (esticamento) na borda direita do clip.
+    pub fn begin_stretch(&mut self, clips: &[ClipDemo], cursor: (f32, f32), m: &ClipMetrics) -> bool {
+        if let Some(idx) = self.hit_test(clips, cursor, m) {
+            let clip = &clips[idx];
+            let (cx, _cy, cw, _ch) = clip_rect(clip, m);
+            if cursor.0 >= cx + cw - 12.0 {
+                self.drag_idx = Some(idx);
+                self.drag_orig_beat = clip.beat;
+                self.drag_orig_track = clip.track_index;
+                self.drag_start_cursor = cursor;
+                self.drag_live_beat = clip.beat;
+                self.drag_live_track = clip.track_index;
+                self.drag_moved = false;
+                self.stretch_mode = true;
+                self.stretch_live_len = clip.len;
+                self.hover_idx = None;
+                return true;
+            }
+        }
+        false
+    }
+
     /// Move o clip em arrasto preservando o ponto de pega (delta desde o DOWN),
     /// com snap de 1 beat e snap de linha inteira, e limiar de 3px.
+    /// No modo stretch (stretch_mode), mantém a posição e varia apenas o `len`.
     pub fn drag_move(&mut self, cursor: (f32, f32), m: &ClipMetrics, snap: bool) {
         if self.drag_idx.is_none() {
             return;
@@ -198,31 +230,46 @@ impl ClipInteraction {
         }
         self.drag_moved = true;
 
-        let raw_beat = self.drag_orig_beat + (dx + m.scroll_x) / m.px_per_beat.max(0.001);
-        let live_beat = if snap {
-            raw_beat.max(0.0).round()
+        if self.stretch_mode {
+            // Stretch: mantém beat e track, varia apenas o len.
+            let delta_beats = dx / m.px_per_beat.max(0.001);
+            let new_len = if snap {
+                (self.stretch_live_len + delta_beats).round().max(0.25)
+            } else {
+                (self.stretch_live_len + delta_beats).max(0.25)
+            };
+            self.stretch_live_len = new_len;
         } else {
-            raw_beat.max(0.0)
-        };
-        self.drag_live_beat = live_beat;
-        self.drag_live_beat = live_beat;
+            let raw_beat = self.drag_orig_beat + (dx + m.scroll_x) / m.px_per_beat.max(0.001);
+            let live_beat = if snap {
+                raw_beat.max(0.0).round()
+            } else {
+                raw_beat.max(0.0)
+            };
+            self.drag_live_beat = live_beat;
 
-        let row_delta = (dy / m.row_height.max(0.001)).round();
-        let n_tracks = 4;
-        let live_track = (self.drag_orig_track as f32 + row_delta).clamp(0.0, (n_tracks - 1) as f32) as usize;
-        self.drag_live_track = live_track;
+            let row_delta = (dy / m.row_height.max(0.001)).round();
+            let n_tracks = 4;
+            let live_track = (self.drag_orig_track as f32 + row_delta).clamp(0.0, (n_tracks - 1) as f32) as usize;
+            self.drag_live_track = live_track;
+        }
     }
 
     /// Termina o arrasto e aplica a nova posição no modelo (commit no release).
     pub fn end_drag(&mut self, clips: &mut [ClipDemo], _m: &ClipMetrics, _snap: bool) {
         if let Some(idx) = self.drag_idx {
             if self.drag_moved {
-                clips[idx].beat = self.drag_live_beat;
-                clips[idx].track_index = self.drag_live_track;
+                if self.stretch_mode {
+                    clips[idx].len = self.stretch_live_len;
+                } else {
+                    clips[idx].beat = self.drag_live_beat;
+                    clips[idx].track_index = self.drag_live_track;
+                }
             }
         }
         self.drag_idx = None;
         self.drag_moved = false;
+        self.stretch_mode = false;
     }
 
     /// Inicia o desenho contínuo com a ferramenta de desenho (tecla 2)
@@ -385,12 +432,24 @@ pub fn build_clip_instances(
     // Overlay: clip seguindo o mouse durante o arrasto (moved).
     if let (Some(idx), true) = (inter.drag_idx, inter.drag_moved) {
         if let Some(clip) = clips.get(idx) {
-            let live = ClipDemo {
-                track_index: inter.drag_live_track,
-                beat: inter.drag_live_beat,
-                len: clip.len,
-                is_midi: clip.is_midi,
-                color: clip.color,
+            let live = if inter.stretch_mode {
+                // Stretch: posição original, len varia
+                ClipDemo {
+                    track_index: inter.drag_orig_track,
+                    beat: inter.drag_orig_beat,
+                    len: inter.stretch_live_len,
+                    is_midi: clip.is_midi,
+                    color: clip.color,
+                }
+            } else {
+                // Move: posição varia, len original
+                ClipDemo {
+                    track_index: inter.drag_live_track,
+                    beat: inter.drag_live_beat,
+                    len: clip.len,
+                    is_midi: clip.is_midi,
+                    color: clip.color,
+                }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
             if w > 0.0 && x < width && x + w > 0.0 {

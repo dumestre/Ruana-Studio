@@ -915,10 +915,10 @@ impl App {
     fn tool_stretch_start(&mut self, pos: (f32, f32)) -> bool {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-            // Verifica se clicou na borda direita do clip (últimos 10px)
+            // Verifica se clicou na borda direita do clip (últimos 12px)
             let (cx, _, cw, _) = clips::clip_rect(&self.clips[idx], &cm);
-            if pos.0 >= cx + cw - 10.0 {
-                self.clip_interaction.begin_drag(&self.clips, pos, &cm);
+            if pos.0 >= cx + cw - 12.0 {
+                self.clip_interaction.begin_stretch(&self.clips, pos, &cm);
                 self.clip_interaction.select_only(idx);
                 self.edge_scroll_x = 0.0;
                 self.edge_scroll_y = 0.0;
@@ -1134,7 +1134,7 @@ impl App {
         // Atualiza cursor nativo do Windows
         update_cursor();
 
-        if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() && !self.clip_interaction.is_drawing() {
+        if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() && !self.clip_interaction.is_drawing() && !self.clip_interaction.is_stretching() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
@@ -1212,7 +1212,11 @@ impl App {
         // `dx / px_per_beat` para manter a mesma posição na tela.
         if self.clip_interaction.is_dragging() {
             let pps = self.px_per_beat.max(0.001);
-            self.clip_interaction.drag_live_beat += dx / pps;
+            if self.clip_interaction.is_stretching() {
+                self.clip_interaction.stretch_live_len += dx / pps;
+            } else {
+                self.clip_interaction.drag_live_beat += dx / pps;
+            }
         }
     }
 
