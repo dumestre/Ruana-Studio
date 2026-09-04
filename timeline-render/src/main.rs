@@ -384,6 +384,7 @@ struct App {
     loop_drag_orig_end: f32,
 
     focus_saved: Option<(f32, f32, f32)>,
+    clipboard: Vec<ClipDemo>,
 }
 
 impl App {
@@ -613,6 +614,7 @@ impl App {
             loop_drag_orig_end: 0.0,
 
             focus_saved: None,
+            clipboard: Vec::new(),
         })
     }
 
@@ -760,6 +762,103 @@ impl App {
         self.focus_saved = Some((self.scroll_x, self.px_per_beat, self.scroll_y));
         let clip_x = clip.beat * self.px_per_beat;
         self.scroll_x = (clip_x - width * 0.5).max(0.0);
+    }
+
+    /// Copia os clips selecionados para o clipboard, preservando posições relativas.
+    fn copy_selected(&mut self) {
+        let selected_clips: Vec<ClipDemo> = self
+            .clips
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i < &self.clip_interaction.selected.len() && self.clip_interaction.selected[*i])
+            .map(|(_, c)| *c)
+            .collect();
+        if !selected_clips.is_empty() {
+            self.clipboard = selected_clips;
+        }
+    }
+
+    /// Cola os clips do clipboard na posição alvo (beat), com snap ao grid (1 beat).
+    /// Mantém a estrutura relativa dos clips copiados.
+    fn paste_at_beat(&mut self, target_beat: f32) {
+        if self.clipboard.is_empty() {
+            return;
+        }
+        // Encontra o beat mínimo dos clips copiados para manter offsets relativos
+        let min_beat = self.clipboard.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
+        let snap_beat = target_beat.round().max(0.0);
+        let offset = snap_beat - min_beat.round();
+        for clip in &self.clipboard {
+            let mut new_clip = *clip;
+            new_clip.beat = (clip.beat + offset).max(0.0).round();
+            self.clips.push(new_clip);
+        }
+        // Seleciona os clips colados
+        self.clip_interaction.sync_selection(self.clips.len());
+        for s in self.clip_interaction.selected.iter_mut() {
+            *s = false;
+        }
+        let pasted_count = self.clipboard.len();
+        for i in (self.clips.len() - pasted_count)..self.clips.len() {
+            if i < self.clip_interaction.selected.len() {
+                self.clip_interaction.selected[i] = true;
+            }
+        }
+    }
+
+    /// Duplica os clips selecionados no local (com snap ao grid).
+    fn duplicate_selected(&mut self) {
+        let selected_indices: Vec<usize> = self
+            .clip_interaction
+            .selected
+            .iter()
+            .enumerate()
+            .filter(|&(_, &s)| s)
+            .map(|(i, _)| i)
+            .collect();
+        if selected_indices.is_empty() {
+            return;
+        }
+        let clips_to_dup: Vec<ClipDemo> = selected_indices.iter().map(|&i| self.clips[i]).collect();
+        // Calcula o beat mínimo para snap relativo
+        let min_beat = clips_to_dup.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
+        let snap_base = min_beat.round();
+        for clip in &clips_to_dup {
+            let mut new_clip = *clip;
+            new_clip.beat = (clip.beat - min_beat + snap_base + clip.len).round().max(0.0);
+            self.clips.push(new_clip);
+        }
+        // Seleciona os duplicados
+        self.clip_interaction.sync_selection(self.clips.len());
+        for s in self.clip_interaction.selected.iter_mut() {
+            *s = false;
+        }
+        let dup_count = clips_to_dup.len();
+        for i in (self.clips.len() - dup_count)..self.clips.len() {
+            if i < self.clip_interaction.selected.len() {
+                self.clip_interaction.selected[i] = true;
+            }
+        }
+    }
+
+    /// Deleta os clips selecionados.
+    fn delete_selected(&mut self) {
+        let selected_indices: Vec<usize> = self
+            .clip_interaction
+            .selected
+            .iter()
+            .enumerate()
+            .filter(|&(_, &s)| s)
+            .map(|(i, _)| i)
+            .collect();
+        if selected_indices.is_empty() {
+            return;
+        }
+        // Remove em ordem reversa para manter índices válidos
+        for &i in selected_indices.iter().rev() {
+            self.clips.remove(i);
+        }
+        self.clip_interaction.sync_selection(self.clips.len());
     }
 
     fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), ruler_h: f32) {
@@ -1309,6 +1408,7 @@ struct AppHandler {
     window_id: WindowId,
     ctrl_pressed: bool,
     alt_pressed: bool,
+    shift_pressed: bool,
 }
 
 impl AppHandler {
@@ -1318,6 +1418,7 @@ impl AppHandler {
             window_id: WindowId::dummy(),
             ctrl_pressed: false,
             alt_pressed: false,
+            shift_pressed: false,
         }
     }
 }
@@ -1372,11 +1473,9 @@ impl winit::application::ApplicationHandler for AppHandler {
                 let vk = event.logical_key;
                 if pressed && vk == Key::Named(NamedKey::Space) {
                     if app.playing {
-                        // Pausa: playhead volta para onde começou a tocar.
                         app.transport_seconds = app.play_start_seconds;
                         app.playing = false;
                     } else {
-                        // Inicia o play a partir da posição atual.
                         app.play_start_seconds = app.transport_seconds;
                         app.playing = true;
                     }
@@ -1391,14 +1490,47 @@ impl winit::application::ApplicationHandler for AppHandler {
                     app.toggle_clip_focus(app.size.width as f32);
                     app.window.request_redraw();
                 }
-                // Track ctrl/alt para zoom com touchpad/mouse.
+                // Clipboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+D, Delete, Backspace)
+                if pressed && self.ctrl_pressed {
+                    match vk {
+                        Key::Character(ref s) if s.eq_ignore_ascii_case("c") => {
+                            app.copy_selected();
+                            app.window.request_redraw();
+                        }
+                        Key::Character(ref s) if s.eq_ignore_ascii_case("v") => {
+                            // Cola na posição do playhead (com snap)
+                            let bpm = 120.0;
+                            let pps = app.px_per_beat * bpm / 60.0;
+                            let target_beat = if pps > 0.0 {
+                                app.transport_seconds * bpm / 60.0
+                            } else {
+                                0.0
+                            };
+                            app.paste_at_beat(target_beat);
+                            app.window.request_redraw();
+                        }
+                        Key::Character(ref s) if s.eq_ignore_ascii_case("d") => {
+                            app.duplicate_selected();
+                            app.window.request_redraw();
+                        }
+                        _ => {}
+                    }
+                }
+                if pressed && matches!(vk, Key::Named(NamedKey::Delete) | Key::Named(NamedKey::Backspace)) {
+                    app.delete_selected();
+                    app.window.request_redraw();
+                }
+                // Track ctrl/alt/shift para zoom e shortcuts.
                 use winit::keyboard::{KeyCode, PhysicalKey};
                 let is_ctrl = matches!(vk, Key::Named(NamedKey::Control))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ControlLeft | KeyCode::ControlRight));
                 let is_alt = matches!(vk, Key::Named(NamedKey::Alt))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::AltLeft | KeyCode::AltRight));
+                let is_shift = matches!(vk, Key::Named(NamedKey::Shift))
+                    || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight));
                 self.ctrl_pressed = pressed && is_ctrl;
                 self.alt_pressed = pressed && is_alt;
+                self.shift_pressed = pressed && is_shift;
             }
             WindowEvent::MouseInput {
                 device_id: _,
@@ -1410,7 +1542,26 @@ impl winit::application::ApplicationHandler for AppHandler {
                     let pos = Some(app.last_cursor);
                     app.handle_mouse_button(state, pos);
                 } else if button == winit::event::MouseButton::Left {
-                    app.handle_primary_button(state, app.last_cursor);
+                    // Shift+Left Click: cola o clipboard na posição do cursor (fora de clips/régua)
+                    if state == ElementState::Pressed && self.shift_pressed {
+                        let pos = app.last_cursor;
+                        if pos.1 >= app.ruler_px {
+                            // Verifica se não está sobre um clip
+                            let cm = app.clip_metrics();
+                            if app.clip_interaction.hit_test(&app.clips, pos, &cm).is_none() {
+                                // Converte cursor para beat com snap
+                                let beat = (pos.0 + app.scroll_x) / app.px_per_beat.max(0.001);
+                                app.paste_at_beat(beat.round().max(0.0));
+                                app.window.request_redraw();
+                            } else {
+                                app.handle_primary_button(state, app.last_cursor);
+                            }
+                        } else {
+                            app.handle_primary_button(state, app.last_cursor);
+                        }
+                    } else {
+                        app.handle_primary_button(state, app.last_cursor);
+                    }
                 }
                 app.window.request_redraw();
             }
