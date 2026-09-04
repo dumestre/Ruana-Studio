@@ -338,6 +338,14 @@ impl OrthoCamera {
 // App
 // ============================================================================
 
+/// Modo de arrasto do seletor de loop na régua.
+#[derive(Clone, Copy, PartialEq)]
+enum LoopDrag {
+    Start, // arrasta a borda esquerda (ajusta largura)
+    End,   // arrasta a borda direita (ajusta largura)
+    Move,  // arrasta o centro (move o range inteiro)
+}
+
 struct App {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -366,6 +374,14 @@ struct App {
     wave_bars: Vec<f32>,
     clips: Vec<ClipDemo>,
     clip_interaction: clips::ClipInteraction,
+
+    loop_start_beat: f32,
+    loop_end_beat: f32,
+    loop_enabled: bool,
+    loop_drag: Option<LoopDrag>,
+    loop_drag_start_x: f32,
+    loop_drag_orig_start: f32,
+    loop_drag_orig_end: f32,
 }
 
 impl App {
@@ -585,6 +601,14 @@ impl App {
             wave_bars,
             clips,
             clip_interaction: clips::ClipInteraction::new(),
+
+            loop_start_beat: 0.0,
+            loop_end_beat: 8.0,
+            loop_enabled: true,
+            loop_drag: None,
+            loop_drag_start_x: 0.0,
+            loop_drag_orig_start: 0.0,
+            loop_drag_orig_end: 0.0,
         })
     }
 
@@ -663,6 +687,61 @@ impl App {
         self.transport_seconds = ((mx + self.scroll_x) / pps).max(0.0);
     }
 
+    /// Converte um beat (tempo musical) para a coordenada x de janela.
+    fn beat_to_x(&self, beat: f32) -> f32 {
+        beat * self.px_per_beat - self.scroll_x
+    }
+
+    /// Inicia o arrasto do loop na régua a partir da posição x do cursor.
+    /// Retorna true se iniciou um arrasto de loop; false para comportamento padrão.
+    fn begin_loop_drag(&mut self, mx: f32) -> bool {
+        if !self.loop_enabled {
+            return false;
+        }
+        let sx = self.beat_to_x(self.loop_start_beat);
+        let ex = self.beat_to_x(self.loop_end_beat);
+        let grab = 6.0;
+        self.loop_drag_orig_start = self.loop_start_beat;
+        self.loop_drag_orig_end = self.loop_end_beat;
+        self.loop_drag_start_x = mx;
+        if (mx - sx).abs() <= grab {
+            self.loop_drag = Some(LoopDrag::Start);
+        } else if (mx - ex).abs() <= grab {
+            self.loop_drag = Some(LoopDrag::End);
+        } else if mx >= sx && mx <= ex {
+            self.loop_drag = Some(LoopDrag::Move);
+        } else {
+            return false;
+        }
+        true
+    }
+
+    /// Move a borda/seleção do loop com snap de 1 beat (arredonda o beat).
+    fn handle_loop_drag(&mut self, mx: f32) {
+        let Some(kind) = self.loop_drag else { return };
+        let dx = mx - self.loop_drag_start_x;
+        let delta_beats = (dx / self.px_per_beat.max(0.001)).round();
+        match kind {
+            LoopDrag::Start => {
+                let new = (self.loop_drag_orig_start + delta_beats)
+                    .max(0.0)
+                    .min(self.loop_end_beat - 1.0);
+                self.loop_start_beat = new.max(0.0);
+            }
+            LoopDrag::End => {
+                let new = (self.loop_drag_orig_end + delta_beats)
+                    .max(self.loop_start_beat + 1.0);
+                self.loop_end_beat = new;
+            }
+            LoopDrag::Move => {
+                let span = self.loop_drag_orig_end - self.loop_drag_orig_start;
+                let new_start = (self.loop_drag_orig_start + delta_beats).max(0.0);
+                self.loop_start_beat = new_start;
+                self.loop_end_beat = new_start + span;
+            }
+        }
+    }
+
     fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), ruler_h: f32) {
         match state {
             ElementState::Pressed => {
@@ -698,8 +777,10 @@ impl App {
         match state {
             ElementState::Pressed => {
                 if pos.1 < self.ruler_px {
-                    // Régua → scrub do playhead (não seleciona).
-                    self.handle_ruler_click(state, pos, self.ruler_px);
+                    // Régua → tenta arrastar o seletor de loop; senão, scrub do playhead.
+                    if !self.begin_loop_drag(pos.0) {
+                        self.handle_ruler_click(state, pos, self.ruler_px);
+                    }
                 } else if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
                     // Clique num clip → seleciona e inicia possível arrasto.
                     self.clip_interaction.begin_drag(&self.clips, pos, &cm);
@@ -710,7 +791,9 @@ impl App {
                 }
             }
             ElementState::Released => {
-                if self.clip_interaction.is_dragging() {
+                if self.loop_drag.is_some() {
+                    self.loop_drag = None;
+                } else if self.clip_interaction.is_dragging() {
                     let snap = true;
                     let cm = self.clip_metrics();
                     self.clip_interaction.drag_move(pos, &cm, snap);
@@ -728,7 +811,9 @@ impl App {
 
     fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
-        if self.clip_interaction.is_dragging() {
+        if self.loop_drag.is_some() {
+            self.handle_loop_drag(pos.0);
+        } else if self.clip_interaction.is_dragging() {
             let snap = true;
             self.clip_interaction.drag_move(pos, &cm, snap);
         } else if self.clip_interaction.is_marqueeing() {
@@ -1022,6 +1107,53 @@ impl App {
                 radius: 6.0,
             });
 
+        // Seletor de loop — bordas laterais grossas na régua (alças de arrasto)
+        // + centro translúcido descendo por toda a timeline.
+        if self.loop_enabled {
+            let c = palette::PLAYHEAD_COLOR;
+            let crim = [c.0, c.1, c.2, 255];
+            let crim_fill = [c.0, c.1, c.2, 28]; // centro translúcido (corpo)
+            let crim_fill_ruler = [c.0, c.1, c.2, 90]; // centro na régua: menos translúcido
+            let sx = self.beat_to_x(self.loop_start_beat);
+            let ex = self.beat_to_x(self.loop_end_beat);
+            let lw = (ex - sx).max(0.0);
+            let bw = 3.0; // grossura das bordas laterais (alças)
+            let body_top = self.ruler_px;
+            let body_h = (height - self.ruler_px).max(0.0);
+
+            if lw > 0.0 {
+                // Centro translúcido que desce toda a timeline (sem borda no corpo).
+                instances.push(RectInstance {
+                    x: sx, y: body_top, w: lw, h: body_h,
+                    color: crim_fill,
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+
+                // Centro na régua: menos translúcido (mais visível que o corpo).
+                if sx + lw > 0.0 && sx < width {
+                    instances.push(RectInstance {
+                        x: sx, y: 0.0, w: lw.min(width - sx).max(0.0), h: self.ruler_px,
+                        color: crim_fill_ruler,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+
+                // Bordas laterais grossas NA RÉGUA (alças de arrasto).
+                if sx + lw >= -bw && sx <= width {
+                    instances.push(RectInstance {
+                        x: sx, y: 0.0, w: bw, h: self.ruler_px, color: crim,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+                if ex >= 0.0 && ex - bw <= width {
+                    instances.push(RectInstance {
+                        x: ex - bw, y: 0.0, w: bw, h: self.ruler_px, color: crim,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+            }
+        }
+
         instances
     }
     fn render(&mut self) {
@@ -1246,7 +1378,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                 ..
             } => {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
-                if app.scrubbing || app.clip_interaction.is_dragging()
+                if app.loop_drag.is_some() || app.scrubbing || app.clip_interaction.is_dragging()
                     || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some() {
                     app.window.request_redraw();
                 }
