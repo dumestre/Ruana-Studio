@@ -1168,7 +1168,7 @@ impl App {
                 }
                 if ex >= 0.0 && ex - bw <= width {
                     instances.push(RectInstance {
-                        x: ex, y: 0.0, w: bw, h: self.ruler_px, color: border,
+                        x: ex - bw, y: 0.0, w: bw, h: self.ruler_px, color: border,
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
@@ -1183,7 +1183,7 @@ impl App {
                 }
                 if ex >= 0.0 && ex - bw <= width {
                     instances.push(RectInstance {
-                        x: ex, y: body_top, w: 2.0, h: body_h, color: border_body,
+                        x: ex - 2.0, y: body_top, w: 2.0, h: body_h, color: border_body,
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
