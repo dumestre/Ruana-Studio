@@ -14,6 +14,7 @@ pub struct ClipDemo {
     pub color: usize,
     pub seam_beat: Option<f32>,
     pub pre_glue_len: Option<f32>,
+    pub pre_glue_color: Option<usize>,
 }
 
 /// Métricas de conversão cursor ↔ conteúdo, espelhadas do App.
@@ -148,12 +149,24 @@ impl ClipInteraction {
         }
     }
 
-    /// Des-cola um clip: restaura o len original (abre o gap novamente)
-    /// e limpa o seam. O clip da frente permanece no lugar.
+    /// Des-cola um clip: restaura o len original (abre o gap) e devolve
+    /// a cor original do clip da frente. O seam é removido.
     pub fn unglue_seam(&mut self, clips: &mut Vec<ClipDemo>, idx: usize) {
         if clips[idx].seam_beat.is_some() {
             if let Some(orig_len) = clips[idx].pre_glue_len {
-                // Restaura o len original, reabrindo o gap
+                let seam_beat = clips[idx].seam_beat.unwrap();
+                let track = clips[idx].track_index;
+
+                // Restaura cor original do clip da frente
+                for c in clips.iter_mut() {
+                    if c.track_index == track && (c.beat - seam_beat).abs() < 0.01
+                        && c.pre_glue_color.is_some() {
+                        c.color = c.pre_glue_color.unwrap();
+                        c.pre_glue_color = None;
+                    }
+                }
+
+                // Restaura len original do clip atual
                 clips[idx].len = orig_len;
                 clips[idx].seam_beat = None;
                 clips[idx].pre_glue_len = None;
@@ -358,6 +371,7 @@ impl ClipInteraction {
                     color: 0,
                     seam_beat: None,
                     pre_glue_len: None,
+                    pre_glue_color: None,
                 };
 
                 clips.push(clip.clone());
@@ -511,6 +525,7 @@ pub fn build_clip_instances(
                     color: clip.color,
                     seam_beat: clip.seam_beat,
                     pre_glue_len: clip.pre_glue_len,
+                    pre_glue_color: clip.pre_glue_color,
                 }
             } else {
                 // Stretch: posição original, len varia
@@ -522,6 +537,7 @@ pub fn build_clip_instances(
                     color: clip.color,
                     seam_beat: clip.seam_beat,
                     pre_glue_len: clip.pre_glue_len,
+                    pre_glue_color: clip.pre_glue_color,
                 }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
@@ -550,6 +566,7 @@ pub fn build_clip_instances(
                 color: 0,
                 seam_beat: None,
                 pre_glue_len: None,
+                pre_glue_color: None,
             };
 
             let (x, y, w, _h) = clip_rect(&temp_clip, m);

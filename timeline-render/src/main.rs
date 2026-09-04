@@ -558,12 +558,12 @@ impl App {
 
         // === Dados demo ===
         let clips = vec![
-            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, seam_beat: None, pre_glue_len: None },
-            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, seam_beat: None, pre_glue_len: None },
-            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, seam_beat: None, pre_glue_len: None },
-            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, seam_beat: None, pre_glue_len: None },
-            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, seam_beat: None, pre_glue_len: None },
-            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, seam_beat: None, pre_glue_len: None },
+            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
         ];
 
         let mut wave_bars: Vec<f32> = Vec::new();
@@ -909,6 +909,7 @@ impl App {
             color: 0,
             seam_beat: None,
             pre_glue_len: None,
+            pre_glue_color: None,
         });
         self.clip_interaction.sync_selection(self.clips.len());
     }
@@ -994,6 +995,9 @@ impl App {
                 // Marca o seam na posição onde o próximo clip começa
                 self.clips[idx].seam_beat = Some(next_beat);
                 self.clips[idx].pre_glue_len = Some(clip.len);
+                // Sincroniza a cor do próximo clip com o atual + salva cor original
+                self.clips[next_idx].pre_glue_color = Some(self.clips[next_idx].color);
+                self.clips[next_idx].color = clip.color;
                 // Estica o clip atual até o início do próximo (preenchendo o gap)
                 self.clips[idx].len = (next_beat - clip.beat).max(0.25);
                 // Seleciona o clip esticado
