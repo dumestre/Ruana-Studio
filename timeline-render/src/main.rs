@@ -5,11 +5,13 @@
 //! instancing + storage buffer de waveform do `TimelineGpuRenderer` do app.
 //!
 //! Controles:
-//!   - Scroll do mouse:      pan horizontal
-//!   - Shift + scroll:         zoom
-//!   - Espaço:                  play/pause do playhead animado
-//!   - ESC:                     fecha
-//!   - Resize:                  redimensiona o canvas
+//!   - Roda do mouse / touchpad 2 dedos: scroll vertical (e lateral)
+//!   - Click na roda + arrastar:          pan na timeline
+//!   - Ctrl + PixelDelta vertical:        zoom horizontal (onde suportado)
+//!   - Alt + PixelDelta vertical:         zoom vertical (altura das faixas)
+//!   - Espaço:                            play/pause do playhead animado
+//!   - ESC:                               fecha
+//!   - Resize:                            redimensiona o canvas
 
 mod shctx;
 
@@ -341,12 +343,14 @@ struct App {
     theme: usize,
     scroll_x: f32,
     scroll_y: f32,
-    zoom: f32,
     px_per_beat: f32,
+    zoom_y: f32,
     ruler_px: f32,
     playing: bool,
     transport_seconds: f32,
     last_play_head_update: Instant,
+    panning: bool,
+    last_cursor: (f32, f32),
 
     wave_bars: Vec<f32>,
     clips: Vec<ClipDemo>,
@@ -555,12 +559,14 @@ impl App {
             theme: 6,   // <- Mudança: usar Paper (claro) como tema base
             scroll_x: 0.0,
             scroll_y: 0.0,
-            zoom: 1.0,
             px_per_beat,
+            zoom_y: 1.0,
             ruler_px: 25.0,
             playing: true,
             transport_seconds: 0.0,
             last_play_head_update: Instant::now(),
+            panning: false,
+            last_cursor: (0.0, 0.0),
 
             wave_bars,
             clips,
@@ -576,50 +582,54 @@ impl App {
         }
     }
 
-    fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_shift: bool, with_ctrl: bool, with_alt: bool) {
-        let amount = match *delta {
-            winit::event::MouseScrollDelta::LineDelta(_, y) => y,
-            winit::event::MouseScrollDelta::PixelDelta(p) => (p.y / 10.0) as f32,
-        };
-
-        // Heuristic to detect touchpad vs mouse:
-        // - PixelDelta with non-zero x likely from touchpad/gesture
-        // - LineDelta or PixelDelta with x=0 likely from mouse wheel
-        let is_touchpad_like = matches!(delta, winit::event::MouseScrollDelta::PixelDelta(p) if p.x != 0.0);
-
-        // Priority: Alt > Ctrl > Shift > default
-        // Rules:
-        // - Alt+any: vertical zoom (always)
-        // - Ctrl+any: horizontal zoom (always)
-        // - Shift+any: horizontal zoom (always, or could be scroll)
-        // - Touchpad-like (PixelDelta with x!=0): vertical scroll when no modifier
-        // - Mouse wheel (no x component): horizontal scroll when no modifier
-        if with_alt {
-            // ZOOM VERTICAL (Alt+roda / Alt+arrasto 2 dedos) — instantâneo, afeta altura das faixas
-            let old_scroll_y = self.scroll_y;
-            let new_scroll_y = (old_scroll_y + amount * 20.0).clamp(0.0, 1000.0);
-            self.scroll_y = new_scroll_y;
-        } else if with_ctrl {
-            // ZOOM HORIZONTAL (Ctrl+roda / Ctrl+arrasto 2 dedos) — ajusta zoom, preservando ponto sob cursor
-            let amount_zoom = amount * 0.05;
-            self.zoom = (self.zoom + amount_zoom).clamp(0.1, 10.0);
-            self.px_per_beat = 40.0 * self.zoom;
-        } else if with_shift {
-            // ZOOM HORIZONTAL antigo (Shift+roda) — ou pode ser mantido como scroll
-            self.zoom = (self.zoom + amount * 0.05).clamp(0.1, 10.0);
-            self.px_per_beat = 40.0 * self.zoom;
-        } else if is_touchpad_like {
-            // Touchpad 2 dedos gesto vertical — scroll vertical
-            // (detected by PixelDelta with non-zero x component)
-            let old_scroll_y = self.scroll_y;
-            let new_scroll_y = (old_scroll_y + amount * 20.0).clamp(0.0, 1000.0);
-            self.scroll_y = new_scroll_y;
-        } else {
-            // Mouse wheel sem modificadores — scroll horizontal da timeline
-            // Faz scroll horizontal da timeline
-            self.scroll_x += amount * 20.0;
-            self.scroll_x = self.scroll_x.max(0.0);
+    fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_ctrl: bool, with_alt: bool) {
+        // No Windows, roda do mouse E touchpad 2 dedos chegam como LineDelta,
+        // sem como distinguir — tratamos ambos pelo eixo real do delta:
+        //   x → scroll horizontal, y → scroll vertical.
+        // PixelDelta (ex.: macOS/outras plataformas) segue as regras de
+        // touchpad com Ctrl/Alt para zoom.
+        match *delta {
+            winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                self.scroll_x = (self.scroll_x - x * 40.0).max(0.0);
+                self.scroll_y = (self.scroll_y - y * 40.0).max(0.0);
+            }
+            winit::event::MouseScrollDelta::PixelDelta(p) => {
+                let dx = p.x as f32;
+                let dy = p.y as f32;
+                if with_ctrl && dy.abs() >= 1.0 {
+                    // Ctrl + 2 dedos arrasto vertical — zoom horizontal.
+                    self.px_per_beat = (self.px_per_beat + dy * 0.5).clamp(8.0, 640.0);
+                } else if with_alt && dy.abs() >= 1.0 {
+                    // Alt + 2 dedos arrasto vertical — zoom vertical (altura das faixas).
+                    self.zoom_y = (self.zoom_y + dy * 0.01).clamp(0.25, 6.0);
+                } else {
+                    // 2 dedos arrasto horizontal/vertical — scroll na timeline.
+                    self.scroll_x = (self.scroll_x - dx).max(0.0);
+                    self.scroll_y = (self.scroll_y - dy).max(0.0);
+                }
+            }
         }
+    }
+
+    fn handle_mouse_button(&mut self, state: ElementState, pos: Option<(f32, f32)>) {
+        match state {
+            ElementState::Pressed => {
+                self.panning = true;
+                if let Some(p) = pos { self.last_cursor = p; }
+            }
+            ElementState::Released => {
+                self.panning = false;
+            }
+        }
+    }
+
+    fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
+        if self.panning {
+            let (lx, ly) = self.last_cursor;
+            self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
+            self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
+        }
+        self.last_cursor = pos;
     }
 
     fn build_instances(&self, width: f32, height: f32) -> Vec<RectInstance> {
@@ -627,7 +637,7 @@ impl App {
         let mut instances = Vec::new();
         let px_per_bar = self.px_per_beat * 4.0;
         let _total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
-        let row_height = 40.0;
+        let row_height = 40.0 * self.zoom_y;
 
         // Fundo geral - cobre desde a régua até o fundo
         instances.push(RectInstance {
@@ -786,7 +796,7 @@ impl App {
 
             let x = clip.beat * self.px_per_beat - self.scroll_x;
             let w = (clip.len * self.px_per_beat).max(40.0);
-            let y = self.ruler_px + clip.track_index as f32 * row_height;
+            let y = self.ruler_px + clip.track_index as f32 * row_height - self.scroll_y;
 
             if w <= 0.0 || x + w < 0.0 || x > width { continue; }
             let draw_w = w.min(width - x).max(0.0);
@@ -978,7 +988,6 @@ impl App {
 struct AppHandler {
     app: Option<App>,
     window_id: WindowId,
-    shift_pressed: bool,
     ctrl_pressed: bool,
     alt_pressed: bool,
 }
@@ -988,7 +997,6 @@ impl AppHandler {
         Self {
             app: None,
             window_id: WindowId::dummy(),
-            shift_pressed: false,
             ctrl_pressed: false,
             alt_pressed: false,
         }
@@ -1033,7 +1041,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                 delta,
                 phase: _,
             } => {
-                app.handle_scroll(&delta, self.shift_pressed, self.ctrl_pressed, self.alt_pressed);
+                app.handle_scroll(&delta, self.ctrl_pressed, self.alt_pressed);
             }
             WindowEvent::KeyboardInput {
                 device_id: _,
@@ -1049,17 +1057,32 @@ impl winit::application::ApplicationHandler for AppHandler {
                 if pressed && vk == Key::Named(NamedKey::Escape) {
                     event_loop.exit();
                 }
-                // Track shift/ctrl/alt para zoom/scroll com mouse
+                // Track ctrl/alt para zoom com touchpad/mouse.
                 use winit::keyboard::{KeyCode, PhysicalKey};
-                let is_shift = matches!(vk, Key::Named(NamedKey::Shift))
-                    || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight));
                 let is_ctrl = matches!(vk, Key::Named(NamedKey::Control))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ControlLeft | KeyCode::ControlRight));
                 let is_alt = matches!(vk, Key::Named(NamedKey::Alt))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::AltLeft | KeyCode::AltRight));
-                self.shift_pressed = pressed && is_shift;
                 self.ctrl_pressed = pressed && is_ctrl;
                 self.alt_pressed = pressed && is_alt;
+            }
+            WindowEvent::MouseInput {
+                device_id: _,
+                state,
+                button,
+                ..
+            } => {
+                if button == winit::event::MouseButton::Middle {
+                    let pos = Some(app.last_cursor);
+                    app.handle_mouse_button(state, pos);
+                }
+            }
+            WindowEvent::CursorMoved {
+                device_id: _,
+                position,
+                ..
+            } => {
+                app.handle_cursor_moved((position.x as f32, position.y as f32));
             }
             WindowEvent::Focused(focused) => {
                 if !focused {
