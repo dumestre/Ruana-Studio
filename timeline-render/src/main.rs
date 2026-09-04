@@ -114,14 +114,6 @@ pub(crate) fn darker((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
         (b as f32 * f).round() as u8,
     )
 }
-pub(crate) fn lighter((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
-    let a = amount.clamp(0.0, 1.0);
-    (
-        (r as f32 + (255.0 - r as f32) * a).round() as u8,
-        (g as f32 + (255.0 - g as f32) * a).round() as u8,
-        (b as f32 + (255.0 - b as f32) * a).round() as u8,
-    )
-}
 pub(crate) fn rgba_alpha((r, g, b): palette::Rgb, alpha: f32) -> [u8; 4] {
     let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
     [r, g, b, a]
