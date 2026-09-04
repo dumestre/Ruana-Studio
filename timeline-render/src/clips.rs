@@ -68,6 +68,7 @@ pub struct ClipInteraction {
     pub marquee_start: (f32, f32),
     pub marquee_cur: (f32, f32),
     pub draw_state: Option<DrawToolState>,
+    pub stretch_edge_idx: Option<usize>,
 }
 
 /// Estado de desenho contínuo com a ferramenta de desenho (tecla 2)
@@ -96,6 +97,7 @@ impl ClipInteraction {
             marquee_start: (0.0, 0.0),
             marquee_cur: (0.0, 0.0),
             draw_state: None,
+            stretch_edge_idx: None,
         }
     }
 
@@ -144,11 +146,25 @@ impl ClipInteraction {
     }
 
     /// Atualiza o hover conforme o cursor (quando não arrastando).
+    /// Também detecta proximidade da borda direita para a ferramenta Stretch.
     pub fn update_hover(&mut self, clips: &[ClipDemo], cursor: (f32, f32), m: &ClipMetrics) {
         if self.is_dragging() || self.is_drawing() {
+            self.stretch_edge_idx = None;
             return;
         }
         self.hover_idx = self.hit_test(clips, cursor, m);
+
+        // Detecta se o cursor está perto da borda direita do clip hoverado
+        // (usado pela ferramenta Stretch para feedback visual).
+        self.stretch_edge_idx = self.hover_idx.and_then(|idx| {
+            let clip = &clips[idx];
+            let (cx, _cy, cw, _ch) = clip_rect(clip, m);
+            if cursor.0 >= cx + cw - 12.0 {
+                Some(idx)
+            } else {
+                None
+            }
+        });
     }
 
     /// Inicia um possível arrasto: captura a origem e o ponto de pega.

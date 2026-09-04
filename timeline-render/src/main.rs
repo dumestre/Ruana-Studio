@@ -1385,6 +1385,24 @@ impl App {
             width,
         ));
 
+        // Indicador visual: borda direita piscando quando hover na ferramenta Stretch
+        if current_tool() == Tool::Stretch {
+            if let Some(idx) = self.clip_interaction.stretch_edge_idx {
+                if let Some(clip) = self.clips.get(idx) {
+                    let (cx, cy, cw, ch) = clips::clip_rect(clip, &cm);
+                    let edge_x = cx + cw;
+                    if edge_x > -4.0 && edge_x < width + 4.0 {
+                        let col = if t == 6 { (0xDC, 0x14, 0x3C) } else { palette::ACCENT[t] };
+                        instances.push(RectInstance {
+                            x: edge_x - 2.0, y: cy, w: 4.0, h: ch,
+                            color: [col.0, col.1, col.2, 200],
+                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        });
+                    }
+                }
+            }
+        }
+
         // Régua fixa no topo — desenhada por cima do grid e dos clips
         // (cobre qualquer track que role por baixo dela).
         // Fundos alternados dos compassos (par/ímpar), igual ao corpo.
@@ -1552,6 +1570,20 @@ impl App {
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
+            }
+        }
+
+        // Linha de corte vertical viva (ferramenta Slice — tecla 4)
+        if current_tool() == Tool::Slice && self.last_cursor.1 >= self.ruler_px {
+            let cx = self.last_cursor.0;
+            if cx >= 0.0 && cx <= width {
+                let col = if t == 6 { (0xDC, 0x14, 0x3C) } else { palette::ACCENT[t] };
+                instances.push(RectInstance {
+                    x: cx - 1.0, y: self.ruler_px,
+                    w: 2.0, h: (height - self.ruler_px).max(0.0),
+                    color: [col.0, col.1, col.2, 180],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
             }
         }
 
@@ -1878,7 +1910,8 @@ impl winit::application::ApplicationHandler for AppHandler {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
                 if app.loop_drag.is_some() || app.scrubbing || app.clip_interaction.is_dragging()
                     || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some()
-                    || app.clip_interaction.is_drawing() {
+                    || app.clip_interaction.is_drawing()
+                    || current_tool() == Tool::Slice || current_tool() == Tool::Stretch {
                     app.window.request_redraw();
                 }
             }
