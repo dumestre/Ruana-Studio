@@ -1535,17 +1535,23 @@ impl winit::application::ApplicationHandler for AppHandler {
                     app.delete_selected();
                     app.window.request_redraw();
                 }
-                // Track ctrl/alt/shift para zoom e shortcuts.
+                // Track ctrl/alt/shift para zoom e shortcuts — só atualiza quando a tecla É o modificador.
                 use winit::keyboard::{KeyCode, PhysicalKey};
-                let is_ctrl = matches!(vk, Key::Named(NamedKey::Control))
+                let is_ctrl_key = matches!(vk, Key::Named(NamedKey::Control))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ControlLeft | KeyCode::ControlRight));
-                let is_alt = matches!(vk, Key::Named(NamedKey::Alt))
+                let is_alt_key = matches!(vk, Key::Named(NamedKey::Alt))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::AltLeft | KeyCode::AltRight));
-                let is_shift = matches!(vk, Key::Named(NamedKey::Shift))
+                let is_shift_key = matches!(vk, Key::Named(NamedKey::Shift))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight));
-                self.ctrl_pressed = pressed && is_ctrl;
-                self.alt_pressed = pressed && is_alt;
-                self.shift_pressed = pressed && is_shift;
+                if is_ctrl_key {
+                    self.ctrl_pressed = pressed;
+                }
+                if is_alt_key {
+                    self.alt_pressed = pressed;
+                }
+                if is_shift_key {
+                    self.shift_pressed = pressed;
+                }
             }
             WindowEvent::MouseInput {
                 device_id: _,
