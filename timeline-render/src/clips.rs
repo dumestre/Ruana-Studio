@@ -12,6 +12,7 @@ pub struct ClipDemo {
     pub len: f32,
     pub is_midi: bool,
     pub color: usize,
+    pub seam_beat: Option<f32>,
 }
 
 /// Métricas de conversão cursor ↔ conteúdo, espelhadas do App.
@@ -72,6 +73,7 @@ pub struct ClipInteraction {
     pub stretch_mode: bool,
     pub stretch_orig_len: f32,
     pub stretch_live_len: f32,
+    pub seam_hover_idx: Option<usize>,
 }
 
 /// Estado de desenho contínuo com a ferramenta de desenho (tecla 2)
@@ -104,6 +106,7 @@ impl ClipInteraction {
             stretch_mode: false,
             stretch_orig_len: 0.0,
             stretch_live_len: 0.0,
+            seam_hover_idx: None,
         }
     }
 
@@ -130,6 +133,10 @@ impl ClipInteraction {
         self.stretch_mode
     }
 
+    pub fn is_seam_hovered(&self) -> bool {
+        self.seam_hover_idx.is_some()
+    }
+
     /// Seleciona apenas o clip `idx`, apagando as demais seleções.
     pub fn select_only(&mut self, idx: usize) {
         for s in self.selected.iter_mut() {
@@ -137,6 +144,30 @@ impl ClipInteraction {
         }
         if idx < self.selected.len() {
             self.selected[idx] = true;
+        }
+    }
+
+    /// Splita um clip no seam: separa o clip unido em dois clips originais.
+    /// Usado pela ferramenta Glue para des-fazer (click sobre a linehazinha).
+    pub fn unglue_seam(&mut self, clips: &mut Vec<ClipDemo>, idx: usize) {
+        if let Some(seam_beat) = clips[idx].seam_beat {
+            let clip = clips[idx];
+            let left_len = (seam_beat - clip.beat).max(0.25);
+            let right_len = (clip.beat + clip.len - seam_beat).max(0.25);
+
+            // Clip da esquerda: mantém beat original, len até o seam
+            clips[idx].len = left_len;
+            clips[idx].seam_beat = None;
+
+            // Clip da direita: novo, do seam ao fim original
+            let mut right = clip;
+            right.beat = seam_beat;
+            right.len = right_len;
+            right.seam_beat = None;
+            clips.push(right);
+
+            self.sync_selection(clips.len());
+            self.select_only(idx);
         }
     }
 
@@ -156,10 +187,11 @@ impl ClipInteraction {
     }
 
     /// Atualiza o hover conforme o cursor (quando não arrastando).
-    /// Também detecta proximidade da borda direita para a ferramenta Stretch.
+    /// Também detecta proximidade da borda direita (Stretch) e dos seams (Glue).
     pub fn update_hover(&mut self, clips: &[ClipDemo], cursor: (f32, f32), m: &ClipMetrics) {
         if self.is_dragging() || self.is_drawing() {
             self.stretch_edge_idx = None;
+            self.seam_hover_idx = None;
             return;
         }
         self.hover_idx = self.hit_test(clips, cursor, m);
@@ -174,6 +206,21 @@ impl ClipInteraction {
             } else {
                 None
             }
+        });
+
+        // Detecta hover sobre seam (linha pontilhada de des-colagem Glue).
+        // Procura o clip com seam_beat sob o cursor, dentro de 8px do seam_x.
+        self.seam_hover_idx = clips.iter().enumerate().rev().find_map(|(idx, clip)| {
+            if let Some(seam_beat) = clip.seam_beat {
+                let seam_x = seam_beat * m.px_per_beat - m.scroll_x;
+                let (_, cy, _, ch) = clip_rect(clip, m);
+                // Cursor precisa estar dentro do clip verticalmente e perto do seam
+                if cursor.0 >= seam_x - 8.0 && cursor.0 <= seam_x + 8.0
+                    && cursor.1 >= cy && cursor.1 <= cy + ch {
+                    return Some(idx);
+                }
+            }
+            None
         });
     }
 
@@ -318,6 +365,7 @@ impl ClipInteraction {
                     len,
                     is_midi: true,
                     color: 0,
+                    seam_beat: None,
                 };
 
                 clips.push(clip.clone());
@@ -431,7 +479,30 @@ pub fn build_clip_instances(
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
             // direita
             instances.push(RectInstance { x: x + w - thin, y, w: thin, h: m.row_height, color: ac,
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+        }
+
+        // Linha pontilhada do seam (ponto de costura Glue) — permite des-colar
+        if let Some(seam_beat) = clip.seam_beat {
+            let seam_x = seam_beat * m.px_per_beat - m.scroll_x;
+            if seam_x > x && seam_x < x + draw_w {
+                let seam_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
+                let is_hovered = inter.seam_hover_idx == Some(idx);
+                let alpha: u8 = if is_hovered { 200 } else { 110 };
+                let dash_w = 2.0;
+                let dash_h = 5.0;
+                let gap = 3.0;
+                let mut dy = y;
+                while dy + dash_h <= y + m.row_height {
+                    instances.push(RectInstance {
+                        x: seam_x - dash_w / 2.0, y: dy,
+                        w: dash_w, h: dash_h,
+                        color: [seam_col.0, seam_col.1, seam_col.2, alpha],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                    dy += dash_h + gap;
+                }
+            }
         }
     }
 
@@ -446,15 +517,17 @@ pub fn build_clip_instances(
                     len: inter.stretch_live_len,
                     is_midi: clip.is_midi,
                     color: clip.color,
+                    seam_beat: clip.seam_beat,
                 }
             } else {
-                // Move: posição varia, len original
+                // Stretch: posição original, len varia
                 ClipDemo {
-                    track_index: inter.drag_live_track,
-                    beat: inter.drag_live_beat,
-                    len: clip.len,
+                    track_index: inter.drag_orig_track,
+                    beat: inter.drag_orig_beat,
+                    len: inter.stretch_live_len,
                     is_midi: clip.is_midi,
                     color: clip.color,
+                    seam_beat: clip.seam_beat,
                 }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
@@ -481,6 +554,7 @@ pub fn build_clip_instances(
                 len,
                 is_midi: true,
                 color: 0,
+                seam_beat: None,
             };
 
             let (x, y, w, _h) = clip_rect(&temp_clip, m);

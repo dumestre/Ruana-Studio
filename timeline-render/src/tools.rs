@@ -249,3 +249,15 @@ pub fn update_cursor() {
         }
     }
 }
+
+/// Força o cursor visual sem mudar a ferramenta atual (usado para hover de seam).
+pub fn set_cursor_override(tool: Tool) {
+    if let Some(guard) = get_tool_manager() {
+        if let Some(mgr) = guard.as_ref() {
+            let map = if mgr.dark_mode { &mgr.dark_cursors } else { &mgr.cursors };
+            if let Some(handle) = map.get(&tool) {
+                unsafe { SetCursor(handle.hcursor); }
+            }
+        }
+    }
+}

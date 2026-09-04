@@ -18,7 +18,7 @@ mod shctx;
 mod tools;
 
 use clips::ClipDemo;
-use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor};
+use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor, set_cursor_override};
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -558,12 +558,12 @@ impl App {
 
         // === Dados demo ===
         let clips = vec![
-            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0 },
-            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0 },
-            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3 },
-            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1 },
-            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0 },
-            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5 },
+            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, seam_beat: None },
+            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, seam_beat: None },
+            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, seam_beat: None },
+            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, seam_beat: None },
+            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, seam_beat: None },
+            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, seam_beat: None },
         ];
 
         let mut wave_bars: Vec<f32> = Vec::new();
@@ -907,6 +907,7 @@ impl App {
             len,
             is_midi: false,
             color: 0,
+            seam_beat: None,
         });
         self.clip_interaction.sync_selection(self.clips.len());
     }
@@ -929,29 +930,34 @@ impl App {
         false
     }
 
-    /// Corta clip (ferramenta Slice) - divide no ponto do clique.
+    /// Corta clip (ferramenta Slice — tecla 4).
+    /// Divide o clip no ponto do clique. O clip da esquerda (original) é selecionado,
+    /// então cortes consecutivos deixam o clip do meio selecionado automaticamente.
     fn tool_slice(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
             let clip = self.clips[idx];
             let click_beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
             let click_beat_snapped = click_beat.round().max(clip.beat).min(clip.beat + clip.len);
-            
+
             // Só divide se o clique não estiver na borda
             if click_beat_snapped > clip.beat && click_beat_snapped < clip.beat + clip.len {
                 let left_len = click_beat_snapped - clip.beat;
                 let right_len = clip.beat + clip.len - click_beat_snapped;
-                
+
                 // Atualiza clip original para a parte esquerda
                 self.clips[idx].len = left_len;
-                
+
                 // Cria novo clip para a parte direita
                 let mut right_clip = clip;
                 right_clip.beat = click_beat_snapped;
                 right_clip.len = right_len;
                 self.clips.push(right_clip);
-                
+
                 self.clip_interaction.sync_selection(self.clips.len());
+                // Seleciona o clip esquerdo (parte que foi cortada) —
+                // cortes consecutivos mantêm o clip do meio selecionado.
+                self.clip_interaction.select_only(idx);
             }
         }
     }
@@ -966,8 +972,9 @@ impl App {
     }
 
     /// Cola clips (ferramenta Glue — tecla 6).
-    /// Clicar num clip: gruda a borda direita dele na borda esquerda do
-    /// próximo clip na mesma track, esticando o atual e removendo o próximo.
+    /// Clicar num clip: estica a borda direita dele até o início do próximo
+    /// clip na mesma track, preenchendo o gap. O próximo é removido e o
+    /// ponto de costura (seam) é marcado como linha pontilhada para desfazer.
     fn tool_glue(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
@@ -982,6 +989,8 @@ impl App {
 
             if let Some(next_idx) = next_idx {
                 let next_beat = self.clips[next_idx].beat;
+                // Marca o seam na posição onde o próximo clip começava
+                self.clips[idx].seam_beat = Some(next_beat);
                 // Estica o clip atual até o início do próximo
                 self.clips[idx].len = (next_beat - clip.beat).max(0.25);
                 // Remove o próximo (junta os dois)
@@ -1036,6 +1045,13 @@ impl App {
                         self.handle_ruler_click(state, pos, self.ruler_px);
                     }
                 } else {
+                    // Seam hover → un-glue (split) — funciona em qualquer ferramenta
+                    if let Some(seam_idx) = self.clip_interaction.seam_hover_idx {
+                        if self.clip_interaction.is_seam_hovered() {
+                            self.clip_interaction.unglue_seam(&mut self.clips, seam_idx);
+                            return;
+                        }
+                    }
                     match tool {
                         Tool::Select => {
                             if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
@@ -1123,8 +1139,12 @@ impl App {
         }
         self.clip_interaction.update_hover(&self.clips, pos, &cm);
 
-        // Atualiza cursor nativo do Windows
-        update_cursor();
+        // Cursor override: seam hover → cursor de slice (visual feedback de des-colagem)
+        if self.clip_interaction.is_seam_hovered() {
+            set_cursor_override(Tool::Slice);
+        } else {
+            update_cursor();
+        }
 
         if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() && !self.clip_interaction.is_drawing() && !self.clip_interaction.is_stretching() {
             let (lx, ly) = self.last_cursor;
@@ -1903,6 +1923,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                 if app.loop_drag.is_some() || app.scrubbing || app.clip_interaction.is_dragging()
                     || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some()
                     || app.clip_interaction.is_drawing()
+                    || app.clip_interaction.is_seam_hovered()
                     || current_tool() == Tool::Slice || current_tool() == Tool::Stretch {
                     app.window.request_redraw();
                 }
