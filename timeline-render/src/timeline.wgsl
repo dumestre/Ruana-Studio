@@ -33,6 +33,7 @@ struct Instance {
     @location(1) rect: vec4<f32>,        // x, y, w, h (conteúdo px)
     @location(2) color: vec4<f32>,       // RGBA base
     @location(3) wave_info: vec4<f32>,   // x=offset, y=count, z=clip_w, w=clip_h
+    @location(4) radius: f32,            // raio de arredondamento de cantos (px)
 };
 
 struct VsOut {
@@ -40,6 +41,8 @@ struct VsOut {
     @location(0) local: vec2<f32>,       // 0..1 dentro do rect
     @location(1) frag_color: vec4<f32>,  // cor base
     @location(2) wave_info: vec4<f32>,   // passa para fragment
+    @location(3) radius: f32,            // raio (px)
+    @location(4) size: vec2<f32>,        // w,h do rect (px) p/ arredondamento
 };
 
 @vertex
@@ -55,6 +58,8 @@ fn vs_main(
     out.local = corner;
     out.frag_color = inst.color;
     out.wave_info = inst.wave_info;
+    out.radius = inst.radius;
+    out.size = inst.rect.zw;
     return out;
 }
 
@@ -64,6 +69,22 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let wave_count = u32(in.wave_info.y);
     let clip_width = in.wave_info.z;
     let _clip_height = in.wave_info.w;
+
+    // Arredondamento de cantos: descarta fragmentos fora do raio.
+    if in.radius > 0.0 {
+        let r = min(in.radius, min(in.size.x, in.size.y) * 0.5);
+        let px = in.local * in.size;
+        let dist_x = min(px.x, in.size.x - px.x);
+        let dist_y = min(px.y, in.size.y - px.y);
+        let inside = min(dist_x, dist_y) >= r;
+        if !inside {
+            let dx = r - dist_x;
+            let dy = r - dist_y;
+            if dx > 0.0 && dy > 0.0 && dx * dx + dy * dy > r * r {
+                discard;
+            }
+        }
+    }
 
     // Sem waveform: devolve cor base.
     if wave_count == 0 {

@@ -33,6 +33,7 @@ struct Instance {
     @location(1) rect: vec4<f32>,        // x, y, w, h (conteúdo px)
     @location(2) color: vec4<f32>,       // RGBA base
     @location(3) wave_info: vec4<f32>,   // x=offset, y=count, z=clip_w, h=clip_h
+    @location(4) radius: f32,            // radius for circular clips
 };
 
 struct VsOut {
@@ -40,6 +41,7 @@ struct VsOut {
     @location(0) local: vec2<f32>,       // 0..1 dentro do rect
     @location(1) frag_color: vec4<f32>,  // cor base
     @location(2) wave_info: vec4<f32>,   // passa para fragment
+    @location(3) radius: f32,            // radius for circle clipping
 };
 
 @vertex
@@ -55,6 +57,7 @@ fn vs_main(
     out.local = corner;
     out.frag_color = inst.color;
     out.wave_info = inst.wave_info;
+    out.radius = inst.radius;
     return out;
 }
 

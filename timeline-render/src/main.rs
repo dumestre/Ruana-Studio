@@ -249,6 +249,7 @@ fn build_text_instances(
                             wave_count: 0,
                             clip_w: 0.0,
                             clip_h: 0.0,
+                            radius: 0.0,
                         });
                     }
                 }
@@ -270,16 +271,18 @@ pub struct RectInstance {
     pub wave_count: u32,
     pub clip_w: f32,
     pub clip_h: f32,
+    pub radius: f32,
 }
 
 impl RectInstance {
-    fn to_f32(self) -> [f32; 12] {
+    fn to_f32(self) -> [f32; 13] {
         let [r, g, b, a] = self.color;
         [
             self.x, self.y, self.w, self.h,
             r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0,
             self.wave_offset as f32, self.wave_count as f32,
             self.clip_w, self.clip_h,
+            self.radius,
         ]
     }
 }
@@ -465,7 +468,7 @@ impl App {
                         }],
                     },
                     wgpu::VertexBufferLayout {
-                        array_stride: 48,
+                        array_stride: 52,
                         step_mode: wgpu::VertexStepMode::Instance,
                         attributes: &[
                             wgpu::VertexAttribute {
@@ -482,6 +485,11 @@ impl App {
                                 format: wgpu::VertexFormat::Float32x4,
                                 offset: 32,
                                 shader_location: 3,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32,
+                                offset: 48,
+                                shader_location: 4,
                             },
                         ],
                     },
@@ -626,7 +634,7 @@ impl App {
             x: 0.0, y: self.ruler_px,
             w: width, h: (height - self.ruler_px).max(0.0),
             color: rgba(palette::TIMELINE_BG[t], 255),
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
 
         // Régua — com listras alternadas (igualdade das faixas/tracks)
@@ -647,7 +655,7 @@ impl App {
                 instances.push(RectInstance {
                     x: seg_x, y: 0.0, w: seg_w, h: self.ruler_px,
                     color: [bg_color.0, bg_color.1, bg_color.2, 255],
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });
             }
         }
@@ -670,7 +678,7 @@ impl App {
                 instances.push(RectInstance {
                     x: bx, y: 0.0, w: bw, h: bh,
                     color: [bg.0, bg.1, bg.2, 255],
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });
             }
         }
@@ -683,7 +691,7 @@ impl App {
             instances.push(RectInstance {
                 x: bx, y: 0.0, w: 1.0, h: height,
                 color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, bar_a],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
 
             // Número do compasso na régua (proximos da linha da régua, não no meio da barra)
@@ -707,7 +715,7 @@ impl App {
                         x, y: self.ruler_px, w: 1.0,
                         h: height - self.ruler_px,
                         color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
                 // 1/8
@@ -717,7 +725,7 @@ impl App {
                         x: x8, y: self.ruler_px, w: 1.0,
                         h: height - self.ruler_px,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
                 // 1/16
@@ -728,13 +736,13 @@ impl App {
                         x: x16a, y: self.ruler_px, w: 1.0,
                         h: height - self.ruler_px,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                     instances.push(RectInstance {
                         x: x16b, y: self.ruler_px, w: 1.0,
                         h: height - self.ruler_px,
                         color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
                 // 1/32
@@ -746,7 +754,7 @@ impl App {
                             x: xs, y: self.ruler_px, w: 1.0,
                             h: height - self.ruler_px,
                             color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 90],
-                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                         });
                     }
                 }
@@ -759,7 +767,7 @@ impl App {
                             x: xs, y: self.ruler_px, w: 1.0,
                             h: height - self.ruler_px,
                             color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 70],
-                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                         });
                     }
                 }
@@ -789,7 +797,7 @@ impl App {
                 w: (draw_w - 2.0 * bw).max(0.0),
                 h: (header_h - bw).max(0.0),
                 color: rgba(base, 255),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
 
             // Corpo (com waveform simulado)
@@ -811,7 +819,7 @@ impl App {
                 x: x + bw, y: y + header_h,
                 w: body_w, h: body_h,
                 color: rgba_alpha(darker(base, 0.12), 0.50),
-                wave_offset: wo, wave_count: wc, clip_w: body_w, clip_h: body_h,
+                wave_offset: wo, wave_count: wc, clip_w: body_w, clip_h: body_h, radius: 0.0,
             });
 
             // Divisória
@@ -819,7 +827,7 @@ impl App {
                 x: x + bw, y: y + header_h - 1.0,
                 w: (draw_w - 2.0 * bw).max(0.0), h: 1.0,
                 color: rgba(darker(base, 0.18), 255),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
 
             // Indicador direito
@@ -827,7 +835,7 @@ impl App {
                 x: x + draw_w - bw - 6.0, y: y + 5.0,
                 w: 3.0, h: 8.0,
                 color: rgba(palette::TEXT_PRIMARY[t.clamp(0, 6)], 255),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
         }
 
@@ -841,12 +849,14 @@ impl App {
                 w: 2.0, h: height - self.ruler_px,
                 color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                radius: 0.0,
             });
             instances.push(RectInstance {
                 x: head_x - 6.0, y: 1.0,
                 w: 12.0, h: 12.0,
                 color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
+                radius: 6.0,
             });
         }
 
