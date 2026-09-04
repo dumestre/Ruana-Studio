@@ -496,10 +496,10 @@ fn push_clip(
     let clip_r = 6.0;
 
     // Alpha do header/divisor/indicador: quando o corpo é muito translúcido
-    // (ghost durante drag), também escurece os elementos decorativos para
-    // ficar quase imperceptível. Clip normal mantém 100% opaco.
+    // (ghost durante drag), escurece os elementos decorativos.
+    // Clip normal mantém 100% opaco; ghost fica mais pálido mas visível.
     let decor_alpha: u8 = if body_alpha < 0.15 {
-        (body_alpha * 255.0).round() as u8
+        ((body_alpha * 255.0 * 6.0).round() as u8).min(180) // ghost: ~48 alpha
     } else {
         255
     };
@@ -547,4 +547,18 @@ fn push_clip(
         color: rgba(palette::TEXT_PRIMARY[t], decor_alpha),
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
+
+    // Ghost: outline wireframe (posição original durante drag)
+    if body_alpha < 0.15 {
+        let ghost_border = rgba(darker(base, 0.15), 55);
+        let th = 1.0;
+        instances.push(RectInstance { x, y, w: draw_w, h: th, color: ghost_border,
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: clip_r });
+        instances.push(RectInstance { x, y: y + row_height - th, w: draw_w, h: th, color: ghost_border,
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+        instances.push(RectInstance { x, y, w: th, h: row_height, color: ghost_border,
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+        instances.push(RectInstance { x: x + draw_w - th, y, w: th, h: row_height, color: ghost_border,
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+    }
 }
