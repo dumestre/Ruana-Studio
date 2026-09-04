@@ -1130,44 +1130,44 @@ impl App {
         // Seletor de loop — bordas laterais grossas na régua (alças de arrasto)
         // + centro translúcido descendo por toda a timeline.
         if self.loop_enabled {
-            let c = palette::PLAYHEAD_COLOR;
-            let crim = [c.0, c.1, c.2, 255];
-            let crim_fill = [c.0, c.1, c.2, 28]; // centro translúcido (corpo)
-            let crim_fill_ruler = [c.0, c.1, c.2, 90]; // centro na régua: menos translúcido
+            let r: (u8, u8, u8) = (0xA5, 0x4D, 0xFF); // roxo do loop
+            let border = [r.0, r.1, r.2, 150]; // bordas de ajuste: meio translúcido
+            let fill_ruler = [r.0, r.1, r.2, 130]; // régua: pouco translúcido
+            let fill_body = [r.0, r.1, r.2, 70]; // timeline: mais translúcido ainda
             let sx = self.beat_to_x(self.loop_start_beat);
             let ex = self.beat_to_x(self.loop_end_beat);
             let lw = (ex - sx).max(0.0);
-            let bw = 3.0; // grossura das bordas laterais (alças)
+            let bw = 6.0; // grossura das bordas laterais (alças)
             let body_top = self.ruler_px;
             let body_h = (height - self.ruler_px).max(0.0);
 
             if lw > 0.0 {
-                // Centro translúcido que desce toda a timeline (sem borda no corpo).
+                // Centro que desce toda a timeline — mais translúcido ainda.
                 instances.push(RectInstance {
                     x: sx, y: body_top, w: lw, h: body_h,
-                    color: crim_fill,
+                    color: fill_body,
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });
 
-                // Centro na régua: menos translúcido (mais visível que o corpo).
+                // Centro na régua — pouco translúcido.
                 if sx + lw > 0.0 && sx < width {
                     instances.push(RectInstance {
                         x: sx, y: 0.0, w: lw.min(width - sx).max(0.0), h: self.ruler_px,
-                        color: crim_fill_ruler,
+                        color: fill_ruler,
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
 
-                // Bordas laterais grossas NA RÉGUA (alças de arrasto).
+                // Bordas laterais grossas NA RÉGUA (alças de arrasto) — roxo opaco.
                 if sx + lw >= -bw && sx <= width {
                     instances.push(RectInstance {
-                        x: sx, y: 0.0, w: bw, h: self.ruler_px, color: crim,
+                        x: sx, y: 0.0, w: bw, h: self.ruler_px, color: border,
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
                 if ex >= 0.0 && ex - bw <= width {
                     instances.push(RectInstance {
-                        x: ex - bw, y: 0.0, w: bw, h: self.ruler_px, color: crim,
+                        x: ex - bw, y: 0.0, w: bw, h: self.ruler_px, color: border,
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }

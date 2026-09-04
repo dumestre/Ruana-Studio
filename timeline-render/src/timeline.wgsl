@@ -70,6 +70,19 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let clip_width = in.wave_info.z;
     let _clip_height = in.wave_info.w;
 
+    // Modo "listras diagonais" (sobreposição de clips): clip_width < 0 sinaliza.
+    if clip_width < 0.0 {
+        let px = in.local * in.size;
+        let d = px.x + px.y;                 // diagonal 45° (px)
+        let sp = 18.0;                        // espaçamento das listras
+        let on = fract(d / sp) < 0.5;         // listra grossa = metade do espaçamento
+        if !on {
+            return vec4<f32>(in.frag_color.r, in.frag_color.g, in.frag_color.b,
+                             in.frag_color.a * 0.20);
+        }
+        return in.frag_color;
+    }
+
     // Arredondamento de cantos: descarta fragmentos fora do raio.
     if in.radius > 0.0 {
         let r = min(in.radius, min(in.size.x, in.size.y) * 0.5);

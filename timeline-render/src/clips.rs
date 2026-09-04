@@ -342,6 +342,28 @@ pub fn build_clip_instances(
         }
     }
 
+    // Sobreposição de clips: cada região de contato entre clips que se cruzam
+    // recebe listras diagonais grossas (modo diagonal no shader).
+    for i in 0..clips.len() {
+        for j in (i + 1)..clips.len() {
+            let (xi, yi, wi, hi) = clip_rect(&clips[i], m);
+            let (xj, yj, wj, hj) = clip_rect(&clips[j], m);
+            let ix0 = xi.max(xj);
+            let ix1 = (xi + wi).min(xj + wj);
+            let iy0 = yi.max(yj);
+            let iy1 = (yi + hi).min(yj + hj);
+            if ix1 > ix0 && iy1 > iy0 {
+                let ov = (0xFFu8, 0x8Cu8, 0x00u8); // laranja de alerta
+                instances.push(RectInstance {
+                    x: ix0, y: iy0, w: ix1 - ix0, h: iy1 - iy0,
+                    color: [ov.0, ov.1, ov.2, 220],
+                    wave_offset: 0, wave_count: 0,
+                    clip_w: -1.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+        }
+    }
+
     instances
 }
 
