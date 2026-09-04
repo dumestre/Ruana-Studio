@@ -770,70 +770,8 @@ impl App {
             }
         }
 
-        // Régua fixa no topo — desenhada por último (por cima do grid).
-        // Com fundo próprio + linhas de escala (compasso, batida e subdivisões).
+        // Régua fixa no topo — será desenhada por cima dos clips mais adiante.
         let ruler_h = self.ruler_px;
-        instances.push(RectInstance {
-            x: 0.0, y: 0.0, w: width, h: ruler_h,
-            color: rgba(palette::SURFACE_HIGH[t], 255),
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-        });
-        for i in 0..total_bars {
-            let bx = i as f32 * px_per_bar - self.scroll_x;
-            if bx > width || bx < -px_per_bar { continue; }
-            // Número do compasso
-            let ruler_text_color = if i % 2 == 0 {
-                rgba(palette::TEXT_PRIMARY[t], 220)
-            } else {
-                rgba(palette::TEXT_DIM[t], 220)
-            };
-            if bx > -px_per_bar * 0.5 && bx < width {
-                instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color));
-            }
-            // Linha vertical do compasso (1px, altura cheia da régua)
-            instances.push(RectInstance {
-                x: bx, y: 0.0, w: 1.0, h: ruler_h,
-                color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 255],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-            });
-            let beat_px = px_per_bar / 4.0;
-            for k in 0..4 {
-                let x = bx + k as f32 * beat_px;
-                if x <= 0.0 || x > width { continue; }
-                // Linhas de batida (quando px_per_bar >= 40)
-                if px_per_bar >= 40.0 {
-                    instances.push(RectInstance {
-                        x, y: 2.0, w: 1.0, h: ruler_h - 2.0,
-                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                    });
-                }
-                // Subdivisões 1/8 (quando px_per_bar >= 120) — tiques menores no baixo
-                if px_per_bar >= 120.0 {
-                    let x8 = x + beat_px * 0.5;
-                    instances.push(RectInstance {
-                        x: x8, y: ruler_h - 8.0, w: 1.0, h: 8.0,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                    });
-                }
-                // Subdivisões 1/16 (quando px_per_bar >= 240) — tiques ainda menores
-                if px_per_bar >= 240.0 {
-                    let x16a = x + beat_px * 0.25;
-                    let x16b = x + beat_px * 0.75;
-                    instances.push(RectInstance {
-                        x: x16a, y: ruler_h - 6.0, w: 1.0, h: 6.0,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                    });
-                    instances.push(RectInstance {
-                        x: x16b, y: ruler_h - 6.0, w: 1.0, h: 6.0,
-                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                    });
-                }
-            }
-        }
 
         // Clips
         let header_h = 16.0;
@@ -898,6 +836,70 @@ impl App {
                 color: rgba(palette::TEXT_PRIMARY[t.clamp(0, 6)], 255),
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
+        }
+
+        // Régua fixa no topo — desenhada por cima do grid e dos clips
+        // (cobre qualquer track que role por baixo dela).
+        instances.push(RectInstance {
+            x: 0.0, y: 0.0, w: width, h: ruler_h,
+            color: rgba(palette::SURFACE_HIGH[t], 255),
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+        });
+        for i in 0..total_bars {
+            let bx = i as f32 * px_per_bar - self.scroll_x;
+            if bx > width || bx < -px_per_bar { continue; }
+            // Número do compasso
+            let ruler_text_color = if i % 2 == 0 {
+                rgba(palette::TEXT_PRIMARY[t], 220)
+            } else {
+                rgba(palette::TEXT_DIM[t], 220)
+            };
+            if bx > -px_per_bar * 0.5 && bx < width {
+                instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color));
+            }
+            // Linha vertical do compasso (1px, altura cheia da régua)
+            instances.push(RectInstance {
+                x: bx, y: 0.0, w: 1.0, h: ruler_h,
+                color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 255],
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            });
+            let beat_px = px_per_bar / 4.0;
+            for k in 0..4 {
+                let x = bx + k as f32 * beat_px;
+                if x <= 0.0 || x > width { continue; }
+                // Linhas de batida (quando px_per_bar >= 40)
+                if px_per_bar >= 40.0 {
+                    instances.push(RectInstance {
+                        x, y: 2.0, w: 1.0, h: ruler_h - 2.0,
+                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 150],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+                // Subdivisões 1/8 (quando px_per_bar >= 120) — tiques menores no baixo
+                if px_per_bar >= 120.0 {
+                    let x8 = x + beat_px * 0.5;
+                    instances.push(RectInstance {
+                        x: x8, y: ruler_h - 8.0, w: 1.0, h: 8.0,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 130],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+                // Subdivisões 1/16 (quando px_per_bar >= 240) — tiques ainda menores
+                if px_per_bar >= 240.0 {
+                    let x16a = x + beat_px * 0.25;
+                    let x16b = x + beat_px * 0.75;
+                    instances.push(RectInstance {
+                        x: x16a, y: ruler_h - 6.0, w: 1.0, h: 6.0,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                    instances.push(RectInstance {
+                        x: x16b, y: ruler_h - 6.0, w: 1.0, h: 6.0,
+                        color: [palette::GRID_SUB[t].0, palette::GRID_SUB[t].1, palette::GRID_SUB[t].2, 110],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+            }
         }
 
         // Playhead
