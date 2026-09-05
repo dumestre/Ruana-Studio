@@ -1328,6 +1328,20 @@ impl App {
             }
         }
 
+        // Separadores horizontais entre as tracks (row separators). Francem a
+        // largura toda do corpo e rolam verticalmente junto com scroll_y.
+        let view_bottom = height - self.time_ruler_h;
+        let max_track = self.clips.iter().map(|c| c.track_index as i32).max().unwrap_or(-1);
+        for tr in 0..=max_track {
+            let y = self.ruler_px + (tr as f32 + 1.0) * row_height - self.scroll_y;
+            if y < self.ruler_px || y > view_bottom { continue; }
+            instances.push(RectInstance {
+                x: 0.0, y, w: width, h: 1.0,
+                color: rgba(palette::GRID_LINE[t], 150),
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            });
+        }
+
         // Régua fixa no topo — será desenhada por cima dos clips mais adiante.
         let ruler_h = self.ruler_px;
 
