@@ -1662,20 +1662,13 @@ impl App {
                 color: [col.0, col.1, col.2, 120],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
-            // Bolinha indicando o tempo atual
-            instances.push(RectInstance {
-                x: head_x - 5.0, y: tr_y + tr_h / 2.0 - 5.0,
-                w: 10.0, h: 10.0,
-                color: [col.0, col.1, col.2, 255],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 5.0,
-            });
             // Texto do tempo atual (min:sec)
             let total_s = self.transport_seconds as i64;
             let cur_m = total_s / 60;
             let cur_s = total_s % 60;
             let cur_str = format!("{}:{:02}", cur_m, cur_s);
             let cur_col = rgba((0xFF, 0xFF, 0xFF), 255);
-            instances.extend(build_text_instances(&cur_str, head_x + 8.0, tr_y + 8.0, cur_col, 1.0));
+            instances.extend(build_text_instances(&cur_str, head_x, tr_y + 8.0, cur_col, 1.0));
         }
 
         // Borda inferior da time ruler
