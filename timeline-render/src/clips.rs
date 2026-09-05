@@ -2,16 +2,17 @@
 //! geração dos retângulos de render (corpo, header, waveform, fantasma e
 //! overlay do clip em arrasto).
 
-use super::{rgba, rgba_alpha, darker, RectInstance, palette};
+use super::{rgba, rgba_alpha, darker, RectInstance, palette, build_text_instances};
 
 /// Um clip posicionado numa faixa (track) da timeline.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ClipDemo {
     pub track_index: usize,
     pub beat: f32,
     pub len: f32,
     pub is_midi: bool,
     pub color: usize,
+    pub name: Option<String>,
     pub seam_beat: Option<f32>,
     pub pre_glue_len: Option<f32>,
     pub pre_glue_color: Option<usize>,
@@ -480,8 +481,9 @@ impl ClipInteraction {
                     beat: start_beat,
                     len,
                     is_midi: true,
-                    color: 0,
-                    seam_beat: None,
+                     color: 0,
+                     name: None,
+                     seam_beat: None,
                     pre_glue_len: None,
                     pre_glue_color: None,
                 };
@@ -590,6 +592,16 @@ pub fn build_clip_instances(
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
                   body_alpha, body_dark, wave_bars, idx, t, m.row_height, w);
 
+        // Nome do clip no header (preto)
+        if let Some(ref name) = clip.name {
+            if w >= 40.0 {
+                let text_x = x + bw + 2.0;
+                let text_y = y + header_h / 2.0 - 4.0;
+                let text_color = [0u8, 0, 0, 255];
+                instances.extend(build_text_instances(name, text_x + (w - 2.0 * bw) / 2.0, text_y, text_color));
+            }
+        }
+
         // Borda (raio 8) para clips selecionados ou dentro do marquee ativo.
         if !being_dragged && (idx < inter.selected.len() && inter.selected[idx] || in_marquee) {
             let col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -645,6 +657,7 @@ pub fn build_clip_instances(
                     len: inter.stretch_live_len,
                     is_midi: clip.is_midi,
                     color: clip.color,
+                    name: clip.name.clone(),
                     seam_beat: clip.seam_beat,
                     pre_glue_len: clip.pre_glue_len,
                     pre_glue_color: clip.pre_glue_color,
@@ -656,6 +669,7 @@ pub fn build_clip_instances(
                     len: clip.len,
                     is_midi: clip.is_midi,
                     color: clip.color,
+                    name: clip.name.clone(),
                     seam_beat: clip.seam_beat,
                     pre_glue_len: clip.pre_glue_len,
                     pre_glue_color: clip.pre_glue_color,
@@ -703,7 +717,7 @@ pub fn build_clip_instances(
                     let live = ClipDemo {
                         track_index: live_track,
                         beat: live_beat,
-                        ..*clip
+                        ..clip.clone()
                     };
                     let (x, y, w, _h) = clip_rect(&live, m);
                     if w > 0.0 && x < width && x + w > 0.0 {
@@ -736,6 +750,7 @@ pub fn build_clip_instances(
                 len,
                 is_midi: true,
                 color: 0,
+                name: None,
                 seam_beat: None,
                 pre_glue_len: None,
                 pre_glue_color: None,

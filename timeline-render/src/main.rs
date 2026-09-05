@@ -239,9 +239,80 @@ const FONT_8X8: [[[u8; 8]; 8]; 10] = [
     ],
 ];
 
+/// Busca o glyph 8x8 para um caractere ASCII (dígitos, letras A-Z/a-z).
+fn char_glyph(ch: char) -> Option<[[u8; 8]; 8]> {
+    let upper = ch.to_ascii_uppercase();
+    if let Some(d) = upper.to_digit(10) {
+        return Some(FONT_8X8[d as usize]);
+    }
+    // A-Z → índices 10..=35
+    if upper >= 'A' && upper <= 'Z' {
+        let idx = (upper as u8 - b'A') as usize;
+        if idx < FONT_ALPHA.len() {
+            return Some(FONT_ALPHA[idx]);
+        }
+    }
+    None
+}
+
+const FONT_ALPHA: [[[u8; 8]; 8]; 26] = [
+    // A
+    [[0,0,0,1,1,0,0,0],[0,0,1,1,1,1,0,0],[0,1,1,0,0,1,1,0],[1,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1]],
+    // B
+    [[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,0]],
+    // C
+    [[0,0,0,1,1,1,1,0],[0,0,1,1,1,1,1,1],[0,1,1,0,0,0,0,0],[0,1,1,0,0,0,0,0],[0,1,1,0,0,0,0,0],[0,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1],[0,0,0,1,1,1,1,0]],
+    // D
+    [[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,0,0]],
+    // E
+    [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,0,0],[1,1,0,0,0,0,0,0],[1,1,1,1,1,1,1,1]],
+    // F
+    [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0]],
+    // G
+    [[0,0,0,1,1,1,1,0],[0,0,1,1,1,1,1,1],[0,1,1,0,0,0,0,0],[0,1,1,0,0,0,0,0],[0,1,1,0,0,1,1,1],[0,1,1,0,0,0,1,1],[0,0,1,1,1,1,1,1],[0,0,0,1,1,1,1,0]],
+    // H
+    [[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1]],
+    // I
+    [[0,0,1,1,1,1,0,0],[0,0,1,1,1,1,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,1,1,1,1,0,0],[0,0,1,1,1,1,0,0]],
+    // J
+    [[0,0,0,0,1,1,1,1],[0,0,0,0,1,1,1,1],[0,0,0,0,0,1,1,0],[0,0,0,0,0,1,1,0],[0,0,0,0,0,1,1,0],[0,1,1,0,0,1,1,0],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0]],
+    // K
+    [[1,1,0,0,0,0,1,1],[1,1,0,0,0,1,1,0],[1,1,0,0,1,1,0,0],[1,1,0,1,1,0,0,0],[1,1,1,1,0,0,0,0],[1,1,0,1,1,0,0,0],[1,1,0,0,1,1,0,0],[1,1,0,0,0,1,1,0]],
+    // L
+    [[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]],
+    // M
+    [[1,1,0,0,0,0,1,1],[1,1,1,0,0,1,1,1],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1]],
+    // N
+    [[1,1,0,0,0,0,1,1],[1,1,1,0,0,1,1,1],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1]],
+    // O
+    [[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0]],
+    // P
+    [[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0]],
+    // Q
+    [[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,1,1,0,1,1],[0,1,1,1,1,1,1,1],[0,0,1,1,1,1,0,1]],
+    // R
+    [[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,0,0,0],[1,1,0,0,1,1,0,0],[1,1,0,0,0,1,1,0]],
+    // S
+    [[0,0,1,1,1,1,1,0],[0,1,1,1,1,1,1,1],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[0,1,1,1,1,1,1,0],[0,0,0,0,0,0,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0]],
+    // T
+    [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0]],
+    // U
+    [[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0]],
+    // V
+    [[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[0,1,1,0,0,1,1,0],[0,1,1,0,0,1,1,0],[0,0,1,1,1,1,0,0]],
+    // W
+    [[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[1,1,0,1,1,0,1,1],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,0,0,0,0,1,1]],
+    // X
+    [[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[0,1,1,0,0,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,1,1,0,0,0],[0,0,1,1,1,1,0,0],[0,1,1,0,0,1,1,0],[1,1,0,0,0,0,1,1]],
+    // Y
+    [[1,1,0,0,0,0,1,1],[1,1,0,0,0,0,1,1],[0,1,1,0,0,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0]],
+    // Z
+    [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,0,0,0,0,0,1,1],[0,0,0,0,1,1,0,0],[0,0,0,1,1,0,0,0],[0,0,1,1,0,0,0,0],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]],
+];
+
 /// Desenha um número (0-999) na régua usando a fonte bitmap 8x8.
 /// Cada dígito ocupa 8px de largura. O texto é centrado no x informado.
-fn build_text_instances(
+pub fn build_text_instances(
     text: &str,
     center_x: f32,
     y: f32,
@@ -254,9 +325,7 @@ fn build_text_instances(
 
     let mut instances = Vec::new();
     for (i, ch) in text.chars().enumerate() {
-        let digit = ch.to_digit(10);
-        if let Some(d) = digit {
-            let glyph = &FONT_8X8[d as usize];
+        if let Some(glyph) = char_glyph(ch) {
             for row in 0..8 {
                 for col in 0..8 {
                     if glyph[row][col] == 1 {
@@ -579,12 +648,12 @@ impl App {
 
         // === Dados demo ===
         let clips = vec![
-            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, name: Some("Bass".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
         ];
 
         let mut wave_bars: Vec<f32> = Vec::new();
@@ -809,7 +878,7 @@ impl App {
             .iter()
             .enumerate()
             .filter(|(i, _)| i < &self.clip_interaction.selected.len() && self.clip_interaction.selected[*i])
-            .map(|(_, c)| *c)
+            .map(|(_, c)| c.clone())
             .collect();
         if !selected_clips.is_empty() {
             self.clipboard = selected_clips;
@@ -830,7 +899,7 @@ impl App {
         let min_track = self.clipboard.iter().map(|c| c.track_index).min().unwrap_or(0);
         let track_offset = target_track as i32 - min_track as i32;
         for clip in &self.clipboard {
-            let mut new_clip = *clip;
+            let mut new_clip = clip.clone();
             new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
             new_clip.track_index = (clip.track_index as i32 + track_offset).clamp(0, 3) as usize;
             self.clips.push(new_clip);
@@ -866,11 +935,11 @@ impl App {
             .map(|&i| self.clips[i].beat + self.clips[i].len)
             .fold(0.0_f32, f32::max);
         let snap_beat = max_end.round().max(0.0);
-        let clips_to_dup: Vec<ClipDemo> = selected_indices.iter().map(|&i| self.clips[i]).collect();
+        let clips_to_dup: Vec<ClipDemo> = selected_indices.iter().map(|&i| self.clips[i].clone()).collect();
         let min_beat = clips_to_dup.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
         let beat_offset = snap_beat - min_beat.round();
         for clip in &clips_to_dup {
-            let mut new_clip = *clip;
+            let mut new_clip = clip.clone();
             new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
             self.clips.push(new_clip);
         }
@@ -930,6 +999,7 @@ impl App {
             len,
             is_midi: false,
             color: 0,
+            name: None,
             seam_beat: None,
             pre_glue_len: None,
             pre_glue_color: None,
@@ -961,7 +1031,7 @@ impl App {
     fn tool_slice(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-            let clip = self.clips[idx];
+            let clip = self.clips[idx].clone();
             let click_beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
             let click_beat_snapped = click_beat.round().max(clip.beat).min(clip.beat + clip.len);
 
@@ -1011,7 +1081,7 @@ impl App {
             let chain = clips::ClipInteraction::find_group(&self.clips, idx);
             let chain_end_idx = *chain.last().unwrap();
 
-            let end_clip = self.clips[chain_end_idx];
+            let end_clip = self.clips[chain_end_idx].clone();
             let current_end = end_clip.beat + end_clip.len;
 
             let next_idx = self.clips.iter().enumerate()
