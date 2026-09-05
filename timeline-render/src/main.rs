@@ -1681,6 +1681,27 @@ impl App {
             let start_sec = (self.scroll_x / pixels_per_second).floor();
             let end_sec = ((self.scroll_x + width) / pixels_per_second).ceil();
 
+            // Grid minor (linhas finas, sem texto) — sumem no zoom out
+            let minor_step = (step_seconds / 5.0).max(0.1);
+            let minor_px = minor_step * pixels_per_second;
+            let show_minor = minor_px >= 15.0;
+            if show_minor {
+                let minor_col = rgba(palette::GRID_SUB[t], 90);
+                let mut sec = start_sec;
+                while sec <= end_sec {
+                    let x = sec * pixels_per_second - self.scroll_x;
+                    if x >= -5.0 && x <= width + 5.0 {
+                        if (sec % step_seconds).abs() < 0.01 { sec += minor_step; continue; }
+                        instances.push(RectInstance {
+                            x, y: tr_y + tr_h / 4.0, w: 1.0, h: tr_h / 2.0,
+                            color: minor_col,
+                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        });
+                    }
+                    sec += minor_step;
+                }
+            }
+
             // Grid major (linhas altas + texto M:SS)
             let major_col = rgba(palette::GRID_LINE[t], 140);
             let mut sec = start_sec;
