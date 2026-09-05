@@ -200,7 +200,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let cov = 1.0 - smoothstep(0.0, aa, outside);
         let fill_alpha = cov * fill_amount;
         if fill_alpha > 0.001 {
-            return vec4<f32>(0.149, 0.149, 0.149, fill_alpha);
+            // 0.0194 = #262626 em linear (alvo sRGB converte na escrita).
+            return vec4<f32>(0.0194, 0.0194, 0.0194, fill_alpha);
         }
     }
 
@@ -233,5 +234,5 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return in.frag_color;
     }
 
-    return vec4<f32>(0.149, 0.149, 0.149, alpha);
+    return vec4<f32>(0.0194, 0.0194, 0.0194, alpha);
 }
