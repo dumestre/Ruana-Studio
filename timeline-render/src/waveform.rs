@@ -33,25 +33,6 @@ fn gain(frac: f32) -> f32 {
     0.35 + 0.65 * fade_in * fade_out
 }
 
-/// Suaviza com média móvel (boxcar) para eliminar altas frequências:
-/// é o que garante UMA linha única no shader, sem ripples que viram pontinhos.
-fn smooth(x: &mut [f32]) {
-    let n = x.len();
-    if n < 3 {
-        return;
-    }
-    let w = (n / 96).max(2).min(256);
-    let half = w / 2;
-    let src = x.to_vec();
-    for i in 0..n {
-        let lo = (i as i32 - half as i32).max(0) as usize;
-        let hi = (i + half).min(n - 1);
-        let cnt = (hi - lo + 1) as f32;
-        let sum: f32 = src[lo..=hi].iter().sum();
-        x[i] = sum / cnt;
-    }
-}
-
 /// Baixo: 2 oscilações lentas superpostas — curva única e contínua.
 fn sample_bass(i: u32, n: u32, seed: u64) -> f32 {
     let frac = i as f32 / n as f32;
@@ -101,18 +82,13 @@ pub fn build_wave_bars(clips: &[ClipDemo], px_per_beat: f32) -> Vec<f32> {
         let seed = audio_idx.wrapping_mul(0x9E3779B97F4A7C15)
             ^ (clip.beat as u32 as u64).wrapping_mul(11)
             ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
-        let mut seg: Vec<f32> = (0..n_cols)
+        let seg: Vec<f32> = (0..n_cols)
             .map(|col| {
-                sample_wave(
-                    style,
-                    col,
-                    n_cols,
-                    seed ^ (col as u64).wrapping_mul(0x9E3779B97F4A7C15),
-                ) * gain(col as f32 / n_cols as f32)
+                // Seed é constante por clip: o oscilador é uma função
+                // contínua de `col` (frac), sem fase mudando por coluna.
+                sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32)
             })
             .collect();
-        // Média móvel: converge o trecho para UMA linha contínua e suave.
-        smooth(&mut seg);
         bars.extend_from_slice(&seg);
         audio_idx += 1;
     }

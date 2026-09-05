@@ -125,44 +125,27 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return in.frag_color;
     }
 
-    // Modo osciloscópio com interpolação Catmull-Rom (curva C1 contínua):
-    // em vez de segmentos retos entre colunas (que aparecem "serrados" em
-    // zoom alto), avalia um spline suave entre 4 amostras vizinhas — tipo a
-    // curva de um indicador RSI/MA, sem quinas.
-    let col = u32(col_f);
-    let col0 = max(col, 1u) - 1u;
-    let frac = clamp(col_f - f32(col0 + 1), 0.0, 1.0);
-    let p0 = clamp(wave_bars[wave_offset + col0], -1.0, 1.0);
-    let p1 = clamp(wave_bars[wave_offset + col0 + 1], -1.0, 1.0);
-    let p2 = clamp(wave_bars[wave_offset + col0 + 2], -1.0, 1.0);
-    let p3 = clamp(wave_bars[wave_offset + min(col0 + 3u, wave_count - 1u)], -1.0, 1.0);
-
-    // Catmull-Rom com tensão padrão.
-    let c0 = p1;
-    let c1 = (p2 - p0) * 0.5;
-    let c2 = (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * 0.5;
-    let c3 = (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * 0.5;
-    let s = clamp(c0 + c1 * frac + c2 * frac * frac + c3 * frac * frac * frac, -1.0, 1.0);
+    // Modo osciloscópio: interpolação LINEAR entre as duas colunas vizinhas.
+    // O dado já é uma função contínua (1 amostra por coluna), então `mix`
+    // entre [col] e [col+1] desenha exatamente a linha que liga os pontos.
+    let col = u32(floor(col_f));
+    let next_col = min(col + 1u, wave_count - 1u);
+    let t = fract(col_f);
+    let p0 = clamp(wave_bars[wave_offset + col], -1.0, 1.0);
+    let p1 = clamp(wave_bars[wave_offset + next_col], -1.0, 1.0);
+    let s = mix(p0, p1, t);
 
     // Window vertical: mapeia a amplitude em fração da altura do corpo.
     let amp = 0.4; // metade da altura = 40% para cima/baixo = 80% total
     let center = 0.5;
     let y_line = center - s * amp;
 
-    // Linha contínua com antialiasing: a cobertura decai linearmente nas
-    // bordas (feather de 1px), em vez de corte duro — isso elimina a
-    // "escadinha" de rasterização nas diagonais. A banda ainda usa a
-    // inclinação central (p2-p0)/2 para não deixar vazios em trechos
-    // íngremes, mas o transição suave mantém a aparência lisa em qualquer
-    // zoom.
-    let col_span = select(in.size.x, natural_w, natural_w > 0.0);
-    let cols_per_px = f32(wave_count) / max(col_span, 1.0);
-    let slope_px = abs((p2 - p0) * 0.5) * amp * in.size.y * cols_per_px;
-    let half_px = 0.8 + 0.5 * min(slope_px, 8.0);
+    // Espessura fixa da linha (~1.5px), sem dilatação por inclinação.
     let d_px = abs(in.local.y - y_line) * in.size.y;
-    let cov = clamp(half_px + 0.5 - d_px, 0.0, 1.0);
-    if cov <= 0.0 {
-        return in.frag_color;
+    let line_width_px = 1.5;
+    if d_px <= line_width_px * 0.5 {
+        return vec4<f32>(0.012, 0.012, 0.012, 0.95);
     }
-    return vec4<f32>(0.012, 0.012, 0.012, 0.95 * cov);
+
+    return in.frag_color;
 }
