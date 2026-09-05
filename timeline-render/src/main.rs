@@ -2190,7 +2190,11 @@ impl winit::application::ApplicationHandler for AppHandler {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
                 // Mantém o cursor da ferramenta ativa persistente (evita voltar pro
                 // cursor padrão do SO a cada movimento).
-                tools::update_cursor();
+                // Só chama update_cursor() se NÃO houver override ativo (seam/fade hover),
+                // pois o handle_cursor_moved já fez set_cursor_override.
+                if !app.clip_interaction.is_seam_hovered() && app.fade_interaction.hovered.is_none() {
+                    tools::update_cursor();
+                }
                 if app.loop_drag.is_some() || app.scrubbing || app.clip_interaction.is_dragging()
                     || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some()
                     || app.clip_interaction.is_drawing()
@@ -2214,7 +2218,10 @@ impl winit::application::ApplicationHandler for AppHandler {
         if let Some(app) = &self.app {
             // Reaplica o cursor da ferramenta a cada ciclo (evita reset do SO
             // após clique/solta, WM_SETCURSOR, etc.).
-            tools::update_cursor();
+            // Não sobrescreve overrides de seam/fade hover.
+            if !app.clip_interaction.is_seam_hovered() && app.fade_interaction.hovered.is_none() {
+                tools::update_cursor();
+            }
             if app.playing || app.clip_interaction.is_drawing() {
                 app.window.request_redraw();
             }
