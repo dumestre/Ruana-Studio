@@ -2,7 +2,7 @@
 //! geração dos retângulos de render (corpo, header, waveform, fantasma e
 //! overlay do clip em arrasto).
 
-use super::{rgba, rgba_alpha, darker, RectInstance, palette, build_text_instances};
+use super::{rgba, rgba_alpha, darker, RectInstance, palette, build_text_instances_font, get_regular_font};
 
 /// Um clip posicionado numa faixa (track) da timeline.
 #[derive(Clone, Debug)]
@@ -557,7 +557,7 @@ fn push_clip_name(
             let start_x = x + bw + 4.0;
             let center_x = start_x + total_w / 2.0;
             let text_color = [0u8, 0, 0, 255];
-            instances.extend(build_text_instances(name, center_x, text_y, text_color, scale));
+            instances.extend(build_text_instances_font(get_regular_font(), name, center_x, text_y, text_color, scale));
         }
     }
 }
