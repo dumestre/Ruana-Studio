@@ -22,6 +22,10 @@ pub struct ClipDemo {
 #[derive(Clone, Copy)]
 pub struct ClipMetrics {
     pub px_per_beat: f32,
+    /// px-per-beat FIXO usado ao gerar `wave_bars` (independe do zoom): os
+    /// offsets/counts do buffer devem bater com ele, senão a waveform
+    /// "desliza"/descola do clip ao dar zoom.
+    pub wave_ppb: f32,
     pub row_height: f32,
     pub scroll_x: f32,
     pub scroll_y: f32,
@@ -612,7 +616,7 @@ pub fn build_clip_instances(
         let body_dark = if being_dragged { 0.70 } else { 0.12 };
 
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
-                  body_alpha, body_dark, m.px_per_beat, idx, t, m.row_height, w);
+                  body_alpha, body_dark, m.wave_ppb, idx, t, m.row_height, w);
         push_clip_name(&mut instances, clip, x, y, w, header_h, bw);
 
         // Borda (raio 8) para clips selecionados ou dentro do marquee ativo.
@@ -698,7 +702,7 @@ pub fn build_clip_instances(
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, m.px_per_beat, idx, t, m.row_height, wave_natural_w);
+                          body_alpha_overlay, 0.12, m.wave_ppb, idx, t, m.row_height, wave_natural_w);
                 push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                 // Contorno visível no overlay do clip arrastado
                 let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -738,7 +742,7 @@ pub fn build_clip_instances(
                         let draw_w = w.min(width - x).max(0.0);
                         let base = clip_color(clip, t);
                         push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                                  body_alpha_overlay, 0.12, m.px_per_beat, *gi, t, m.row_height, w);
+                                  body_alpha_overlay, 0.12, m.wave_ppb, *gi, t, m.row_height, w);
                         push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                         // Contorno visível
                         let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -776,7 +780,7 @@ pub fn build_clip_instances(
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(&temp_clip, t);
                 push_clip(&mut instances, clips, &temp_clip, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, m.px_per_beat, clips.len(), t, m.row_height, w);
+                          body_alpha_overlay, 0.12, m.wave_ppb, clips.len(), t, m.row_height, w);
             }
         }
     }
@@ -856,7 +860,7 @@ fn push_clip(
     bw: f32,
     body_alpha: f32,
     dark_amount: f32,
-    px_per_beat: f32,
+    wave_ppb: f32,
     idx: usize,
     t: usize,
     row_height: f32,
@@ -889,10 +893,13 @@ fn push_clip(
     } else {
         // O buffer é segmentado: cada clip de áudio é dono do seu trecho de
         // colunas, na ordem de aparição (mesma segmentação da geração).
+        // IMPORTANTE: usar `wave_ppb` (px-per-beat fixo da geração) e NÃO o
+        // zoom atual — se os offsets divergem do buffer, a waveform desliza
+        // dentro do clip ao dar zoom.
         let prev_cols = clips[..idx].iter().filter(|c| !c.is_midi)
-            .map(|c| super::waveform::wave_cols(c.len, px_per_beat))
+            .map(|c| super::waveform::wave_cols(c.len, wave_ppb))
             .sum::<u32>();
-        (prev_cols, super::waveform::wave_cols(clip.len, px_per_beat))
+        (prev_cols, super::waveform::wave_cols(clip.len, wave_ppb))
     };
     let body_h = row_height - header_h;
 

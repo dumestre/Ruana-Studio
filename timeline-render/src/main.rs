@@ -305,6 +305,8 @@ struct App {
     last_cursor: (f32, f32),
 
     wave_bars: Vec<f32>,
+    /// px-per-beat fixo com que `wave_bars` foi gerado (não é o zoom atual).
+    wave_ppb: f32,
     clips: Vec<ClipDemo>,
     clip_interaction: clips::ClipInteraction,
 
@@ -500,8 +502,8 @@ impl App {
             ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
 ];
 
-        let px_per_beat = 40.0;
-        let wave_bars = waveform::build_wave_bars(&clips, px_per_beat);
+        let wave_ppb = 40.0;
+        let wave_bars = waveform::build_wave_bars(&clips, wave_ppb);
 
         Ok(Self {
             window,
@@ -517,7 +519,8 @@ impl App {
             theme: 6,   // <- Mudança: usar Paper (claro) como tema base
             scroll_x: 0.0,
             scroll_y: 0.0,
-            px_per_beat,
+            px_per_beat: 40.0,
+            wave_ppb,
             zoom_y: 1.0,
             ruler_px: 25.0,
             playing: true,
@@ -957,6 +960,7 @@ impl App {
     fn clip_metrics(&self) -> clips::ClipMetrics {
         clips::ClipMetrics {
             px_per_beat: self.px_per_beat,
+            wave_ppb: self.wave_ppb,
             row_height: 64.0 * self.zoom_y.max(0.001),
             scroll_x: self.scroll_x,
             scroll_y: self.scroll_y,
@@ -1336,6 +1340,7 @@ impl App {
         // Clips (hover/drag/fantasma + overlay) — módulo clips
         let cm = clips::ClipMetrics {
             px_per_beat: self.px_per_beat,
+            wave_ppb: self.wave_ppb,
             row_height,
             scroll_x: self.scroll_x,
             scroll_y: self.scroll_y,
