@@ -567,7 +567,6 @@ pub fn build_clip_instances(
     clips: &[ClipDemo],
     inter: &ClipInteraction,
     m: &ClipMetrics,
-    wave_bars: &[f32],
     width: f32,
 ) -> Vec<RectInstance> {
     let t = m.theme.clamp(0, 6) as usize;
@@ -613,7 +612,7 @@ pub fn build_clip_instances(
         let body_dark = if being_dragged { 0.70 } else { 0.12 };
 
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
-                  body_alpha, body_dark, wave_bars, idx, t, m.row_height, w);
+                  body_alpha, body_dark, m.px_per_beat, idx, t, m.row_height, w);
         push_clip_name(&mut instances, clip, x, y, w, header_h, bw);
 
         // Borda (raio 8) para clips selecionados ou dentro do marquee ativo.
@@ -699,7 +698,7 @@ pub fn build_clip_instances(
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height, wave_natural_w);
+                          body_alpha_overlay, 0.12, m.px_per_beat, idx, t, m.row_height, wave_natural_w);
                 push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                 // Contorno visível no overlay do clip arrastado
                 let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -739,7 +738,7 @@ pub fn build_clip_instances(
                         let draw_w = w.min(width - x).max(0.0);
                         let base = clip_color(clip, t);
                         push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                                  body_alpha_overlay, 0.12, wave_bars, *gi, t, m.row_height, w);
+                                  body_alpha_overlay, 0.12, m.px_per_beat, *gi, t, m.row_height, w);
                         push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                         // Contorno visível
                         let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -777,7 +776,7 @@ pub fn build_clip_instances(
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(&temp_clip, t);
                 push_clip(&mut instances, clips, &temp_clip, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, wave_bars, clips.len(), t, m.row_height, w);
+                          body_alpha_overlay, 0.12, m.px_per_beat, clips.len(), t, m.row_height, w);
             }
         }
     }
@@ -857,7 +856,7 @@ fn push_clip(
     bw: f32,
     body_alpha: f32,
     dark_amount: f32,
-    wave_bars: &[f32],
+    px_per_beat: f32,
     idx: usize,
     t: usize,
     row_height: f32,
@@ -888,10 +887,12 @@ fn push_clip(
     let (wo, wc) = if clip.is_midi {
         (0u32, 0u32)
     } else {
-        let bar_idx = clips[..idx].iter().filter(|c| !c.is_midi).count();
-        let offset = bar_idx as u32 * 2;
-        let total = wave_bars.len() as u32 / 2;
-        (offset, total)
+        // O buffer é segmentado: cada clip de áudio é dono do seu trecho de
+        // colunas, na ordem de aparição (mesma segmentação da geração).
+        let prev_cols = clips[..idx].iter().filter(|c| !c.is_midi)
+            .map(|c| super::waveform::wave_cols(c.len, px_per_beat))
+            .sum::<u32>();
+        (prev_cols, super::waveform::wave_cols(clip.len, px_per_beat))
     };
     let body_h = row_height - header_h;
 

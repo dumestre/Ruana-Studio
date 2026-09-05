@@ -1346,7 +1346,6 @@ impl App {
             &self.clips,
             &self.clip_interaction,
             &cm,
-            &self.wave_bars,
             width,
         ));
 
