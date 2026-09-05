@@ -305,8 +305,8 @@ struct App {
     last_cursor: (f32, f32),
 
     wave_bars: Vec<f32>,
-    /// px-per-beat fixo com que `wave_bars` foi gerado (não é o zoom atual).
-    wave_ppb: f32,
+    /// (offset, count) fixos por id de clip no buffer `wave_bars`.
+    wave_segments: Vec<(u32, u32)>,
     clips: Vec<ClipDemo>,
     clip_interaction: clips::ClipInteraction,
 
@@ -504,6 +504,22 @@ impl App {
 
         let wave_ppb = 40.0;
         let wave_bars = waveform::build_wave_bars(&clips, wave_ppb);
+        // Segmentação fixa por id de clip: os offsets/counts do buffer são
+        // calculados UMA vez com os lens ORIGINAIS e nunca mais recomputados
+        // a partir dos lens vivos (senão um stretch corrompe os clips vizinhos).
+        let mut wave_segments = Vec::with_capacity(clips.len());
+        {
+            let mut offset = 0u32;
+            for c in &clips {
+                let count = if c.is_midi {
+                    0u32
+                } else {
+                    waveform::wave_cols(c.len, wave_ppb)
+                };
+                wave_segments.push((offset, count));
+                offset += count;
+            }
+        }
 
         Ok(Self {
             window,
@@ -520,7 +536,6 @@ impl App {
             scroll_x: 0.0,
             scroll_y: 0.0,
             px_per_beat: 40.0,
-            wave_ppb,
             zoom_y: 1.0,
             ruler_px: 25.0,
             playing: true,
@@ -531,7 +546,8 @@ impl App {
             scrubbing: false,
             last_cursor: (0.0, 0.0),
 
-            wave_bars,
+wave_bars,
+            wave_segments,
             clips,
             clip_interaction: clips::ClipInteraction::new(),
 
@@ -960,7 +976,7 @@ impl App {
     fn clip_metrics(&self) -> clips::ClipMetrics {
         clips::ClipMetrics {
             px_per_beat: self.px_per_beat,
-            wave_ppb: self.wave_ppb,
+            wave_segments: self.wave_segments.clone(),
             row_height: 64.0 * self.zoom_y.max(0.001),
             scroll_x: self.scroll_x,
             scroll_y: self.scroll_y,
@@ -1340,7 +1356,7 @@ impl App {
         // Clips (hover/drag/fantasma + overlay) — módulo clips
         let cm = clips::ClipMetrics {
             px_per_beat: self.px_per_beat,
-            wave_ppb: self.wave_ppb,
+            wave_segments: self.wave_segments.clone(),
             row_height,
             scroll_x: self.scroll_x,
             scroll_y: self.scroll_y,

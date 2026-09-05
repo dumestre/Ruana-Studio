@@ -19,13 +19,14 @@ pub struct ClipDemo {
 }
 
 /// Métricas de conversão cursor ↔ conteúdo, espelhadas do App.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct ClipMetrics {
     pub px_per_beat: f32,
-    /// px-per-beat FIXO usado ao gerar `wave_bars` (independe do zoom): os
-    /// offsets/counts do buffer devem bater com ele, senão a waveform
-    /// "desliza"/descola do clip ao dar zoom.
-    pub wave_ppb: f32,
+    /// Segmentos (offset, count) no buffer `wave_bars`, FIXOS por id do clip
+    /// (calculados uma vez com os lens originais). Stretch/move nunca mudam
+    /// o buffer, então NUNCA recomputar a partir dos lens vivos — senão o
+    /// stretch de um clip corrompe a waveform dos clips seguintes.
+    pub wave_segments: Vec<(u32, u32)>,
     pub row_height: f32,
     pub scroll_x: f32,
     pub scroll_y: f32,
@@ -615,8 +616,8 @@ pub fn build_clip_instances(
         };
         let body_dark = if being_dragged { 0.70 } else { 0.12 };
 
-        push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
-                  body_alpha, body_dark, m.wave_ppb, clip.len, idx, t, m.row_height, w);
+        push_clip(&mut instances, clip, base, x, y, w, draw_w, header_h, bw,
+                  body_alpha, body_dark, &m.wave_segments, idx, t, m.row_height, w);
         push_clip_name(&mut instances, clip, x, y, w, header_h, bw);
 
         // Borda (raio 8) para clips selecionados ou dentro do marquee ativo.
@@ -699,8 +700,8 @@ pub fn build_clip_instances(
             if w > 0.0 && x < width && x + w > 0.0 {
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(clip, t);
-                push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, m.wave_ppb, clips[idx].len, idx, t, m.row_height, wave_natural_w);
+                push_clip(&mut instances, &live, base, x, y, w, draw_w, header_h, bw,
+                          body_alpha_overlay, 0.12, &m.wave_segments, idx, t, m.row_height, wave_natural_w);
                 push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                 // Contorno visível no overlay do clip arrastado
                 let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -739,8 +740,8 @@ pub fn build_clip_instances(
                     if w > 0.0 && x < width && x + w > 0.0 {
                         let draw_w = w.min(width - x).max(0.0);
                         let base = clip_color(clip, t);
-                        push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                                  body_alpha_overlay, 0.12, m.wave_ppb, clips[*gi].len, *gi, t, m.row_height, w);
+                        push_clip(&mut instances, &live, base, x, y, w, draw_w, header_h, bw,
+                                  body_alpha_overlay, 0.12, &m.wave_segments, *gi, t, m.row_height, w);
                         push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                         // Contorno visível
                         let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -777,8 +778,8 @@ pub fn build_clip_instances(
             if w > 0.0 && x < width && x + w > 0.0 {
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(&temp_clip, t);
-                push_clip(&mut instances, clips, &temp_clip, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, m.wave_ppb, temp_clip.len, clips.len(), t, m.row_height, w);
+                push_clip(&mut instances, &temp_clip, base, x, y, w, draw_w, header_h, bw,
+                          body_alpha_overlay, 0.12, &m.wave_segments, clips.len(), t, m.row_height, w);
             }
         }
     }
@@ -847,7 +848,6 @@ fn clip_color(clip: &ClipDemo, t: usize) -> palette::Rgb {
 #[allow(clippy::too_many_arguments)]
 fn push_clip(
     instances: &mut Vec<RectInstance>,
-    clips: &[ClipDemo],
     clip: &ClipDemo,
     base: palette::Rgb,
     x: f32,
@@ -858,11 +858,7 @@ fn push_clip(
     bw: f32,
     body_alpha: f32,
     dark_amount: f32,
-    wave_ppb: f32,
-    // Durante um stretch o clip vivo tem len maior, mas o buffer foi gerado
-    // com o len ORIGINAL — então aqui vai o len original p/ os índices baterem
-    // (o COUNT do segmento no buffer vem deste valor).
-    wave_len: f32,
+    segs: &[(u32, u32)],
     idx: usize,
     t: usize,
     row_height: f32,
@@ -889,19 +885,14 @@ fn push_clip(
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: clip_r,
     });
 
-    // Waveform (só para clips de áudio)
+    // Waveform (só para clips de áudio) — segmento FIXO por id (calculado na
+    // geração do buffer com os lens originais). Nunca derive de lens vivos.
     let (wo, wc) = if clip.is_midi {
         (0u32, 0u32)
+    } else if let Some(&(o, c)) = segs.get(idx) {
+        (o, c)
     } else {
-        // O buffer é segmentado: cada clip de áudio é dono do seu trecho de
-        // colunas, na ordem de aparição (mesma segmentação da geração).
-        // IMPORTANTE: usar `wave_ppb` (px-per-beat fixo da geração) e NÃO o
-        // zoom atual — se os offsets divergem do buffer, a waveform desliza
-        // dentro do clip ao dar zoom.
-        let prev_cols = clips[..idx].iter().filter(|c| !c.is_midi)
-            .map(|c| super::waveform::wave_cols(c.len, wave_ppb))
-            .sum::<u32>();
-        (prev_cols, super::waveform::wave_cols(wave_len, wave_ppb))
+        (0u32, 0u32)
     };
     let body_h = row_height - header_h;
 
