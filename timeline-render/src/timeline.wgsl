@@ -187,16 +187,46 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let z = clamp((px_per_sample - 0.05) / (4.0 - 0.05), 0.0, 1.0);
     let fill_amount = 1.0 - smoothstep(0.333, 0.667, z);
 
+    // ZOOM BAIXO (várias colunas por pixel): usa o ENVELOPE (máximo |amp|)
+    // das colunas sob o pixel. Cada pixel amostrar UMA coluna com o feather
+    // antigo causava a "sombra cinza" (fwidth(wave_y) enorme) e a onda
+    // parecia encolher (cristas descartadas). O envelope dá um preenchimento
+    // denso com borda ~1px, sem artefatos.
+    if px_per_sample < 1.0 {
+        let c0 = u32(floor(col_f));
+        let span = min(u32(ceil(1.0 / max(px_per_sample, 0.001))), 64u);
+        let c1 = min(c0 + span, wave_count - 1u);
+        var env: f32 = 0.0;
+        var k = c0;
+        while k < c1 {
+            env = max(env, abs(wave_bars[wave_offset + k]));
+            k = k + 1u;
+        }
+        let top = center - env * amp;
+        let bottom = center + env * amp;
+        // Distância EXTERNA ao envelope: AA constante ~1px (fwidth de
+        // `outside` ≈ 1 em espaço de tela, independente da frequência).
+        let outside = max(top - p.y, p.y - bottom);
+        let env_aa = clamp(fwidth(outside), 0.35, 1.5);
+        let cov = 1.0 - smoothstep(0.0, env_aa, outside);
+        if cov * fill_amount > 0.001 {
+            return vec4<f32>(0.0194, 0.0194, 0.0194, cov * fill_amount);
+        }
+    }
+
     // MODO PREENCHIDO.
     if fill_amount > 0.001 {
         let top = min(wave_y, center);
         let bottom = max(wave_y, center);
-        let aa = max(fwidth(wave_y), 0.5);
         // Distância EXTERNA simétrica ao intervalo [top, bottom]:
         // <=0 dentro, >0 fora. Funciona tanto para wave_y > center
         // quanto para wave_y < center (corrige a versão com
         // inside/inside_bottom assimétricos).
         let outside = max(top - p.y, p.y - bottom);
+        // AA da EDGE da distância (`outside`), ~1px constante. NÃO usar
+        // fwidth(wave_y): a onda balança muito entre pixels no zoom baixo e
+        // o feather vira uma sombra gigante verde/cinza.
+        let aa = clamp(fwidth(outside), 0.5, 1.5);
         let cov = 1.0 - smoothstep(0.0, aa, outside);
         let fill_alpha = cov * fill_amount;
         if fill_alpha > 0.001 {
