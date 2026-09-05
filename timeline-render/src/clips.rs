@@ -616,7 +616,7 @@ pub fn build_clip_instances(
         let body_dark = if being_dragged { 0.70 } else { 0.12 };
 
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
-                  body_alpha, body_dark, m.wave_ppb, idx, t, m.row_height, w);
+                  body_alpha, body_dark, m.wave_ppb, clip.len, idx, t, m.row_height, w);
         push_clip_name(&mut instances, clip, x, y, w, header_h, bw);
 
         // Borda (raio 8) para clips selecionados ou dentro do marquee ativo.
@@ -693,16 +693,14 @@ pub fn build_clip_instances(
                 }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
-            let wave_natural_w = if inter.stretch_mode {
-                inter.stretch_orig_len * m.px_per_beat.max(0.001)
-            } else {
-                w
-            };
+            // A waveform estica junto com o clip em tempo real: os samples são
+            // os ORIGINAIS (wave_len) mapeados sobre a largura VIVA (w).
+            let wave_natural_w = w;
             if w > 0.0 && x < width && x + w > 0.0 {
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, m.wave_ppb, idx, t, m.row_height, wave_natural_w);
+                          body_alpha_overlay, 0.12, m.wave_ppb, clips[idx].len, idx, t, m.row_height, wave_natural_w);
                 push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                 // Contorno visível no overlay do clip arrastado
                 let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -742,7 +740,7 @@ pub fn build_clip_instances(
                         let draw_w = w.min(width - x).max(0.0);
                         let base = clip_color(clip, t);
                         push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
-                                  body_alpha_overlay, 0.12, m.wave_ppb, *gi, t, m.row_height, w);
+                                  body_alpha_overlay, 0.12, m.wave_ppb, clips[*gi].len, *gi, t, m.row_height, w);
                         push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                         // Contorno visível
                         let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
@@ -780,7 +778,7 @@ pub fn build_clip_instances(
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(&temp_clip, t);
                 push_clip(&mut instances, clips, &temp_clip, base, x, y, w, draw_w, header_h, bw,
-                          body_alpha_overlay, 0.12, m.wave_ppb, clips.len(), t, m.row_height, w);
+                          body_alpha_overlay, 0.12, m.wave_ppb, temp_clip.len, clips.len(), t, m.row_height, w);
             }
         }
     }
@@ -861,6 +859,10 @@ fn push_clip(
     body_alpha: f32,
     dark_amount: f32,
     wave_ppb: f32,
+    /// len (beats) usado para o COUNT do segmento no buffer. Durante um
+    /// stretch o clip vivo tem len maior, mas o buffer foi gerado com o len
+    /// ORIGINAL — então aqui vai o len original para os índices baterem.
+    wave_len: f32,
     idx: usize,
     t: usize,
     row_height: f32,
@@ -899,7 +901,7 @@ fn push_clip(
         let prev_cols = clips[..idx].iter().filter(|c| !c.is_midi)
             .map(|c| super::waveform::wave_cols(c.len, wave_ppb))
             .sum::<u32>();
-        (prev_cols, super::waveform::wave_cols(clip.len, wave_ppb))
+        (prev_cols, super::waveform::wave_cols(wave_len, wave_ppb))
     };
     let body_h = row_height - header_h;
 
