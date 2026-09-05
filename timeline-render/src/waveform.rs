@@ -106,8 +106,8 @@ pub fn build_wave_bars_and_segments(
             let mut w = Vec::with_capacity(n_cols as usize * 2);
             for col in 0..n_cols {
                 let v = sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32);
-                w.push(-v.abs()); // min
-                w.push(v.abs());  // max
+                w.push(v); // L
+                w.push(v); // R (mesmo valor para procedural)
             }
             w
         };
@@ -121,37 +121,65 @@ pub fn build_wave_bars_and_segments(
     (bars, segments)
 }
 
-/// Decodifica um arquivo de áudio real e converte para MIN/MAX por coluna.
+/// Decodifica um arquivo de áudio real e converte para amplitudes por coluna.
+/// Mono: 1 float por coluna (valor com sinal, positivo/negativo).
+/// Stereo: 2 floats por coluna (L, R com sinal).
 pub(crate) fn decode_real_wave(path: &str, n_cols: u32) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
     let data = decode_audio(Path::new(path))?;
     let samples = &data.samples;
     if samples.is_empty() || n_cols == 0 {
-        return Ok(vec![0.0; n_cols as usize * 2]);
+        return Ok(vec![0.0; n_cols as usize * data.channels.max(1) as usize]);
     }
 
-    let mut wave = Vec::with_capacity(n_cols as usize * 2);
-    let total = samples.len();
+    let channels = data.channels.max(1) as usize;
+    let mut wave = Vec::with_capacity(n_cols as usize * channels);
+    let total_frames = samples.len() / channels;
     let cols = n_cols as usize;
 
     for col in 0..cols {
-        let start = (col * total / cols).min(total.saturating_sub(1));
-        let end = ((col + 1) * total / cols).min(total);
-        if start >= end {
-            wave.push(0.0);
-            wave.push(0.0);
+        let frame_start = (col * total_frames / cols).min(total_frames.saturating_sub(1));
+        let frame_end = ((col + 1) * total_frames / cols).min(total_frames);
+        if frame_start >= frame_end {
+            for _ in 0..channels {
+                wave.push(0.0);
+            }
             continue;
         }
-        let chunk = &samples[start..end];
-        let mn = chunk.iter().fold(f32::INFINITY, |a, &s| a.min(s));
-        let mx = chunk.iter().fold(f32::NEG_INFINITY, |a, &s| a.max(s));
-        wave.push(if mn.is_finite() { mn } else { 0.0 });
-        wave.push(if mx.is_finite() { mx } else { 0.0 });
+        if channels == 1 {
+            // Mono: média com sinal (preserva positivo/negativo)
+            let start_sample = frame_start;
+            let end_sample = frame_end;
+            let sum: f32 = samples[start_sample..end_sample].iter().sum();
+            let avg = if (end_sample - start_sample) > 0 {
+                sum / (end_sample - start_sample) as f32
+            } else {
+                0.0
+            };
+            wave.push(if avg.is_finite() { avg } else { 0.0 });
+        } else {
+            // Stereo: média com sinal por canal (L, R)
+            for ch in 0..channels {
+                let start_sample = frame_start * channels + ch;
+                let end_sample = frame_end * channels + ch;
+                let step = channels;
+                let mut sum: f32 = 0.0;
+                let mut count: usize = 0;
+                let mut i = start_sample;
+                while i < end_sample && i < samples.len() {
+                    sum += samples[i];
+                    count += 1;
+                    i += step;
+                }
+                let avg = if count > 0 { sum / count as f32 } else { 0.0 };
+                wave.push(if avg.is_finite() { avg } else { 0.0 });
+            }
+        }
     }
 
     Ok(wave)
 }
 
-/// Gera waveform procedural para um clip (fallback) com MIN/MAX.
+/// Gera waveform procedural para um clip (fallback) com 2 floats por coluna (L,R).
 pub(crate) fn generate_procedural_wave(clip: &ClipDemo, n_cols: u32, seed: u64) -> Vec<f32> {
     let style = (seed % 3) as usize;
     let seed = seed.wrapping_mul(0x9E3779B97F4A7C15)
@@ -160,8 +188,8 @@ pub(crate) fn generate_procedural_wave(clip: &ClipDemo, n_cols: u32, seed: u64) 
     let mut wave = Vec::with_capacity(n_cols as usize * 2);
     for col in 0..n_cols {
         let v = sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32);
-        wave.push(-v.abs()); // min
-        wave.push(v.abs());  // max
+        wave.push(v); // L
+        wave.push(v); // R (mesmo valor para procedural)
     }
     wave
 }
@@ -187,7 +215,7 @@ pub fn concat_wave_data(clips: &[ClipDemo]) -> (Vec<f32>, Vec<(u32, u32)>) {
 }
 
 /// Aplica o envelope de fade in/out e ganho às amostras da waveform.
-/// Cada coluna ocupa 2 posições no buffer (min, max) e o fade é aplicado
+/// Cada coluna ocupa 2 posições no buffer (L, R) e o fade é aplicado
 /// em AMBOS os valores.
 pub fn apply_fade_envelope(
     bars: Vec<f32>,
@@ -239,8 +267,8 @@ pub fn apply_fade_envelope(
             let envelope = env_in * env_out * gain_linear;
             let idx = (offset_cols as usize + j) * 2;
             if idx + 1 < out.len() {
-                out[idx] = out[idx] * envelope;     // min
-                out[idx + 1] = out[idx + 1] * envelope; // max
+                out[idx] = out[idx] * envelope;     // L
+                out[idx + 1] = out[idx + 1] * envelope; // R
             }
         }
     }

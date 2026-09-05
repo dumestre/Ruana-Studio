@@ -225,7 +225,15 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     // ------------------------------------------------------------
-    // WAVEFORM (min/max por coluna)
+    // WAVEFORM (simétrica: oscila + e - a partir do centro)
+    // wave_info.z == -4.0 => stereo L (topo)
+    // wave_info.z == -5.0 => stereo R (embaixo)
+    // wave_info.z == -6.0 => mono na faixa central (1/3)
+    // senão => mono (linha central, usado pelo fallback)
+    // buffer: 2 floats por coluna (L,R) com sinal
+    // Modos:
+    //   - zoom baixo : preenchimento entre +val e -val
+    //   - zoom alto  : linha Catmull-Rom simétrica
     // ------------------------------------------------------------
     if wave_count < 2u {
         return in.frag_color;
@@ -234,10 +242,14 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let col = min(u32(floor(col_f)), wave_count - 2u);
     let next_col = col + 1u;
 
-    let p0_min = clamp(wave_bars[(wave_offset + col) * 2], -1.0, 1.0);
-    let p0_max = clamp(wave_bars[(wave_offset + col) * 2 + 1], -1.0, 1.0);
-    let p1_min = clamp(wave_bars[(wave_offset + next_col) * 2], -1.0, 1.0);
-    let p1_max = clamp(wave_bars[(wave_offset + next_col) * 2 + 1], -1.0, 1.0);
+    let is_stereo_l = abs(in.wave_info.z - (-4.0)) < 0.1;
+    let is_stereo_r = abs(in.wave_info.z - (-5.0)) < 0.1;
+
+    // Acesso ao buffer (sempre 2 floats por coluna: L, R)
+    let p0_l = clamp(wave_bars[(wave_offset + col) * 2], -1.0, 1.0);
+    let p0_r = clamp(wave_bars[(wave_offset + col) * 2 + 1], -1.0, 1.0);
+    let p1_l = clamp(wave_bars[(wave_offset + next_col) * 2], -1.0, 1.0);
+    let p1_r = clamp(wave_bars[(wave_offset + next_col) * 2 + 1], -1.0, 1.0);
 
     let p = in.local * in.size;
 
@@ -246,101 +258,90 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let x0 = f32(col) / f32(wave_count - 1u) * wave_width;
     let x1 = f32(next_col) / f32(wave_count - 1u) * wave_width;
 
-    let center = in.size.y * 0.5;
-    let amp = in.size.y * 0.4;
+    // Taper: começa mais grossa e termina mais afinada.
+    let taper = 1.0 - in.local.x * 0.55;
+    let line_width = 1.6 * taper;
+    let radius = line_width * 0.5;
 
-    let y0_min = center - p0_min * amp;
-    let y0_max = center - p0_max * amp;
-    let y1_min = center - p1_min * amp;
-    let y1_max = center - p1_max * amp;
+    // Cor fixa da waveform (cinza escuro).
+    let wave_color = vec3<f32>(0.0194, 0.0194, 0.0194);
 
+    // Segmento X atual
+    let segment_width = max(x1 - x0, 0.0001);
+    let t = clamp((p.x - x0) / segment_width, 0.0, 1.0);
+
+    // Escolhe canal conforme a faixa.
+    var v0: f32 = p0_l;
+    var v1: f32 = p1_l;
+    if is_stereo_l {
+        v0 = p0_l;
+        v1 = p1_l;
+    } else if is_stereo_r {
+        v0 = p0_r;
+        v1 = p1_r;
+    }
+
+    // Valor interpolarizado no X atual (com sinal, pode ser + ou -).
+    let val = mix(v0, v1, t);
+
+    // Ajusta centro e amplitude por modo.
+    // Para stereo L (-4.0), R (-5.0) e mono-center (-6.0), o rect já tem
+    // altura proporcional (1/5 para stereo, 1/3 para mono) posicionado pelo
+    // Rust-side push_clip. O center/amplitude default (body_h*0.5 / *0.4) já
+    // centra a onda no rect corretamente.
+    let body_h = in.size.y;
+    let center_y = body_h * 0.5;
+    let amp_y = body_h * 0.4;
+    let half_h = body_h / 2.0;
+
+    // Stereo L/R e mono-center: c e a usam os defaults acima.
+    // (As checagens de canal L/R acima determinam qual amostra ler,
+    // mas não precisam reajustar center/amplitude — o rect já está posicionado.)
+    var c: f32 = center_y;
+    var a: f32 = amp_y;
+
+    // Tamanho real (em pixels) de cada amostra na tela.
     let stretch = max(in.size.x / max(natural_w, 0.001), 1.0);
     let px_per_sample = clamp((natural_w / f32(wave_count - 1u)) * stretch, 0.001, 1000.0);
 
-    let segment_width = max(x1 - x0, 0.0001);
-    let t = clamp((p.x - x0) / segment_width, 0.0, 1.0);
-    let wave_y_min = mix(y0_min, y1_min, t);
-    let wave_y_max = mix(y0_max, y1_max, t);
-
-    let z = clamp((px_per_sample - 0.05) / (4.0 - 0.05), 0.0, 1.0);
-    let fill_amount = 1.0 - smoothstep(0.333, 0.667, z);
-
+    // Modo preenchido (zoom baixo): entre y_bottom e y_top.
     if px_per_sample < 1.0 {
-        let c0 = u32(floor(col_f));
-        let span = min(u32(ceil(1.0 / max(px_per_sample, 0.001))), 64u);
-        let c1 = min(c0 + span, wave_count - 1u);
-        var env_min: f32 = 0.0;
-        var env_max: f32 = 0.0;
-        var k = c0;
-        while k < c1 {
-            env_min = min(env_min, wave_bars[(wave_offset + k) * 2]);
-            env_max = max(env_max, wave_bars[(wave_offset + k) * 2 + 1]);
-            k = k + 1u;
-        }
-        let top = center - env_max * amp;
-        let bottom = center - env_min * amp;
-        let outside = max(top - p.y, p.y - bottom);
-        let env_aa = clamp(fwidth(outside), 0.35, 1.5);
-        let cov = 1.0 - smoothstep(0.0, env_aa, outside);
-        if cov * fill_amount > 0.001 {
-            return vec4<f32>(0.0194, 0.0194, 0.0194, cov * fill_amount);
-        }
-    }
-
-    // MODO PREENCHIDO (entre min e max da coluna).
-    if fill_amount > 0.001 {
-        let top = min(wave_y_max, wave_y_min);
-        let bottom = max(wave_y_max, wave_y_min);
-        let outside = max(top - p.y, p.y - bottom);
+        let y_top = c - val * a;
+        let y_bottom = c + val * a;
+        let outside = max(y_bottom - p.y, p.y - y_top);
         let aa = clamp(fwidth(outside), 0.5, 1.5);
         let cov = 1.0 - smoothstep(0.0, aa, outside);
-        let fill_alpha = cov * fill_amount;
-        if fill_alpha > 0.001 {
-            return vec4<f32>(0.0194, 0.0194, 0.0194, fill_alpha);
+        if cov > 0.001 {
+            return vec4<f32>(wave_color.r, wave_color.g, wave_color.b, cov);
         }
     }
 
-    // MODO FIO — curva Catmull-Rom usando min e max como pontos de controle.
-    let a0_min = clamp(wave_bars[(wave_offset + max(col, 1u) - 1u) * 2], -1.0, 1.0);
-    let a0_max = clamp(wave_bars[(wave_offset + max(col, 1u) - 1u) * 2 + 1], -1.0, 1.0);
-    let d3_min = clamp(wave_bars[(wave_offset + min(col + 2u, wave_count - 1u)) * 2], -1.0, 1.0);
-    let d3_max = clamp(wave_bars[(wave_offset + min(col + 2u, wave_count - 1u)) * 2 + 1], -1.0, 1.0);
+    // Modo fio (zoom alto): curva Catmull-Rom simétrica.
+    let a0 = clamp(wave_bars[(wave_offset + max(col, 1u) - 1u) * 2], -1.0, 1.0);
+    let d3 = clamp(wave_bars[(wave_offset + min(col + 2u, wave_count - 1u)) * 2], -1.0, 1.0);
 
     let tf = clamp(col_f - f32(col), 0.0, 1.0);
     let t2 = tf * tf;
     let t3 = t2 * tf;
 
-    // Catmull-Rom para min e max separadamente.
-    let s_min = 0.5 * (2.0 * p0_min + (-a0_min + p1_min) * tf
-                    + (2.0 * a0_min - 5.0 * p0_min + 4.0 * p1_min - d3_min) * t2
-                    + (-a0_min + 3.0 * p0_min - 3.0 * p1_min + d3_min) * t3);
-    let s_max = 0.5 * (2.0 * p0_max + (-a0_max + p1_max) * tf
-                    + (2.0 * a0_max - 5.0 * p0_max + 4.0 * p1_max - d3_max) * t2
-                    + (-a0_max + 3.0 * p0_max - 3.0 * p1_max + d3_max) * t3);
+    // Catmull-Rom (tensão 0.5) para o valor com sinal.
+    let s = 0.5 * (2.0 * v0 + (-a0 + v1) * tf
+                   + (2.0 * a0 - 5.0 * v0 + 4.0 * v1 - d3) * t2
+                   + (-a0 + 3.0 * v0 - 3.0 * v1 + d3) * t3);
+    let ds = 0.5 * ((-a0 + v1)
+                    + (4.0 * a0 - 10.0 * v0 + 8.0 * v1 - 2.0 * d3) * tf
+                    + (-3.0 * a0 + 9.0 * v0 - 9.0 * v1 + 3.0 * d3) * t2);
 
-    let ds_min = 0.5 * ((-a0_min + p1_min)
-                    + (4.0 * a0_min - 10.0 * p0_min + 8.0 * p1_min - 2.0 * d3_min) * tf
-                    + (-3.0 * a0_min + 9.0 * p0_min - 9.0 * p1_min + 3.0 * d3_min) * t2);
-    let ds_max = 0.5 * ((-a0_max + p1_max)
-                    + (4.0 * a0_max - 10.0 * p0_max + 8.0 * p1_max - 2.0 * d3_max) * tf
-                    + (-3.0 * a0_max + 9.0 * p0_max - 9.0 * p1_max + 3.0 * d3_max) * t2);
+    let y_curve = c - s * a;
+    let slope_pp = ds * (-a) * f32(wave_count - 1u) / max(wave_width, 0.001);
+    let d_px = abs(p.y - y_curve) / sqrt(1.0 + slope_pp * slope_pp);
 
-    let y_curve_min = center - s_min * amp;
-    let y_curve_max = center - s_max * amp;
-    let slope_pp_min = ds_min * (-amp) * f32(wave_count - 1u) / max(wave_width, 0.001);
-    let slope_pp_max = ds_max * (-amp) * f32(wave_count - 1u) / max(wave_width, 0.001);
-
-    let d_px_min = abs(p.y - y_curve_min) / sqrt(1.0 + slope_pp_min * slope_pp_min);
-    let d_px_max = abs(p.y - y_curve_max) / sqrt(1.0 + slope_pp_max * slope_pp_max);
-    let d_px = min(d_px_min, d_px_max);
-    let line_width = 1.5;
-    let radius = line_width * 0.5;
+    // BITOLA COM TAPER.
     let aa = clamp(fwidth(d_px), 0.35, 0.55);
-
     let alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_px);
     if alpha <= 0.001 {
         return in.frag_color;
     }
 
-    return vec4<f32>(0.0194, 0.0194, 0.0194, alpha);
+    return vec4<f32>(wave_color.r, wave_color.g, wave_color.b, alpha);
 }

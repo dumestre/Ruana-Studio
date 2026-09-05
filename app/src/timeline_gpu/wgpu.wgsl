@@ -97,19 +97,17 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let mn = clamp(bar.x, -1.0, 1.0);
     let mx = clamp(bar.y, -1.0, 1.0);
 
-    // Waveform centrada verticalmente no corpo do clip (0..1).
+    // Waveform centrada verticalmente no rect (0..1).
+    // para mono-center (-6.0), stereo L (-4.0) e stereo R (-5.0),
+    // o rect já está posicionado no terço correto pelo Rust-side build_clip_instances.
     // O envelope vai de center - mx*amp até center - mn*amp (NDC y invertido).
-    // amp = fração da altura do clip que a onda ocupa (ex: 0.8).
-    let amp = 0.4; // metade da altura = 40% para cima/baixo = 80% total
+    let amp = 0.4; // 40% para cima/baixo = 80% total do rect
     let center = 0.5;
     let top = center - mx * amp;
     let bottom = center - mn * amp;
 
     // Se o fragmento está dentro do envelope vertical, desenha waveform.
-    // Cor da waveform: branco semi-transparente sobre o corpo.
     if in.local.y >= top && in.local.y <= bottom {
-        // Branco com alpha aditivo sobre o corpo (melhora visibilidade).
-        // Mistura: 70% waveform + 30% corpo original.
         return vec4<f32>(0.9, 0.9, 0.9, 0.85);
     }
 

@@ -647,63 +647,162 @@ fn build_clip_instances(
         });
 
         if is_stereo {
-            // Stereo: divide o corpo em duas faixas (L em cima, R embaixo)
+            // Stereo: divide o corpo em 5 partes iguais. A waveform L ocupa o 2º
+            // quinto, a waveform R ocupa o 4º quinto, e os 1º/3º/5º ficam vazios
+            // como separadores. layout de cima pra baixo: espaco, L, espaco, R, espaco.
             let body_w = (w - 2.0 * bw).max(0.0);
             let body_h = (h - header_h - bw).max(0.0);
-            let half_h = body_h / 2.0;
+            let fifth = body_h / 5.0;
 
-            // Faixa L (topo)
+            // Fill top spacer (1º quinto)
             out.push(RectInstance {
                 x: x + bw,
                 y: y + header_h,
                 w: body_w,
-                h: half_h,
+                h: fifth,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: fifth,
+            });
+
+            // Faixa L (2º quinto)
+            out.push(RectInstance {
+                x: x + bw,
+                y: y + header_h + fifth,
+                w: body_w,
+                h: fifth,
                 color: rgba_alpha(darker(base, 0.12), 0.50),
                 wave_offset: clip.wave_offset,
                 wave_count: clip.wave_count,
-                clip_w: body_w,
-                clip_h: half_h,
+                clip_w: -4.0, // sinaliza stereo L para o shader
+                clip_h: fifth,
             });
 
-            // Faixa R (embaixo)
+            // Fill center spacer (3º quinto)
             out.push(RectInstance {
                 x: x + bw,
-                y: y + header_h + half_h,
+                y: y + header_h + 2.0 * fifth,
                 w: body_w,
-                h: half_h,
+                h: fifth,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: fifth,
+            });
+
+            // Faixa R (4º quinto)
+            out.push(RectInstance {
+                x: x + bw,
+                y: y + header_h + 3.0 * fifth,
+                w: body_w,
+                h: fifth,
                 color: rgba_alpha(darker(base, 0.18), 0.50),
                 wave_offset: clip.wave_offset,
                 wave_count: clip.wave_count,
-                clip_w: body_w,
-                clip_h: half_h,
+                clip_w: -5.0, // sinaliza stereo R para o shader
+                clip_h: fifth,
             });
 
-            // Divisória entre L e R
+            // Fill bottom spacer (5º quinto)
             out.push(RectInstance {
                 x: x + bw,
-                y: y + header_h + half_h - 0.5,
+                y: y + header_h + 4.0 * fifth,
+                w: body_w,
+                h: fifth,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: fifth,
+            });
+
+            // Linhas divisórias entre as 5 partes (4 dividers)
+            for i in 1..5u32 {
+                let di = i as f32;
+                out.push(RectInstance {
+                    x: x + bw,
+                    y: y + header_h + di * fifth - 1.0,
+                    w: body_w,
+                    h: 1.0,
+                    color: rgba(darker(base, 0.25), 255),
+                    wave_offset: 0,
+                    wave_count: 0,
+                    clip_w: 0.0,
+                    clip_h: 0.0,
+                });
+            }
+        } else {
+            // Mono: waveform na faixa central (1/3 do corpo), com 2 linhas
+            // divisórias separando as 3 partes.
+            let body_w = (w - 2.0 * bw).max(0.0);
+            let third = (h - header_h - bw).max(0.0) / 3.0;
+            let body_y = y + header_h;
+
+            // Fill top spacer (1/3)
+            out.push(RectInstance {
+                x: x + bw,
+                y: body_y,
+                w: body_w,
+                h: third,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: third,
+            });
+
+            out.push(RectInstance {
+                x: x + bw,
+                y: body_y + third,
+                w: body_w,
+                h: third,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: clip.wave_offset,
+                wave_count: clip.wave_count,
+                clip_w: -6.0, // sinaliza mono-center para o shader
+                clip_h: third,
+            });
+
+            // Fill bottom spacer (1/3)
+            out.push(RectInstance {
+                x: x + bw,
+                y: body_y + 2.0 * third,
+                w: body_w,
+                h: third,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: third,
+            });
+
+            // Linha divisória acima da faixa central
+            out.push(RectInstance {
+                x: x + bw,
+                y: body_y + third - 1.0,
                 w: body_w,
                 h: 1.0,
-                color: rgba(darker(base, 0.25), 180),
+                color: rgba(darker(base, 0.25), 255),
                 wave_offset: 0,
                 wave_count: 0,
                 clip_w: 0.0,
                 clip_h: 0.0,
             });
-        } else {
-            // Mono: corpo único
-            let body_w = (w - 2.0 * bw).max(0.0);
-            let body_h = (h - header_h - bw).max(0.0);
+
+            // Linha divisória abaixo da faixa central
             out.push(RectInstance {
                 x: x + bw,
-                y: y + header_h,
+                y: body_y + 2.0 * third - 1.0,
                 w: body_w,
-                h: body_h,
-                color: rgba_alpha(darker(base, 0.12), 0.50),
-                wave_offset: clip.wave_offset,
-                wave_count: clip.wave_count,
-                clip_w: body_w,
-                clip_h: body_h,
+                h: 1.0,
+                color: rgba(darker(base, 0.25), 255),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
             });
         }
 
