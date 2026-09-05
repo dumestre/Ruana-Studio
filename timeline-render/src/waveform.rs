@@ -8,6 +8,7 @@
 //! caixa, variação de dinâmica).
 
 use crate::clips::ClipDemo;
+use crate::fades::{ClipFade, eval_bezier_2d_in, eval_bezier_2d_out};
 
 /// Número de colunas de waveform de um clip de áudio. Deve bater com o
 /// mesmo cálculo usado na geração — 1 vértice por coluna.
@@ -124,4 +125,65 @@ pub fn concat_wave_data(clips: &[ClipDemo]) -> (Vec<f32>, Vec<(u32, u32)>) {
         bars.extend_from_slice(&clip.wave);
     }
     (bars, segments)
+}
+
+/// Aplica o envelope de fade in/out e ganho às amostras da waveform.
+/// Cada sample é multiplicado pelo envelope correspondente à sua posição
+/// dentro do clip, fazendo com que a waveform visual reflita os fades.
+pub fn apply_fade_envelope(
+    bars: Vec<f32>,
+    segments: &[(u32, u32)],
+    clips: &[ClipDemo],
+    fades: &[ClipFade],
+) -> Vec<f32> {
+    let mut out = bars;
+
+    for (i, clip) in clips.iter().enumerate() {
+        if clip.is_midi || clip.wave.is_empty() {
+            continue;
+        }
+        if i >= fades.len() {
+            continue;
+        }
+        let fade = &fades[i];
+        let (offset, count) = segments[i];
+        let n = count as usize;
+        if n == 0 {
+            continue;
+        }
+
+        let clip_len = clip.wave.len() as f32 / 160.0;
+        if clip_len <= 0.0 {
+            continue;
+        }
+
+        let gain_linear = fade.gain_linear();
+
+        let start = offset as usize;
+        let end = start + n;
+
+        for (j, sample) in out[start..end].iter_mut().enumerate() {
+            let frac = if n > 1 { j as f32 / (n - 1) as f32 } else { 0.0 };
+            let beat_pos = frac * clip_len;
+
+            let env_in = if fade.in_len > 0.0 && beat_pos < fade.in_len {
+                let t = (beat_pos / fade.in_len).clamp(0.0, 1.0);
+                eval_bezier_2d_in(t, fade.in_curve_x, fade.in_curve_y)
+            } else {
+                1.0
+            };
+
+            let env_out = if fade.out_len > 0.0 && beat_pos > clip_len - fade.out_len {
+                let t = ((beat_pos - (clip_len - fade.out_len)) / fade.out_len).clamp(0.0, 1.0);
+                eval_bezier_2d_out(t, fade.out_curve_x, fade.out_curve_y)
+            } else {
+                1.0
+            };
+
+            let envelope = env_in * env_out * gain_linear;
+            *sample = *sample * envelope;
+        }
+    }
+
+    out
 }

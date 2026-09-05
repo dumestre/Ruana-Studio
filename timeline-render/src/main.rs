@@ -1042,14 +1042,14 @@ impl App {
     }
 
     /// Reconcatena as ondas ARMAZENADAS nos clips (`clip.wave`) no buffer e
-/// recalcula a segmentação por id. Chamar SEMPRE que a estrutura mudar
-/// (slice, glue, erase, copy/paste, duplicate). NÃO regenera as ondas — os
-/// cortes feitos por slice são preservados nas peças.
-fn rebuild_wave_data(&mut self) {
-    let (bars, segments) = waveform::concat_wave_data(&self.clips);
-    self.wave_bars = bars;
-    self.wave_segments = segments;
-}
+    /// recalcula a segmentação por id. Chamar SEMPRE que a estrutura mudar
+    /// (slice, glue, erase, copy/paste, duplicate). NÃO regenera as ondas — os
+    /// cortes feitos por slice são preservados nas peças.
+    fn rebuild_wave_data(&mut self) {
+        let (bars, segments) = waveform::concat_wave_data(&self.clips);
+        self.wave_bars = waveform::apply_fade_envelope(bars, &segments, &self.clips, &self.fades);
+        self.wave_segments = segments;
+    }
 
     fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
         self.clip_interaction.sync_selection(self.clips.len());
@@ -1171,6 +1171,7 @@ fn rebuild_wave_data(&mut self) {
                         body_w,
                         body_h,
                     );
+                    self.rebuild_wave_data();
                 }
             }
         } else if self.loop_drag.is_some() {
