@@ -139,9 +139,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let bottom = center - mn * amp;
 
     // Se o fragmento está dentro do envelope vertical, desenha waveform.
-    // Cor da waveform: preto.
+    // Cor da waveform: cinza escuro opaco (mais suave que preto puro).
     if in.local.y >= top && in.local.y <= bottom {
-        return vec4<f32>(0.0, 0.0, 0.0, 0.85);
+        return vec4<f32>(0.012, 0.012, 0.012, 1.0);
     }
 
     return in.frag_color;
