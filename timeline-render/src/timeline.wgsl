@@ -86,26 +86,44 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
     // ========================================================================
     // MODO FADE IN (clip_width == -2.0)
-    // Curva Bézier analítica perfeitamente lisa via SDF e Anti-Aliasing (idêntica à waveform)
+    // Curva Bézier 2D analítica suave: ponto de controle (cx, cy) segue o mouse
     // ========================================================================
     if abs(clip_width - (-2.0)) < 0.1 {
-        let tension = clamp(in.wave_info.x / 1000.0 - 1.0, -1.0, 1.0);
-        let t = clamp(in.local.x, 0.0, 1.0);
+        let cx = clamp(in.wave_info.x / 1000.0, 0.02, 0.98);
+        let cy = clamp(in.wave_info.y / 1000.0, 0.0, 1.0);
         let px = in.local * in.size;
+        let x = clamp(in.local.x, 0.0, 1.0);
 
-        let exponent = select(1.0 - tension * 3.0, 1.0 / (1.0 + tension * 3.0), tension > 0.0);
-        let y_norm = pow(clamp(t, 0.0001, 1.0), exponent);
-        let dy_norm = exponent * pow(clamp(t, 0.0001, 1.0), max(exponent - 1.0, -0.999));
+        // Resolve u para o X atual da curva Bézier quadrática:
+        // x(u) = (1-2*cx)*u^2 + 2*cx*u = x
+        var u: f32;
+        let denom = 1.0 - 2.0 * cx;
+        if abs(denom) < 0.001 {
+            u = x;
+        } else {
+            let discr = max(cx * cx + denom * x, 0.0);
+            u = clamp((-cx + sqrt(discr)) / denom, 0.0, 1.0);
+        }
+
+        // Posição Y normalizada [0.0..1.0] e derivadas analíticas:
+        let one_minus_u = 1.0 - u;
+        let y_norm = 2.0 * one_minus_u * u * cy + u * u;
+
+        let dx_du = max(2.0 * (1.0 - 2.0 * cx) * u + 2.0 * cx, 0.0001);
+        let dy_du = 2.0 * (1.0 - 2.0 * cy) * u + 2.0 * cy;
+        let dy_norm_dx = dy_du / dx_du;
 
         let y_curve = in.size.y * (1.0 - y_norm);
-        let slope = - (in.size.y / max(in.size.x, 0.001)) * dy_norm;
+        let slope = - (in.size.y / max(in.size.x, 0.001)) * dy_norm_dx;
 
+        // Distância ortogonal euclidiana real até a curva tangente:
         let d_line = abs(px.y - y_curve) / sqrt(1.0 + slope * slope);
-        let line_width = 1.6;
+        let line_width = 1.8;
         let radius = line_width * 0.5;
         let aa = clamp(fwidth(d_line), 0.35, 0.65);
         let line_alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_line);
 
+        // Preenchimento sombreado da área de fade:
         let d_fill = px.y - y_curve;
         let fill_aa = clamp(fwidth(d_fill), 0.35, 0.75);
         let fill_mask = 1.0 - smoothstep(0.0, fill_aa, d_fill);
@@ -122,22 +140,36 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
     // ========================================================================
     // MODO FADE OUT (clip_width == -3.0)
-    // Curva Bézier analítica perfeitamente lisa via SDF e Anti-Aliasing (idêntica à waveform)
+    // Curva Bézier 2D analítica suave: ponto de controle (cx, cy) segue o mouse
     // ========================================================================
     if abs(clip_width - (-3.0)) < 0.1 {
-        let tension = clamp(in.wave_info.x / 1000.0 - 1.0, -1.0, 1.0);
-        let t = clamp(in.local.x, 0.0, 1.0);
+        let cx = clamp(in.wave_info.x / 1000.0, 0.02, 0.98);
+        let cy = clamp(in.wave_info.y / 1000.0, 0.0, 1.0);
         let px = in.local * in.size;
+        let x = clamp(in.local.x, 0.0, 1.0);
 
-        let exponent = select(1.0 + tension * 3.0, 1.0 / (1.0 - tension * 3.0), -tension > 0.0);
-        let y_norm = 1.0 - pow(clamp(t, 0.0001, 1.0), exponent);
-        let dy_norm = -exponent * pow(clamp(t, 0.0001, 1.0), max(exponent - 1.0, -0.999));
+        var u: f32;
+        let denom = 1.0 - 2.0 * cx;
+        if abs(denom) < 0.001 {
+            u = x;
+        } else {
+            let discr = max(cx * cx + denom * x, 0.0);
+            u = clamp((-cx + sqrt(discr)) / denom, 0.0, 1.0);
+        }
+
+        // No Fade Out, curva vai de 1 (u=0) a 0 (u=1):
+        let one_minus_u = 1.0 - u;
+        let y_norm = one_minus_u * one_minus_u + 2.0 * one_minus_u * u * cy;
+
+        let dx_du = max(2.0 * (1.0 - 2.0 * cx) * u + 2.0 * cx, 0.0001);
+        let dy_du = -2.0 * one_minus_u + 2.0 * (1.0 - 2.0 * u) * cy;
+        let dy_norm_dx = dy_du / dx_du;
 
         let y_curve = in.size.y * (1.0 - y_norm);
-        let slope = - (in.size.y / max(in.size.x, 0.001)) * dy_norm;
+        let slope = - (in.size.y / max(in.size.x, 0.001)) * dy_norm_dx;
 
         let d_line = abs(px.y - y_curve) / sqrt(1.0 + slope * slope);
-        let line_width = 1.6;
+        let line_width = 1.8;
         let radius = line_width * 0.5;
         let aa = clamp(fwidth(d_line), 0.35, 0.65);
         let line_alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_line);

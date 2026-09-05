@@ -1,12 +1,9 @@
 //! fades.rs — Fade In, Fade Out e Gain/Volume para clips de áudio.
 //!
-//! Fornece estruturas de dados para fades e volume, avaliação de curvas Bézier
-//! analíticas suaves (padrão DAW profissional), detecção de handles interativos
-//! (bolinhas) e geração de polypath contínuo pixel-a-pixel para:
-//!   - Preenchimento sombreado suave da área atenuada do fade (sem degraus de bloco)
-//!   - Traçado contínuo do polypath da curva Bézier com espessura uniforme
-//!   - Linha de nível de ganho/volume
-//!   - Bolinhas/handles redondos com feedback de hover e arrasto ativo
+//! Fornece estruturas de dados para fades e volume, avaliação de curvas Bézier 2D
+//! controladas livremente pelo cursor do mouse (arrasto em X para esquerda/direita
+//! e Y para cima/baixo), detecção de handles interativos (bolinhas) e renderização
+//! analítica no shader WGSL com SDF contínuo e anti-aliasing de subpixel.
 
 use super::RectInstance;
 
@@ -15,11 +12,11 @@ use super::RectInstance;
 pub enum FadeHandleKind {
     /// Bolinha superior esquerda: define a duração do Fade In.
     FadeInLen,
-    /// Bolinha central da curva: ajusta a curvatura Bézier do Fade In.
+    /// Bolinha da curva: ajusta a posição e curvatura Bézier 2D do Fade In.
     FadeInCurve,
     /// Bolinha superior direita: define a duração do Fade Out.
     FadeOutLen,
-    /// Bolinha central da curva: ajusta a curvatura Bézier do Fade Out.
+    /// Bolinha da curva: ajusta a posição e curvatura Bézier 2D do Fade Out.
     FadeOutCurve,
     /// Bolinha na linha de volume/ganho: ajusta o nível em dB.
     GainLevel,
@@ -30,12 +27,16 @@ pub enum FadeHandleKind {
 pub struct ClipFade {
     /// Duração do fade in em beats (>= 0.0).
     pub in_len: f32,
-    /// Tensão Bézier do fade in: -1.0 (exponencial) a +1.0 (logarítmica), 0.0 = linear.
-    pub in_curve: f32,
+    /// Ponto de controle Bézier do Fade In: X normalizado [0.0..1.0] dentro do fade in. Padrão 0.5.
+    pub in_curve_x: f32,
+    /// Ponto de controle Bézier do Fade In: Y normalizado [0.0..1.0] de amplitude. Padrão 0.5.
+    pub in_curve_y: f32,
     /// Duração do fade out em beats (>= 0.0).
     pub out_len: f32,
-    /// Tensão Bézier do fade out: -1.0 a +1.0, 0.0 = linear.
-    pub out_curve: f32,
+    /// Ponto de controle Bézier do Fade Out: X normalizado [0.0..1.0] dentro do fade out. Padrão 0.5.
+    pub out_curve_x: f32,
+    /// Ponto de controle Bézier do Fade Out: Y normalizado [0.0..1.0] de amplitude. Padrão 0.5.
+    pub out_curve_y: f32,
     /// Nível de ganho em decibéis (-24.0 dB a +12.0 dB, 0.0 dB = ganho unitário).
     pub gain_db: f32,
 }
@@ -43,11 +44,13 @@ pub struct ClipFade {
 impl Default for ClipFade {
     fn default() -> Self {
         Self {
-            in_len: 1.0,      // 1 beat de fade in demo
-            in_curve: 0.0,    // linear por padrão
-            out_len: 1.0,     // 1 beat de fade out demo
-            out_curve: 0.0,   // linear por padrão
-            gain_db: 0.0,     // 0 dB (100% volume)
+            in_len: 1.0,         // 1 beat de fade in demo
+            in_curve_x: 0.5,     // centro horizontal (curva linear/neutra)
+            in_curve_y: 0.5,     // centro vertical
+            out_len: 1.0,        // 1 beat de fade out demo
+            out_curve_x: 0.5,    // centro horizontal
+            out_curve_y: 0.5,    // centro vertical
+            gain_db: 0.0,        // 0 dB (100% volume)
         }
     }
 }
@@ -63,9 +66,11 @@ impl ClipFade {
     pub fn none() -> Self {
         Self {
             in_len: 0.0,
-            in_curve: 0.0,
+            in_curve_x: 0.5,
+            in_curve_y: 0.5,
             out_len: 0.0,
-            out_curve: 0.0,
+            out_curve_x: 0.5,
+            out_curve_y: 0.5,
             gain_db: 0.0,
         }
     }
@@ -95,44 +100,46 @@ impl ClipFade {
 }
 
 // ============================================================================
-// Curvas Bézier Analíticas Suaves
+// Avaliação de Curva Bézier 2D Analítica (CPU)
 // ============================================================================
 
-/// Avalia a curva Bézier / função de transferência para t em [0.0, 1.0].
-/// - `t`: progresso de 0.0 (início) a 1.0 (fim).
-/// - `tension`: fator de curvatura entre -1.0 e +1.0.
-///   - 0.0: estritamente linear (linha reta perfeita)
-///   - > 0.0: convexa / logarítmica (subida rápida e suave)
-///   - < 0.0: côncava / exponencial (subida gradual e tardia)
-pub fn eval_bezier(t: f32, tension: f32) -> f32 {
-    let t = t.clamp(0.0, 1.0);
-    let tension = tension.clamp(-1.0, 1.0);
+/// Calcula o Y normalizado [0.0..1.0] de uma curva Bézier quadrática 2D para um dado X [0.0..1.0].
+/// P0 = (0, 0), P1 = (cx, cy), P2 = (1, 1).
+#[allow(dead_code)]
+pub fn eval_bezier_2d_in(x: f32, cx: f32, cy: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    let cx = cx.clamp(0.02, 0.98);
+    let cy = cy.clamp(0.0, 1.0);
 
-    if tension.abs() < 0.001 {
-        return t;
-    }
-
-    // Fórmula paramétrica exponencial/logarítmica contínua C-infinito:
-    // Garante curvatura orgânica suave em qualquer ponto sem artefatos de polinômios
-    let exponent = if tension > 0.0 {
-        1.0 / (1.0 + tension * 3.5)
+    let denom = 1.0 - 2.0 * cx;
+    let u = if denom.abs() < 0.001 {
+        x
     } else {
-        1.0 - tension * 3.5
+        let discr = (cx * cx + denom * x).max(0.0);
+        ((-cx + discr.sqrt()) / denom).clamp(0.0, 1.0)
     };
 
-    t.powf(exponent).clamp(0.0, 1.0)
+    2.0 * (1.0 - u) * u * cy + u * u
 }
 
-/// Avalia o valor do Fade In [0.0..1.0] dado um progresso t em [0.0..1.0].
-#[inline]
-pub fn eval_fade_in(t: f32, tension: f32) -> f32 {
-    eval_bezier(t, tension)
-}
+/// Calcula o Y normalizado [1.0..0.0] de uma curva Bézier quadrática 2D de Fade Out para um dado X [0.0..1.0].
+/// P0 = (0, 1), P1 = (cx, cy), P2 = (1, 0).
+#[allow(dead_code)]
+pub fn eval_bezier_2d_out(x: f32, cx: f32, cy: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    let cx = cx.clamp(0.02, 0.98);
+    let cy = cy.clamp(0.0, 1.0);
 
-/// Avalia o valor do Fade Out [1.0..0.0] dado um progresso t em [0.0..1.0].
-#[inline]
-pub fn eval_fade_out(t: f32, tension: f32) -> f32 {
-    1.0 - eval_bezier(t, -tension)
+    let denom = 1.0 - 2.0 * cx;
+    let u = if denom.abs() < 0.001 {
+        x
+    } else {
+        let discr = (cx * cx + denom * x).max(0.0);
+        ((-cx + discr.sqrt()) / denom).clamp(0.0, 1.0)
+    };
+
+    let one_minus_u = 1.0 - u;
+    one_minus_u * one_minus_u + 2.0 * one_minus_u * u * cy
 }
 
 // ============================================================================
@@ -146,9 +153,11 @@ pub struct ActiveFadeDrag {
     pub kind: FadeHandleKind,
     pub start_cursor: (f32, f32),
     pub orig_in_len: f32,
-    pub orig_in_curve: f32,
+    pub orig_in_curve_x: f32,
+    pub orig_in_curve_y: f32,
     pub orig_out_len: f32,
-    pub orig_out_curve: f32,
+    pub orig_out_curve_x: f32,
+    pub orig_out_curve_y: f32,
     pub orig_gain_db: f32,
 }
 
@@ -177,9 +186,11 @@ impl FadeInteraction {
                     kind,
                     start_cursor: cursor,
                     orig_in_len: fade.in_len,
-                    orig_in_curve: fade.in_curve,
+                    orig_in_curve_x: fade.in_curve_x,
+                    orig_in_curve_y: fade.in_curve_y,
                     orig_out_len: fade.out_len,
-                    orig_out_curve: fade.out_curve,
+                    orig_out_curve_x: fade.out_curve_x,
+                    orig_out_curve_y: fade.out_curve_y,
                     orig_gain_db: fade.gain_db,
                 });
                 return true;
@@ -189,6 +200,9 @@ impl FadeInteraction {
     }
 
     /// Atualiza o valor do fade ou ganho durante o arrasto do mouse.
+    ///
+    /// O arrasto em X e Y move o ponto de controle Bézier diretamente, fazendo a curva
+    /// seguir exatamente a direção do cursor do mouse.
     pub fn update_drag(
         &mut self,
         cursor: (f32, f32),
@@ -210,8 +224,13 @@ impl FadeInteraction {
                 fade.in_len = (drag.orig_in_len + delta_beats).clamp(0.0, max_len);
             }
             FadeHandleKind::FadeInCurve => {
-                let delta_tension = -dy / 45.0 + dx / 45.0;
-                fade.in_curve = (drag.orig_in_curve + delta_tension).clamp(-1.0, 1.0);
+                // Arrasto horizontal (dx) controla X do ponto de controle Bézier
+                // Arrasto vertical (dy) controla Y do ponto de controle Bézier
+                let in_px = (fade.in_len * px_per_beat).max(10.0);
+                let delta_norm_x = dx / in_px;
+                let delta_norm_y = -dy / body_h.max(10.0); // arrastar pra cima aumenta Y
+                fade.in_curve_x = (drag.orig_in_curve_x + delta_norm_x).clamp(0.05, 0.95);
+                fade.in_curve_y = (drag.orig_in_curve_y + delta_norm_y).clamp(0.0, 1.0);
             }
             FadeHandleKind::FadeOutLen => {
                 let delta_beats = -dx / px_per_beat.max(1.0);
@@ -219,8 +238,11 @@ impl FadeInteraction {
                 fade.out_len = (drag.orig_out_len + delta_beats).clamp(0.0, max_len);
             }
             FadeHandleKind::FadeOutCurve => {
-                let delta_tension = dy / 45.0 + dx / 45.0;
-                fade.out_curve = (drag.orig_out_curve + delta_tension).clamp(-1.0, 1.0);
+                let out_px = (fade.out_len * px_per_beat).max(10.0);
+                let delta_norm_x = dx / out_px;
+                let delta_norm_y = -dy / body_h.max(10.0);
+                fade.out_curve_x = (drag.orig_out_curve_x + delta_norm_x).clamp(0.05, 0.95);
+                fade.out_curve_y = (drag.orig_out_curve_y + delta_norm_y).clamp(0.0, 1.0);
             }
             FadeHandleKind::GainLevel => {
                 let delta_norm = dy / body_h.max(1.0);
@@ -239,7 +261,7 @@ impl FadeInteraction {
 }
 
 // ============================================================================
-// Renderização: Bolinhas e Polypath Curvo Suave
+// Renderização: Bolinhas e Shaders SDF
 // ============================================================================
 
 /// Cria uma instância de círculo perfeito (bolinha) com anel de borda anti-aliased.
@@ -286,11 +308,8 @@ pub fn push_handle_circle(
 
 /// Gera todas as instâncias visuais para os fades (in/out) e volume de um clip.
 ///
-/// Implementa um verdadeiro POLYPATH contínuo com amostragem de 1 pixel por coluna:
-/// 1. Sombra preenchida sob a curva Bézier sem degraus nem blocos retangulares
-/// 2. Traçado contínuo da curva Bézier com espessura uniforme
-/// 3. Linha horizontal de Ganho / Volume
-/// 4. Bolinhas (handles) interativas redondas no topo e nas curvas
+/// O shader WGSL calcula o SDF da curva Bézier 2D e anti-aliasing analítico de subpixel.
+/// As bolinhas (handles) acompanham a curva e a direção do mouse.
 pub fn build_clip_fade_instances(
     clip_index: usize,
     fade: &ClipFade,
@@ -323,16 +342,17 @@ pub fn build_clip_fade_instances(
     let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
     if in_px > 1.0 {
         // Envia UM único quad para o fragment shader.
-        // O shader calcula o SDF da curva Bézier e anti-aliasing analítico de subpixel.
-        let tension_code = ((fade.in_curve.clamp(-1.0, 1.0) + 1.0) * 1000.0).round() as u32;
+        // wave_offset = in_curve_x * 1000, wave_count = in_curve_y * 1000.
+        let cx_code = (fade.in_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
+        let cy_code = (fade.in_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
         instances.push(RectInstance {
             x: body_x,
             y: body_y,
             w: in_px,
             h: body_h,
             color: [0, 0, 0, 0],
-            wave_offset: tension_code,
-            wave_count: 0,
+            wave_offset: cx_code,
+            wave_count: cy_code,
             clip_w: -2.0, // sinaliza Fade In SDF
             clip_h: body_h,
             radius: 0.0,
@@ -346,14 +366,12 @@ pub fn build_clip_fade_instances(
         let fill_len = if hover_len { handle_fill_hover } else { handle_fill_normal };
         push_handle_circle(instances, handle_in_x, handle_in_y, r_len, fill_len, handle_border_color);
 
-        // Bolinha Fade In Curve (no centro exato da curva Bézier)
-        let mid_t = 0.5;
-        let mid_gain = eval_fade_in(mid_t, fade.in_curve);
-        let handle_curve_x = body_x + mid_t * in_px;
-        let handle_curve_y = body_y + body_h - mid_gain * body_h;
+        // Bolinha Fade In Curve (no ponto de controle Bézier 2D que segue o mouse)
+        let handle_curve_x = body_x + fade.in_curve_x * in_px;
+        let handle_curve_y = body_y + body_h - fade.in_curve_y * body_h;
         let hover_curve = is_hovered(FadeHandleKind::FadeInCurve);
-        let r_curve = if hover_curve { 4.5 } else { 3.5 };
-        let fill_curve = if hover_curve { handle_fill_hover } else { [220, 220, 230, 230] };
+        let r_curve = if hover_curve { 5.0 } else { 4.0 };
+        let fill_curve = if hover_curve { handle_fill_hover } else { [225, 225, 235, 240] };
         push_handle_circle(instances, handle_curve_x, handle_curve_y, r_curve, fill_curve, handle_border_color);
     } else {
         // Indicador pequeno quando hovering próximo ao topo esquerdo
@@ -368,15 +386,16 @@ pub fn build_clip_fade_instances(
     let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
     if out_px > 1.0 {
         let start_x = body_x + body_w - out_px;
-        let tension_code = ((fade.out_curve.clamp(-1.0, 1.0) + 1.0) * 1000.0).round() as u32;
+        let cx_code = (fade.out_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
+        let cy_code = (fade.out_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
         instances.push(RectInstance {
             x: start_x,
             y: body_y,
             w: out_px,
             h: body_h,
             color: [0, 0, 0, 0],
-            wave_offset: tension_code,
-            wave_count: 0,
+            wave_offset: cx_code,
+            wave_count: cy_code,
             clip_w: -3.0, // sinaliza Fade Out SDF
             clip_h: body_h,
             radius: 0.0,
@@ -390,14 +409,12 @@ pub fn build_clip_fade_instances(
         let fill_len = if hover_len { handle_fill_hover } else { handle_fill_normal };
         push_handle_circle(instances, handle_out_x, handle_out_y, r_len, fill_len, handle_border_color);
 
-        // Bolinha Fade Out Curve (no centro exato da curva)
-        let mid_t = 0.5;
-        let mid_gain = eval_fade_out(mid_t, fade.out_curve);
-        let handle_curve_x = start_x + mid_t * out_px;
-        let handle_curve_y = body_y + body_h - mid_gain * body_h;
+        // Bolinha Fade Out Curve (no ponto de controle Bézier 2D que segue o mouse)
+        let handle_curve_x = start_x + fade.out_curve_x * out_px;
+        let handle_curve_y = body_y + body_h - fade.out_curve_y * body_h;
         let hover_curve = is_hovered(FadeHandleKind::FadeOutCurve);
-        let r_curve = if hover_curve { 4.5 } else { 3.5 };
-        let fill_curve = if hover_curve { handle_fill_hover } else { [220, 220, 230, 230] };
+        let r_curve = if hover_curve { 5.0 } else { 4.0 };
+        let fill_curve = if hover_curve { handle_fill_hover } else { [225, 225, 235, 240] };
         push_handle_circle(instances, handle_curve_x, handle_curve_y, r_curve, fill_curve, handle_border_color);
     } else {
         if is_hovered(FadeHandleKind::FadeOutLen) {
@@ -451,7 +468,7 @@ pub fn hit_test_clip_handles(
     let hit_dist_sq = |hx: f32, hy: f32, r: f32| -> bool {
         let dx = cursor.0 - hx;
         let dy = cursor.1 - hy;
-        dx * dx + dy * dy <= (r + 4.0) * (r + 4.0) // margem de tolerância de 4px para clique fácil
+        dx * dx + dy * dy <= (r + 5.0) * (r + 5.0) // margem de 5px para clique confortável
     };
 
     // 1. Handle Fade In Length
@@ -462,12 +479,11 @@ pub fn hit_test_clip_handles(
         return Some(FadeHandleKind::FadeInLen);
     }
 
-    // 2. Handle Fade In Curve
+    // 2. Handle Fade In Curve (ponto cx, cy)
     if in_px > 1.0 {
-        let mid_gain = eval_fade_in(0.5, fade.in_curve);
-        let handle_curve_x = body_x + 0.5 * in_px;
-        let handle_curve_y = body_y + body_h - mid_gain * body_h;
-        if hit_dist_sq(handle_curve_x, handle_curve_y, 4.5) {
+        let handle_curve_x = body_x + fade.in_curve_x * in_px;
+        let handle_curve_y = body_y + body_h - fade.in_curve_y * body_h;
+        if hit_dist_sq(handle_curve_x, handle_curve_y, 5.0) {
             return Some(FadeHandleKind::FadeInCurve);
         }
     }
@@ -480,13 +496,12 @@ pub fn hit_test_clip_handles(
         return Some(FadeHandleKind::FadeOutLen);
     }
 
-    // 4. Handle Fade Out Curve
+    // 4. Handle Fade Out Curve (ponto cx, cy)
     if out_px > 1.0 {
         let start_x = body_x + body_w - out_px;
-        let mid_gain = eval_fade_out(0.5, fade.out_curve);
-        let handle_curve_x = start_x + 0.5 * out_px;
-        let handle_curve_y = body_y + body_h - mid_gain * body_h;
-        if hit_dist_sq(handle_curve_x, handle_curve_y, 4.5) {
+        let handle_curve_x = start_x + fade.out_curve_x * out_px;
+        let handle_curve_y = body_y + body_h - fade.out_curve_y * body_h;
+        if hit_dist_sq(handle_curve_x, handle_curve_y, 5.0) {
             return Some(FadeHandleKind::FadeOutCurve);
         }
     }
