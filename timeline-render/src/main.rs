@@ -1337,7 +1337,7 @@ impl App {
             if y < self.ruler_px || y > view_bottom { continue; }
             instances.push(RectInstance {
                 x: 0.0, y, w: width, h: 1.0,
-                color: rgba(palette::GRID_LINE[t], 150),
+                color: rgba(palette::BASE[t], 150),
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
             });
         }
