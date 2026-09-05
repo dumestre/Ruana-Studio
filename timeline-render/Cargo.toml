@@ -8,9 +8,9 @@ name = "timeline-render"
 path = "src/main.rs"
 
 [dependencies]
-wgpu = "0.19"
+wgpu = "30.0.1"
 winit = "0.30"
-pollster = "0.4"
+pollster = "1.0.1"
 bytemuck = "1.14"
 ab_glyph = "0.2"
 raw-window-handle = "0.6"

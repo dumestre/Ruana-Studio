@@ -1,0 +1,4 @@
+[MAIN] starting up
+[MAIN] event loop created
+[MAIN] handler created, running app
+[APP] new() start, size=PhysicalSize { width: 1280, height: 720 }

@@ -19,7 +19,7 @@ mod tools;
 mod waveform;
 
 use clips::ClipDemo;
-use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor, set_cursor_override, set_hwnd};
+use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor, set_cursor_override};
 use raw_window_handle::HasWindowHandle;
 use windows_sys::Win32::Foundation::HWND;
 
@@ -360,8 +360,11 @@ impl App {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            ..Default::default()
+            backends: wgpu::Backends::DX12 | wgpu::Backends::GL,
+            flags: wgpu::InstanceFlags::empty(),
+            backend_options: wgpu::BackendOptions::default(),
+            memory_budget_thresholds: Default::default(),
+            display: None,
         });
         let surface = instance
             .create_surface(window.clone())
@@ -371,16 +374,19 @@ impl App {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
+            apply_limit_buckets: false,
         }))
-        .ok_or_else(|| "wgpu: no adapter available".to_string())?;
+        .map_err(|e| format!("wgpu: no adapter available: {e}"))?;
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("ruana-timeline-device"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: Default::default(),
+                experimental_features: Default::default(),
             },
-            None,
         ))
         .map_err(|e| format!("wgpu: request_device failed: {e}"))?;
 
@@ -420,8 +426,8 @@ impl App {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("timeline-pl"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: 0,
         });
 
         let unit_quad = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -443,12 +449,13 @@ impl App {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: size.width,
-            height: size.height,
+            width: size.width.max(1),
+            height: size.height.max(1),
             view_formats: vec![],
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: surface_caps.alpha_modes[0],
             desired_maximum_frame_latency: 1,
+            color_space: Default::default(),
         };
         surface.configure(&device, &config);
 
@@ -457,9 +464,10 @@ impl App {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[
-                    wgpu::VertexBufferLayout {
+                    Some(wgpu::VertexBufferLayout {
                         array_stride: 8,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: &[wgpu::VertexAttribute {
@@ -467,8 +475,8 @@ impl App {
                             offset: 0,
                             shader_location: 0,
                         }],
-                    },
-                    wgpu::VertexBufferLayout {
+                    }),
+                    Some(wgpu::VertexBufferLayout {
                         array_stride: 52,
                         step_mode: wgpu::VertexStepMode::Instance,
                         attributes: &[
@@ -493,12 +501,13 @@ impl App {
                                 shader_location: 4,
                             },
                         ],
-                    },
+                    }),
                 ],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -511,7 +520,8 @@ impl App {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
+            cache: None,
         });
 
         // === Dados demo ===
@@ -1743,14 +1753,15 @@ fn rebuild_wave_data(&mut self) {
             return;
         }
 
-        let output = match self.surface.get_current_texture() {
-            Ok(o) => o,
-            Err(_e) => {
+        let surface_texture = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.surface.configure(&self.device, &self.config);
-                self.surface.get_current_texture().unwrap()
+                return;
             }
+            _ => return,
         };
-        let view = output
+        let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -1813,6 +1824,7 @@ fn rebuild_wave_data(&mut self) {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
+                    depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.1, g: 0.1, b: 0.12, a: 1.0,
@@ -1823,6 +1835,7 @@ fn rebuild_wave_data(&mut self) {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             rpass.set_pipeline(&self.pipeline);
             rpass.set_bind_group(0, &bind_group, &[]);
@@ -1832,7 +1845,7 @@ fn rebuild_wave_data(&mut self) {
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        self.queue.present(surface_texture);
     }
 
     fn update_playhead(&mut self) {
