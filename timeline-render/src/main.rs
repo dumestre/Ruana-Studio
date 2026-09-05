@@ -1160,13 +1160,15 @@ fn rebuild_wave_data(&mut self) {
         if self.fade_interaction.is_dragging() {
             if let Some(ref drag) = self.fade_interaction.active_drag {
                 if let Some(clip) = self.clips.get(drag.clip_index) {
-                    let (_, _, _, ch) = clips::clip_rect(clip, &cm);
+                    let (_, _, cw, ch) = clips::clip_rect(clip, &cm);
+                    let body_w = cw - 2.0;
                     let body_h = ch - 16.0;
                     self.fade_interaction.update_drag(
                         pos,
                         &mut self.fades,
                         self.px_per_beat,
                         clip.len,
+                        body_w,
                         body_h,
                     );
                 }

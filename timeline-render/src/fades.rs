@@ -209,6 +209,7 @@ impl FadeInteraction {
         fades: &mut [ClipFade],
         px_per_beat: f32,
         clip_len_beats: f32,
+        body_w: f32,
         body_h: f32,
     ) {
         let Some(ref drag) = self.active_drag else { return };
@@ -226,7 +227,9 @@ impl FadeInteraction {
             FadeHandleKind::FadeInCurve => {
                 // Arrasto horizontal (dx) controla X do ponto de controle Bézier
                 // Arrasto vertical (dy) controla Y do ponto de controle Bézier
-                let in_px = (fade.in_len * px_per_beat).max(10.0);
+                // Usa a MESMA largura clampada do render (min(body_w)) para o delta
+                // normalizado não "desgrudar" da curva visual.
+                let in_px = (fade.in_len * px_per_beat).min(body_w).max(10.0);
                 let delta_norm_x = dx / in_px;
                 let delta_norm_y = -dy / body_h.max(10.0); // arrastar pra cima aumenta Y
                 fade.in_curve_x = (drag.orig_in_curve_x + delta_norm_x).clamp(0.05, 0.95);
@@ -238,7 +241,8 @@ impl FadeInteraction {
                 fade.out_len = (drag.orig_out_len + delta_beats).clamp(0.0, max_len);
             }
             FadeHandleKind::FadeOutCurve => {
-                let out_px = (fade.out_len * px_per_beat).max(10.0);
+                // Mesma largura clampada do render para consistência visual
+                let out_px = (fade.out_len * px_per_beat).min(body_w).max(10.0);
                 let delta_norm_x = dx / out_px;
                 let delta_norm_y = -dy / body_h.max(10.0);
                 fade.out_curve_x = (drag.orig_out_curve_x + delta_norm_x).clamp(0.05, 0.95);
