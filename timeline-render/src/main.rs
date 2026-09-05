@@ -317,9 +317,10 @@ pub fn build_text_instances(
     center_x: f32,
     y: f32,
     color: [u8; 4],
+    scale: f32,
 ) -> Vec<RectInstance> {
-    let char_w = 8.0;
-    let gap = 1.0;
+    let char_w = 8.0 * scale;
+    let gap = 1.0 * scale;
     let total_w = (text.len() as f32 - 1.0) * gap + text.len() as f32 * char_w;
     let start_x = center_x - total_w / 2.0;
 
@@ -330,10 +331,10 @@ pub fn build_text_instances(
                 for col in 0..8 {
                     if glyph[row][col] == 1 {
                         instances.push(RectInstance {
-                            x: start_x + i as f32 * (char_w + gap) + col as f32,
-                            y: y + row as f32,
-                            w: 1.0,
-                            h: 1.0,
+                            x: start_x + i as f32 * (char_w + gap) + col as f32 * scale,
+                            y: y + row as f32 * scale,
+                            w: scale,
+                            h: scale,
                             color,
                             wave_offset: 0,
                             wave_count: 0,
@@ -1553,7 +1554,7 @@ impl App {
             // Número do compasso
             let ruler_text_color = rgba(palette::TEXT_PRIMARY[t], 220);
             if bx > -px_per_bar * 0.5 && bx < width {
-                instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color));
+                instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color, 1.0));
             }
             // Linha vertical do compasso (1px, altura cheia da régua)
             instances.push(RectInstance {
@@ -1615,7 +1616,7 @@ impl App {
         if self.follow_playhead {
             let px = width - 120.0;
             let py = 2.0;
-            instances.extend(build_text_instances("FOLLOW", px, py, rgba(palette::ACCENT[t], 255)));
+            instances.extend(build_text_instances("FOLLOW", px, py, rgba(palette::ACCENT[t], 255), 1.0));
         }
 
         // Playhead — sempre visível; para de avançar quando pausado.
@@ -1788,7 +1789,7 @@ impl App {
                     let s = total_s % 60;
                     let time_str = format!("{}:{:02}", m, s);
                     let text_col = rgba(palette::TEXT_PRIMARY[t], 200);
-                    instances.extend(build_text_instances(&time_str, x + 2.0, tr_y + 8.0, text_col));
+                    instances.extend(build_text_instances(&time_str, x + 2.0, tr_y + 8.0, text_col, 1.0));
                 }
                 sec += step_seconds;
             }
@@ -1818,7 +1819,7 @@ impl App {
             let cur_s = total_s % 60;
             let cur_str = format!("{}:{:02}", cur_m, cur_s);
             let cur_col = rgba((0xFF, 0xFF, 0xFF), 255);
-            instances.extend(build_text_instances(&cur_str, head_x + 8.0, tr_y + 8.0, cur_col));
+            instances.extend(build_text_instances(&cur_str, head_x + 8.0, tr_y + 8.0, cur_col, 1.0));
         }
 
         // Borda inferior da time ruler

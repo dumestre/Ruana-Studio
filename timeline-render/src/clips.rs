@@ -539,6 +539,29 @@ impl ClipInteraction {
     }
 }
 
+/// Desenha o nome do clip no header, alinhado à esquerda, em preto.
+fn push_clip_name(
+    instances: &mut Vec<RectInstance>,
+    clip: &ClipDemo,
+    x: f32, y: f32, w: f32,
+    header_h: f32, bw: f32,
+) {
+    if let Some(ref name) = clip.name {
+        let scale = 1.0;
+        let char_w = 8.0 * scale;
+        let gap = 1.0 * scale;
+        let total_w = (name.len() as f32 - 1.0) * gap + name.len() as f32 * char_w;
+        let available = w - 2.0 * bw;
+        if total_w <= available {
+            let text_y = y + header_h / 2.0 - 4.0 * scale;
+            let start_x = x + bw + 4.0;
+            let center_x = start_x + total_w / 2.0;
+            let text_color = [0u8, 0, 0, 255];
+            instances.extend(build_text_instances(name, center_x, text_y, text_color, scale));
+        }
+    }
+}
+
 /// Gera os retângulos de todos os clips, com hover/fantasma/overlay.
 pub fn build_clip_instances(
     clips: &[ClipDemo],
@@ -591,16 +614,7 @@ pub fn build_clip_instances(
 
         push_clip(&mut instances, clips, clip, base, x, y, w, draw_w, header_h, bw,
                   body_alpha, body_dark, wave_bars, idx, t, m.row_height, w);
-
-        // Nome do clip no header (preto)
-        if let Some(ref name) = clip.name {
-            if w >= 40.0 {
-                let text_x = x + bw + 2.0;
-                let text_y = y + header_h / 2.0 - 4.0;
-                let text_color = [0u8, 0, 0, 255];
-                instances.extend(build_text_instances(name, text_x + (w - 2.0 * bw) / 2.0, text_y, text_color));
-            }
-        }
+        push_clip_name(&mut instances, clip, x, y, w, header_h, bw);
 
         // Borda (raio 8) para clips selecionados ou dentro do marquee ativo.
         if !being_dragged && (idx < inter.selected.len() && inter.selected[idx] || in_marquee) {
@@ -686,6 +700,7 @@ pub fn build_clip_instances(
                 let base = clip_color(clip, t);
                 push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
                           body_alpha_overlay, 0.12, wave_bars, idx, t, m.row_height, wave_natural_w);
+                push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                 // Contorno visível no overlay do clip arrastado
                 let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
                 let th = 2.0;
@@ -725,6 +740,7 @@ pub fn build_clip_instances(
                         let base = clip_color(clip, t);
                         push_clip(&mut instances, clips, &live, base, x, y, w, draw_w, header_h, bw,
                                   body_alpha_overlay, 0.12, wave_bars, *gi, t, m.row_height, w);
+                        push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                         // Contorno visível
                         let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
                         let th = 2.0;
