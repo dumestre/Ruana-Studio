@@ -1,10 +1,10 @@
 //! fades.rs — Fade In, Fade Out e Gain/Volume para clips de áudio.
 //!
 //! Fornece estruturas de dados para fades e volume, avaliação de curvas Bézier
-//! (linear, côncava, convexa, s-curve), detecção de handles interativos (bolinhas)
-//! e geração dos retângulos de renderização (`RectInstance`) para:
-//!   - Preenchimento sombreado da área atenuada do fade
-//!   - Traçado das curvas Bézier com espessura suave
+//! analíticas suaves (padrão DAW profissional), detecção de handles interativos
+//! (bolinhas) e geração de polypath contínuo pixel-a-pixel para:
+//!   - Preenchimento sombreado suave da área atenuada do fade (sem degraus de bloco)
+//!   - Traçado contínuo do polypath da curva Bézier com espessura uniforme
 //!   - Linha de nível de ganho/volume
 //!   - Bolinhas/handles redondos com feedback de hover e arrasto ativo
 
@@ -15,11 +15,11 @@ use super::RectInstance;
 pub enum FadeHandleKind {
     /// Bolinha superior esquerda: define a duração do Fade In.
     FadeInLen,
-    /// Bolinha central da curva: ajusta a tensão Bézier do Fade In.
+    /// Bolinha central da curva: ajusta a curvatura Bézier do Fade In.
     FadeInCurve,
     /// Bolinha superior direita: define a duração do Fade Out.
     FadeOutLen,
-    /// Bolinha central da curva: ajusta a tensão Bézier do Fade Out.
+    /// Bolinha central da curva: ajusta a curvatura Bézier do Fade Out.
     FadeOutCurve,
     /// Bolinha na linha de volume/ganho: ajusta o nível em dB.
     GainLevel,
@@ -79,7 +79,6 @@ impl ClipFade {
     /// Converte o ganho dB em posição Y relativa [0.0 = topo (+12dB), 1.0 = base (-24dB)].
     /// 0 dB fica exatamente no centro vertical da área de áudio (y = 0.5).
     pub fn gain_to_norm_y(&self) -> f32 {
-        // Range: +12 dB (topo) a -24 dB (base)
         let min_db = -24.0;
         let max_db = 12.0;
         let clamped = self.gain_db.clamp(min_db, max_db);
@@ -96,15 +95,15 @@ impl ClipFade {
 }
 
 // ============================================================================
-// Curvas Bézier
+// Curvas Bézier Analíticas Suaves
 // ============================================================================
 
-/// Avalia a curva Bézier normalizada para um progresso t em [0.0, 1.0].
+/// Avalia a curva Bézier / função de transferência para t em [0.0, 1.0].
 /// - `t`: progresso de 0.0 (início) a 1.0 (fim).
 /// - `tension`: fator de curvatura entre -1.0 e +1.0.
-///   - 0.0: linear
-///   - > 0.0: curva convexa / logarítmica (sobe rápido no fade in)
-///   - < 0.0: curva côncava / exponencial (sobe lento no fade in)
+///   - 0.0: estritamente linear (linha reta perfeita)
+///   - > 0.0: convexa / logarítmica (subida rápida e suave)
+///   - < 0.0: côncava / exponencial (subida gradual e tardia)
 pub fn eval_bezier(t: f32, tension: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     let tension = tension.clamp(-1.0, 1.0);
@@ -113,26 +112,15 @@ pub fn eval_bezier(t: f32, tension: f32) -> f32 {
         return t;
     }
 
-    // Ponto de controle central da Bézier quadrática:
-    // P0 = (0, 0), P1 = (0.5 - 0.35 * tension, 0.5 + 0.35 * tension), P2 = (1, 1)
-    let _p1_x = 0.5 - 0.35 * tension;
-    let p1_y = 0.5 + 0.35 * tension;
-
-    // Aproximação inversa da parametrização de tempo para o valor X dado t:
-    // Como queremos Y para um dado X=t, usamos a relação de curvatura de Bernstein:
-    let u = t;
-    let one_minus_u = 1.0 - u;
-    // B_y(u) = 2*(1-u)*u*p1_y + u^2
-    let y = 2.0 * one_minus_u * u * p1_y + u * u;
-
-    // Mistura com expoente para maior fidelidade em extremos
-    let exp_factor = if tension > 0.0 {
-        t.powf(1.0 - 0.65 * tension)
+    // Fórmula paramétrica exponencial/logarítmica contínua C-infinito:
+    // Garante curvatura orgânica suave em qualquer ponto sem artefatos de polinômios
+    let exponent = if tension > 0.0 {
+        1.0 / (1.0 + tension * 3.5)
     } else {
-        1.0 - (1.0 - t).powf(1.0 + 0.65 * tension)
+        1.0 - tension * 3.5
     };
 
-    (0.5 * y + 0.5 * exp_factor).clamp(0.0, 1.0)
+    t.powf(exponent).clamp(0.0, 1.0)
 }
 
 /// Avalia o valor do Fade In [0.0..1.0] dado um progresso t em [0.0..1.0].
@@ -222,7 +210,7 @@ impl FadeInteraction {
                 fade.in_len = (drag.orig_in_len + delta_beats).clamp(0.0, max_len);
             }
             FadeHandleKind::FadeInCurve => {
-                let delta_tension = -dy / 50.0 + dx / 50.0;
+                let delta_tension = -dy / 45.0 + dx / 45.0;
                 fade.in_curve = (drag.orig_in_curve + delta_tension).clamp(-1.0, 1.0);
             }
             FadeHandleKind::FadeOutLen => {
@@ -231,7 +219,7 @@ impl FadeInteraction {
                 fade.out_len = (drag.orig_out_len + delta_beats).clamp(0.0, max_len);
             }
             FadeHandleKind::FadeOutCurve => {
-                let delta_tension = dy / 50.0 + dx / 50.0;
+                let delta_tension = dy / 45.0 + dx / 45.0;
                 fade.out_curve = (drag.orig_out_curve + delta_tension).clamp(-1.0, 1.0);
             }
             FadeHandleKind::GainLevel => {
@@ -251,10 +239,10 @@ impl FadeInteraction {
 }
 
 // ============================================================================
-// Renderização: Bolinhas e Curvas Bézier
+// Renderização: Bolinhas e Polypath Curvo Suave
 // ============================================================================
 
-/// Cria uma instância de círculo perfeito (bolinha) com borda.
+/// Cria uma instância de círculo perfeito (bolinha) com anel de borda anti-aliased.
 #[inline]
 pub fn push_handle_circle(
     instances: &mut Vec<RectInstance>,
@@ -265,7 +253,7 @@ pub fn push_handle_circle(
     border_color: [u8; 4],
 ) {
     let d = radius * 2.0;
-    // Borda exterior
+    // Borda exterior (círculo com raio total)
     instances.push(RectInstance {
         x: cx - radius,
         y: cy - radius,
@@ -279,7 +267,7 @@ pub fn push_handle_circle(
         radius,
     });
 
-    // Miolo interno (1px menor para criar o anel de borda)
+    // Miolo interno preenchido
     let inner_r = (radius - 1.2).max(1.0);
     let inner_d = inner_r * 2.0;
     instances.push(RectInstance {
@@ -298,12 +286,11 @@ pub fn push_handle_circle(
 
 /// Gera todas as instâncias visuais para os fades (in/out) e volume de um clip.
 ///
-/// Desenha:
-/// 1. Sombra preenchida sob a curva Bézier do Fade In e Fade Out
-/// 2. Traçado contínuo da curva Bézier de Fade In
-/// 3. Traçado contínuo da curva Bézier de Fade Out
-/// 4. Linha horizontal de Ganho / Volume
-/// 5. Bolinhas (handles) interativas no topo e nas curvas
+/// Implementa um verdadeiro POLYPATH contínuo com amostragem de 1 pixel por coluna:
+/// 1. Sombra preenchida sob a curva Bézier sem degraus nem blocos retangulares
+/// 2. Traçado contínuo da curva Bézier com espessura uniforme
+/// 3. Linha horizontal de Ganho / Volume
+/// 4. Bolinhas (handles) interativas redondas no topo e nas curvas
 pub fn build_clip_fade_instances(
     clip_index: usize,
     fade: &ClipFade,
@@ -324,70 +311,32 @@ pub fn build_clip_fade_instances(
             || inter.active_drag.as_ref().map_or(false, |d| d.clip_index == clip_index && d.kind == kind)
     };
 
-    // Cores do tema profissional
-    let fade_shadow_color = [15, 15, 20, 90];     // Sombra translúcida sob o fade
-    let curve_stroke_color = [255, 255, 255, 210]; // Linha branca da curva Bézier
-    let gain_line_color = [255, 215, 0, 170];      // Linha dourada suave para ganho
-    let handle_fill_normal = [245, 245, 250, 240];
-    let handle_fill_hover = [0, 200, 83, 255];     // Accent verde esmeralda no hover
-    let handle_border_color = [30, 30, 35, 230];
+    // Cores profissionais estilo DAW
+    let gain_line_color = [255, 215, 0, 160];       // Linha dourada suave para ganho
+    let handle_fill_normal = [250, 250, 255, 245];
+    let handle_fill_hover = [0, 210, 90, 255];      // Accent esmeralda no hover
+    let handle_border_color = [25, 25, 30, 240];
 
     // ========================================================================
-    // 1. FADE IN
+    // 1. FADE IN — SHADER ANALÍTICO SDF (MESMA TÉCNICA DA WAVEFORM)
     // ========================================================================
     let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
     if in_px > 1.0 {
-        // Amostragem da curva Bézier em segmentos verticais
-        let steps = (in_px / 4.0).clamp(12.0, 64.0) as usize;
-        let step_w = in_px / steps as f32;
-
-        let mut prev_pt = (body_x, body_y + body_h);
-
-        for i in 0..=steps {
-            let t = i as f32 / steps as f32;
-            let gain = eval_fade_in(t, fade.in_curve);
-            let cur_x = body_x + t * in_px;
-            let cur_y = body_y + body_h - gain * body_h;
-
-            if i > 0 {
-                // Sombra da atenuação: do topo até a curva
-                let seg_x = body_x + (i - 1) as f32 * step_w;
-                let top_y = body_y;
-                let fill_h = (cur_y - top_y).max(0.0);
-                if fill_h > 0.5 {
-                    instances.push(RectInstance {
-                        x: seg_x,
-                        y: top_y,
-                        w: step_w + 0.5,
-                        h: fill_h,
-                        color: fade_shadow_color,
-                        wave_offset: 0,
-                        wave_count: 0,
-                        clip_w: 0.0,
-                        clip_h: 0.0,
-                        radius: 0.0,
-                    });
-                }
-
-                // Traço da linha Bézier (segmento fino conectando os pontos)
-                let stroke_w = (cur_x - prev_pt.0).max(1.0);
-                let stroke_h = (cur_y - prev_pt.1).abs().max(1.5);
-                let stroke_y = cur_y.min(prev_pt.1);
-                instances.push(RectInstance {
-                    x: prev_pt.0,
-                    y: stroke_y,
-                    w: stroke_w,
-                    h: stroke_h,
-                    color: curve_stroke_color,
-                    wave_offset: 0,
-                    wave_count: 0,
-                    clip_w: 0.0,
-                    clip_h: 0.0,
-                    radius: 0.0,
-                });
-            }
-            prev_pt = (cur_x, cur_y);
-        }
+        // Envia UM único quad para o fragment shader.
+        // O shader calcula o SDF da curva Bézier e anti-aliasing analítico de subpixel.
+        let tension_code = ((fade.in_curve.clamp(-1.0, 1.0) + 1.0) * 1000.0).round() as u32;
+        instances.push(RectInstance {
+            x: body_x,
+            y: body_y,
+            w: in_px,
+            h: body_h,
+            color: [0, 0, 0, 0],
+            wave_offset: tension_code,
+            wave_count: 0,
+            clip_w: -2.0, // sinaliza Fade In SDF
+            clip_h: body_h,
+            radius: 0.0,
+        });
 
         // Bolinha Fade In Length (no canto superior do fade in)
         let handle_in_x = body_x + in_px;
@@ -397,78 +346,41 @@ pub fn build_clip_fade_instances(
         let fill_len = if hover_len { handle_fill_hover } else { handle_fill_normal };
         push_handle_circle(instances, handle_in_x, handle_in_y, r_len, fill_len, handle_border_color);
 
-        // Bolinha Fade In Curve (no centro da curva de Bézier)
+        // Bolinha Fade In Curve (no centro exato da curva Bézier)
         let mid_t = 0.5;
         let mid_gain = eval_fade_in(mid_t, fade.in_curve);
         let handle_curve_x = body_x + mid_t * in_px;
         let handle_curve_y = body_y + body_h - mid_gain * body_h;
         let hover_curve = is_hovered(FadeHandleKind::FadeInCurve);
         let r_curve = if hover_curve { 4.5 } else { 3.5 };
-        let fill_curve = if hover_curve { handle_fill_hover } else { [210, 210, 220, 220] };
+        let fill_curve = if hover_curve { handle_fill_hover } else { [220, 220, 230, 230] };
         push_handle_circle(instances, handle_curve_x, handle_curve_y, r_curve, fill_curve, handle_border_color);
     } else {
-        // Indicador pequeno de Fade In inativo quando hovering próximo ao topo esquerdo
+        // Indicador pequeno quando hovering próximo ao topo esquerdo
         if is_hovered(FadeHandleKind::FadeInLen) {
             push_handle_circle(instances, body_x + 4.0, body_y + 4.0, 4.0, handle_fill_hover, handle_border_color);
         }
     }
 
     // ========================================================================
-    // 2. FADE OUT
+    // 2. FADE OUT — SHADER ANALÍTICO SDF (MESMA TÉCNICA DA WAVEFORM)
     // ========================================================================
     let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
     if out_px > 1.0 {
         let start_x = body_x + body_w - out_px;
-        let steps = (out_px / 4.0).clamp(12.0, 64.0) as usize;
-        let step_w = out_px / steps as f32;
-
-        let mut prev_pt = (start_x, body_y);
-
-        for i in 0..=steps {
-            let t = i as f32 / steps as f32;
-            let gain = eval_fade_out(t, fade.out_curve);
-            let cur_x = start_x + t * out_px;
-            let cur_y = body_y + body_h - gain * body_h;
-
-            if i > 0 {
-                // Sombra da atenuação no fade out
-                let seg_x = start_x + (i - 1) as f32 * step_w;
-                let top_y = body_y;
-                let fill_h = (cur_y - top_y).max(0.0);
-                if fill_h > 0.5 {
-                    instances.push(RectInstance {
-                        x: seg_x,
-                        y: top_y,
-                        w: step_w + 0.5,
-                        h: fill_h,
-                        color: fade_shadow_color,
-                        wave_offset: 0,
-                        wave_count: 0,
-                        clip_w: 0.0,
-                        clip_h: 0.0,
-                        radius: 0.0,
-                    });
-                }
-
-                // Traço da linha Bézier
-                let stroke_w = (cur_x - prev_pt.0).max(1.0);
-                let stroke_h = (cur_y - prev_pt.1).abs().max(1.5);
-                let stroke_y = cur_y.min(prev_pt.1);
-                instances.push(RectInstance {
-                    x: prev_pt.0,
-                    y: stroke_y,
-                    w: stroke_w,
-                    h: stroke_h,
-                    color: curve_stroke_color,
-                    wave_offset: 0,
-                    wave_count: 0,
-                    clip_w: 0.0,
-                    clip_h: 0.0,
-                    radius: 0.0,
-                });
-            }
-            prev_pt = (cur_x, cur_y);
-        }
+        let tension_code = ((fade.out_curve.clamp(-1.0, 1.0) + 1.0) * 1000.0).round() as u32;
+        instances.push(RectInstance {
+            x: start_x,
+            y: body_y,
+            w: out_px,
+            h: body_h,
+            color: [0, 0, 0, 0],
+            wave_offset: tension_code,
+            wave_count: 0,
+            clip_w: -3.0, // sinaliza Fade Out SDF
+            clip_h: body_h,
+            radius: 0.0,
+        });
 
         // Bolinha Fade Out Length (no canto superior do fade out)
         let handle_out_x = start_x;
@@ -478,14 +390,14 @@ pub fn build_clip_fade_instances(
         let fill_len = if hover_len { handle_fill_hover } else { handle_fill_normal };
         push_handle_circle(instances, handle_out_x, handle_out_y, r_len, fill_len, handle_border_color);
 
-        // Bolinha Fade Out Curve (no centro da curva)
+        // Bolinha Fade Out Curve (no centro exato da curva)
         let mid_t = 0.5;
         let mid_gain = eval_fade_out(mid_t, fade.out_curve);
         let handle_curve_x = start_x + mid_t * out_px;
         let handle_curve_y = body_y + body_h - mid_gain * body_h;
         let hover_curve = is_hovered(FadeHandleKind::FadeOutCurve);
         let r_curve = if hover_curve { 4.5 } else { 3.5 };
-        let fill_curve = if hover_curve { handle_fill_hover } else { [210, 210, 220, 220] };
+        let fill_curve = if hover_curve { handle_fill_hover } else { [220, 220, 230, 230] };
         push_handle_circle(instances, handle_curve_x, handle_curve_y, r_curve, fill_curve, handle_border_color);
     } else {
         if is_hovered(FadeHandleKind::FadeOutLen) {

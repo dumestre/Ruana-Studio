@@ -71,8 +71,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let clip_width = in.wave_info.z;
     let _clip_height = in.wave_info.w;
 
-    // Modo "listras diagonais" (sobreposição de clips): clip_width < 0 sinaliza.
-    if clip_width < 0.0 {
+    // Modo "listras diagonais" (sobreposição de clips): clip_width == -1.0 sinaliza.
+    if abs(clip_width - (-1.0)) < 0.1 {
         let px = in.local * in.size;
         let d = px.x + px.y;                 // diagonal 45° (px)
         let sp = 18.0;                        // espaçamento das listras
@@ -82,6 +82,78 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
                              in.frag_color.a * 0.20);
         }
         return in.frag_color;
+    }
+
+    // ========================================================================
+    // MODO FADE IN (clip_width == -2.0)
+    // Curva Bézier analítica perfeitamente lisa via SDF e Anti-Aliasing (idêntica à waveform)
+    // ========================================================================
+    if abs(clip_width - (-2.0)) < 0.1 {
+        let tension = clamp(in.wave_info.x / 1000.0 - 1.0, -1.0, 1.0);
+        let t = clamp(in.local.x, 0.0, 1.0);
+        let px = in.local * in.size;
+
+        let exponent = select(1.0 - tension * 3.0, 1.0 / (1.0 + tension * 3.0), tension > 0.0);
+        let y_norm = pow(clamp(t, 0.0001, 1.0), exponent);
+        let dy_norm = exponent * pow(clamp(t, 0.0001, 1.0), max(exponent - 1.0, -0.999));
+
+        let y_curve = in.size.y * (1.0 - y_norm);
+        let slope = - (in.size.y / max(in.size.x, 0.001)) * dy_norm;
+
+        let d_line = abs(px.y - y_curve) / sqrt(1.0 + slope * slope);
+        let line_width = 1.6;
+        let radius = line_width * 0.5;
+        let aa = clamp(fwidth(d_line), 0.35, 0.65);
+        let line_alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_line);
+
+        let d_fill = px.y - y_curve;
+        let fill_aa = clamp(fwidth(d_fill), 0.35, 0.75);
+        let fill_mask = 1.0 - smoothstep(0.0, fill_aa, d_fill);
+        let shadow_alpha = fill_mask * 0.35;
+
+        if line_alpha <= 0.001 && shadow_alpha <= 0.001 {
+            discard;
+        }
+
+        let stroke_color = vec4<f32>(1.0, 1.0, 1.0, line_alpha * 0.95);
+        let shadow_color = vec4<f32>(0.05, 0.05, 0.08, shadow_alpha);
+        return mix(shadow_color, stroke_color, stroke_color.a);
+    }
+
+    // ========================================================================
+    // MODO FADE OUT (clip_width == -3.0)
+    // Curva Bézier analítica perfeitamente lisa via SDF e Anti-Aliasing (idêntica à waveform)
+    // ========================================================================
+    if abs(clip_width - (-3.0)) < 0.1 {
+        let tension = clamp(in.wave_info.x / 1000.0 - 1.0, -1.0, 1.0);
+        let t = clamp(in.local.x, 0.0, 1.0);
+        let px = in.local * in.size;
+
+        let exponent = select(1.0 + tension * 3.0, 1.0 / (1.0 - tension * 3.0), -tension > 0.0);
+        let y_norm = 1.0 - pow(clamp(t, 0.0001, 1.0), exponent);
+        let dy_norm = -exponent * pow(clamp(t, 0.0001, 1.0), max(exponent - 1.0, -0.999));
+
+        let y_curve = in.size.y * (1.0 - y_norm);
+        let slope = - (in.size.y / max(in.size.x, 0.001)) * dy_norm;
+
+        let d_line = abs(px.y - y_curve) / sqrt(1.0 + slope * slope);
+        let line_width = 1.6;
+        let radius = line_width * 0.5;
+        let aa = clamp(fwidth(d_line), 0.35, 0.65);
+        let line_alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_line);
+
+        let d_fill = px.y - y_curve;
+        let fill_aa = clamp(fwidth(d_fill), 0.35, 0.75);
+        let fill_mask = 1.0 - smoothstep(0.0, fill_aa, d_fill);
+        let shadow_alpha = fill_mask * 0.35;
+
+        if line_alpha <= 0.001 && shadow_alpha <= 0.001 {
+            discard;
+        }
+
+        let stroke_color = vec4<f32>(1.0, 1.0, 1.0, line_alpha * 0.95);
+        let shadow_color = vec4<f32>(0.05, 0.05, 0.08, shadow_alpha);
+        return mix(shadow_color, stroke_color, stroke_color.a);
     }
 
     // Arredondamento de cantos: descarta fragmentos fora do raio.
