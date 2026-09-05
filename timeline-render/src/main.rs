@@ -186,13 +186,14 @@ pub fn build_text_instances_font(
         if let Some(outlined) = font.outline_glyph(glyph) {
             let b = outlined.px_bounds();
             outlined.draw(|px, py, alpha| {
-                if alpha > 0.5 {
+                if alpha > 0.02 {
+                    let a = (color[3] as f32 * alpha).round() as u8;
                     instances.push(RectInstance {
                         x: b.min.x + px as f32,
                         y: b.min.y + py as f32,
                         w: 1.0,
                         h: 1.0,
-                        color,
+                        color: [color[0], color[1], color[2], a],
                         wave_offset: 0,
                         wave_count: 0,
                         clip_w: 0.0,
