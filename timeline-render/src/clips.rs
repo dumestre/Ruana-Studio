@@ -628,21 +628,20 @@ pub fn build_clip_instances(
                   body_alpha, body_dark, &m.wave_segments, idx, t, m.row_height, w);
         push_clip_name(&mut instances, clip, x, y, w, header_h, bw);
 
-        // Borda (raio 8) para clips selecionados ou dentro do marquee ativo.
+// Borda de seleção simples (4 tiras), espessura 4px, cor da waveform
+        // (#262626).
         if !being_dragged && (idx < inter.selected.len() && inter.selected[idx] || in_marquee) {
-            let col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
-            let ac = [col.0, col.1, col.2, 255];
-            let r = 8.0;
-            let thin = 3.0;
+            let ac = [0x26, 0x26, 0x26, 255];
+            let thin = 4.0;
             // superior
             instances.push(RectInstance { x, y, w, h: thin, color: ac,
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0 });
             // inferior
             instances.push(RectInstance { x, y: y + m.row_height - thin, w, h: thin, color: ac,
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0 });
             // esquerda
             instances.push(RectInstance { x, y, w: thin, h: m.row_height, color: ac,
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: r });
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
             // direita
             instances.push(RectInstance { x: x + w - thin, y, w: thin, h: m.row_height, color: ac,
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
@@ -652,7 +651,8 @@ pub fn build_clip_instances(
         if let Some(seam_beat) = clip.seam_beat {
             let seam_x = seam_beat * m.px_per_beat - m.scroll_x;
             if seam_x >= x && seam_x <= x + draw_w {
-                let seam_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
+                // Cor da waveform (#262626)
+                let seam_col = (0x26, 0x26, 0x26);
                 let is_hovered = inter.seam_hover_idx == Some(idx);
                 let alpha: u8 = if is_hovered { 200 } else { 110 };
                 let dash_w = 2.0;
@@ -796,25 +796,22 @@ pub fn build_clip_instances(
     }
 
      // Marquee de multiseleção (caixa accent).
-    // No Paper (t==6), crimson; nos demais, accent.
+    // Na cor da WAVEFORM (#262626) — mesma identidade da borda de seleção.
     if inter.marquee_active {
         let (mx, my, mw, mh) = inter.marquee_rect();
-        let accent = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
-        let ac = [accent.0, accent.1, accent.2, 255];
-        let ac_fill = [accent.0, accent.1, accent.2, 60];
         if mw > 0.0 && mh > 0.0 {
             // preenchimento leve
-            instances.push(RectInstance { x: mx, y: my, w: mw, h: mh, color: ac_fill,
+            instances.push(RectInstance { x: mx, y: my, w: mw, h: mh, color: [0x26, 0x26, 0x26, 60],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
             // borda de 1px
             let thin = 1.0;
-            instances.push(RectInstance { x: mx, y: my, w: mw, h: thin, color: ac,
+            instances.push(RectInstance { x: mx, y: my, w: mw, h: thin, color: [0x26, 0x26, 0x26, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
-            instances.push(RectInstance { x: mx, y: my + mh - thin, w: mw, h: thin, color: ac,
+            instances.push(RectInstance { x: mx, y: my + mh - thin, w: mw, h: thin, color: [0x26, 0x26, 0x26, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
-            instances.push(RectInstance { x: mx, y: my, w: thin, h: mh, color: ac,
+            instances.push(RectInstance { x: mx, y: my, w: thin, h: mh, color: [0x26, 0x26, 0x26, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
-            instances.push(RectInstance { x: mx + mw - thin, y: my, w: thin, h: mh, color: ac,
+            instances.push(RectInstance { x: mx + mw - thin, y: my, w: thin, h: mh, color: [0x26, 0x26, 0x26, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
         }
     }

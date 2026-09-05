@@ -1421,7 +1421,8 @@ fn rebuild_wave_data(&mut self) {
                     let (cx, cy, cw, ch) = clips::clip_rect(clip, &cm);
                     let edge_x = cx + cw;
                     if edge_x > -4.0 && edge_x < width + 4.0 {
-                        let col = if t == 6 { (0xDC, 0x14, 0x3C) } else { palette::ACCENT[t] };
+                        // Cor da waveform (#262626)
+                        let col = (0x26, 0x26, 0x26);
                         instances.push(RectInstance {
                             x: edge_x - 2.0, y: cy, w: 4.0, h: ch,
                             color: [col.0, col.1, col.2, 200],
