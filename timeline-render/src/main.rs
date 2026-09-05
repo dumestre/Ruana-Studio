@@ -1317,7 +1317,7 @@ impl App {
                 palette::SURFACE_STEP[t]
             };
             let bw = px_per_bar;
-            let bh = (height - self.ruler_px - self.time_ruler_h).max(0.0); // corpo abaixo da régua
+            let bh = (height - self.ruler_px - self.time_ruler_h + self.scroll_y).max(0.0); // corpo abaixo da régua, inclui scroll_y
             if bw > 0.0 && bh > 0.0 {
                 instances.push(RectInstance {
                     x: bx, y: self.ruler_px - self.scroll_y, w: bw, h: bh,
@@ -1330,7 +1330,7 @@ impl App {
         // Grid do corpo (abaixo da régua) — rola verticalmente com scroll_y,
         // enquanto a régua permanece fixa no topo.
         let body_top = self.ruler_px - self.scroll_y;
-        let body_h = (height - self.ruler_px).max(0.0);
+        let body_h = (height - self.ruler_px + self.scroll_y).max(0.0);
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
             if bx > width || bx < -px_per_bar { continue; }
