@@ -231,11 +231,26 @@ impl RectInstance {
         let [r, g, b, a] = self.color;
         [
             self.x, self.y, self.w, self.h,
-            r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0,
+            srgb_to_linear(r as f32 / 255.0),
+            srgb_to_linear(g as f32 / 255.0),
+            srgb_to_linear(b as f32 / 255.0),
+            a as f32 / 255.0,
             self.wave_offset as f32, self.wave_count as f32,
             self.clip_w, self.clip_h,
             self.radius,
         ]
+    }
+}
+
+/// Converte um canal de cor sRGB (0..1, como vem das paletas hex) para o
+/// espaço LINEAR que o fragment shader entrega ao alvo sRGB. Sem isso a cor
+/// chega "lavada" na tela e o header/UI parecem translúcidos, quando na
+/// verdade têm alpha 255.
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
     }
 }
 
@@ -278,6 +293,11 @@ enum LoopDrag {
     End,   // arrasta a borda direita (ajusta largura)
     Move,  // arrasta o centro (move o range inteiro)
 }
+
+// px-per-beat FIXO com que o buffer da waveform é gerado (zoom base).
+// Qualquer mudança estrutural nos clips (slice/glue/erase/copy/paste) deve
+// regenerar o buffer EM CONJUNTO com `wave_segments` — os dois andam juntos.
+const WAVE_PPB: f32 = 40.0;
 
 struct App {
     window: Arc<Window>,
@@ -493,33 +513,19 @@ impl App {
         });
 
         // === Dados demo ===
-        let clips = vec![
-            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, name: Some("Bass".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
-            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
+        let mut clips = vec![
+            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
+            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, name: Some("Bass".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
+            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
+            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
+            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
+            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
 ];
 
-        let wave_ppb = 40.0;
-        let wave_bars = waveform::build_wave_bars(&clips, wave_ppb);
-        // Segmentação fixa por id de clip: os offsets/counts do buffer são
-        // calculados UMA vez com os lens ORIGINAIS e nunca mais recomputados
-        // a partir dos lens vivos (senão um stretch corrompe os clips vizinhos).
-        let mut wave_segments = Vec::with_capacity(clips.len());
-        {
-            let mut offset = 0u32;
-            for c in &clips {
-                let count = if c.is_midi {
-                    0u32
-                } else {
-                    waveform::wave_cols(c.len, wave_ppb)
-                };
-                wave_segments.push((offset, count));
-                offset += count;
-            }
-        }
+        // Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
+        // (a fonte da verdade). Buffer e segmentação derivam disso.
+        let (wave_bars, wave_segments) =
+            waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB);
 
         Ok(Self {
             window,
@@ -765,6 +771,7 @@ wave_bars,
                 self.clip_interaction.selected[i] = true;
             }
         }
+        self.rebuild_wave_data();
     }
 
     /// Duplica os clips selecionados APÓS o último clip selecionado (com snap ao grid).
@@ -804,6 +811,7 @@ wave_bars,
                 self.clip_interaction.selected[i] = true;
             }
         }
+        self.rebuild_wave_data();
     }
 
     /// Deleta os clips selecionados.
@@ -824,6 +832,7 @@ wave_bars,
             self.clips.remove(i);
         }
         self.clip_interaction.sync_selection(self.clips.len());
+        self.rebuild_wave_data();
     }
 
     /// Converte posição do cursor para beat e track com snap ao grid.
@@ -853,8 +862,10 @@ wave_bars,
             seam_beat: None,
             pre_glue_len: None,
             pre_glue_color: None,
+            wave: Vec::new(),
         });
         self.clip_interaction.sync_selection(self.clips.len());
+        self.rebuild_wave_data();
     }
 
     /// Estica clip (ferramenta Stretch) - arrasta borda direita.
@@ -897,12 +908,31 @@ wave_bars,
                 let mut right_clip = clip;
                 right_clip.beat = click_beat_snapped;
                 right_clip.len = right_len;
+
+                // Corte VERDADEIRO da waveform: divide as amostras do clip
+                // pai, proporcional ao ponto de corte. As duas peças exibem
+                // exatamente o conteúdo original, apenas cortado — nunca uma
+                // onda regenerada.
+                let parent_len = left_len + right_len;
+                if left_len >= 0.25 && right_len >= 0.25 && self.clips[idx].wave.len() > 1 {
+                    let n = self.clips[idx].wave.len();
+                    let frac = (left_len / parent_len).clamp(0.0, 1.0);
+                    let split_at = ((n as f32 * frac).round() as usize).clamp(1, n - 1);
+                    let right_wave = self.clips[idx].wave[split_at..].to_vec();
+                    self.clips[idx].wave.truncate(split_at);
+                    right_clip.wave = right_wave;
+                } else {
+                    right_clip.wave = Vec::new();
+                }
                 self.clips.push(right_clip);
 
                 self.clip_interaction.sync_selection(self.clips.len());
                 // Seleciona o clip esquerdo (parte que foi cortada) —
                 // cortes consecutivos mantêm o clip do meio selecionado.
                 self.clip_interaction.select_only(idx);
+                // A segmentação do buffer muda (um clip virou dois): regenera
+                // para o clip direito também ter waveform.
+                self.rebuild_wave_data();
             }
         }
     }
@@ -913,6 +943,7 @@ wave_bars,
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
             self.clips.remove(idx);
             self.clip_interaction.sync_selection(self.clips.len());
+            self.rebuild_wave_data();
         }
     }
 
@@ -951,6 +982,7 @@ wave_bars,
                 self.clips[next_idx].color = end_clip.color;
                 self.clips[chain_end_idx].len = (next_beat - end_clip.beat).max(0.25);
                 self.clip_interaction.select_chain(&self.clips, &chain);
+                self.rebuild_wave_data();
             }
         }
     }
@@ -985,6 +1017,16 @@ wave_bars,
         }
     }
 
+    /// Reconcatena as ondas ARMAZENADAS nos clips (`clip.wave`) no buffer e
+/// recalcula a segmentação por id. Chamar SEMPRE que a estrutura mudar
+/// (slice, glue, erase, copy/paste, duplicate). NÃO regenera as ondas — os
+/// cortes feitos por slice são preservados nas peças.
+fn rebuild_wave_data(&mut self) {
+    let (bars, segments) = waveform::concat_wave_data(&self.clips);
+    self.wave_bars = bars;
+    self.wave_segments = segments;
+}
+
     fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
         self.clip_interaction.sync_selection(self.clips.len());
         let cm = self.clip_metrics();
@@ -1002,6 +1044,7 @@ wave_bars,
                     if let Some(seam_idx) = self.clip_interaction.seam_hover_idx {
                         if self.clip_interaction.is_seam_hovered() {
                             self.clip_interaction.unglue_seam(&mut self.clips, seam_idx);
+                            self.rebuild_wave_data();
                             return;
                         }
                     }
@@ -1066,6 +1109,7 @@ wave_bars,
                     let cm = self.clip_metrics();
                     self.clip_interaction.end_draw(&mut self.clips, &cm);
                     self.clip_interaction.sync_selection(self.clips.len());
+                    self.rebuild_wave_data();
                 } else if self.clip_interaction.is_marqueeing() {
                     self.clip_interaction.marquee_move(pos);
                     let cm = self.clip_metrics();

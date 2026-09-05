@@ -70,11 +70,22 @@ fn sample_wave(style: usize, i: u32, n: u32, seed: u64) -> f32 {
 /// Constrói todas as amplitudes (uma por coluna) dos clips de áudio,
 /// concatenadas na mesma ordem em que os clips aparecem (os offsets de
 /// `clips.rs` coincidem com a segmentação: cada clip é seu próprio trecho).
-pub fn build_wave_bars(clips: &[ClipDemo], px_per_beat: f32) -> Vec<f32> {
+///
+/// Além do buffer concatenado, devolve a segmentação (offset, count) por id
+/// de clip e ARMAZENA as amostras em `clip.wave` — a fonte da verdade por
+/// clip. Um slice futura divide `clip.wave` ao meio (corte verdadeiro, sem
+/// regenerar as peças).
+pub fn build_wave_bars_and_segments(
+    clips: &mut [ClipDemo],
+    px_per_beat: f32,
+) -> (Vec<f32>, Vec<(u32, u32)>) {
     let mut bars = Vec::new();
+    let mut segments = Vec::with_capacity(clips.len());
     let mut audio_idx = 0u64;
-    for clip in clips {
+    for clip in clips.iter_mut() {
         if clip.is_midi {
+            segments.push((0u32, 0u32));
+            clip.wave = Vec::new();
             continue;
         }
         let n_cols = wave_cols(clip.len, px_per_beat);
@@ -82,15 +93,35 @@ pub fn build_wave_bars(clips: &[ClipDemo], px_per_beat: f32) -> Vec<f32> {
         let seed = audio_idx.wrapping_mul(0x9E3779B97F4A7C15)
             ^ (clip.beat as u32 as u64).wrapping_mul(11)
             ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
-        let seg: Vec<f32> = (0..n_cols)
+        let wave: Vec<f32> = (0..n_cols)
             .map(|col| {
                 // Seed é constante por clip: o oscilador é uma função
                 // contínua de `col` (frac), sem fase mudando por coluna.
                 sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32)
             })
             .collect();
-        bars.extend_from_slice(&seg);
+        let offset = bars.len() as u32;
+        bars.extend_from_slice(&wave);
+        segments.push((offset, wave.len() as u32));
+        clip.wave = wave;
         audio_idx += 1;
     }
-    bars
+    (bars, segments)
+}
+
+/// Concatena as ondas ARMAZENADAS nos clips (fonte da verdade, campo `wave`)
+/// num buffer único com a segmentação (offset, count) por id. Não regenera
+/// nada: cortes, glues, erases etc. refletem as ondas persistidas.
+pub fn concat_wave_data(clips: &[ClipDemo]) -> (Vec<f32>, Vec<(u32, u32)>) {
+    let mut bars = Vec::new();
+    let mut segments = Vec::with_capacity(clips.len());
+    for clip in clips {
+        if clip.is_midi || clip.wave.is_empty() {
+            segments.push((0u32, 0u32));
+            continue;
+        }
+        segments.push((bars.len() as u32, clip.wave.len() as u32));
+        bars.extend_from_slice(&clip.wave);
+    }
+    (bars, segments)
 }
