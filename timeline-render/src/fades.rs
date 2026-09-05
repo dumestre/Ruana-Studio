@@ -363,13 +363,12 @@ pub fn build_clip_fade_instances(
             radius: 0.0,
         });
 
-        // Bolinhas Fade In — só aparecem quando hover no respectivo handle
-        if is_hovered(FadeHandleKind::FadeInLen) {
+        // Bolinhas Fade In — aparecem junto com a linha do fade (hover_fade_in)
+        if hover_fade_in {
             let handle_in_x = body_x + in_px;
             let handle_in_y = body_y + 4.0;
             push_handle_circle(instances, handle_in_x, handle_in_y, 5.5, handle_fill_hover, handle_border_color);
-        }
-        if is_hovered(FadeHandleKind::FadeInCurve) {
+
             let handle_curve_x = body_x + fade.in_curve_x * in_px;
             let handle_curve_y = body_y + body_h - fade.in_curve_y * body_h;
             push_handle_circle(instances, handle_curve_x, handle_curve_y, 5.0, handle_fill_hover, handle_border_color);
@@ -403,13 +402,12 @@ pub fn build_clip_fade_instances(
             radius: 0.0,
         });
 
-        // Bolinhas Fade Out — só aparecem quando hover no respectivo handle
-        if is_hovered(FadeHandleKind::FadeOutLen) {
+        // Bolinhas Fade Out — aparecem junto com a linha do fade (hover_fade_out)
+        if hover_fade_out {
             let handle_out_x = start_x;
             let handle_out_y = body_y + 4.0;
             push_handle_circle(instances, handle_out_x, handle_out_y, 5.5, handle_fill_hover, handle_border_color);
-        }
-        if is_hovered(FadeHandleKind::FadeOutCurve) {
+
             let handle_curve_x = start_x + fade.out_curve_x * out_px;
             let handle_curve_y = body_y + body_h - fade.out_curve_y * body_h;
             push_handle_circle(instances, handle_curve_x, handle_curve_y, 5.0, handle_fill_hover, handle_border_color);
