@@ -5818,6 +5818,10 @@ version = "0.1.0"
 dependencies = [
  "ab_glyph",
  "bytemuck",
+ "daw-audio",
+ "daw-core",
+ "daw-media",
+ "daw-midi",
  "pollster 1.0.1",
  "raw-window-handle",
  "wgpu 30.0.1",

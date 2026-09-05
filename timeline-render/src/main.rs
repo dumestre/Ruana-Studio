@@ -19,15 +19,18 @@ mod shctx;
 mod tools;
 mod waveform;
 
+use std::sync::{Arc, Mutex};
+
 use clips::ClipDemo;
 use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor, set_cursor_override};
 use raw_window_handle::HasWindowHandle;
 use windows_sys::Win32::Foundation::HWND;
 
-use std::sync::Arc;
 use std::time::Instant;
 
 use wgpu::util::DeviceExt;
+use daw_core::{Clip as CoreClip, ClipKind, Project, Transport};
+use daw_audio::AudioEngine;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::event::{ElementState, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
@@ -327,6 +330,9 @@ struct App {
     scrubbing: bool,
     last_cursor: (f32, f32),
 
+    transport: Arc<Mutex<Transport>>,
+    audio_engine: Option<AudioEngine>,
+
     wave_bars: Vec<f32>,
     /// (offset, count) fixos por id de clip no buffer `wave_bars`.
     wave_segments: Vec<(u32, u32)>,
@@ -529,12 +535,12 @@ impl App {
 
         // === Dados demo ===
         let mut clips = vec![
-            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
-            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, name: Some("Bass".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
-            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
-            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
-            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
-            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
+            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
+            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, name: Some("Bass".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
+            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
+            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
+            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
+            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
         ];
 
         // Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
@@ -548,6 +554,9 @@ impl App {
                 fades::ClipFade::none()
             }
         }).collect();
+
+        let transport = Arc::new(Mutex::new(Transport::default()));
+        let audio_engine = AudioEngine::start(transport.clone()).ok();
 
         Ok(Self {
             window,
@@ -573,6 +582,9 @@ impl App {
             panning: false,
             scrubbing: false,
             last_cursor: (0.0, 0.0),
+
+            transport,
+            audio_engine,
 
             wave_bars,
             wave_segments,
@@ -659,6 +671,65 @@ impl App {
             self.scroll_y = 0.0;
         } else {
             self.scroll_y = self.scroll_y.clamp(0.0, content_h - view_h);
+        }
+    }
+
+    /// Constrói um `daw_core::Project` a partir dos clips da timeline.
+    fn build_project(&self) -> Project {
+        use daw_core::{MixerChannel, Track, TrackKind};
+
+        let track_count = self.clips.iter()
+            .map(|c| c.track_index)
+            .max()
+            .map(|m| m + 1)
+            .unwrap_or(4)
+            .max(4);
+
+        let mut tracks = Vec::with_capacity(track_count);
+        for i in 0..track_count {
+            tracks.push(Track {
+                id: i as u64,
+                name: format!("Track {}", i + 1),
+                kind: TrackKind::Audio,
+                color: 0,
+                mixer: MixerChannel::default(),
+            });
+        }
+
+        let mut clips = Vec::with_capacity(self.clips.len());
+        for (idx, clip) in self.clips.iter().enumerate() {
+            let core_clip = CoreClip {
+                id: idx as u64,
+                track_id: clip.track_index as u64,
+                name: clip.name.clone().unwrap_or_else(|| format!("Clip {}", idx + 1)),
+                kind: if clip.is_midi { ClipKind::Midi } else { ClipKind::Audio },
+                start_beat: clip.beat,
+                length_beats: clip.len,
+                source_start_beats: clip.source_start_beats,
+                color: clip.color as u8,
+                color_override: false,
+                file_path: clip.file_path.clone(),
+                fade_in_beats: self.fades.get(idx).map(|f| f.in_len).unwrap_or(0.0),
+                fade_out_beats: self.fades.get(idx).map(|f| f.out_len).unwrap_or(0.0),
+                gain_db: self.fades.get(idx).map(|f| f.gain_db).unwrap_or(0.0),
+                notes: Vec::new(),
+            };
+            clips.push(core_clip);
+        }
+
+        let mut project = Project::default();
+        project.tracks = tracks;
+        project.clips = clips;
+        project.master_mixer = MixerChannel::default();
+        project.beat_patterns = daw_midi::BeatPatterns::default();
+        project
+    }
+
+    /// Sincroniza o projeto atual com o motor de áudio.
+    fn sync_audio_engine(&self) {
+        if let Some(ref engine) = self.audio_engine {
+            let project = self.build_project();
+            engine.handle().sync_project(&project);
         }
     }
 
@@ -871,6 +942,48 @@ impl App {
         (snapped_beat, track)
     }
 
+    /// Carrega um arquivo de áudio e cria um clip na posição especificada.
+    fn load_audio_file(&mut self, path: &str, beat: f32, track: usize) {
+        use daw_media::waveform::decode_audio;
+        use std::path::Path;
+
+        match decode_audio(Path::new(path)) {
+            Ok(data) => {
+                let _sample_rate = data.sample_rate;
+                let bpm = self.bpm;
+                let beats_per_second = bpm / 60.0;
+                let source_length_beats = data.duration_seconds as f32 * beats_per_second;
+
+                let clip = ClipDemo {
+                    track_index: track,
+                    beat,
+                    len: source_length_beats,
+                    is_midi: false,
+                    color: 0,
+                    name: Some(std::path::Path::new(path)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Audio")
+                        .to_string()),
+                    seam_beat: None,
+                    pre_glue_len: None,
+                    pre_glue_color: None,
+                    wave: Vec::new(),
+                    file_path: Some(path.to_string()),
+                    source_start_beats: 0.0,
+                    source_length_beats,
+                };
+
+                self.clips.push(clip);
+                self.rebuild_wave_data();
+                self.window.request_redraw();
+            }
+            Err(e) => {
+                eprintln!("falha ao decodificar {}: {}", path, e);
+            }
+        }
+    }
+
     /// Desenha novo clip (ferramenta Draw/Pencil).
     #[allow(dead_code)]
     fn tool_draw(&mut self, pos: (f32, f32)) {
@@ -887,6 +1000,9 @@ impl App {
             pre_glue_len: None,
             pre_glue_color: None,
             wave: Vec::new(),
+            file_path: None,
+            source_start_beats: 0.0,
+            source_length_beats: 0.0,
         });
         self.clip_interaction.sync_selection(self.clips.len());
         self.rebuild_wave_data();
@@ -1942,9 +2058,14 @@ impl App {
 
     fn update_playhead(&mut self) {
         if !self.playing { return; }
-        let dt = self.last_play_head_update.elapsed().as_secs_f32();
+
+        // Lê a posição do transporte compartilhado (avançado pelo AudioEngine).
+        let transport_seconds = self.transport.lock()
+            .map(|t| t.position_seconds() as f32)
+            .unwrap_or(self.transport_seconds);
+
+        self.transport_seconds = transport_seconds;
         self.last_play_head_update = Instant::now();
-        self.transport_seconds += dt;
 
         // Follow playhead: mantém o playhead no centro da tela rolando a timeline.
         // Só ativa quando o playhead atinge o centro — antes disso, o usuário
@@ -2062,9 +2183,26 @@ impl winit::application::ApplicationHandler for AppHandler {
                 let vk = event.logical_key;
                 if pressed && vk == Key::Named(NamedKey::Space) {
                     if app.playing {
-                        app.transport_seconds = app.play_start_seconds;
+                        if let Ok(mut t) = app.transport.lock() {
+                            t.playing = false;
+                        }
                         app.playing = false;
                     } else {
+                        // Sincroniza o projeto com o motor de áudio antes de tocar.
+                        app.sync_audio_engine();
+                        // Sincroniza o estado do loop no transporte compartilhado.
+                        if let Ok(mut t) = app.transport.lock() {
+                            t.bpm = app.bpm as u32;
+                            t.loop_enabled = app.loop_enabled;
+                            if app.loop_enabled {
+                                t.loop_start_ticks = (app.loop_start_beat * t.ppq as f32) as u64;
+                                t.loop_end_ticks = (app.loop_end_beat * t.ppq as f32) as u64;
+                            }
+                            // Posiciona no playhead atual.
+                            let beats = app.transport_seconds * app.bpm / 60.0;
+                            t.position_ticks = (beats * t.ppq as f32) as u64;
+                            t.playing = true;
+                        }
                         app.play_start_seconds = app.transport_seconds;
                         app.playing = true;
                     }
@@ -2204,6 +2342,19 @@ impl winit::application::ApplicationHandler for AppHandler {
                     || app.fade_interaction.is_dragging()
                     || current_tool() == Tool::Slice || current_tool() == Tool::Stretch {
                     app.window.request_redraw();
+                }
+            }
+            WindowEvent::DroppedFile(path) => {
+                if let Some(p) = path.to_str() {
+                    let ext = std::path::Path::new(p)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_lowercase())
+                        .unwrap_or_default();
+                    if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
+                        let (beat, track) = app.cursor_to_snapped_beat_track((0.0, app.ruler_px));
+                        app.load_audio_file(p, beat, track);
+                    }
                 }
             }
             WindowEvent::Focused(focused) => {

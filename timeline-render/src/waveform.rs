@@ -9,6 +9,8 @@
 
 use crate::clips::ClipDemo;
 use crate::fades::{ClipFade, eval_bezier_2d_in, eval_bezier_2d_out};
+use daw_media::waveform::decode_audio;
+use std::path::Path;
 
 /// Número de colunas de waveform de um clip de áudio. Deve bater com o
 /// mesmo cálculo usado na geração — 1 vértice por coluna.
@@ -89,18 +91,25 @@ pub fn build_wave_bars_and_segments(
             clip.wave = Vec::new();
             continue;
         }
+
         let n_cols = wave_cols(clip.len, px_per_beat);
-        let style = (audio_idx % 3) as usize;
-        let seed = audio_idx.wrapping_mul(0x9E3779B97F4A7C15)
-            ^ (clip.beat as u32 as u64).wrapping_mul(11)
-            ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
-        let wave: Vec<f32> = (0..n_cols)
-            .map(|col| {
-                // Seed é constante por clip: o oscilador é uma função
-                // contínua de `col` (frac), sem fase mudando por coluna.
-                sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32)
-            })
-            .collect();
+        let wave: Vec<f32> = if let Some(ref path) = clip.file_path {
+            match decode_real_wave(path, n_cols) {
+                Ok(w) => w,
+                Err(_) => generate_procedural_wave(clip, n_cols, audio_idx),
+            }
+        } else {
+            let style = (audio_idx % 3) as usize;
+            let seed = audio_idx.wrapping_mul(0x9E3779B97F4A7C15)
+                ^ (clip.beat as u32 as u64).wrapping_mul(11)
+                ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
+            (0..n_cols)
+                .map(|col| {
+                    sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32)
+                })
+                .collect()
+        };
+
         let offset = bars.len() as u32;
         bars.extend_from_slice(&wave);
         segments.push((offset, wave.len() as u32));
@@ -108,6 +117,48 @@ pub fn build_wave_bars_and_segments(
         audio_idx += 1;
     }
     (bars, segments)
+}
+
+/// Decodifica um arquivo de áudio real e converte para amplitudes por coluna.
+fn decode_real_wave(path: &str, n_cols: u32) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
+    let data = decode_audio(Path::new(path))?;
+    let samples = &data.samples;
+    if samples.is_empty() || n_cols == 0 {
+        return Ok(vec![0.0; n_cols as usize]);
+    }
+
+    let mut wave = Vec::with_capacity(n_cols as usize);
+    let total = samples.len();
+    let cols = n_cols as usize;
+
+    for col in 0..cols {
+        let start = (col * total / cols).min(total.saturating_sub(1));
+        let end = ((col + 1) * total / cols).min(total);
+        if start >= end {
+            wave.push(0.0);
+            continue;
+        }
+        let peak = samples[start..end]
+            .iter()
+            .map(|&s| s.abs())
+            .fold(0.0f32, f32::max);
+        wave.push(peak);
+    }
+
+    Ok(wave)
+}
+
+/// Gera waveform procedural para um clip (fallback).
+fn generate_procedural_wave(clip: &ClipDemo, n_cols: u32, seed: u64) -> Vec<f32> {
+    let style = (seed % 3) as usize;
+    let seed = seed.wrapping_mul(0x9E3779B97F4A7C15)
+        ^ (clip.beat as u32 as u64).wrapping_mul(11)
+        ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
+    (0..n_cols)
+        .map(|col| {
+            sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32)
+        })
+        .collect()
 }
 
 /// Concatena as ondas ARMAZENADAS nos clips (fonte da verdade, campo `wave`)

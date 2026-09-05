@@ -20,6 +20,12 @@ pub struct ClipDemo {
     /// fonte da verdade do buffer `wave_bars`. Slice divide este vetor ao
     /// meio (corte verdadeiro); as peças NUNCA são regeneradas.
     pub wave: Vec<f32>,
+    /// Caminho do arquivo de áudio original, se houver.
+    pub file_path: Option<String>,
+    /// Posição de início dentro do arquivo original, em beats do projeto.
+    pub source_start_beats: f32,
+    /// Duração do arquivo original em beats (antes de qualquer corte/trim).
+    pub source_length_beats: f32,
 }
 
 /// Métricas de conversão cursor ↔ conteúdo, espelhadas do App.
@@ -499,6 +505,9 @@ impl ClipInteraction {
                     pre_glue_len: None,
                     pre_glue_color: None,
                     wave: Vec::new(),
+                    file_path: None,
+                    source_start_beats: 0.0,
+                    source_length_beats: 0.0,
                 };
 
                 clips.push(clip.clone());
@@ -693,6 +702,9 @@ pub fn build_clip_instances(
                     pre_glue_len: clip.pre_glue_len,
                     pre_glue_color: clip.pre_glue_color,
                     wave: clip.wave.clone(),
+                    file_path: clip.file_path.clone(),
+                    source_start_beats: clip.source_start_beats,
+                    source_length_beats: clip.source_length_beats,
                 }
             } else {
                 ClipDemo {
@@ -706,6 +718,9 @@ pub fn build_clip_instances(
                     pre_glue_len: clip.pre_glue_len,
                     pre_glue_color: clip.pre_glue_color,
                     wave: clip.wave.clone(),
+                    file_path: clip.file_path.clone(),
+                    source_start_beats: clip.source_start_beats,
+                    source_length_beats: clip.source_length_beats,
                 }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
@@ -794,6 +809,9 @@ let (x, y, w, _h) = clip_rect(&live, m);
                 pre_glue_len: None,
                 pre_glue_color: None,
                 wave: Vec::new(),
+                file_path: None,
+                source_start_beats: 0.0,
+                source_length_beats: 0.0,
             };
 
             let (x, y, w, _h) = clip_rect(&temp_clip, m);
