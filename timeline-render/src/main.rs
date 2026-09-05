@@ -16,6 +16,7 @@
 mod clips;
 mod shctx;
 mod tools;
+mod waveform;
 
 use clips::ClipDemo;
 use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor, set_cursor_override};
@@ -499,21 +500,8 @@ impl App {
             ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None },
 ];
 
-        let mut wave_bars: Vec<f32> = Vec::new();
         let px_per_beat = 40.0;
-        for clip in &clips {
-            if clip.is_midi {
-                continue;
-            }
-            let n_cols = ((clip.len * px_per_beat).ceil() as u32).max(1).min(256);
-            for col in 0..n_cols {
-                let phase = (col as f32) / n_cols as f32 * std::f32::consts::TAU;
-                let mn = -0.5 * (phase * 1.3).sin();
-                let mx = 0.5 * (phase * 0.7 + 0.5).cos();
-                wave_bars.push(mn);
-                wave_bars.push(mx);
-            }
-        }
+        let wave_bars = waveform::build_wave_bars(&clips, px_per_beat);
 
         Ok(Self {
             window,
