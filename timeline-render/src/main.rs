@@ -19,7 +19,9 @@ mod tools;
 mod waveform;
 
 use clips::ClipDemo;
-use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor, set_cursor_override};
+use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor, set_cursor_override, set_hwnd};
+use raw_window_handle::HasWindowHandle;
+use windows_sys::Win32::Foundation::HWND;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -1893,6 +1895,12 @@ impl winit::application::ApplicationHandler for AppHandler {
                 .expect("failed to create window");
             self.window_id = window.id();
             let win = Arc::new(window);
+            // Get HWND for Win32 cursor class override
+            if let Ok(handle) = win.window_handle() {
+                if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                    tools::set_hwnd(h.hwnd.get() as HWND);
+                }
+            }
             self.app = Some(App::new(win).expect("app init failed"));
             // Initialize tools and set dark mode for Paper theme
             if let Some(app) = &self.app {
@@ -2043,6 +2051,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                 button,
                 ..
             } => {
+                tools::update_cursor();
                 if button == winit::event::MouseButton::Middle {
                     let pos = Some(app.last_cursor);
                     app.handle_mouse_button(state, pos);
@@ -2075,6 +2084,9 @@ impl winit::application::ApplicationHandler for AppHandler {
                 ..
             } => {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
+                // Mantém o cursor da ferramenta ativa persistente (evita voltar pro
+                // cursor padrão do SO a cada movimento).
+                tools::update_cursor();
                 if app.loop_drag.is_some() || app.scrubbing || app.clip_interaction.is_dragging()
                     || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some()
                     || app.clip_interaction.is_drawing()
@@ -2094,6 +2106,9 @@ impl winit::application::ApplicationHandler for AppHandler {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(app) = &self.app {
+            // Reaplica o cursor da ferramenta a cada ciclo (evita reset do SO
+            // após clique/solta, WM_SETCURSOR, etc.).
+            tools::update_cursor();
             if app.playing || app.clip_interaction.is_drawing() {
                 app.window.request_redraw();
             }

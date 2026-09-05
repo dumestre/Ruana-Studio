@@ -5900,6 +5900,7 @@ dependencies = [
  "ab_glyph",
  "bytemuck",
  "pollster",
+ "raw-window-handle",
  "wgpu 0.19.4",
  "windows-sys 0.59.0",
  "winit",

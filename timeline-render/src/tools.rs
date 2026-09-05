@@ -1,10 +1,17 @@
 use std::sync::{Mutex, OnceLock};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use windows_sys::Win32::Foundation::HINSTANCE;
+use windows_sys::Win32::Foundation::{HINSTANCE, HWND};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     HCURSOR, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, LoadImageW, SetCursor, LoadCursorW, IDC_ARROW,
+    SetClassLongPtrW, GCLP_HCURSOR,
 };
+
+// Wrapper para HWND que implementa Send + Sync (HWND é apenas um ponteiro opaco).
+#[derive(Copy, Clone)]
+struct WindowHandle(HWND);
+unsafe impl Send for WindowHandle {}
+unsafe impl Sync for WindowHandle {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Tool {
@@ -78,6 +85,7 @@ pub struct ToolManager {
     dark_cursors: HashMap<Tool, CursorHandle>,
     current_tool: Tool,
     dark_mode: bool,
+    hwnd: Option<WindowHandle>,
 }
 
 impl ToolManager {
@@ -109,7 +117,47 @@ impl ToolManager {
             dark_cursors,
             current_tool: Tool::Select,
             dark_mode: false,
+            hwnd: None,
         })
+    }
+
+    pub fn set_hwnd(&mut self, hwnd: HWND) {
+        self.hwnd = Some(WindowHandle(hwnd));
+    }
+
+    fn apply_cursor(&self) {
+        if let Some(hwnd) = self.hwnd {
+            let map = if self.dark_mode { &self.dark_cursors } else { &self.cursors };
+            if let Some(handle) = map.get(&self.current_tool) {
+                // Define o cursor na CLASSE da janela (GCLP_HCURSOR) — persistente,
+                // evita o flash do cursor do SO entre WM_SETCURSOR.
+                unsafe {
+                    SetClassLongPtrW(hwnd.0, GCLP_HCURSOR, handle.hcursor as isize);
+                }
+                // Também força imediato para a janela atual.
+                unsafe { SetCursor(handle.hcursor); }
+            }
+        } else {
+            // Fallback sem HWND: apenas SetCursor (pode piscar).
+            let map = if self.dark_mode { &self.dark_cursors } else { &self.cursors };
+            if let Some(handle) = map.get(&self.current_tool) {
+                unsafe { SetCursor(handle.hcursor); }
+            }
+        }
+    }
+
+    pub fn set_tool(&mut self, tool: Tool) {
+        self.current_tool = tool;
+        self.apply_cursor();
+    }
+
+    pub fn current_tool(&self) -> Tool {
+        self.current_tool
+    }
+
+    pub fn set_dark_mode(&mut self, dark: bool) {
+        self.dark_mode = dark;
+        self.apply_cursor();
     }
 
     fn load_cursor(cursor_dir: &PathBuf, file_name: &str) -> Option<CursorHandle> {
@@ -171,27 +219,6 @@ impl ToolManager {
         Ok(exe_dir.join("cursors"))
     }
 
-    pub fn set_tool(&mut self, tool: Tool) {
-        self.current_tool = tool;
-        self.apply_cursor();
-    }
-
-    pub fn current_tool(&self) -> Tool {
-        self.current_tool
-    }
-
-    pub fn set_dark_mode(&mut self, dark: bool) {
-        self.dark_mode = dark;
-        self.apply_cursor();
-    }
-
-    fn apply_cursor(&self) {
-        let map = if self.dark_mode { &self.dark_cursors } else { &self.cursors };
-        if let Some(handle) = map.get(&self.current_tool) {
-            unsafe { SetCursor(handle.hcursor); }
-        }
-    }
-
     #[allow(dead_code)]
     pub fn reset_to_default(&self) {
         let default = unsafe { LoadCursorW(core::ptr::null_mut(), IDC_ARROW as usize as *const u16) };
@@ -250,7 +277,14 @@ pub fn update_cursor() {
     }
 }
 
-/// Força o cursor visual sem mudar a ferramenta atual (usado para hover de seam).
+pub fn set_hwnd(hwnd: HWND) {
+    if let Some(mut guard) = get_tool_manager() {
+        if let Some(mgr) = guard.as_mut() {
+            mgr.set_hwnd(hwnd);
+        }
+    }
+}
+
 pub fn set_cursor_override(tool: Tool) {
     if let Some(guard) = get_tool_manager() {
         if let Some(mgr) = guard.as_ref() {
