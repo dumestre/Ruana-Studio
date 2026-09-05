@@ -624,8 +624,13 @@ pub fn build_clip_instances(
         };
         let body_dark = if being_dragged { 0.70 } else { 0.12 };
 
+        // Largura "natural" da waveform: para clips com Glue (pre_glue_len),
+        // a onda NÃO estica — ocupa só a largura original e o restante
+        // alongado fica vazio. Demais clips (inclusive stretch) preenchem.
+        let wave_natural_w = clip.pre_glue_len.unwrap_or(clip.len) * m.px_per_beat;
+
         push_clip(&mut instances, clip, base, x, y, w, draw_w, header_h, bw,
-                  body_alpha, body_dark, &m.wave_segments, idx, t, m.row_height, w);
+                  body_alpha, body_dark, &m.wave_segments, idx, t, m.row_height, wave_natural_w);
         push_clip_name(&mut instances, clip, x, y, w, header_h, bw);
 
 // Borda de seleção simples (4 tiras), espessura 4px, cor da waveform
@@ -704,9 +709,13 @@ pub fn build_clip_instances(
                 }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
-            // A waveform estica junto com o clip em tempo real: os samples são
-            // os ORIGINAIS (wave_len) mapeados sobre a largura VIVA (w).
-            let wave_natural_w = w;
+            // Stretch estica a waveform em tempo real (w); move/glue mantém a
+            // largura natural original (onda não alonga com o clip).
+            let wave_natural_w = if inter.stretch_mode {
+                w
+            } else {
+                live.pre_glue_len.unwrap_or(live.len) * m.px_per_beat
+            };
             if w > 0.0 && x < width && x + w > 0.0 {
                 let draw_w = w.min(width - x).max(0.0);
                 let base = clip_color(clip, t);
@@ -746,12 +755,14 @@ pub fn build_clip_instances(
                         beat: live_beat,
                         ..clip.clone()
                     };
-                    let (x, y, w, _h) = clip_rect(&live, m);
-                    if w > 0.0 && x < width && x + w > 0.0 {
-                        let draw_w = w.min(width - x).max(0.0);
-                        let base = clip_color(clip, t);
-                        push_clip(&mut instances, &live, base, x, y, w, draw_w, header_h, bw,
-                                  body_alpha_overlay, 0.12, &m.wave_segments, *gi, t, m.row_height, w);
+let (x, y, w, _h) = clip_rect(&live, m);
+                        if w > 0.0 && x < width && x + w > 0.0 {
+                            let draw_w = w.min(width - x).max(0.0);
+                            let base = clip_color(clip, t);
+                            // Mesma regra da onda original para members de grupo
+                            let wave_natural_w = clip.pre_glue_len.unwrap_or(clip.len) * m.px_per_beat;
+                            push_clip(&mut instances, &live, base, x, y, w, draw_w, header_h, bw,
+                                      body_alpha_overlay, 0.12, &m.wave_segments, *gi, t, m.row_height, wave_natural_w);
                         push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
                         // Contorno visível (cor da waveform)
                         let border_col = (0x26, 0x26, 0x26);
