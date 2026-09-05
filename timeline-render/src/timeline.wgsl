@@ -125,12 +125,17 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     } else {
         col_f = in.local.x * n_f;
     }
-    if col_f < 0.0 || col_f >= n_f {
+    if col_f < 0.0 {
         return in.frag_color;
     }
 
     // ------------------------------------------------------------
-    // OSCILOSCÓPIO — uma única linha contínua
+    // WAVEFORM
+    //
+    // Zoom alto  -> linha contínua tipo osciloscópio (fio),
+    //               bitola constante ~1.5px.
+    // Zoom baixo -> preenchimento entre a waveform e o zero.
+    // Transição contínua via px_per_sample, sem saltos visuais.
     // ------------------------------------------------------------
     if wave_count < 2u {
         return in.frag_color;
@@ -142,27 +147,67 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let p0 = clamp(wave_bars[wave_offset + col], -1.0, 1.0);
     let p1 = clamp(wave_bars[wave_offset + next_col], -1.0, 1.0);
 
-    // Coordenadas locais do fragmento em pixels.
     let p = in.local * in.size;
 
-    // Cada amostra ocupa exatamente uma parte horizontal do clip.
-    let natural = natural_w > 0.0;
-    let wave_width = select(in.size.x, natural_w, natural);
+    let wave_width = select(in.size.x, natural_w, natural_w > 0.0);
 
     let x0 = f32(col) / f32(wave_count - 1u) * wave_width;
     let x1 = f32(next_col) / f32(wave_count - 1u) * wave_width;
 
-    // Amplitude -> Y.
     let center = in.size.y * 0.5;
     let amp = in.size.y * 0.4;
 
     let y0 = center - p0 * amp;
     let y1 = center - p1 * amp;
 
+    // Tamanho real (em pixels) de cada amostra na tela, na direção X.
+    // Usa wave_count (nº de colunas) e a largura REAL em que o clip aparece.
+    // `wave_width` é a largura natural da curva (clip_w, antes do stretch);
+    // a razão clip_w/wave_count é constante por clip, mas multiplicada por
+    // quanto o corpo foi esticado na tela (in.size.x/clip_w) — isso reflete
+    // o ZOOM. Em zoom alto cada amostra vira vários pixels (>=2) -> fio;
+    // em zoom baixo várias amostras caem dentro de um pixel (<1) -> preenchido.
+    let stretch = max(in.size.x / max(natural_w, 0.001), 1.0);
+    let px_per_sample = clamp((natural_w / f32(wave_count - 1u)) * stretch, 0.001, 1000.0);
+
+    // POSIÇÃO DA WAVEFORM NO X ATUAL (segmento linear).
+    let segment_width = max(x1 - x0, 0.0001);
+    let t = clamp((p.x - x0) / segment_width, 0.0, 1.0);
+    let wave_y = mix(y0, y1, t);
+
+    // DIVIDIDO EM 3 ZONAS DE ZOOM, ancorado nos limites da timeline
+    // (px_per_beat: min 8, max 640). A wave é gerada com 4 amostras por
+    // beat-pixel no zoom base (40), então px_per_sample ≈ px_per_beat/160:
+    //   zoom 8   → 0.05 px/sample
+    //   zoom 640 → 4.0 px/sample
+    // Normaliza em z ∈ [0,1]:
+    //   z ≤ 1/3 (zoom baixo)  → WAVEFORM PREENCHIDA (até o zero)
+    //   1/3 < z < 2/3         → transição contínua preenchida → fio
+    //   z ≥ 2/3 (zoom alto)   → OSCILOSCÓPIO (só a linha fina)
+    let z = clamp((px_per_sample - 0.05) / (4.0 - 0.05), 0.0, 1.0);
+    let fill_amount = 1.0 - smoothstep(0.333, 0.667, z);
+
+    // MODO PREENCHIDO.
+    if fill_amount > 0.001 {
+        let top = min(wave_y, center);
+        let bottom = max(wave_y, center);
+        let aa = max(fwidth(wave_y), 0.5);
+        // Distância EXTERNA simétrica ao intervalo [top, bottom]:
+        // <=0 dentro, >0 fora. Funciona tanto para wave_y > center
+        // quanto para wave_y < center (corrige a versão com
+        // inside/inside_bottom assimétricos).
+        let outside = max(top - p.y, p.y - bottom);
+        let cov = 1.0 - smoothstep(0.0, aa, outside);
+        let fill_alpha = cov * fill_amount;
+        if fill_alpha > 0.001 {
+            return vec4<f32>(0.149, 0.149, 0.149, fill_alpha);
+        }
+    }
+
+    // MODO FIO.
     let a = vec2<f32>(x0, y0);
     let b = vec2<f32>(x1, y1);
 
-    // Distância exata do fragmento ao segmento.
     let ab = b - a;
     let ap = p - a;
 
@@ -176,13 +221,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let closest = a + ab * segment_t;
     let distance_px = distance(p, closest);
 
-    // BITOLA CONSTANTE
+    // BITOLA CONSTANTE.
     let line_width = 1.5;
     let radius = line_width * 0.5;
 
-    // AA curto (~0.5px): fwidth estabiliza ao dar zoom, mas a faixa fica
-    // estreita para o núcleo ficar sólido — recupera a aparência escura
-    // original (0.012) sem lavar a linha no corpo do clip.
+    // AA curto: núcleo sólido (cor 0.012) com feather de ~0.5px.
     let aa = clamp(fwidth(distance_px), 0.35, 0.55);
 
     let alpha = 1.0 - smoothstep(radius - aa, radius + aa, distance_px);
@@ -190,5 +233,5 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return in.frag_color;
     }
 
-    return vec4<f32>(0.012, 0.012, 0.012, 0.95 * alpha);
+    return vec4<f32>(0.149, 0.149, 0.149, alpha);
 }
