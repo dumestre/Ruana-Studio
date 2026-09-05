@@ -859,9 +859,9 @@ fn push_clip(
     body_alpha: f32,
     dark_amount: f32,
     wave_ppb: f32,
-    /// len (beats) usado para o COUNT do segmento no buffer. Durante um
-    /// stretch o clip vivo tem len maior, mas o buffer foi gerado com o len
-    /// ORIGINAL — então aqui vai o len original para os índices baterem.
+    // Durante um stretch o clip vivo tem len maior, mas o buffer foi gerado
+    // com o len ORIGINAL — então aqui vai o len original p/ os índices baterem
+    // (o COUNT do segmento no buffer vem deste valor).
     wave_len: f32,
     idx: usize,
     t: usize,
