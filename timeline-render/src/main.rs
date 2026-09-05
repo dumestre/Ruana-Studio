@@ -14,6 +14,7 @@
 //!   - Resize:                            redimensiona o canvas
 
 mod clips;
+mod fades;
 mod shctx;
 mod tools;
 mod waveform;
@@ -331,6 +332,8 @@ struct App {
     wave_segments: Vec<(u32, u32)>,
     clips: Vec<ClipDemo>,
     clip_interaction: clips::ClipInteraction,
+    fades: Vec<fades::ClipFade>,
+    fade_interaction: fades::FadeInteraction,
 
     loop_start_beat: f32,
     loop_end_beat: f32,
@@ -532,12 +535,19 @@ impl App {
             ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
             ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
             ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new() },
-];
+        ];
 
         // Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
         // (a fonte da verdade). Buffer e segmentação derivam disso.
-        let (wave_bars, wave_segments) =
-            waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB);
+        let (wave_bars, wave_segments) = waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB);
+
+        let fades = clips.iter().map(|c| {
+            if !c.is_midi {
+                fades::ClipFade::default()
+            } else {
+                fades::ClipFade::none()
+            }
+        }).collect();
 
         Ok(Self {
             window,
@@ -550,13 +560,13 @@ impl App {
             config,
             size,
 
-            theme: 6,   // <- Mudança: usar Paper (claro) como tema base
+            theme: 6,
             scroll_x: 0.0,
             scroll_y: 0.0,
             px_per_beat: 40.0,
             zoom_y: 1.0,
-            ruler_px: 25.0,
-            playing: true,
+            ruler_px: 28.0,
+            playing: false,
             transport_seconds: 0.0,
             play_start_seconds: 0.0,
             last_play_head_update: Instant::now(),
@@ -564,10 +574,12 @@ impl App {
             scrubbing: false,
             last_cursor: (0.0, 0.0),
 
-wave_bars,
+            wave_bars,
             wave_segments,
             clips,
             clip_interaction: clips::ClipInteraction::new(),
+            fades,
+            fade_interaction: fades::FadeInteraction::new(),
 
             loop_start_beat: 0.0,
             loop_end_beat: 8.0,
@@ -1052,6 +1064,12 @@ fn rebuild_wave_data(&mut self) {
                         self.handle_ruler_click(state, pos, self.ruler_px);
                     }
                 } else {
+                    // Interação com bolinhas de fade (in/out) e volume/ganho
+                    if self.fade_interaction.hovered.is_some() {
+                        if self.fade_interaction.begin_drag(pos, &self.fades) {
+                            return;
+                        }
+                    }
                     // Seam hover → un-glue (split) — funciona em qualquer ferramenta
                     if let Some(seam_idx) = self.clip_interaction.seam_hover_idx {
                         if self.clip_interaction.is_seam_hovered() {
@@ -1106,6 +1124,10 @@ fn rebuild_wave_data(&mut self) {
                 }
             }
             ElementState::Released => {
+                if self.fade_interaction.is_dragging() {
+                    self.fade_interaction.end_drag();
+                    return;
+                }
                 if self.loop_drag.is_some() {
                     self.loop_drag = None;
                 } else if self.clip_interaction.is_dragging() {
@@ -1135,7 +1157,21 @@ fn rebuild_wave_data(&mut self) {
 
     fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
-        if self.loop_drag.is_some() {
+        if self.fade_interaction.is_dragging() {
+            if let Some(ref drag) = self.fade_interaction.active_drag {
+                if let Some(clip) = self.clips.get(drag.clip_index) {
+                    let (_, _, _, ch) = clips::clip_rect(clip, &cm);
+                    let body_h = ch - 16.0;
+                    self.fade_interaction.update_drag(
+                        pos,
+                        &mut self.fades,
+                        self.px_per_beat,
+                        clip.len,
+                        body_h,
+                    );
+                }
+            }
+        } else if self.loop_drag.is_some() {
             self.handle_loop_drag(pos.0);
         } else if self.clip_interaction.is_dragging() {
             let snap = true;
@@ -1149,6 +1185,34 @@ fn rebuild_wave_data(&mut self) {
             self.set_playhead_from_x(pos.0);
         }
         self.clip_interaction.update_hover(&self.clips, pos, &cm);
+
+        // Atualiza detecção de hover sobre bolinhas de fade e ganho
+        if !self.clip_interaction.is_dragging() && !self.fade_interaction.is_dragging() {
+            self.fade_interaction.hovered = None;
+            for (i, clip) in self.clips.iter().enumerate() {
+                if !clip.is_midi {
+                    if let Some(fade) = self.fades.get(i) {
+                        let (cx, cy, cw, ch) = clips::clip_rect(clip, &cm);
+                        let header_h = 16.0;
+                        let body_y = cy + header_h;
+                        let body_h = ch - header_h;
+                        if let Some(kind) = fades::hit_test_clip_handles(
+                            i,
+                            fade,
+                            cx,
+                            body_y,
+                            cw,
+                            body_h,
+                            self.px_per_beat,
+                            pos,
+                        ) {
+                            self.fade_interaction.hovered = Some((i, kind));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
 
         // Cursor override: seam hover → cursor de slice (visual feedback de des-colagem)
         if self.clip_interaction.is_seam_hovered() {
@@ -1425,6 +1489,31 @@ fn rebuild_wave_data(&mut self) {
             &cm,
             width,
         ));
+
+        // Renderiza Fades (In / Out), Curvas Bézier, Nível de Ganho e Bolinhas/Handles
+        for (i, clip) in self.clips.iter().enumerate() {
+            if !clip.is_midi {
+                if let Some(fade) = self.fades.get(i) {
+                    let (cx, cy, cw, ch) = clips::clip_rect(clip, &cm);
+                    let header_h = 16.0;
+                    let body_y = cy + header_h;
+                    let body_h = ch - header_h;
+                    if cw > 0.0 && cx + cw > 0.0 && cx < width && body_h > 0.0 {
+                        fades::build_clip_fade_instances(
+                            i,
+                            fade,
+                            cx,
+                            body_y,
+                            cw,
+                            body_h,
+                            self.px_per_beat,
+                            &self.fade_interaction,
+                            &mut instances,
+                        );
+                    }
+                }
+            }
+        }
 
         // Indicador visual: borda direita piscando quando hover na ferramenta Stretch
         if current_tool() == Tool::Stretch {
@@ -2104,6 +2193,8 @@ impl winit::application::ApplicationHandler for AppHandler {
                     || app.clip_interaction.is_marqueeing() || app.clip_interaction.hover_idx.is_some()
                     || app.clip_interaction.is_drawing()
                     || app.clip_interaction.is_seam_hovered()
+                    || app.fade_interaction.hovered.is_some()
+                    || app.fade_interaction.is_dragging()
                     || current_tool() == Tool::Slice || current_tool() == Tool::Stretch {
                     app.window.request_redraw();
                 }
