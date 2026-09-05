@@ -249,7 +249,10 @@ impl FadeInteraction {
                 fade.out_curve_y = (drag.orig_out_curve_y + delta_norm_y).clamp(0.0, 1.0);
             }
             FadeHandleKind::GainLevel => {
-                let delta_norm = dy / body_h.max(1.0);
+                // Área de ganho: 14px no topo do corpo. Ajusta ganho com base na
+                // posição vertical dentro dessa faixa (topo = +12dB, base = -24dB).
+                let gain_area_h: f32 = 14.0;
+                let delta_norm = dy / gain_area_h.max(1.0);
                 let min_db = -24.0;
                 let max_db = 12.0;
                 let delta_db = -delta_norm * (max_db - min_db);
@@ -335,8 +338,8 @@ pub fn build_clip_fade_instances(
     };
 
     // Cores profissionais estilo DAW
-    let gain_line_color = [255, 215, 0, 160];       // Linha dourada suave para ganho
-    let handle_fill_normal = [250, 250, 255, 245];
+    let _gain_line_color = [255, 215, 0, 160];       // Linha dourada suave para ganho
+    let _handle_fill_normal = [250, 250, 255, 245];
     let handle_fill_hover = [0, 210, 90, 255];      // Accent esmeralda no hover
     let handle_border_color = [25, 25, 30, 240];
 
@@ -419,30 +422,42 @@ pub fn build_clip_fade_instances(
     }
 
     // ========================================================================
-    // 3. GAIN / VOLUME (Linha e Bolinha Central)
+    // 3. GAIN / VOLUME — Área no topo do corpo (abaixo do header)
     // ========================================================================
+    // Área de ganho: faixa de 14px no topo do corpo do clip.
+    let gain_area_h = 14.0;
+    let gain_area_y = body_y;
     let gain_norm_y = fade.gain_to_norm_y();
-    let gain_y = body_y + gain_norm_y * body_h;
-
-    // Linha horizontal de volume (sempre visível)
+    // Brilho de hover na área de ganho (só desenha quando hover)
+    if is_hovered(FadeHandleKind::GainLevel) {
+        let glow_alpha: u8 = 60;
+        instances.push(RectInstance {
+            x: body_x,
+            y: gain_area_y,
+            w: body_w,
+            h: gain_area_h,
+            color: [255, 215, 0, glow_alpha], // dourado suave
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+    }
+    // Indicador de nível (linha fina) dentro da área de ganho
+    let gain_line_y = gain_area_y + gain_norm_y * gain_area_h;
     instances.push(RectInstance {
-        x: body_x,
-        y: gain_y - 0.75,
-        w: body_w,
-        h: 1.5,
-        color: gain_line_color,
+        x: body_x + 4.0,
+        y: gain_line_y - 0.5,
+        w: body_w - 8.0,
+        h: 1.0,
+        color: [255, 215, 0, 200],
         wave_offset: 0,
         wave_count: 0,
         clip_w: 0.0,
         clip_h: 0.0,
         radius: 0.0,
     });
-
-    // Bolinha de ajuste de ganho — só aparece quando hover no GainLevel
-    if is_hovered(FadeHandleKind::GainLevel) {
-        let gain_handle_x = body_x + body_w * 0.5;
-        push_handle_circle(instances, gain_handle_x, gain_y, 6.0, [255, 230, 80, 255], handle_border_color);
-    }
 }
 
 // ============================================================================
@@ -501,11 +516,11 @@ pub fn hit_test_clip_handles(
         }
     }
 
-    // 5. Handle Gain / Volume
-    let gain_norm_y = fade.gain_to_norm_y();
-    let gain_y = body_y + gain_norm_y * body_h;
-    let gain_x = body_x + body_w * 0.5;
-    if hit_dist_sq(gain_x, gain_y, 5.5) {
+    // 5. Handle Gain / Volume — área no topo do corpo (14px abaixo do header)
+    let gain_area_h = 14.0;
+    let gain_area_y = body_y;
+    if cursor.0 >= body_x && cursor.0 <= body_x + body_w
+        && cursor.1 >= gain_area_y && cursor.1 <= gain_area_y + gain_area_h {
         return Some(FadeHandleKind::GainLevel);
     }
 
