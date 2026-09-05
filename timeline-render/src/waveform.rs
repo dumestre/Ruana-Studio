@@ -1,8 +1,8 @@
 //! Waveforms procedurais de teste (placeholder com aparência real).
 //!
-//! Gera uma amostra de amplitude por coluna — o "osciloscópio" da timeline.
-//! O shader liga as amostras com segmentos de reta (1 coluna = 1 vértice),
-//! então mais colunas = linha mais suave e nítida. Sem dependências externas:
+//! Gera MIN/MAX por coluna — o "osciloscópio" da timeline.
+//! O shader liga as amostras com segmentos de reta (1 coluna = 2 valores:
+//! min e max), então mais colunas = linha mais suave e nítida. Sem dependências externas:
 //! cada amostra vem de um hash determinístico, estável entre execuções mas
 //! com textura de áudio de verdade (ataque, sustentação, reverberação de
 //! caixa, variação de dinâmica).
@@ -70,11 +70,11 @@ fn sample_wave(style: usize, i: u32, n: u32, seed: u64) -> f32 {
     }
 }
 
-/// Constrói todas as amplitudes (uma por coluna) dos clips de áudio,
+/// Constrói todas as amplitudes MIN/MAX (2 por coluna) dos clips de áudio,
 /// concatenadas na mesma ordem em que os clips aparecem (os offsets de
 /// `clips.rs` coincidem com a segmentação: cada clip é seu próprio trecho).
 ///
-/// Além do buffer concatenado, devolve a segmentação (offset, count) por id
+/// Além do buffer concatenado, devolve a segmentação (offset_em_colunas, count_em_colunas) por id
 /// de clip e ARMAZENA as amostras em `clip.wave` — a fonte da verdade por
 /// clip. Um slice futura divide `clip.wave` ao meio (corte verdadeiro, sem
 /// regenerar as peças).
@@ -103,31 +103,33 @@ pub fn build_wave_bars_and_segments(
             let seed = audio_idx.wrapping_mul(0x9E3779B97F4A7C15)
                 ^ (clip.beat as u32 as u64).wrapping_mul(11)
                 ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
-            (0..n_cols)
-                .map(|col| {
-                    sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32)
-                })
-                .collect()
+            let mut w = Vec::with_capacity(n_cols as usize * 2);
+            for col in 0..n_cols {
+                let v = sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32);
+                w.push(-v.abs()); // min
+                w.push(v.abs());  // max
+            }
+            w
         };
 
-        let offset = bars.len() as u32;
+        let offset_cols = bars.len() as u32 / 2;
         bars.extend_from_slice(&wave);
-        segments.push((offset, wave.len() as u32));
+        segments.push((offset_cols, n_cols));
         clip.wave = wave;
         audio_idx += 1;
     }
     (bars, segments)
 }
 
-/// Decodifica um arquivo de áudio real e converte para amplitudes por coluna.
+/// Decodifica um arquivo de áudio real e converte para MIN/MAX por coluna.
 pub(crate) fn decode_real_wave(path: &str, n_cols: u32) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
     let data = decode_audio(Path::new(path))?;
     let samples = &data.samples;
     if samples.is_empty() || n_cols == 0 {
-        return Ok(vec![0.0; n_cols as usize]);
+        return Ok(vec![0.0; n_cols as usize * 2]);
     }
 
-    let mut wave = Vec::with_capacity(n_cols as usize);
+    let mut wave = Vec::with_capacity(n_cols as usize * 2);
     let total = samples.len();
     let cols = n_cols as usize;
 
@@ -136,51 +138,57 @@ pub(crate) fn decode_real_wave(path: &str, n_cols: u32) -> Result<Vec<f32>, Box<
         let end = ((col + 1) * total / cols).min(total);
         if start >= end {
             wave.push(0.0);
+            wave.push(0.0);
             continue;
         }
-        let peak = samples[start..end]
-            .iter()
-            .map(|&s| s.abs())
-            .fold(0.0f32, f32::max);
-        wave.push(peak);
+        let chunk = &samples[start..end];
+        let mn = chunk.iter().fold(f32::INFINITY, |a, &s| a.min(s));
+        let mx = chunk.iter().fold(f32::NEG_INFINITY, |a, &s| a.max(s));
+        wave.push(if mn.is_finite() { mn } else { 0.0 });
+        wave.push(if mx.is_finite() { mx } else { 0.0 });
     }
 
     Ok(wave)
 }
 
-/// Gera waveform procedural para um clip (fallback).
+/// Gera waveform procedural para um clip (fallback) com MIN/MAX.
 pub(crate) fn generate_procedural_wave(clip: &ClipDemo, n_cols: u32, seed: u64) -> Vec<f32> {
     let style = (seed % 3) as usize;
     let seed = seed.wrapping_mul(0x9E3779B97F4A7C15)
         ^ (clip.beat as u32 as u64).wrapping_mul(11)
         ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
-    (0..n_cols)
-        .map(|col| {
-            sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32)
-        })
-        .collect()
+    let mut wave = Vec::with_capacity(n_cols as usize * 2);
+    for col in 0..n_cols {
+        let v = sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32);
+        wave.push(-v.abs()); // min
+        wave.push(v.abs());  // max
+    }
+    wave
 }
 
 /// Concatena as ondas ARMAZENADAS nos clips (fonte da verdade, campo `wave`)
-/// num buffer único com a segmentação (offset, count) por id. Não regenera
+/// num buffer único com a segmentação (offset_em_colunas, count_em_colunas) por id. Não regenera
 /// nada: cortes, glues, erases etc. refletem as ondas persistidas.
 pub fn concat_wave_data(clips: &[ClipDemo]) -> (Vec<f32>, Vec<(u32, u32)>) {
     let mut bars = Vec::new();
     let mut segments = Vec::with_capacity(clips.len());
+    let mut col_offset = 0u32;
     for clip in clips {
         if clip.is_midi || clip.wave.is_empty() {
             segments.push((0u32, 0u32));
             continue;
         }
-        segments.push((bars.len() as u32, clip.wave.len() as u32));
+        let n_cols = (clip.wave.len() / 2) as u32;
+        segments.push((col_offset, n_cols));
         bars.extend_from_slice(&clip.wave);
+        col_offset += n_cols;
     }
     (bars, segments)
 }
 
 /// Aplica o envelope de fade in/out e ganho às amostras da waveform.
-/// Cada sample é multiplicado pelo envelope correspondente à sua posição
-/// dentro do clip, fazendo com que a waveform visual reflita os fades.
+/// Cada coluna ocupa 2 posições no buffer (min, max) e o fade é aplicado
+/// em AMBOS os valores.
 pub fn apply_fade_envelope(
     bars: Vec<f32>,
     segments: &[(u32, u32)],
@@ -197,9 +205,9 @@ pub fn apply_fade_envelope(
             continue;
         }
         let fade = &fades[i];
-        let (offset, count) = segments[i];
-        let n = count as usize;
-        if n == 0 {
+        let (offset_cols, count_cols) = segments[i];
+        let n_cols = count_cols as usize;
+        if n_cols == 0 {
             continue;
         }
 
@@ -210,11 +218,8 @@ pub fn apply_fade_envelope(
 
         let gain_linear = fade.gain_linear();
 
-        let start = offset as usize;
-        let end = start + n;
-
-        for (j, sample) in out[start..end].iter_mut().enumerate() {
-            let frac = if n > 1 { j as f32 / (n - 1) as f32 } else { 0.0 };
+        for j in 0..n_cols {
+            let frac = if n_cols > 1 { j as f32 / (n_cols - 1) as f32 } else { 0.0 };
             let beat_pos = frac * clip_len;
 
             let env_in = if fade.in_len > 0.0 && beat_pos < fade.in_len {
@@ -232,7 +237,11 @@ pub fn apply_fade_envelope(
             };
 
             let envelope = env_in * env_out * gain_linear;
-            *sample = *sample * envelope;
+            let idx = (offset_cols as usize + j) * 2;
+            if idx + 1 < out.len() {
+                out[idx] = out[idx] * envelope;     // min
+                out[idx + 1] = out[idx + 1] * envelope; // max
+            }
         }
     }
 

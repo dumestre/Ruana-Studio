@@ -14,11 +14,11 @@
 // e o pan são operações puramente matemáticas, independentes de quantos
 // clips existem — pilares do AGENST.md.
 //
-// Waveforms: storage buffer `wave_bars` contém pares vec2(min, max) em
-// amplitude [-1,1] para todas as colunas de todos os clips de áudio
+// Waveforms: storage buffer `wave_bars` contém MIN/MAX interleaved (2 amostras por coluna)
+// em amplitude [-1,1] para todas as colunas de todos os clips de áudio
 // concatenados. A instância refencia seu trecho via wave_offset/count.
 // No fragment shader, mapeamos local.x (0..1) -> coluna, buscamos min/max,
-// e se local.y estiver dentro do envelope vertical, sobrescrevemos a cor.
+// e desenhamos a forma real da onda (positiva/negativa).
 
 struct Uniforms {
     // Matriz ortográfica conteúdo→NDC (já incorpora scroll/zoom/viewport).
@@ -26,7 +26,7 @@ struct Uniforms {
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
-// Amplitudes da waveform (modo osciloscópio): 1 amostra por coluna, por clip.
+// Amplitudes da waveform (min/max interleaved): 2 amostras por coluna, por clip.
 @group(0) @binding(1) var<storage, read> wave_bars: array<f32>;
 
 // Traits por instância (interleave) do buffer de instâncias.
@@ -51,7 +51,6 @@ fn vs_main(
     @location(0) corner: vec2<f32>,
     inst: Instance,
 ) -> VsOut {
-    // Corner do quad unitário [0..1]; posição final = retângulo da instância.
     let px = inst.rect.xy + corner * inst.rect.zw;
 
     var out: VsOut;
@@ -74,9 +73,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Modo "listras diagonais" (sobreposição de clips): clip_width == -1.0 sinaliza.
     if abs(clip_width - (-1.0)) < 0.1 {
         let px = in.local * in.size;
-        let d = px.x + px.y;                 // diagonal 45° (px)
-        let sp = 18.0;                        // espaçamento das listras
-        let on = fract(d / sp) < 0.5;         // listra grossa = metade do espaçamento
+        let d = px.x + px.y;
+        let sp = 18.0;
+        let on = fract(d / sp) < 0.5;
         if !on {
             return vec4<f32>(in.frag_color.r, in.frag_color.g, in.frag_color.b,
                              in.frag_color.a * 0.20);
@@ -86,7 +85,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
     // ========================================================================
     // MODO FADE IN (clip_width == -2.0)
-    // Curva Bézier 2D analítica suave: ponto de controle (cx, cy) segue o mouse
     // ========================================================================
     if abs(clip_width - (-2.0)) < 0.1 {
         let cx = clamp(in.wave_info.x / 1000.0, 0.02, 0.98);
@@ -94,8 +92,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let px = in.local * in.size;
         let x = clamp(in.local.x, 0.0, 1.0);
 
-        // Resolve u para o X atual da curva Bézier quadrática:
-        // x(u) = (1-2*cx)*u^2 + 2*cx*u = x
         var u: f32;
         let denom = 1.0 - 2.0 * cx;
         if abs(denom) < 0.001 {
@@ -105,7 +101,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             u = clamp((-cx + sqrt(discr)) / denom, 0.0, 1.0);
         }
 
-        // Posição Y normalizada [0.0..1.0] e derivadas analíticas:
         let one_minus_u = 1.0 - u;
         let y_norm = 2.0 * one_minus_u * u * cy + u * u;
 
@@ -116,14 +111,12 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let y_curve = in.size.y * (1.0 - y_norm);
         let slope = - (in.size.y / max(in.size.x, 0.001)) * dy_norm_dx;
 
-        // Distância ortogonal euclidiana real até a curva tangente:
         let d_line = abs(px.y - y_curve) / sqrt(1.0 + slope * slope);
         let line_width = 1.8;
         let radius = line_width * 0.5;
         let aa = clamp(fwidth(d_line), 0.35, 0.65);
         let line_alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_line);
 
-        // Preenchimento sombreado da área de fade:
         let d_fill = px.y - y_curve;
         let fill_aa = clamp(fwidth(d_fill), 0.35, 0.75);
         let fill_mask = 1.0 - smoothstep(0.0, fill_aa, d_fill);
@@ -140,7 +133,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
     // ========================================================================
     // MODO FADE OUT (clip_width == -3.0)
-    // Curva Bézier 2D analítica suave: ponto de controle (cx, cy) segue o mouse
     // ========================================================================
     if abs(clip_width - (-3.0)) < 0.1 {
         let cx = clamp(in.wave_info.x / 1000.0, 0.02, 0.98);
@@ -157,7 +149,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             u = clamp((-cx + sqrt(discr)) / denom, 0.0, 1.0);
         }
 
-        // No Fade Out, curva vai de 1 (u=0) a 0 (u=1):
         let one_minus_u = 1.0 - u;
         let y_norm = one_minus_u * one_minus_u + 2.0 * one_minus_u * u * cy;
 
@@ -234,12 +225,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     // ------------------------------------------------------------
-    // WAVEFORM
-    //
-    // Zoom alto  -> linha contínua tipo osciloscópio (fio),
-    //               bitola constante ~1.5px.
-    // Zoom baixo -> preenchimento entre a waveform e o zero.
-    // Transição contínua via px_per_sample, sem saltos visuais.
+    // WAVEFORM (min/max por coluna)
     // ------------------------------------------------------------
     if wave_count < 2u {
         return in.frag_color;
@@ -248,8 +234,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let col = min(u32(floor(col_f)), wave_count - 2u);
     let next_col = col + 1u;
 
-    let p0 = clamp(wave_bars[wave_offset + col], -1.0, 1.0);
-    let p1 = clamp(wave_bars[wave_offset + next_col], -1.0, 1.0);
+    let p0_min = clamp(wave_bars[(wave_offset + col) * 2], -1.0, 1.0);
+    let p0_max = clamp(wave_bars[(wave_offset + col) * 2 + 1], -1.0, 1.0);
+    let p1_min = clamp(wave_bars[(wave_offset + next_col) * 2], -1.0, 1.0);
+    let p1_max = clamp(wave_bars[(wave_offset + next_col) * 2 + 1], -1.0, 1.0);
 
     let p = in.local * in.size;
 
@@ -261,55 +249,36 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let center = in.size.y * 0.5;
     let amp = in.size.y * 0.4;
 
-    let y0 = center - p0 * amp;
-    let y1 = center - p1 * amp;
+    let y0_min = center - p0_min * amp;
+    let y0_max = center - p0_max * amp;
+    let y1_min = center - p1_min * amp;
+    let y1_max = center - p1_max * amp;
 
-    // Tamanho real (em pixels) de cada amostra na tela, na direção X.
-    // Usa wave_count (nº de colunas) e a largura REAL em que o clip aparece.
-    // `wave_width` é a largura natural da curva (clip_w, antes do stretch);
-    // a razão clip_w/wave_count é constante por clip, mas multiplicada por
-    // quanto o corpo foi esticado na tela (in.size.x/clip_w) — isso reflete
-    // o ZOOM. Em zoom alto cada amostra vira vários pixels (>=2) -> fio;
-    // em zoom baixo várias amostras caem dentro de um pixel (<1) -> preenchido.
     let stretch = max(in.size.x / max(natural_w, 0.001), 1.0);
     let px_per_sample = clamp((natural_w / f32(wave_count - 1u)) * stretch, 0.001, 1000.0);
 
-    // POSIÇÃO DA WAVEFORM NO X ATUAL (segmento linear).
     let segment_width = max(x1 - x0, 0.0001);
     let t = clamp((p.x - x0) / segment_width, 0.0, 1.0);
-    let wave_y = mix(y0, y1, t);
+    let wave_y_min = mix(y0_min, y1_min, t);
+    let wave_y_max = mix(y0_max, y1_max, t);
 
-    // DIVIDIDO EM 3 ZONAS DE ZOOM, ancorado nos limites da timeline
-    // (px_per_beat: min 8, max 640). A wave é gerada com 4 amostras por
-    // beat-pixel no zoom base (40), então px_per_sample ≈ px_per_beat/160:
-    //   zoom 8   → 0.05 px/sample
-    //   zoom 640 → 4.0 px/sample
-    // Normaliza em z ∈ [0,1]:
-    //   z ≤ 1/3 (zoom baixo)  → WAVEFORM PREENCHIDA (até o zero)
-    //   1/3 < z < 2/3         → transição contínua preenchida → fio
-    //   z ≥ 2/3 (zoom alto)   → OSCILOSCÓPIO (só a linha fina)
     let z = clamp((px_per_sample - 0.05) / (4.0 - 0.05), 0.0, 1.0);
     let fill_amount = 1.0 - smoothstep(0.333, 0.667, z);
 
-    // ZOOM BAIXO (várias colunas por pixel): usa o ENVELOPE (máximo |amp|)
-    // das colunas sob o pixel. Cada pixel amostrar UMA coluna com o feather
-    // antigo causava a "sombra cinza" (fwidth(wave_y) enorme) e a onda
-    // parecia encolher (cristas descartadas). O envelope dá um preenchimento
-    // denso com borda ~1px, sem artefatos.
     if px_per_sample < 1.0 {
         let c0 = u32(floor(col_f));
         let span = min(u32(ceil(1.0 / max(px_per_sample, 0.001))), 64u);
         let c1 = min(c0 + span, wave_count - 1u);
-        var env: f32 = 0.0;
+        var env_min: f32 = 0.0;
+        var env_max: f32 = 0.0;
         var k = c0;
         while k < c1 {
-            env = max(env, abs(wave_bars[wave_offset + k]));
+            env_min = min(env_min, wave_bars[(wave_offset + k) * 2]);
+            env_max = max(env_max, wave_bars[(wave_offset + k) * 2 + 1]);
             k = k + 1u;
         }
-        let top = center - env * amp;
-        let bottom = center + env * amp;
-        // Distância EXTERNA ao envelope: AA constante ~1px (fwidth de
-        // `outside` ≈ 1 em espaço de tela, independente da frequência).
+        let top = center - env_max * amp;
+        let bottom = center - env_min * amp;
         let outside = max(top - p.y, p.y - bottom);
         let env_aa = clamp(fwidth(outside), 0.35, 1.5);
         let cov = 1.0 - smoothstep(0.0, env_aa, outside);
@@ -318,59 +287,56 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         }
     }
 
-    // MODO PREENCHIDO.
+    // MODO PREENCHIDO (entre min e max da coluna).
     if fill_amount > 0.001 {
-        let top = min(wave_y, center);
-        let bottom = max(wave_y, center);
-        // Distância EXTERNA simétrica ao intervalo [top, bottom]:
-        // <=0 dentro, >0 fora. Funciona tanto para wave_y > center
-        // quanto para wave_y < center (corrige a versão com
-        // inside/inside_bottom assimétricos).
+        let top = min(wave_y_max, wave_y_min);
+        let bottom = max(wave_y_max, wave_y_min);
         let outside = max(top - p.y, p.y - bottom);
-        // AA da EDGE da distância (`outside`), ~1px constante. NÃO usar
-        // fwidth(wave_y): a onda balança muito entre pixels no zoom baixo e
-        // o feather vira uma sombra gigante verde/cinza.
         let aa = clamp(fwidth(outside), 0.5, 1.5);
         let cov = 1.0 - smoothstep(0.0, aa, outside);
         let fill_alpha = cov * fill_amount;
         if fill_alpha > 0.001 {
-            // 0.0194 = #262626 em linear (alvo sRGB converte na escrita).
-            // 100% opaco.
             return vec4<f32>(0.0194, 0.0194, 0.0194, fill_alpha);
         }
     }
 
-    // MODO FIO — curva Catmull-Rom (C1 contínua) com SDF à reta tangente:
-    // cancela o serrilhado das curvas mantendo bitola constante em qualquer
-    // zoom. A distância projetada |Δy|/sqrt(1+slope²) é a distância real até
-    // a tangente local da curva.
-    let a0 = clamp(wave_bars[wave_offset + max(col, 1u) - 1u], -1.0, 1.0);
-    let d3 = clamp(wave_bars[wave_offset + min(col + 2u, wave_count - 1u)], -1.0, 1.0);
+    // MODO FIO — curva Catmull-Rom usando min e max como pontos de controle.
+    let a0_min = clamp(wave_bars[(wave_offset + max(col, 1u) - 1u) * 2], -1.0, 1.0);
+    let a0_max = clamp(wave_bars[(wave_offset + max(col, 1u) - 1u) * 2 + 1], -1.0, 1.0);
+    let d3_min = clamp(wave_bars[(wave_offset + min(col + 2u, wave_count - 1u)) * 2], -1.0, 1.0);
+    let d3_max = clamp(wave_bars[(wave_offset + min(col + 2u, wave_count - 1u)) * 2 + 1], -1.0, 1.0);
 
     let tf = clamp(col_f - f32(col), 0.0, 1.0);
     let t2 = tf * tf;
     let t3 = t2 * tf;
 
-    // Catmull-Rom (tensão 0.5) entre p0(col) e p1(col+1).
-    let s = 0.5 * (2.0 * p0 + (-a0 + p1) * tf
-                   + (2.0 * a0 - 5.0 * p0 + 4.0 * p1 - d3) * t2
-                   + (-a0 + 3.0 * p0 - 3.0 * p1 + d3) * t3);
-    let ds = 0.5 * ((-a0 + p1)
-                    + (4.0 * a0 - 10.0 * p0 + 8.0 * p1 - 2.0 * d3) * tf
-                    + (-3.0 * a0 + 9.0 * p0 - 9.0 * p1 + 3.0 * d3) * t2);
+    // Catmull-Rom para min e max separadamente.
+    let s_min = 0.5 * (2.0 * p0_min + (-a0_min + p1_min) * tf
+                    + (2.0 * a0_min - 5.0 * p0_min + 4.0 * p1_min - d3_min) * t2
+                    + (-a0_min + 3.0 * p0_min - 3.0 * p1_min + d3_min) * t3);
+    let s_max = 0.5 * (2.0 * p0_max + (-a0_max + p1_max) * tf
+                    + (2.0 * a0_max - 5.0 * p0_max + 4.0 * p1_max - d3_max) * t2
+                    + (-a0_max + 3.0 * p0_max - 3.0 * p1_max + d3_max) * t3);
 
-    let y_curve = center - s * amp;
-    // Inclinação em pixels verticais por pixel horizontal.
-    let slope_pp = ds * (-amp) * f32(wave_count - 1u) / max(wave_width, 0.001);
-    let d_px = abs(p.y - y_curve) / sqrt(1.0 + slope_pp * slope_pp);
+    let ds_min = 0.5 * ((-a0_min + p1_min)
+                    + (4.0 * a0_min - 10.0 * p0_min + 8.0 * p1_min - 2.0 * d3_min) * tf
+                    + (-3.0 * a0_min + 9.0 * p0_min - 9.0 * p1_min + 3.0 * d3_min) * t2);
+    let ds_max = 0.5 * ((-a0_max + p1_max)
+                    + (4.0 * a0_max - 10.0 * p0_max + 8.0 * p1_max - 2.0 * d3_max) * tf
+                    + (-3.0 * a0_max + 9.0 * p0_max - 9.0 * p1_max + 3.0 * d3_max) * t2);
 
-    // BITOLA CONSTANTE.
+    let y_curve_min = center - s_min * amp;
+    let y_curve_max = center - s_max * amp;
+    let slope_pp_min = ds_min * (-amp) * f32(wave_count - 1u) / max(wave_width, 0.001);
+    let slope_pp_max = ds_max * (-amp) * f32(wave_count - 1u) / max(wave_width, 0.001);
+
+    let d_px_min = abs(p.y - y_curve_min) / sqrt(1.0 + slope_pp_min * slope_pp_min);
+    let d_px_max = abs(p.y - y_curve_max) / sqrt(1.0 + slope_pp_max * slope_pp_max);
+    let d_px = min(d_px_min, d_px_max);
+
     let line_width = 1.5;
     let radius = line_width * 0.5;
-
-    // AA curto: núcleo sólido (#262626) com feather de ~0.5px.
     let aa = clamp(fwidth(d_px), 0.35, 0.55);
-
     let alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_px);
     if alpha <= 0.001 {
         return in.frag_color;

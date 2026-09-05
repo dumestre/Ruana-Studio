@@ -535,12 +535,12 @@ impl App {
 
         // === Dados demo ===
         let mut clips = vec![
-            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
-            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, name: Some("Bass".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
-            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
-            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
-            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
-            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0 },
+            ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
+            ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, name: Some("Bass".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
+            ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
+            ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
+            ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
+            ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
         ];
 
         // Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
@@ -950,6 +950,7 @@ impl App {
         match decode_audio(Path::new(path)) {
             Ok(data) => {
                 let _sample_rate = data.sample_rate;
+                let channels = data.channels;
                 let bpm = self.bpm;
                 let beats_per_second = bpm / 60.0;
                 let source_length_beats = data.duration_seconds as f32 * beats_per_second;
@@ -972,6 +973,7 @@ impl App {
                     file_path: Some(path.to_string()),
                     source_start_beats: 0.0,
                     source_length_beats,
+                    channels,
                 };
 
                 let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
@@ -1011,6 +1013,7 @@ impl App {
             file_path: None,
             source_start_beats: 0.0,
             source_length_beats: 0.0,
+            channels: 1,
         });
         self.clip_interaction.sync_selection(self.clips.len());
         self.rebuild_wave_data();

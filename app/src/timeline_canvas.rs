@@ -575,6 +575,8 @@ pub struct ClipVisual {
     pub fade_in_beats: f32,
     /// Fade-out em beats.
     pub fade_out_beats: f32,
+    /// Número de canais: 1 = mono, 2 = stereo.
+    pub channels: u16,
     /// Preenchido no render: offset no buffer global de wave_bars.
     pub wave_offset: u32,
     /// Preenchido no render: nº de colunas da waveform.
@@ -625,10 +627,11 @@ fn build_clip_instances(
         let h = row_height;
 
         // Culling: pula clips totalmente fora da viewport horizontal.
-        // (Sem acesso à viewport aqui; o caller filtra por scroll.)
         if w <= 0.0 {
             continue;
         }
+
+        let is_stereo = clip.channels == 2 && !clip.is_midi;
 
         // Header opaco no topo do clip.
         out.push(RectInstance {
@@ -643,22 +646,66 @@ fn build_clip_instances(
             clip_h: 0.0,
         });
 
-        // Corpo translúcido (DARKER + alpha) abaixo da header → compõe
-        // SRC-OVER com o grid por baixo graças ao ALPHA_BLENDING.
-        // Se o clip tem waveform (wave_count > 0), passa info pro shader.
-        let body_w = (w - 2.0 * bw).max(0.0);
-        let body_h = (h - header_h - bw).max(0.0);
-        out.push(RectInstance {
-            x: x + bw,
-            y: y + header_h,
-            w: body_w,
-            h: body_h,
-            color: rgba_alpha(darker(base, 0.12), 0.50),
-            wave_offset: clip.wave_offset,
-            wave_count: clip.wave_count,
-            clip_w: body_w,
-            clip_h: body_h,
-        });
+        if is_stereo {
+            // Stereo: divide o corpo em duas faixas (L em cima, R embaixo)
+            let body_w = (w - 2.0 * bw).max(0.0);
+            let body_h = (h - header_h - bw).max(0.0);
+            let half_h = body_h / 2.0;
+
+            // Faixa L (topo)
+            out.push(RectInstance {
+                x: x + bw,
+                y: y + header_h,
+                w: body_w,
+                h: half_h,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: clip.wave_offset,
+                wave_count: clip.wave_count,
+                clip_w: body_w,
+                clip_h: half_h,
+            });
+
+            // Faixa R (embaixo)
+            out.push(RectInstance {
+                x: x + bw,
+                y: y + header_h + half_h,
+                w: body_w,
+                h: half_h,
+                color: rgba_alpha(darker(base, 0.18), 0.50),
+                wave_offset: clip.wave_offset,
+                wave_count: clip.wave_count,
+                clip_w: body_w,
+                clip_h: half_h,
+            });
+
+            // Divisória entre L e R
+            out.push(RectInstance {
+                x: x + bw,
+                y: y + header_h + half_h - 0.5,
+                w: body_w,
+                h: 1.0,
+                color: rgba(darker(base, 0.25), 180),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+            });
+        } else {
+            // Mono: corpo único
+            let body_w = (w - 2.0 * bw).max(0.0);
+            let body_h = (h - header_h - bw).max(0.0);
+            out.push(RectInstance {
+                x: x + bw,
+                y: y + header_h,
+                w: body_w,
+                h: body_h,
+                color: rgba_alpha(darker(base, 0.12), 0.50),
+                wave_offset: clip.wave_offset,
+                wave_count: clip.wave_count,
+                clip_w: body_w,
+                clip_h: body_h,
+            });
+        }
 
         // Divisória header/corpo.
         out.push(RectInstance {
@@ -886,6 +933,7 @@ pub fn wire(
                 gain_db: c.gain_db,
                 fade_in_beats: c.fade_in_beats,
                 fade_out_beats: c.fade_out_beats,
+                channels: 1,
                 wave_offset: 0,
                 wave_count: 0,
             })

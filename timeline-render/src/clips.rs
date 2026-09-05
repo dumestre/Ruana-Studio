@@ -16,9 +16,7 @@ pub struct ClipDemo {
     pub seam_beat: Option<f32>,
     pub pre_glue_len: Option<f32>,
     pub pre_glue_color: Option<usize>,
-    /// Amostras reais da waveform deste clip ([-1,1], uma por coluna), a
-    /// fonte da verdade do buffer `wave_bars`. Slice divide este vetor ao
-    /// meio (corte verdadeiro); as peças NUNCA são regeneradas.
+    /// Amostras da waveform deste clip (min/max interleaved, 2 por coluna).
     pub wave: Vec<f32>,
     /// Caminho do arquivo de áudio original, se houver.
     pub file_path: Option<String>,
@@ -26,6 +24,8 @@ pub struct ClipDemo {
     pub source_start_beats: f32,
     /// Duração do arquivo original em beats (antes de qualquer corte/trim).
     pub source_length_beats: f32,
+    /// Número de canais de áudio: 1 = mono, 2 = stereo.
+    pub channels: u16,
 }
 
 /// Métricas de conversão cursor ↔ conteúdo, espelhadas do App.
@@ -508,6 +508,7 @@ impl ClipInteraction {
                     file_path: None,
                     source_start_beats: 0.0,
                     source_length_beats: 0.0,
+                    channels: 1,
                 };
 
                 clips.push(clip.clone());
@@ -705,6 +706,7 @@ pub fn build_clip_instances(
                     file_path: clip.file_path.clone(),
                     source_start_beats: clip.source_start_beats,
                     source_length_beats: clip.source_length_beats,
+                    channels: clip.channels,
                 }
             } else {
                 ClipDemo {
@@ -721,6 +723,7 @@ pub fn build_clip_instances(
                     file_path: clip.file_path.clone(),
                     source_start_beats: clip.source_start_beats,
                     source_length_beats: clip.source_length_beats,
+                    channels: clip.channels,
                 }
             };
             let (x, y, w, _h) = clip_rect(&live, m);
@@ -768,7 +771,18 @@ pub fn build_clip_instances(
                     let live = ClipDemo {
                         track_index: live_track,
                         beat: live_beat,
-                        ..clip.clone()
+                        len: clip.len,
+                        is_midi: clip.is_midi,
+                        color: clip.color,
+                        name: clip.name.clone(),
+                        seam_beat: clip.seam_beat,
+                        pre_glue_len: clip.pre_glue_len,
+                        pre_glue_color: clip.pre_glue_color,
+                        wave: clip.wave.clone(),
+                        file_path: clip.file_path.clone(),
+                        source_start_beats: clip.source_start_beats,
+                        source_length_beats: clip.source_length_beats,
+                        channels: clip.channels,
                     };
 let (x, y, w, _h) = clip_rect(&live, m);
                         if w > 0.0 && x < width && x + w > 0.0 {
@@ -812,6 +826,7 @@ let (x, y, w, _h) = clip_rect(&live, m);
                 file_path: None,
                 source_start_beats: 0.0,
                 source_length_beats: 0.0,
+                channels: 1,
             };
 
             let (x, y, w, _h) = clip_rect(&temp_clip, m);
