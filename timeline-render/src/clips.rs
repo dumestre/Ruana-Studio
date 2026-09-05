@@ -897,92 +897,157 @@ fn clip_color(clip: &ClipDemo, t: usize) -> palette::Rgb {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn push_clip(
-    instances: &mut Vec<RectInstance>,
-    clip: &ClipDemo,
-    base: palette::Rgb,
-    x: f32,
-    y: f32,
-    w: f32,
-    draw_w: f32,
-    header_h: f32,
-    bw: f32,
-    body_alpha: f32,
-    dark_amount: f32,
-    segs: &[(u32, u32)],
-    idx: usize,
-    t: usize,
-    row_height: f32,
-    wave_natural_w: f32,
-) {
-    // Raio leve nos cantos do clip para quebrar o visual quadrado.
-    let clip_r = 6.0;
+    #[allow(clippy::too_many_arguments)]
+    fn push_clip(
+        instances: &mut Vec<RectInstance>,
+        clip: &ClipDemo,
+        base: palette::Rgb,
+        x: f32,
+        y: f32,
+        w: f32,
+        draw_w: f32,
+        header_h: f32,
+        bw: f32,
+        body_alpha: f32,
+        dark_amount: f32,
+        segs: &[(u32, u32)],
+        idx: usize,
+        t: usize,
+        row_height: f32,
+        wave_natural_w: f32,
+    ) {
+        let clip_r = 6.0;
+        let decor_alpha: u8 = if body_alpha < 0.15 {
+            ((body_alpha * 255.0 * 6.0).round() as u8).min(180)
+        } else {
+            255
+        };
 
-    // Alpha do header/divisor/indicador: quando o corpo é muito translúcido
-    // (ghost durante drag), escurece os elementos decorativos.
-    // Clip normal mantém 100% opaco; ghost fica mais pálido mas visível.
-    let decor_alpha: u8 = if body_alpha < 0.15 {
-        ((body_alpha * 255.0 * 6.0).round() as u8).min(180) // ghost: ~48 alpha
-    } else {
-        255
-    };
+        let (wo, wc) = if clip.is_midi {
+            (0u32, 0u32)
+        } else if let Some(&(o, c)) = segs.get(idx) {
+            (o, c)
+        } else {
+            (0u32, 0u32)
+        };
+        let body_h = row_height - header_h;
 
-    // Header
-    instances.push(RectInstance {
-        x: x + bw, y: y + bw,
-        w: (draw_w - 2.0 * bw).max(0.0),
-        h: (header_h - bw).max(0.0),
-        color: rgba(base, decor_alpha),
-        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: clip_r,
-    });
+        // Stereo: divide o corpo em duas faixas iguais (L em cima, R embaixo)
+        // quando a altura do clip é suficiente. Caso contrário, cai para mono.
+        let is_stereo = clip.channels == 2 && !clip.is_midi && body_h > 40.0;
+        if is_stereo {
+            let half_h = body_h / 2.0;
 
-    // Waveform (só para clips de áudio) — segmento FIXO por id (calculado na
-    // geração do buffer com os lens originais). Nunca derive de lens vivos.
-    let (wo, wc) = if clip.is_midi {
-        (0u32, 0u32)
-    } else if let Some(&(o, c)) = segs.get(idx) {
-        (o, c)
-    } else {
-        (0u32, 0u32)
-    };
-    let body_h = row_height - header_h;
+            // Faixa L (topo)
+            instances.push(RectInstance {
+                x: x + bw,
+                y: y + header_h,
+                w: w,
+                h: half_h,
+                color: rgba_alpha(darker(base, dark_amount), body_alpha),
+                wave_offset: wo,
+                wave_count: wc,
+                clip_w: wave_natural_w,
+                clip_h: half_h,
+                radius: clip_r,
+            });
 
-    // Corpo (com waveform) — alpha e escurecimento controlados por hover/drag.
-    instances.push(RectInstance {
-        x: x + bw, y: y + header_h,
-        w: w, h: body_h,
-        color: rgba_alpha(darker(base, dark_amount), body_alpha),
-        wave_offset: wo, wave_count: wc,         clip_w: wave_natural_w, clip_h: body_h, radius: clip_r,
-    });
+            // Faixa R (embaixo)
+            instances.push(RectInstance {
+                x: x + bw,
+                y: y + header_h + half_h,
+                w: w,
+                h: half_h,
+                color: rgba_alpha(darker(base, dark_amount), body_alpha),
+                wave_offset: wo,
+                wave_count: wc,
+                clip_w: wave_natural_w,
+                clip_h: half_h,
+                radius: clip_r,
+            });
 
-    // Divisória
-    instances.push(RectInstance {
-        x: x + bw, y: y + header_h - 1.0,
-        w: (draw_w - 2.0 * bw).max(0.0), h: 1.0,
-        color: rgba(darker(base, 0.18), decor_alpha),
-        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-    });
+            // Divisória L/R
+            instances.push(RectInstance {
+                x: x + bw,
+                y: y + header_h + half_h - 0.5,
+                w: (draw_w - 2.0 * bw).max(0.0),
+                h: 1.0,
+                color: rgba(darker(base, 0.18), decor_alpha),
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
+            });
+        } else {
+            // Mono: corpo único
+            instances.push(RectInstance {
+                x: x + bw,
+                y: y + header_h,
+                w: w,
+                h: body_h,
+                color: rgba_alpha(darker(base, dark_amount), body_alpha),
+                wave_offset: wo,
+                wave_count: wc,
+                clip_w: wave_natural_w,
+                clip_h: body_h,
+                radius: clip_r,
+            });
+        }
 
-    // Indicador direito
-    instances.push(RectInstance {
-        x: x + draw_w - bw - 6.0, y: y + 5.0,
-        w: 3.0, h: 8.0,
-        color: rgba(palette::TEXT_PRIMARY[t], decor_alpha),
-        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-    });
+        // Header
+        instances.push(RectInstance {
+            x: x + bw,
+            y: y + bw,
+            w: (draw_w - 2.0 * bw).max(0.0),
+            h: (header_h - bw).max(0.0),
+            color: rgba(base, decor_alpha),
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: clip_r,
+        });
 
-    // Ghost: outline wireframe (posição original durante drag)
-    if body_alpha < 0.15 {
-        let ghost_border = rgba(darker(base, 0.15), 55);
-        let th = 1.0;
-        instances.push(RectInstance { x, y, w: draw_w, h: th, color: ghost_border,
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: clip_r });
-        instances.push(RectInstance { x, y: y + row_height - th, w: draw_w, h: th, color: ghost_border,
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
-        instances.push(RectInstance { x, y, w: th, h: row_height, color: ghost_border,
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
-        instances.push(RectInstance { x: x + draw_w - th, y, w: th, h: row_height, color: ghost_border,
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+        // Divisória
+        instances.push(RectInstance {
+            x: x + bw,
+            y: y + header_h - 1.0,
+            w: (draw_w - 2.0 * bw).max(0.0),
+            h: 1.0,
+            color: rgba(darker(base, 0.18), decor_alpha),
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+
+        // Indicador direito
+        instances.push(RectInstance {
+            x: x + draw_w - bw - 6.0,
+            y: y + 5.0,
+            w: 3.0,
+            h: 8.0,
+            color: rgba(palette::TEXT_PRIMARY[t], decor_alpha),
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+
+        // Ghost: outline wireframe (posição original durante drag)
+        if body_alpha < 0.15 {
+            let ghost_border = rgba(darker(base, 0.15), 55);
+            let th = 1.0;
+            instances.push(RectInstance { x, y, w: draw_w, h: th, color: ghost_border,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: clip_r });
+            instances.push(RectInstance { x, y: y + row_height - th, w: draw_w, h: th, color: ghost_border,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+            instances.push(RectInstance { x, y, w: th, h: row_height, color: ghost_border,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+            instances.push(RectInstance { x: x + draw_w - th, y, w: th, h: row_height, color: ghost_border,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0 });
+        }
     }
-}

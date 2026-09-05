@@ -333,10 +333,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let d_px_min = abs(p.y - y_curve_min) / sqrt(1.0 + slope_pp_min * slope_pp_min);
     let d_px_max = abs(p.y - y_curve_max) / sqrt(1.0 + slope_pp_max * slope_pp_max);
     let d_px = min(d_px_min, d_px_max);
-
     let line_width = 1.5;
     let radius = line_width * 0.5;
     let aa = clamp(fwidth(d_px), 0.35, 0.55);
+
     let alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_px);
     if alpha <= 0.001 {
         return in.frag_color;
