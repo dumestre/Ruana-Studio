@@ -29,18 +29,6 @@ struct Uniforms {
 // Amplitudes da waveform (modo osciloscópio): 1 amostra por coluna, por clip.
 @group(0) @binding(1) var<storage, read> wave_bars: array<f32>;
 
-// Distância ponto-segmento em pixels.
-fn seg_dist(a: vec2<f32>, b: vec2<f32>, p: vec2<f32>) -> f32 {
-    let ab = b - a;
-    let ap = p - a;
-    let ab_len2 = dot(ab, ab);
-    var segment_t = 0.0;
-    if ab_len2 > 0.000001 {
-        segment_t = clamp(dot(ap, ab) / ab_len2, 0.0, 1.0);
-    }
-    return distance(p, a + ab * segment_t);
-}
-
 // Traits por instância (interleave) do buffer de instâncias.
 struct Instance {
     @location(1) rect: vec4<f32>,        // x, y, w, h (conteúdo px)
@@ -218,35 +206,38 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         }
     }
 
-    // MODO FIO.
-    let a = vec2<f32>(x0, y0);
-    let b = vec2<f32>(x1, y1);
+    // MODO FIO — curva Catmull-Rom (C1 contínua) com SDF à reta tangente:
+    // cancela o serrilhado das curvas mantendo bitola constante em qualquer
+    // zoom. A distância projetada |Δy|/sqrt(1+slope²) é a distância real até
+    // a tangente local da curva.
+    let a0 = clamp(wave_bars[wave_offset + max(col, 1u) - 1u], -1.0, 1.0);
+    let d3 = clamp(wave_bars[wave_offset + min(col + 2u, wave_count - 1u)], -1.0, 1.0);
 
-    // Distância ao segmento atual + aos vizinhos (join arredondado):
-    // no vértice de uma curva, o fragmento pode estar mais perto do
-    // segmento adjacente do que do atual — testar só o atual deixava
-    // "dentes" nas bordas das curvas. O min() dos três suaviza a curva
-    // como uma polyline com cantos redondos.
-    var distance_px = seg_dist(a, b, p);
-    if col > 0u {
-        let xm = f32(col - 1u) / f32(wave_count - 1u) * wave_width;
-        let ym = center - clamp(wave_bars[wave_offset + col - 1u], -1.0, 1.0) * amp;
-        distance_px = min(distance_px, seg_dist(vec2<f32>(xm, ym), a, p));
-    }
-    if col + 2u < wave_count {
-        let xn = f32(col + 2u) / f32(wave_count - 1u) * wave_width;
-        let yn = center - clamp(wave_bars[wave_offset + col + 2u], -1.0, 1.0) * amp;
-        distance_px = min(distance_px, seg_dist(b, vec2<f32>(xn, yn), p));
-    }
+    let tf = clamp(col_f - f32(col), 0.0, 1.0);
+    let t2 = tf * tf;
+    let t3 = t2 * tf;
+
+    // Catmull-Rom (tensão 0.5) entre p0(col) e p1(col+1).
+    let s = 0.5 * (2.0 * p0 + (-a0 + p1) * tf
+                   + (2.0 * a0 - 5.0 * p0 + 4.0 * p1 - d3) * t2
+                   + (-a0 + 3.0 * p0 - 3.0 * p1 + d3) * t3);
+    let ds = 0.5 * ((-a0 + p1)
+                    + (4.0 * a0 - 10.0 * p0 + 8.0 * p1 - 2.0 * d3) * tf
+                    + (-3.0 * a0 + 9.0 * p0 - 9.0 * p1 + 3.0 * d3) * t2);
+
+    let y_curve = center - s * amp;
+    // Inclinação em pixels verticais por pixel horizontal.
+    let slope_pp = ds * (-amp) * f32(wave_count - 1u) / max(wave_width, 0.001);
+    let d_px = abs(p.y - y_curve) / sqrt(1.0 + slope_pp * slope_pp);
 
     // BITOLA CONSTANTE.
     let line_width = 1.5;
     let radius = line_width * 0.5;
 
-    // AA curto: núcleo sólido (cor 0.012) com feather de ~0.5px.
-    let aa = clamp(fwidth(distance_px), 0.35, 0.55);
+    // AA curto: núcleo sólido (#262626) com feather de ~0.5px.
+    let aa = clamp(fwidth(d_px), 0.35, 0.55);
 
-    let alpha = 1.0 - smoothstep(radius - aa, radius + aa, distance_px);
+    let alpha = 1.0 - smoothstep(radius - aa, radius + aa, d_px);
     if alpha <= 0.001 {
         return in.frag_color;
     }
