@@ -110,60 +110,85 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Se o rect for mais largo que a natural, a waveform não estica:
     //   - dentro da largura natural: waveform normal
     //   - além: só corpo colorido (sem waveform)
+    // Para N pontos o intervalo horizontal é 0..N-1 (não N), senão a
+    // última amostra fica deslocada.
     let rect_w = in.size.x;
     let natural_w = in.wave_info.z;
     if natural_w > 0.0 && in.local.x * rect_w > natural_w {
         return in.frag_color;
     }
+    let n = wave_count - 1u;
+    let n_f = f32(n);
     var col_f: f32;
     if natural_w > 0.0 {
-        col_f = (in.local.x * rect_w / natural_w) * f32(wave_count);
+        col_f = (in.local.x * rect_w / natural_w) * n_f;
     } else {
-        col_f = in.local.x * f32(wave_count);
+        col_f = in.local.x * n_f;
     }
-    if col_f < 0.0 || col_f >= f32(wave_count) - 1.0 {
+    if col_f < 0.0 || col_f >= n_f {
         return in.frag_color;
     }
 
-    // Modo osciloscópio com SDF ponto-segmento: para cada fragmento calcula a
-    // distância REAL ao segmento de reta [col, col+1] em pixels e desenha com
-    // espessura constante (~1.5px) + AA. Isso mantém a mesma bitola em toda a
-    // curva e conecta segmentos íngremes (acabando com pontinhos/vazios).
-    if wave_count < 2 {
+    // ------------------------------------------------------------
+    // OSCILOSCÓPIO — uma única linha contínua
+    // ------------------------------------------------------------
+    if wave_count < 2u {
         return in.frag_color;
     }
-    let col = u32(floor(col_f));
-    let next_col = min(col + 1u, wave_count - 1u);
+
+    let col = min(u32(floor(col_f)), wave_count - 2u);
+    let next_col = col + 1u;
+
     let p0 = clamp(wave_bars[wave_offset + col], -1.0, 1.0);
     let p1 = clamp(wave_bars[wave_offset + next_col], -1.0, 1.0);
 
-    // Pernas do segmento em PIXELS dentro do corpo do clip.
-    let amp = 0.4; // metade da altura = 40% para cima/baixo = 80% total
-    let center = 0.5;
-    let px_per_col = select(
-        in.size.x / f32(wave_count),
-        natural_w / f32(wave_count),
-        natural_w > 0.0,
-    );
-    let ax = f32(col) * px_per_col;
-    let bx = f32(col + 1u) * px_per_col;
-    let ay = (center - p0 * amp) * in.size.y;
-    let by = (center - p1 * amp) * in.size.y;
-    let p = vec2<f32>(in.local.x * in.size.x, in.local.y * in.size.y);
+    // Coordenadas locais do fragmento em pixels.
+    let p = in.local * in.size;
 
-    // Distância ponto-segmento (SDF).
-    let ab = vec2<f32>(bx - ax, by - ay);
-    let ap = p - vec2<f32>(ax, ay);
-    let ab2 = dot(ab, ab);
-    let t2 = select(1.0, dot(ap, ab) / ab2, ab2 > 0.0);
-    let closest = vec2<f32>(ax, ay) + ab * clamp(t2, 0.0, 1.0);
-    let dpx = distance(p, closest);
+    // Cada amostra ocupa exatamente uma parte horizontal do clip.
+    let natural = natural_w > 0.0;
+    let wave_width = select(in.size.x, natural_w, natural);
 
-    // Bitola constante com AA (feather de 1px).
-    let line_w = 1.5;
-    let alpha = 1.0 - smoothstep(line_w * 0.5 - 0.5, line_w * 0.5 + 0.5, dpx);
-    if alpha <= 0.0 {
+    let x0 = f32(col) / f32(wave_count - 1u) * wave_width;
+    let x1 = f32(next_col) / f32(wave_count - 1u) * wave_width;
+
+    // Amplitude -> Y.
+    let center = in.size.y * 0.5;
+    let amp = in.size.y * 0.4;
+
+    let y0 = center - p0 * amp;
+    let y1 = center - p1 * amp;
+
+    let a = vec2<f32>(x0, y0);
+    let b = vec2<f32>(x1, y1);
+
+    // Distância exata do fragmento ao segmento.
+    let ab = b - a;
+    let ap = p - a;
+
+    let ab_len2 = dot(ab, ab);
+
+    var segment_t = 0.0;
+    if ab_len2 > 0.000001 {
+        segment_t = clamp(dot(ap, ab) / ab_len2, 0.0, 1.0);
+    }
+
+    let closest = a + ab * segment_t;
+    let distance_px = distance(p, closest);
+
+    // BITOLA CONSTANTE
+    let line_width = 1.5;
+    let radius = line_width * 0.5;
+
+    // AA curto (~0.5px): fwidth estabiliza ao dar zoom, mas a faixa fica
+    // estreita para o núcleo ficar sólido — recupera a aparência escura
+    // original (0.012) sem lavar a linha no corpo do clip.
+    let aa = clamp(fwidth(distance_px), 0.35, 0.55);
+
+    let alpha = 1.0 - smoothstep(radius - aa, radius + aa, distance_px);
+    if alpha <= 0.001 {
         return in.frag_color;
     }
+
     return vec4<f32>(0.012, 0.012, 0.012, 0.95 * alpha);
 }
