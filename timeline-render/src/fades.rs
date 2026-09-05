@@ -344,7 +344,8 @@ pub fn build_clip_fade_instances(
     // 1. FADE IN — SHADER ANALÍTICO SDF (MESMA TÉCNICA DA WAVEFORM)
     // ========================================================================
     let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
-    if in_px > 1.0 {
+    let hover_fade_in = is_hovered(FadeHandleKind::FadeInLen) || is_hovered(FadeHandleKind::FadeInCurve);
+    if in_px > 1.0 && hover_fade_in {
         // Envia UM único quad para o fragment shader.
         // wave_offset = in_curve_x * 1000, wave_count = in_curve_y * 1000.
         let cx_code = (fade.in_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
@@ -362,21 +363,17 @@ pub fn build_clip_fade_instances(
             radius: 0.0,
         });
 
-        // Bolinha Fade In Length (no canto superior do fade in)
-        let handle_in_x = body_x + in_px;
-        let handle_in_y = body_y + 4.0;
-        let hover_len = is_hovered(FadeHandleKind::FadeInLen);
-        let r_len = if hover_len { 5.5 } else { 4.5 };
-        let fill_len = if hover_len { handle_fill_hover } else { handle_fill_normal };
-        push_handle_circle(instances, handle_in_x, handle_in_y, r_len, fill_len, handle_border_color);
-
-        // Bolinha Fade In Curve (no ponto de controle Bézier 2D que segue o mouse)
-        let handle_curve_x = body_x + fade.in_curve_x * in_px;
-        let handle_curve_y = body_y + body_h - fade.in_curve_y * body_h;
-        let hover_curve = is_hovered(FadeHandleKind::FadeInCurve);
-        let r_curve = if hover_curve { 5.0 } else { 4.0 };
-        let fill_curve = if hover_curve { handle_fill_hover } else { [225, 225, 235, 240] };
-        push_handle_circle(instances, handle_curve_x, handle_curve_y, r_curve, fill_curve, handle_border_color);
+        // Bolinhas Fade In — só aparecem quando hover no respectivo handle
+        if is_hovered(FadeHandleKind::FadeInLen) {
+            let handle_in_x = body_x + in_px;
+            let handle_in_y = body_y + 4.0;
+            push_handle_circle(instances, handle_in_x, handle_in_y, 5.5, handle_fill_hover, handle_border_color);
+        }
+        if is_hovered(FadeHandleKind::FadeInCurve) {
+            let handle_curve_x = body_x + fade.in_curve_x * in_px;
+            let handle_curve_y = body_y + body_h - fade.in_curve_y * body_h;
+            push_handle_circle(instances, handle_curve_x, handle_curve_y, 5.0, handle_fill_hover, handle_border_color);
+        }
     } else {
         // Indicador pequeno quando hovering próximo ao topo esquerdo
         if is_hovered(FadeHandleKind::FadeInLen) {
@@ -388,7 +385,8 @@ pub fn build_clip_fade_instances(
     // 2. FADE OUT — SHADER ANALÍTICO SDF (MESMA TÉCNICA DA WAVEFORM)
     // ========================================================================
     let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
-    if out_px > 1.0 {
+    let hover_fade_out = is_hovered(FadeHandleKind::FadeOutLen) || is_hovered(FadeHandleKind::FadeOutCurve);
+    if out_px > 1.0 && hover_fade_out {
         let start_x = body_x + body_w - out_px;
         let cx_code = (fade.out_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
         let cy_code = (fade.out_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
@@ -405,21 +403,17 @@ pub fn build_clip_fade_instances(
             radius: 0.0,
         });
 
-        // Bolinha Fade Out Length (no canto superior do fade out)
-        let handle_out_x = start_x;
-        let handle_out_y = body_y + 4.0;
-        let hover_len = is_hovered(FadeHandleKind::FadeOutLen);
-        let r_len = if hover_len { 5.5 } else { 4.5 };
-        let fill_len = if hover_len { handle_fill_hover } else { handle_fill_normal };
-        push_handle_circle(instances, handle_out_x, handle_out_y, r_len, fill_len, handle_border_color);
-
-        // Bolinha Fade Out Curve (no ponto de controle Bézier 2D que segue o mouse)
-        let handle_curve_x = start_x + fade.out_curve_x * out_px;
-        let handle_curve_y = body_y + body_h - fade.out_curve_y * body_h;
-        let hover_curve = is_hovered(FadeHandleKind::FadeOutCurve);
-        let r_curve = if hover_curve { 5.0 } else { 4.0 };
-        let fill_curve = if hover_curve { handle_fill_hover } else { [225, 225, 235, 240] };
-        push_handle_circle(instances, handle_curve_x, handle_curve_y, r_curve, fill_curve, handle_border_color);
+        // Bolinhas Fade Out — só aparecem quando hover no respectivo handle
+        if is_hovered(FadeHandleKind::FadeOutLen) {
+            let handle_out_x = start_x;
+            let handle_out_y = body_y + 4.0;
+            push_handle_circle(instances, handle_out_x, handle_out_y, 5.5, handle_fill_hover, handle_border_color);
+        }
+        if is_hovered(FadeHandleKind::FadeOutCurve) {
+            let handle_curve_x = start_x + fade.out_curve_x * out_px;
+            let handle_curve_y = body_y + body_h - fade.out_curve_y * body_h;
+            push_handle_circle(instances, handle_curve_x, handle_curve_y, 5.0, handle_fill_hover, handle_border_color);
+        }
     } else {
         if is_hovered(FadeHandleKind::FadeOutLen) {
             push_handle_circle(instances, body_x + body_w - 4.0, body_y + 4.0, 4.0, handle_fill_hover, handle_border_color);
@@ -432,7 +426,7 @@ pub fn build_clip_fade_instances(
     let gain_norm_y = fade.gain_to_norm_y();
     let gain_y = body_y + gain_norm_y * body_h;
 
-    // Linha horizontal de volume
+    // Linha horizontal de volume (sempre visível)
     instances.push(RectInstance {
         x: body_x,
         y: gain_y - 0.75,
@@ -446,12 +440,11 @@ pub fn build_clip_fade_instances(
         radius: 0.0,
     });
 
-    // Bolinha de ajuste de ganho (no centro horizontal da linha de ganho)
-    let gain_handle_x = body_x + body_w * 0.5;
-    let hover_gain = is_hovered(FadeHandleKind::GainLevel);
-    let r_gain = if hover_gain { 6.0 } else { 4.5 };
-    let fill_gain = if hover_gain { [255, 230, 80, 255] } else { [255, 215, 0, 230] };
-    push_handle_circle(instances, gain_handle_x, gain_y, r_gain, fill_gain, handle_border_color);
+    // Bolinha de ajuste de ganho — só aparece quando hover no GainLevel
+    if is_hovered(FadeHandleKind::GainLevel) {
+        let gain_handle_x = body_x + body_w * 0.5;
+        push_handle_circle(instances, gain_handle_x, gain_y, 6.0, [255, 230, 80, 255], handle_border_color);
+    }
 }
 
 // ============================================================================
