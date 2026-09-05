@@ -992,19 +992,7 @@ fn clip_color(clip: &ClipDemo, t: usize) -> palette::Rgb {
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: fifth, radius: clip_r,
             });
 
-            // Linhas divisórias entre as 5 partes (4 dividers)
-            for i in 1..5u32 {
-                let di = i as f32;
-                instances.push(RectInstance {
-                    x: x + bw,
-                    y: y + header_h + di * fifth - 1.0,
-                    w: (draw_w - 2.0 * bw).max(0.0),
-                    h: 1.0,
-                    color: rgba(darker(base, 0.25), decor_alpha),
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-                });
-            }
-        } else {
+         } else {
             // Mono: waveform na faixa central (1/3 do corpo), com 2 linhas
             // divisórias separando as 3 partes.
             let third = body_h / 3.0;
@@ -1039,25 +1027,6 @@ fn clip_color(clip: &ClipDemo, t: usize) -> palette::Rgb {
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: third, radius: clip_r,
             });
 
-            // Linha divisória acima da faixa central
-            instances.push(RectInstance {
-                x: x + bw,
-                y: y + header_h + third - 1.0,
-                w: (draw_w - 2.0 * bw).max(0.0),
-                h: 1.0,
-                color: rgba(darker(base, 0.25), decor_alpha),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-            });
-
-            // Linha divisória abaixo da faixa central
-            instances.push(RectInstance {
-                x: x + bw,
-                y: y + header_h + 2.0 * third - 1.0,
-                w: (draw_w - 2.0 * bw).max(0.0),
-                h: 1.0,
-                color: rgba(darker(base, 0.25), decor_alpha),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
-            });
         }
 
         // Header
