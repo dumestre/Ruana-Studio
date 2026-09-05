@@ -120,7 +120,7 @@ pub fn build_wave_bars_and_segments(
 }
 
 /// Decodifica um arquivo de áudio real e converte para amplitudes por coluna.
-fn decode_real_wave(path: &str, n_cols: u32) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
+pub(crate) fn decode_real_wave(path: &str, n_cols: u32) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
     let data = decode_audio(Path::new(path))?;
     let samples = &data.samples;
     if samples.is_empty() || n_cols == 0 {
@@ -149,7 +149,7 @@ fn decode_real_wave(path: &str, n_cols: u32) -> Result<Vec<f32>, Box<dyn std::er
 }
 
 /// Gera waveform procedural para um clip (fallback).
-fn generate_procedural_wave(clip: &ClipDemo, n_cols: u32, seed: u64) -> Vec<f32> {
+pub(crate) fn generate_procedural_wave(clip: &ClipDemo, n_cols: u32, seed: u64) -> Vec<f32> {
     let style = (seed % 3) as usize;
     let seed = seed.wrapping_mul(0x9E3779B97F4A7C15)
         ^ (clip.beat as u32 as u64).wrapping_mul(11)

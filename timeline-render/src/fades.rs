@@ -344,13 +344,11 @@ pub fn build_clip_fade_instances(
     let handle_border_color = [25, 25, 30, 240];
 
     // ========================================================================
-    // 1. FADE IN — SHADER ANALÍTICO SDF (MESMA TÉCNICA DA WAVEFORM)
+    // 1. FADE IN — SHADER ANALÍTICO SDF (overlay sempre visível, handles no hover)
     // ========================================================================
     let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
     let hover_fade_in = is_hovered(FadeHandleKind::FadeInLen) || is_hovered(FadeHandleKind::FadeInCurve);
-    if in_px > 1.0 && hover_fade_in {
-        // Envia UM único quad para o fragment shader.
-        // wave_offset = in_curve_x * 1000, wave_count = in_curve_y * 1000.
+    if in_px > 1.0 {
         let cx_code = (fade.in_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
         let cy_code = (fade.in_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
         instances.push(RectInstance {
@@ -366,7 +364,6 @@ pub fn build_clip_fade_instances(
             radius: 0.0,
         });
 
-        // Bolinhas Fade In — aparecem junto com a linha do fade (hover_fade_in)
         if hover_fade_in {
             let handle_in_x = body_x + in_px;
             let handle_in_y = body_y + 4.0;
@@ -384,11 +381,11 @@ pub fn build_clip_fade_instances(
     }
 
     // ========================================================================
-    // 2. FADE OUT — SHADER ANALÍTICO SDF (MESMA TÉCNICA DA WAVEFORM)
+    // 2. FADE OUT — SHADER ANALÍTICO SDF (overlay sempre visível, handles no hover)
     // ========================================================================
     let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
     let hover_fade_out = is_hovered(FadeHandleKind::FadeOutLen) || is_hovered(FadeHandleKind::FadeOutCurve);
-    if out_px > 1.0 && hover_fade_out {
+    if out_px > 1.0 {
         let start_x = body_x + body_w - out_px;
         let cx_code = (fade.out_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
         let cy_code = (fade.out_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
@@ -405,7 +402,6 @@ pub fn build_clip_fade_instances(
             radius: 0.0,
         });
 
-        // Bolinhas Fade Out — aparecem junto com a linha do fade (hover_fade_out)
         if hover_fade_out {
             let handle_out_x = start_x;
             let handle_out_y = body_y + 4.0;
@@ -444,14 +440,14 @@ pub fn build_clip_fade_instances(
             radius: 0.0,
         });
     }
-    // Indicador de nível (linha fina) dentro da área de ganho
+    // Indicador de nível (linha) dentro da área de ganho — sempre visível
     let gain_line_y = gain_area_y + gain_norm_y * gain_area_h;
     instances.push(RectInstance {
         x: body_x + 4.0,
-        y: gain_line_y - 0.5,
+        y: gain_line_y - 1.0,
         w: body_w - 8.0,
-        h: 1.0,
-        color: [255, 215, 0, 200],
+        h: 2.0,
+        color: [255, 215, 0, 240],
         wave_offset: 0,
         wave_count: 0,
         clip_w: 0.0,

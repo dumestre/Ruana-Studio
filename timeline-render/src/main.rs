@@ -954,7 +954,7 @@ impl App {
                 let beats_per_second = bpm / 60.0;
                 let source_length_beats = data.duration_seconds as f32 * beats_per_second;
 
-                let clip = ClipDemo {
+                let mut clip = ClipDemo {
                     track_index: track,
                     beat,
                     len: source_length_beats,
@@ -972,6 +972,14 @@ impl App {
                     file_path: Some(path.to_string()),
                     source_start_beats: 0.0,
                     source_length_beats,
+                };
+
+                let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
+                let clip_idx = self.clips.len();
+                let seed = clip_idx as u64;
+                clip.wave = match waveform::decode_real_wave(path, n_cols) {
+                    Ok(w) => w,
+                    Err(_) => waveform::generate_procedural_wave(&clip, n_cols, seed),
                 };
 
                 self.clips.push(clip);

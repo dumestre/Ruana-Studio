@@ -555,6 +555,8 @@ fn build_instances(
 /// como overlay Slint sobre o corpo (borda, nome, handles, fades).
 #[allow(dead_code)]
 pub struct ClipVisual {
+    /// ID do clip no core (para buscar waveform no cache).
+    pub clip_id: u64,
     /// Índice da row na timeline (posição de `track_id` em `tracks`).
     pub track_index: usize,
     /// Posição inicial em beats.
@@ -874,6 +876,7 @@ pub fn wire(
             .clips
             .iter()
             .map(|c| ClipVisual {
+                clip_id: c.id,
                 track_index: track_index_of(c.track_id),
                 beat: c.start_beat,
                 len: c.length_beats,
@@ -948,25 +951,41 @@ pub fn wire(
             theme,
         );
 
-        // Waveforms: constrói buffer global de barras (min/max) para clips de áudio.
-        // Lê do WaveformCache, escolhe LOD por largura de exibição, baka gain/fade.
-        let wave_bars: Vec<f32> = Vec::new();
+        // Waveforms: constrói buffer global de barras (min/max interleaved) para clips de áudio.
+        // Lê do WaveformCache, escolhe LOD por largura de exibição, bakeia gain/fade.
+        let mut wave_bars = Vec::new();
+        let mut wave_offset = 0u32;
         {
-            let _wf_cache = waveforms_shot.borrow();
+            let wf_cache = waveforms_shot.borrow();
             for clip in &mut clip_visuals {
                 if clip.is_midi || clip.file_path.is_none() {
+                    clip.wave_offset = 0;
+                    clip.wave_count = 0;
                     continue;
                 }
-                // Largura de exibição do clip em pixels.
                 let clip_w = (clip.len * px_per_beat).max(4.0);
                 let width_px = clip_w.round() as u32;
                 if width_px < 16 {
+                    clip.wave_offset = 0;
+                    clip.wave_count = 0;
                     continue;
                 }
-                // Busca no cache pelo ID do clip (usamos track_index como proxy?).
-                // NOTA: o core Clip não expõe ID aqui facilmente.
-                // Para MVP, pulamos a waveform real — a infraestrutura está pronta.
-                // wave_bars será vazio; o shader desenha cor base.
+                if let Some(cw) = wf_cache.get(&clip.clip_id) {
+                    let level = crate::waveform::pick_level(&cw.lods, width_px as usize);
+                    let fi_px = clip.fade_in_beats * px_per_beat;
+                    let fo_px = clip.fade_out_beats * px_per_beat;
+                    let (mins, maxs) = crate::waveform::bake_bars(level, width_px, 1.0, fi_px, fo_px);
+                    clip.wave_offset = wave_offset;
+                    clip.wave_count = mins.len() as u32;
+                    wave_offset += mins.len() as u32;
+                    for (&mn, &mx) in mins.iter().zip(maxs.iter()) {
+                        wave_bars.push(mn);
+                        wave_bars.push(mx);
+                    }
+                } else {
+                    clip.wave_offset = 0;
+                    clip.wave_count = 0;
+                }
             }
         }
 
