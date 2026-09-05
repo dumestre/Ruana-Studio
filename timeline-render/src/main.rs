@@ -1667,7 +1667,7 @@ impl App {
             let cur_m = total_s / 60;
             let cur_s = total_s % 60;
             let cur_str = format!("{}:{:02}", cur_m, cur_s);
-            let cur_col = rgba((0xFF, 0xFF, 0xFF), 255);
+            let cur_col = rgba(palette::TEXT_PRIMARY[t], 220);
             instances.extend(build_text_instances(&cur_str, head_x, tr_y + 8.0, cur_col, 1.0));
         }
 
