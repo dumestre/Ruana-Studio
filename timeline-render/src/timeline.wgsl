@@ -29,6 +29,18 @@ struct Uniforms {
 // Amplitudes da waveform (modo osciloscópio): 1 amostra por coluna, por clip.
 @group(0) @binding(1) var<storage, read> wave_bars: array<f32>;
 
+// Distância ponto-segmento em pixels.
+fn seg_dist(a: vec2<f32>, b: vec2<f32>, p: vec2<f32>) -> f32 {
+    let ab = b - a;
+    let ap = p - a;
+    let ab_len2 = dot(ab, ab);
+    var segment_t = 0.0;
+    if ab_len2 > 0.000001 {
+        segment_t = clamp(dot(ap, ab) / ab_len2, 0.0, 1.0);
+    }
+    return distance(p, a + ab * segment_t);
+}
+
 // Traits por instância (interleave) do buffer de instâncias.
 struct Instance {
     @location(1) rect: vec4<f32>,        // x, y, w, h (conteúdo px)
@@ -201,6 +213,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let fill_alpha = cov * fill_amount;
         if fill_alpha > 0.001 {
             // 0.0194 = #262626 em linear (alvo sRGB converte na escrita).
+            // 100% opaco.
             return vec4<f32>(0.0194, 0.0194, 0.0194, fill_alpha);
         }
     }
@@ -209,18 +222,22 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let a = vec2<f32>(x0, y0);
     let b = vec2<f32>(x1, y1);
 
-    let ab = b - a;
-    let ap = p - a;
-
-    let ab_len2 = dot(ab, ab);
-
-    var segment_t = 0.0;
-    if ab_len2 > 0.000001 {
-        segment_t = clamp(dot(ap, ab) / ab_len2, 0.0, 1.0);
+    // Distância ao segmento atual + aos vizinhos (join arredondado):
+    // no vértice de uma curva, o fragmento pode estar mais perto do
+    // segmento adjacente do que do atual — testar só o atual deixava
+    // "dentes" nas bordas das curvas. O min() dos três suaviza a curva
+    // como uma polyline com cantos redondos.
+    var distance_px = seg_dist(a, b, p);
+    if col > 0u {
+        let xm = f32(col - 1u) / f32(wave_count - 1u) * wave_width;
+        let ym = center - clamp(wave_bars[wave_offset + col - 1u], -1.0, 1.0) * amp;
+        distance_px = min(distance_px, seg_dist(vec2<f32>(xm, ym), a, p));
     }
-
-    let closest = a + ab * segment_t;
-    let distance_px = distance(p, closest);
+    if col + 2u < wave_count {
+        let xn = f32(col + 2u) / f32(wave_count - 1u) * wave_width;
+        let yn = center - clamp(wave_bars[wave_offset + col + 2u], -1.0, 1.0) * amp;
+        distance_px = min(distance_px, seg_dist(b, vec2<f32>(xn, yn), p));
+    }
 
     // BITOLA CONSTANTE.
     let line_width = 1.5;
