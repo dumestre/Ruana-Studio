@@ -1610,11 +1610,12 @@ fn rebuild_wave_data(&mut self) {
             }
         }
 
-        // Linha de corte vertical viva (ferramenta Slice — tecla 4)
+        // Linha de corte vertical viva (ferramenta Slice — tecla 4) na cor da
+        // borda de seleção (#262626).
         if current_tool() == Tool::Slice && self.last_cursor.1 >= self.ruler_px {
             let cx = self.last_cursor.0;
             if cx >= 0.0 && cx <= width {
-                let col = if t == 6 { (0xDC, 0x14, 0x3C) } else { palette::ACCENT[t] };
+                let col = (0x26, 0x26, 0x26);
                 instances.push(RectInstance {
                     x: cx - 1.0, y: self.ruler_px,
                     w: 2.0, h: (height - self.ruler_px - self.time_ruler_h).max(0.0),
