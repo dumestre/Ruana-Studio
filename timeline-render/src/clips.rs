@@ -713,9 +713,9 @@ pub fn build_clip_instances(
                 push_clip(&mut instances, &live, base, x, y, w, draw_w, header_h, bw,
                           body_alpha_overlay, 0.12, &m.wave_segments, idx, t, m.row_height, wave_natural_w);
                 push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
-                // Contorno visível no overlay do clip arrastado
-                let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
-                let th = 2.0;
+                // Contorno visível no overlay do clip arrastado (cor da waveform)
+                let border_col = (0x26, 0x26, 0x26);
+                let th = 4.0;
                 instances.push(RectInstance { x, y, w: draw_w, h: th, color: [border_col.0, border_col.1, border_col.2, 255],
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0 });
                 instances.push(RectInstance { x, y: y + m.row_height - th, w: draw_w, h: th, color: [border_col.0, border_col.1, border_col.2, 255],
@@ -753,9 +753,9 @@ pub fn build_clip_instances(
                         push_clip(&mut instances, &live, base, x, y, w, draw_w, header_h, bw,
                                   body_alpha_overlay, 0.12, &m.wave_segments, *gi, t, m.row_height, w);
                         push_clip_name(&mut instances, &live, x, y, w, header_h, bw);
-                        // Contorno visível
-                        let border_col = if t == 6 { (0xDC, 0x14, 0x3C) } else { super::palette::ACCENT[t] };
-                        let th = 2.0;
+                        // Contorno visível (cor da waveform)
+                        let border_col = (0x26, 0x26, 0x26);
+                        let th = 4.0;
                         instances.push(RectInstance { x, y, w: draw_w, h: th, color: [border_col.0, border_col.1, border_col.2, 255],
                             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0 });
                     }
