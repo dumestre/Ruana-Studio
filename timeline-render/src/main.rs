@@ -275,6 +275,24 @@ fn build_text_instances(
                     }
                 }
             }
+        } else if ch == ':' {
+            let cx = start_x + i as f32 * (char_w + gap);
+            for row in [2, 5] {
+                for col in [3, 4] {
+                    instances.push(RectInstance {
+                        x: cx + col as f32,
+                        y: y + row as f32,
+                        w: 1.0,
+                        h: 1.0,
+                        color,
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
+                    });
+                }
+            }
         }
     }
     instances
@@ -1886,6 +1904,7 @@ impl winit::application::ApplicationHandler for AppHandler {
             // Initialize tools and set dark mode for Paper theme
             if let Some(app) = &self.app {
                 app.init_tools();
+                app.window.request_redraw();
             }
         }
     }
