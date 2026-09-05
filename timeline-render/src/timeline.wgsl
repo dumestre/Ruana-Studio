@@ -125,27 +125,45 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return in.frag_color;
     }
 
-    // Modo osciloscópio: interpolação LINEAR entre as duas colunas vizinhas.
-    // O dado já é uma função contínua (1 amostra por coluna), então `mix`
-    // entre [col] e [col+1] desenha exatamente a linha que liga os pontos.
+    // Modo osciloscópio com SDF ponto-segmento: para cada fragmento calcula a
+    // distância REAL ao segmento de reta [col, col+1] em pixels e desenha com
+    // espessura constante (~1.5px) + AA. Isso mantém a mesma bitola em toda a
+    // curva e conecta segmentos íngremes (acabando com pontinhos/vazios).
+    if wave_count < 2 {
+        return in.frag_color;
+    }
     let col = u32(floor(col_f));
     let next_col = min(col + 1u, wave_count - 1u);
-    let t = fract(col_f);
     let p0 = clamp(wave_bars[wave_offset + col], -1.0, 1.0);
     let p1 = clamp(wave_bars[wave_offset + next_col], -1.0, 1.0);
-    let s = mix(p0, p1, t);
 
-    // Window vertical: mapeia a amplitude em fração da altura do corpo.
+    // Pernas do segmento em PIXELS dentro do corpo do clip.
     let amp = 0.4; // metade da altura = 40% para cima/baixo = 80% total
     let center = 0.5;
-    let y_line = center - s * amp;
+    let px_per_col = select(
+        in.size.x / f32(wave_count),
+        natural_w / f32(wave_count),
+        natural_w > 0.0,
+    );
+    let ax = f32(col) * px_per_col;
+    let bx = f32(col + 1u) * px_per_col;
+    let ay = (center - p0 * amp) * in.size.y;
+    let by = (center - p1 * amp) * in.size.y;
+    let p = vec2<f32>(in.local.x * in.size.x, in.local.y * in.size.y);
 
-    // Espessura fixa da linha (~1.5px), sem dilatação por inclinação.
-    let d_px = abs(in.local.y - y_line) * in.size.y;
-    let line_width_px = 1.5;
-    if d_px <= line_width_px * 0.5 {
-        return vec4<f32>(0.012, 0.012, 0.012, 0.95);
+    // Distância ponto-segmento (SDF).
+    let ab = vec2<f32>(bx - ax, by - ay);
+    let ap = p - vec2<f32>(ax, ay);
+    let ab2 = dot(ab, ab);
+    let t2 = select(1.0, dot(ap, ab) / ab2, ab2 > 0.0);
+    let closest = vec2<f32>(ax, ay) + ab * clamp(t2, 0.0, 1.0);
+    let dpx = distance(p, closest);
+
+    // Bitola constante com AA (feather de 1px).
+    let line_w = 1.5;
+    let alpha = 1.0 - smoothstep(line_w * 0.5 - 0.5, line_w * 0.5 + 0.5, dpx);
+    if alpha <= 0.0 {
+        return in.frag_color;
     }
-
-    return in.frag_color;
+    return vec4<f32>(0.012, 0.012, 0.012, 0.95 * alpha);
 }
