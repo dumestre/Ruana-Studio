@@ -1667,37 +1667,35 @@ impl App {
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
 
-        // Time ruler: marcas de tempo em segundos
+        // Time ruler: grid de tempo fixo com marcas major + minor
         let bpm = self.bpm;
         let pixels_per_second = self.px_per_beat * bpm / 60.0;
         if pixels_per_second > 0.0 {
-            // Escala: escolhe a granularidade baseada no zoom
-            // Se < 30px por segundo, marca a cada 1s; se < 60px, a cada 5s; etc.
             let px_per_sec = pixels_per_second;
             let step_seconds: f32 = if px_per_sec < 30.0 { 1.0 }
-                else if px_per_sec < 60.0 { 5.0 }
-                else if px_per_sec < 120.0 { 10.0 }
+                else if px_per_sec < 50.0 { 5.0 }
+                else if px_per_sec < 80.0 { 10.0 }
                 else { 30.0 };
 
             // Começa do primeiro segundo visível
             let start_sec = (self.scroll_x / pixels_per_second).floor();
             let end_sec = ((self.scroll_x + width) / pixels_per_second).ceil();
 
+            // Grid major (linhas altas + texto M:SS)
+            let major_col = rgba(palette::GRID_LINE[t], 140);
             let mut sec = start_sec;
             while sec <= end_sec {
                 let x = sec * pixels_per_second - self.scroll_x;
                 if x >= -20.0 && x <= width + 20.0 {
-                    // Linha vertical leve
                     instances.push(RectInstance {
-                        x, y: tr_y + 4.0, w: 1.0, h: tr_h - 6.0,
-                        color: [palette::GRID_LINE[t].0, palette::GRID_LINE[t].1, palette::GRID_LINE[t].2, 100],
+                        x, y: tr_y + 2.0, w: 1.0, h: tr_h - 6.0,
+                        color: major_col,
                         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
-                    // Texto do tempo (s:ms)
-                    let total_ms = (sec * 1000.0) as i64;
-                    let s = total_ms / 1000;
-                    let ms = total_ms % 1000;
-                    let time_str = format!("{}:{:03}", s, ms);
+                    let total_s = sec as i64;
+                    let m = total_s / 60;
+                    let s = total_s % 60;
+                    let time_str = format!("{}:{:02}", m, s);
                     let text_col = rgba(palette::TEXT_PRIMARY[t], 200);
                     instances.extend(build_text_instances(&time_str, x + 2.0, tr_y + 8.0, text_col));
                 }
