@@ -552,17 +552,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     // ========================================================================
-    // INTERPOLAÇÃO LINEAR
-    // ========================================================================
-
-    let _val =
-        mix(
-            v0,
-            v1,
-            t
-        );
-
-    // ========================================================================
     // CENTRO / AMPLITUDE
     // ========================================================================
 
@@ -606,58 +595,61 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         );
 
     // ========================================================================
-    // ZOOM BAIXO
-    // PREENCHIMENTO DA WAVEFORM
+    // TRANSAÇÃO: ENVELOPE (zoom baixo) ↔ CURVA CATMULL-ROM (zoom alto)
+    //
+    // env_weight = 1.0 → envelope cheio (preenchimento)
+    // env_weight = 0.0 → curva Catmull-ROM (traço fino)
+    //
+    // O envelope domina até px_per_sample = 1.0.
+    // A transição suave dura de 1.0 a 2.5, exigindo mais zoom para o traço.
     // ========================================================================
 
-    if px_per_sample < 1.0 {
-        let env_val =
-            mix(
-                abs(v0),
-                abs(v1),
-                t
-            );
+    let env_weight =
+        smoothstep(
+            2.5,
+            1.0,
+            px_per_sample
+        );
 
-        let y_top =
-            c - env_val * a;
+    // ========================================================================
+    // ENVELOPE (preenchimento simétrico, zoom baixo)
+    // ========================================================================
 
-        let y_bottom =
-            c + env_val * a;
+    let env_val =
+        mix(
+            abs(v0),
+            abs(v1),
+            t
+        );
 
-        let outside =
-            max(
-                y_top - p.y,
-                p.y - y_bottom
-            );
+    let y_top =
+        c - env_val * a;
 
-        let aa =
-            0.35;
+    let y_bottom =
+        c + env_val * a;
 
-        let cov =
+    let env_outside =
+        max(
+            y_top - p.y,
+            p.y - y_bottom
+        );
+
+    let env_aa =
+        0.35;
+
+    let env_cov =
+        max(
+            0.0,
             1.0 -
             smoothstep(
                 0.0,
-                aa,
-                outside
-            );
-
-        if cov > 0.001 {
-            return vec4<f32>(
-                wave_color.r,
-                wave_color.g,
-                wave_color.b,
-                cov
-            );
-        }
-
-        // Não é waveform.
-        // Portanto NÃO pinta o retângulo.
-        discard;
-    }
+                env_aa,
+                env_outside
+            )
+        );
 
     // ========================================================================
-    // ZOOM ALTO
-    // CURVA CATMULL-ROM
+    // CURVA CATMULL-ROM (zoom alto)
     // ========================================================================
 
     let prev_col =
@@ -781,23 +773,34 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // ESPESSURA COM TAPER
     // ========================================================================
 
-    let aa =
+    let curve_aa =
         clamp(
             fwidth(d_px),
             0.35,
             0.55
         );
 
-    let alpha =
+    let curve_alpha =
         1.0 -
         smoothstep(
-            wave_radius - aa,
-            wave_radius + aa,
+            wave_radius - curve_aa,
+            wave_radius + curve_aa,
             d_px
         );
 
+    // ========================================================================
+    // BLEND ENTRE ENVELOPE E CURVA
+    // ========================================================================
+
+    let final_alpha =
+        mix(
+            curve_alpha,
+            env_cov,
+            env_weight
+        );
+
     // Fora da waveform => transparente
-    if alpha <= 0.001 {
+    if final_alpha <= 0.001 {
         discard;
     }
 
@@ -806,6 +809,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         wave_color.r,
         wave_color.g,
         wave_color.b,
-        alpha
+        final_alpha
     );
 }
