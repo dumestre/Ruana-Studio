@@ -1789,34 +1789,36 @@ fn push_clip(
             body_alpha,
         );
 
-    // Header – retângulo superior com cantos arredondados (apenas canto superior).
-    // Garante que a soma do header e do corpo ocupe exatamente a altura da track.
-    let header_h_total = (header_h + clip_r).min(row_height);
-    instances.push(RectInstance {
-        x: x + bw,
-        y,
-        w: w,
-        h: header_h_total,
-        color: body_col, // mesmo tom usado no corpo
-        wave_offset: 0,
-        wave_count: 0,
-        clip_w: 0.0,
-        clip_h: header_h_total,
-        radius: clip_r,
-    });
-
     // Corpo – retângulo inferior com cantos arredondados apenas na parte de baixo.
-    let body_h_adj = if row_height > header_h_total { row_height - header_h_total } else { 0.0 };
+    // A altura do corpo é a altura total da track menos a altura do header.
+    let body_rect_h = (row_height - header_h).max(0.0);
     instances.push(RectInstance {
         x: x + bw,
         y: y + header_h,
         w: w,
-        h: body_h_adj,
+        h: body_rect_h,
         color: body_col,
         wave_offset: 0,
         wave_count: 0,
         clip_w: 0.0,
-        clip_h: body_h_adj,
+        clip_h: body_rect_h,
+        radius: clip_r,
+    });
+
+    // Header – retângulo superior com cantos arredondados (apenas canto superior).
+    // Usa a altura fixa do header (header_h) e garante que o total (header + corpo)
+    // preencha exatamente a altura da track (row_height).
+    let header_rect_h = header_h;
+    instances.push(RectInstance {
+        x: x + bw,
+        y,
+        w: w,
+        h: header_rect_h,
+        color: body_col, // mesmo tom usado no corpo
+        wave_offset: 0,
+        wave_count: 0,
+        clip_w: 0.0,
+        clip_h: header_rect_h,
         radius: clip_r,
     });
 
