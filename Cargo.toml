@@ -8,8 +8,6 @@ members = [
     "crates/daw-midi",
     "crates/daw-plugins",
     "crates/daw-project",
-    "waveformlab",
-    "playheadlab",
     "timeline-render",
 ]
 
