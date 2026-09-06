@@ -499,10 +499,20 @@ impl App {
                 } else {
                     // comportamento padrão já existente
                     if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+                        // Se o clip clicado já está selecionado, mantém a
+                        // multiseleção (arrasta todos selecionados). Senão,
+                        // colapsa para o grupo de glue.
+                        let already_selected = self
+                            .clip_interaction
+                            .selected
+                            .get(idx)
+                            .copied()
+                            .unwrap_or(false);
                         self.clip_interaction.begin_drag(&self.clips, pos, &cm);
-                        // Seleciona todo o grupo de clips grudados
-                        let chain = clips::ClipInteraction::find_group(&self.clips, idx);
-                        self.clip_interaction.select_chain(&self.clips, &chain);
+                        if !already_selected {
+                            let chain = clips::ClipInteraction::find_group(&self.clips, idx);
+                            self.clip_interaction.select_chain(&self.clips, &chain);
+                        }
                         self.edge_scroll_x = 0.0;
                         self.edge_scroll_y = 0.0;
                         self.edge_scroll_dir = 0;

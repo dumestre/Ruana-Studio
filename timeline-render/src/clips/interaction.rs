@@ -337,7 +337,22 @@ impl ClipInteraction {
             self.stretch_mode = false;
             self.hover_idx = None;
 
-            let group = Self::find_group(clips, idx);
+            let mut group = Self::find_group(clips, idx);
+
+            // Se o clip clicado estiver selecionado e houver multiseleção,
+            // arrasta TODOS os clips selecionados (não só a cadeia de glue).
+            if self.selected.get(idx).copied().unwrap_or(false)
+                && self.selected.iter().filter(|&&s| s).count() > 1
+            {
+                for (i, _c) in clips.iter().enumerate() {
+                    if i != idx
+                        && self.selected.get(i).copied().unwrap_or(false)
+                        && !group.contains(&i)
+                    {
+                        group.push(i);
+                    }
+                }
+            }
 
             self.drag_group = group
                 .iter()
