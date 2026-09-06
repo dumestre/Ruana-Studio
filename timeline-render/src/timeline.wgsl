@@ -301,8 +301,12 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var a: f32 = amp_y;
 
     // Tamanho real (em pixels) de cada amostra na tela.
-    let stretch = max(in.size.x / max(natural_w, 0.001), 1.0);
-    let px_per_sample = clamp((natural_w / f32(wave_count - 1u)) * stretch, 0.001, 1000.0);
+    // Quando natural_w <= 0 (marcador stereo L/mono-center), usa a
+    // largura do rect — senão o cálculo dá valores absurdo e o fill
+    // mode ativa sempre, mesmo no zoom alto.
+    let actual_w = select(natural_w, in.size.x, natural_w <= 0.0);
+    let stretch = max(in.size.x / max(actual_w, 0.001), 1.0);
+    let px_per_sample = clamp((actual_w / f32(wave_count - 1u)) * stretch, 0.001, 1000.0);
 
     // Modo preenchido (zoom baixo): entre y_bottom e y_top.
     if px_per_sample < 1.0 {
