@@ -1031,8 +1031,8 @@ theme: 6,
             };
             // Insere o clip
             self.clips.push(clip);
-            // Insere um fade correspondente (mesmo que o placeholder usa)
-            self.fades.push(fades::ClipFade::default());
+            // Insere um fade zerado (sem fade in/out) para clip importado
+            self.fades.push(fades::ClipFade::none());
             // Atualiza buffers de waveform
             self.rebuild_wave_data();
             self.window.request_redraw();
