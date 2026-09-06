@@ -727,8 +727,9 @@ impl App {
             }
         }
 
-        // Snap magnético: quando o cursor está perto de um handle, puxa-o
-        // para o centro exato da bolinha para arrasto preciso.
+        // Snap magnético: quando o cursor chega perto de um handle, puxa-o
+        // para o centro exato da bolinha — uma vez só. Após o snap, o cursor
+        // pode sair livremente (sem resistência) até perder o hover.
         if !self.scrubbing
             && !self.clip_interaction.is_dragging()
             && !self.fade_interaction.is_dragging()
@@ -755,17 +756,24 @@ impl App {
                         let dist_sq =
                             (pos.0 - hx) * (pos.0 - hx) + (pos.1 - hy) * (pos.1 - hy);
                         let snap_threshold = 14.0;
-                        if dist_sq <= snap_threshold * snap_threshold {
+                        // Snap apenas se ainda não foi disparado nesta sessão de hover
+                        if !self.fade_interaction.snap_active
+                            && dist_sq <= snap_threshold * snap_threshold
+                        {
                             use winit::dpi::LogicalPosition;
                             let _ = self
                                 .window
                                 .set_cursor_position(LogicalPosition::new(hx, hy));
                             self.cursor_warp_pending = true;
                             self.last_cursor = (hx, hy);
+                            self.fade_interaction.snap_active = true;
                         }
                     }
                 }
             }
+        } else {
+            // Cursor saiu do hover — reseta o flag para permitir snap novamente
+            self.fade_interaction.snap_active = false;
         }
 
 
@@ -827,15 +835,10 @@ if self.fade_interaction.is_dragging() {
         }
         self.last_cursor = constrained;
 
-        // Se o cursor foi ajustado por trava de eixo, reposiciona o cursor do SO
-        // para que ele "grude" visualmente ao handle.
-        if constrained != pos {
-            use winit::dpi::LogicalPosition;
-            let _ = self
-                .window
-                .set_cursor_position(LogicalPosition::new(constrained.0, constrained.1));
-            self.cursor_warp_pending = true;
-        }
+        // O cursor físico NÃO é repospicionado durante o arrasto (trava de eixo).
+        // O lock já é aplicado em `update_drag` (dx/dy = 0) e aqui via `constrained`
+        // para o cálculo de panning. Warpar o cursor a cada frame causa jitter
+        // por loop de feedback (warp → CursorMoved → warp → ...).
     }
 
     /// Detecta quando o cursor está perto das bordas da janela durante um

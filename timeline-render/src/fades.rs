@@ -190,6 +190,10 @@ pub struct ActiveFadeDrag {
 pub struct FadeInteraction {
     pub hovered: Option<(usize, FadeHandleKind)>,
     pub active_drag: Option<ActiveFadeDrag>,
+    /// True após o snap magnético disparar uma vez — evita "resistência" de
+    /// puxar o cursor de volta ao handle a cada frame. Resetado quando o
+    /// hover se perde.
+    pub snap_active: bool,
 }
 
 impl FadeInteraction {
