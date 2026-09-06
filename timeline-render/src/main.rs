@@ -24,7 +24,8 @@ use std::sync::{Arc, Mutex};
 use clips::ClipDemo;
 use tools::{Tool, init_tool_manager, set_tool, current_tool, set_dark_mode, update_cursor, set_cursor_override};
 use raw_window_handle::HasWindowHandle;
-use windows_sys::Win32::Foundation::HWND;
+use windows_sys::Win32::Foundation::{HWND, POINT};
+use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use std::time::Instant;
 
@@ -113,6 +114,24 @@ pub mod palette {
 }
 
 pub(crate) fn rgba((r, g, b): palette::Rgb, a: u8) -> [u8; 4] { [r, g, b, a] }
+
+/// Obtém a posição atual do cursor em coordenadas lógicas da janela, usando
+/// `GetCursorPos` (Win32) porque durante o arrasto de um arquivo o sistema
+/// operacional não envia eventos `CursorMoved` para a janela.
+fn current_cursor_pos(window: &Window) -> Option<(f32, f32)> {
+    unsafe {
+        let mut pt = POINT { x: 0, y: 0 };
+        if GetCursorPos(&mut pt) != 0 {
+            let window_pos = window.outer_position().ok()?;
+            let scale = window.scale_factor();
+            let x = (pt.x - window_pos.x) as f32 / scale as f32;
+            let y = (pt.y - window_pos.y) as f32 / scale as f32;
+            Some((x, y))
+        } else {
+            None
+        }
+    }
+}
 pub(crate) fn darker((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
     let f = (1.0 - amount).max(0.0);
     (
@@ -372,6 +391,7 @@ struct App {
         // ---------- estado para preview de drop de áudio ----------
         drop_path: Option<String>,            // caminho do arquivo arrastado
         drop_preview: Option<DropPreview>,   // preview visual enquanto ainda não inserido
+        is_dragging_file: bool,              // true enquanto um arquivo está sendo arrastado sobre a janela
         // ------------------------------------------------------------
 }
 
@@ -625,6 +645,7 @@ theme: 6,
             follow_playhead: false,
             drop_path: None,
             drop_preview: None,
+            is_dragging_file: false,
         })
     }
 
@@ -1393,6 +1414,15 @@ theme: 6,
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
             self.clamp_scroll_y(self.size.height as f32);
         }
+        // Atualiza a posição do preview de áudio arrastado
+        if self.drop_preview.is_some() {
+            let (beat, track) = self.cursor_to_snapped_beat_track(pos);
+            if let Some(preview) = self.drop_preview.as_mut() {
+                preview.beat = beat;
+                preview.track = track;
+            }
+        }
+
         self.last_cursor = pos;
     }
 
@@ -1655,6 +1685,28 @@ theme: 6,
             &cm,
             width,
         ));
+
+        // Renderiza preview de áudio arrastado (se houver)
+        if let Some(preview) = &self.drop_preview {
+            let row_height = 64.0 * self.zoom_y;
+            let x = preview.beat * self.px_per_beat - self.scroll_x;
+            let y = self.ruler_px + preview.track as f32 * row_height - self.scroll_y;
+            let w = if preview.len_beats > 0.0 { preview.len_beats * self.px_per_beat } else { 4.0 * self.px_per_beat };
+            let h = row_height;
+            let col = rgba(palette::ACCENT[t], 80);
+            instances.push(RectInstance {
+                x,
+                y,
+                w,
+                h,
+                color: col,
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
+            });
+        }
 
         // Renderiza Fades (In / Out), Curvas Bézier, Nível de Ganho e Bolinhas/Handles
         for (i, clip) in self.clips.iter().enumerate() {
@@ -2204,6 +2256,20 @@ impl winit::application::ApplicationHandler for AppHandler {
                     app.update_edge_scroll(app.last_cursor);
                     app.apply_edge_scroll();
                 }
+                // Se um arquivo estiver sendo arrastado, atualiza a posição do preview
+                // usando a posição global do cursor (já que o OS não envia CursorMoved
+                // durante drag de arquivo).
+                if app.is_dragging_file {
+                    if let Some(pos) = current_cursor_pos(&app.window) {
+                        app.last_cursor = pos;
+                        let (beat, track) = app.cursor_to_snapped_beat_track(pos);
+                        if let Some(preview) = app.drop_preview.as_mut() {
+                            preview.beat = beat;
+                            preview.track = track;
+                        }
+                    }
+                    app.window.request_redraw();
+                }
                 app.render();
                 // Continua o loop de redraw enquanto o drag está ativo e há
                 // scroll ativo (para rolar continuamente na borda)
@@ -2387,10 +2453,35 @@ impl winit::application::ApplicationHandler for AppHandler {
                     || app.clip_interaction.is_seam_hovered()
                     || app.fade_interaction.hovered.is_some()
                     || app.fade_interaction.is_dragging()
+                    || app.drop_preview.is_some()
                     || current_tool() == Tool::Slice || current_tool() == Tool::Stretch {
                     app.window.request_redraw();
                 }
             }
+            WindowEvent::HoveredFile(path) => {
+                if let Some(p) = path.to_str() {
+                    let ext = std::path::Path::new(p)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_lowercase())
+                        .unwrap_or_default();
+                    if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
+                        // calcula beat/track onde o cursor está
+                        let (beat, track) = app.cursor_to_snapped_beat_track(app.last_cursor);
+                        app.drop_path = Some(p.to_string());
+                        app.drop_preview = Some(DropPreview { beat, track, len_beats: 0.0 });
+                        app.is_dragging_file = true;
+                        app.window.request_redraw();
+                    }
+                }
+            },
+            WindowEvent::HoveredFileCancelled => {
+                // Limpa preview se o usuário abandona o arrasto
+                app.drop_preview = None;
+                app.drop_path = None;
+                app.is_dragging_file = false;
+                app.window.request_redraw();
+            },
             WindowEvent::DroppedFile(path) => {
                 if let Some(p) = path.to_str() {
                     let ext = std::path::Path::new(p)
@@ -2399,8 +2490,14 @@ impl winit::application::ApplicationHandler for AppHandler {
                         .map(|e| e.to_lowercase())
                         .unwrap_or_default();
                     if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
-                        let (beat, track) = app.cursor_to_snapped_beat_track((0.0, app.ruler_px));
+                        // Usa a posição atual do cursor para inserir o áudio
+                        let (beat, track) = app.cursor_to_snapped_beat_track(app.last_cursor);
                         app.load_audio_file(p, beat, track);
+                        // Limpa o estado de drag de arquivo
+                        app.drop_preview = None;
+                        app.drop_path = None;
+                        app.is_dragging_file = false;
+                        app.window.request_redraw();
                     }
                 }
             }
