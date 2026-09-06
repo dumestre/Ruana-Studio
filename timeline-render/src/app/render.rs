@@ -264,15 +264,23 @@ impl App {
         let _total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
         let row_height = 64.0 * self.zoom_y;
 
+        // Altura efetiva da timeline (encolhe quando piano roll está visível)
+        let piano_roll_area = if self.show_piano_roll {
+            self.piano_roll_height + 4.0 // 4px = altura da splitter
+        } else {
+            0.0
+        };
+        let timeline_bottom = (height - self.time_ruler_h - piano_roll_area).max(self.ruler_px + 4.0);
+
         // Sincroniza notas MIDI do daw-core (fonte de verdade) para o cache do wgpu
         if self.show_piano_roll {
             self.sync_piano_roll_from_core();
         }
 
-        // Fundo geral - cobre desde a régua até o fundo
+        // Fundo geral - cobre desde a régua até o fim da timeline (não o piano roll)
         instances.push(RectInstance {
             x: 0.0, y: self.ruler_px,
-            w: width, h: (height - self.ruler_px - self.time_ruler_h).max(0.0),
+            w: width, h: (timeline_bottom - self.ruler_px).max(0.0),
             color: rgba(palette::TIMELINE_BG[t], 255),
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
@@ -313,7 +321,7 @@ impl App {
                 palette::SURFACE_STEP[t]
             };
             let bw = px_per_bar;
-            let bh = (height - self.ruler_px - self.time_ruler_h + self.scroll_y).max(0.0); // corpo abaixo da régua, inclui scroll_y
+            let bh = (timeline_bottom - self.ruler_px + self.scroll_y).max(0.0);
             if bw > 0.0 && bh > 0.0 {
                 instances.push(RectInstance {
                     x: bx, y: self.ruler_px - self.scroll_y, w: bw, h: bh,
@@ -413,7 +421,7 @@ impl App {
 
         // Separadores horizontais entre as tracks (row separators). Francem a
         // largura toda do corpo e rolam verticalmente junto com scroll_y.
-        let view_bottom = height - self.time_ruler_h;
+        let view_bottom = timeline_bottom;
         let max_track = self.clips.iter().map(|c| c.track_index as i32).max().unwrap_or(-1);
         // FICA: sempre ao menos 1 track visível (uma track padrão).
         let track_count = ((max_track + 1).max(1)) as usize;
@@ -615,7 +623,7 @@ impl App {
         let head_x = self.transport_seconds * pixels_per_second - self.scroll_x;
             instances.push(RectInstance {
                 x: head_x - 1.0, y: 1.0,
-                w: 2.0, h: height - 1.0,
+                w: 2.0, h: timeline_bottom - 1.0,
                 color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 255],
                 wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
                 radius: 0.0,
@@ -641,7 +649,7 @@ impl App {
             let lw = (ex - sx).max(0.0);
             let bw = 6.0; // grossura das bordas laterais (alças)
             let body_top = self.ruler_px;
-        let body_h = (height - self.ruler_px - self.time_ruler_h).max(0.0);
+        let body_h = (timeline_bottom - self.ruler_px).max(0.0);
 
             if lw > 0.0 {
                 // Centro que desce toda a timeline — mais translúcido ainda.
@@ -699,7 +707,7 @@ impl App {
                 let col = (0x26, 0x26, 0x26);
                 instances.push(RectInstance {
                     x: cx - 1.0, y: self.ruler_px,
-                    w: 2.0, h: (height - self.ruler_px - self.time_ruler_h).max(0.0),
+                    w: 2.0, h: (timeline_bottom - self.ruler_px).max(0.0),
                     color: [col.0, col.1, col.2, 180],
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });

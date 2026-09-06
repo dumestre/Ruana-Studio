@@ -523,9 +523,13 @@ impl App {
         }
 
         // Intercepta clique dentro da área do piano roll (quando visível)
-        if self.show_piano_roll && pos.1 >= self.ruler_px + (self.size.height as f32 - self.ruler_px - self.time_ruler_h - self.piano_roll_height) {
-            self.handle_piano_roll_click(state, pos);
-            return;
+        if self.show_piano_roll {
+            let height = self.size.height as f32;
+            let timeline_bottom = (height - self.time_ruler_h - self.piano_roll_height - 4.0).max(self.ruler_px + 4.0);
+            if pos.1 >= timeline_bottom {
+                self.handle_piano_roll_click(state, pos);
+                return;
+            }
         }
 
         self.clip_interaction.sync_selection(self.clips.len());
@@ -948,7 +952,10 @@ impl App {
         let cm = self.clip_metrics();
         let mut m = super::piano_roll::PianoRollMetrics::from_clip_metrics(&cm, self.piano_roll_height);
         m.scroll_y = self.piano_roll_scroll_y;
-        m.ruler_px = self.ruler_px;
+        // O topo do piano roll é abaixo da timeline (encolhida quando PR visível).
+        let height = self.size.height as f32;
+        let timeline_bottom = (height - self.time_ruler_h - self.piano_roll_height - 4.0).max(self.ruler_px + 4.0);
+        m.ruler_px = timeline_bottom;
         m
     }
 
