@@ -421,16 +421,26 @@ pub fn build_clip_fade_instances(
     // Área de ganho: faixa de 14px no topo do corpo do clip.
     let gain_area_h = 14.0;
     let gain_area_y = body_y;
-    let gain_norm_y = fade.gain_to_norm_y();
-    // Brilho de hover na área de ganho (só desenha quando hover)
+    // Fundo dourado suave da área de ganho, sempre visível
+    instances.push(RectInstance {
+        x: body_x,
+        y: gain_area_y,
+        w: body_w,
+        h: gain_area_h,
+        color: [255, 215, 0, 60],
+        wave_offset: 0,
+        wave_count: 0,
+        clip_w: 0.0,
+        clip_h: 0.0,
+        radius: 0.0,
+    });
     if is_hovered(FadeHandleKind::GainLevel) {
-        let glow_alpha: u8 = 60;
         instances.push(RectInstance {
             x: body_x,
             y: gain_area_y,
             w: body_w,
             h: gain_area_h,
-            color: [255, 215, 0, glow_alpha], // dourado suave
+            color: [255, 215, 90, 90],
             wave_offset: 0,
             wave_count: 0,
             clip_w: 0.0,
@@ -438,20 +448,6 @@ pub fn build_clip_fade_instances(
             radius: 0.0,
         });
     }
-    // Indicador de nível (linha) dentro da área de ganho — sempre visível
-    let gain_line_y = gain_area_y + gain_norm_y * gain_area_h;
-    instances.push(RectInstance {
-        x: body_x + 4.0,
-        y: gain_line_y - 1.0,
-        w: body_w - 8.0,
-        h: 2.0,
-        color: [255, 215, 0, 240],
-        wave_offset: 0,
-        wave_count: 0,
-        clip_w: 0.0,
-        clip_h: 0.0,
-        radius: 0.0,
-    });
 }
 
 // ============================================================================
