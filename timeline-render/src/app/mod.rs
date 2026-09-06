@@ -28,6 +28,13 @@ use crate::waveform;
 // regenerar o buffer EM CONJUNTO com `wave_segments` — os dois andam juntos.
 pub const WAVE_PPB: f32 = 40.0;
 
+/// Snapshot do projeto para undo/redo: clips + fades (estado editável).
+#[derive(Clone)]
+pub struct TimelineSnapshot {
+    pub clips: Vec<clips::ClipDemo>,
+    pub fades: Vec<fades::ClipFade>,
+}
+
 /// Estrutura temporária para exibir o preview de um áudio arrastado antes da inserção.
 pub struct DropPreview {
     pub beat: f32,
@@ -107,6 +114,17 @@ pub struct App {
 
     pub focus_saved: Option<(f32, f32, f32)>,
     pub clipboard: Vec<clips::ClipDemo>,
+
+    pub undo_stack: Vec<TimelineSnapshot>,
+    pub redo_stack: Vec<TimelineSnapshot>,
+
+    /// Paths dos arquivos em preview de drag & drop (acumulados; winit envia um
+    /// `DroppedFile` por arquivo). Importados em lote após o fim do arrasto.
+    pub drop_paths: Vec<String>,
+    /// Aguarda período de silêncio (sem novos drops) antes de importar o lote.
+    pub pending_drop_import: bool,
+    /// Momento do último `DroppedFile` (para detectar fim do lote).
+    pub last_drop_instant: Instant,
 
         // Auto-scroll nas bordas durante drag de clips.
         // Quando o cursor se aproxima de uma borda durante um arrasto ativo,
@@ -295,14 +313,9 @@ impl App {
         });
 
         // === Dados demo ===
-        let mut clips = vec![
-            clips::ClipDemo { track_index: 0, beat: 0.0, len: 8.0, is_midi: false, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
-            clips::ClipDemo { track_index: 0, beat: 10.0, len: 4.0, is_midi: true, color: 0, name: Some("Bass".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
-            clips::ClipDemo { track_index: 1, beat: 2.0, len: 12.0, is_midi: false, color: 3, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
-            clips::ClipDemo { track_index: 2, beat: 0.0, len: 16.0, is_midi: false, color: 1, name: Some("Lead".to_string()), seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
-            clips::ClipDemo { track_index: 2, beat: 18.0, len: 6.0, is_midi: true, color: 0, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
-            clips::ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
-        ];
+        // Abre com apenas UMA track padrão, sem clips. O usuário importa o
+        // áudio (por drag & drop ou menu) e a timeline cria as tracks.
+        let mut clips: Vec<clips::ClipDemo> = Vec::new();
 
         // Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
         // (a fonte da verdade). Buffer e segmentação derivam disso.
@@ -365,6 +378,13 @@ impl App {
             focus_saved: None,
             clipboard: Vec::new(),
 
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+
+            drop_paths: Vec::new(),
+            pending_drop_import: false,
+            last_drop_instant: Instant::now(),
+
             edge_scroll_x: 0.0,
             edge_scroll_y: 0.0,
             edge_scroll_dir: 0,
@@ -412,6 +432,7 @@ impl App {
             scroll_y: self.scroll_y,
             ruler_px: self.ruler_px,
             theme: self.theme.clamp(0, 6) as usize,
+            max_track: self.clips.iter().map(|c| c.track_index).max().unwrap_or(0),
         }
     }
 
@@ -421,6 +442,7 @@ impl App {
     pub fn clamp_scroll_y(&mut self, height: f32) {
         let row_height = 64.0 * self.zoom_y.max(0.001);
         let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
+        // Sempre mostra ao menos 1 track (uma track padrão visível).
         let content_h = (max_track as f32 + 1.0) * row_height;
         let view_h = (height - self.ruler_px - self.time_ruler_h).max(0.0);
         if content_h <= view_h {

@@ -73,6 +73,11 @@ impl ClipInteraction {
         self.drag_idx.is_some()
     }
 
+    /// True se o arrasto atual envolveu movimento real (não um simples clique).
+    pub fn did_drag_move(&self) -> bool {
+        self.drag_moved
+    }
+
     pub fn is_marqueeing(&self) -> bool {
         self.marquee_active
     }
@@ -99,6 +104,13 @@ impl ClipInteraction {
 
         if idx < self.selected.len() {
             self.selected[idx] = true;
+        }
+    }
+
+    /// Seleciona todos os clips.
+    pub fn select_all(&mut self) {
+        for s in self.selected.iter_mut() {
+            *s = true;
         }
     }
 
@@ -446,7 +458,7 @@ impl ClipInteraction {
             let row_delta =
                 (dy / m.row_height.max(0.001)).round();
 
-            let n_tracks = 4;
+            let n_tracks = (m.max_track + 1).max(1);
 
             let live_track =
                 (self.drag_orig_track as f32 + row_delta)
@@ -463,7 +475,7 @@ impl ClipInteraction {
     pub fn end_drag(
         &mut self,
         clips: &mut [ClipDemo],
-        _m: &ClipMetrics,
+        m: &ClipMetrics,
         snap: bool,
     ) {
         if let Some(idx) = self.drag_idx {
@@ -525,7 +537,7 @@ impl ClipInteraction {
                         let new_track =
                             (*orig_track as i32
                                 + track_delta)
-                                .clamp(0, 3)
+                                .clamp(0, (m.max_track + 1).max(1) as i32 - 1)
                                 as usize;
 
                         clips[*gi].track_index =

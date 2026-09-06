@@ -18,8 +18,8 @@ impl App {
             .map(|c| c.track_index)
             .max()
             .map(|m| m + 1)
-            .unwrap_or(4)
-            .max(4);
+            .unwrap_or(1)
+            .max(1);
 
         let mut tracks = Vec::with_capacity(track_count);
         for i in 0..track_count {
@@ -69,6 +69,94 @@ impl App {
         }
     }
 
+    /// Importa vários arquivos de áudio, cada um em uma track diferente.
+    /// Se o número de arquivos exceder as tracks existentes, cria tracks
+    /// adicionais automaticamente. Os clips começam no beat informado.
+    pub fn import_audio_files(&mut self, paths: &[String], start_beat: f32) {
+        if paths.is_empty() {
+            return;
+        }
+
+        // A próxima track livre é a que sucede a maior track em uso.
+        let start_track = self
+            .clips
+            .iter()
+            .map(|c| c.track_index)
+            .max()
+            .map(|m| m + 1)
+            .unwrap_or(0);
+
+        // Registra undo UMA vez para o lote inteiro (atomic).
+        use daw_media::waveform::decode_audio;
+        self.record_undo();
+
+        for (i, path) in paths.iter().enumerate() {
+            let track = start_track + i;
+            let Ok(data) = decode_audio(Path::new(path)) else {
+                eprintln!("falha ao decodificar {}: arquivo inválido", path);
+                continue;
+            };
+
+            let bpm = self.bpm;
+            let beats_per_second = bpm / 60.0;
+            let source_length_beats = data.duration_seconds as f32 * beats_per_second;
+
+            let mut clip = clips::ClipDemo {
+                track_index: track,
+                beat: start_beat,
+                len: source_length_beats,
+                is_midi: false,
+                color: 1 + (i % 10),
+                name: Some(Path::new(path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Audio")
+                    .to_string()),
+                seam_beat: None,
+                pre_glue_len: None,
+                pre_glue_color: None,
+                wave: Vec::new(),
+                file_path: Some(path.to_string()),
+                source_start_beats: 0.0,
+                source_length_beats,
+                channels: data.channels,
+            };
+
+            // Gera a waveform (real ou procedural)
+            let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
+            clip.wave = match waveform::decode_real_wave(path, n_cols) {
+                Ok(w) => w,
+                Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
+            };
+
+            self.clips.push(clip);
+            self.fades.push(fades::ClipFade::none());
+        }
+
+        self.rebuild_wave_data();
+        self.window.request_redraw();
+    }
+
+    /// Importa o lote de arquivos acumulados pelo drag & drop quando há um
+    /// período de silêncio (sem novos `DroppedFile`). O winit entrega um evento
+    /// por arquivo; aguardar uns milissegundos garante que o lote fique completo.
+    pub fn process_pending_drop_import(&mut self) {
+        if !self.pending_drop_import {
+            return;
+        }
+        if self.last_drop_instant.elapsed().as_millis() < 80 {
+            self.window.request_redraw();
+            return;
+        }
+        let paths = std::mem::take(&mut self.drop_paths);
+        self.pending_drop_import = false;
+        if paths.is_empty() {
+            return;
+        }
+        let (beat, _track) = self.cursor_to_snapped_beat_track(self.last_cursor);
+        self.import_audio_files(&paths, beat);
+    }
+
     /// Carrega um arquivo de áudio e cria um clip na posição especificada.
     pub fn load_audio_file(&mut self, path: &str, beat: f32, track: usize) {
         // Esta função cria um clip de áudio a partir de um arquivo e garante
@@ -80,6 +168,7 @@ impl App {
 
         match decode_audio(Path::new(path)) {
             Ok(data) => {
+                self.record_undo();
                 let _sample_rate = data.sample_rate;
                 let channels = data.channels;
                 let bpm = self.bpm;

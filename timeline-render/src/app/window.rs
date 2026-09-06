@@ -81,6 +81,10 @@ impl ApplicationHandler for AppHandler {
             }
             WindowEvent::RedrawRequested => {
                 app.update_playhead();
+                // Importa em lote quando o drag & drop terminar (período de silêncio)
+                if app.pending_drop_import {
+                    app.process_pending_drop_import();
+                }
                 // Auto-scroll contínuo nas bordas durante drag ativo (mesmo com
                 // cursor parado). A detecção usa a última posição do cursor conhecida.
                 if app.clip_interaction.is_dragging() {
@@ -177,11 +181,28 @@ impl ApplicationHandler for AppHandler {
                         _ => {}
                     }
                 }
-                // Clipboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+D, Delete, Backspace)
+                // Clipboard/editing shortcuts (Ctrl+C, Ctrl+V, Ctrl+D, Ctrl+A,
+                // Ctrl+Z, Ctrl+Y, Delete, Backspace)
                 if pressed && self.ctrl_pressed {
                     match vk {
                         Key::Character(ref s) if s.eq_ignore_ascii_case("c") => {
                             app.copy_selected();
+                            app.window.request_redraw();
+                        }
+                        Key::Character(ref s) if s.eq_ignore_ascii_case("a") => {
+                            app.select_all();
+                            app.window.request_redraw();
+                        }
+                        Key::Character(ref s) if s.eq_ignore_ascii_case("z") => {
+                            if self.shift_pressed {
+                                app.redo();
+                            } else {
+                                app.undo();
+                            }
+                            app.window.request_redraw();
+                        }
+                        Key::Character(ref s) if s.eq_ignore_ascii_case("y") => {
+                            app.redo();
                             app.window.request_redraw();
                         }
                         Key::Character(ref s) if s.eq_ignore_ascii_case("v") => {
@@ -251,8 +272,7 @@ impl ApplicationHandler for AppHandler {
                             let row_height = 64.0 * app.zoom_y.max(0.001);
                             let track = ((pos.1 - app.ruler_px + app.scroll_y) / row_height)
                                 .floor()
-                                .max(0.0)
-                                .min(3.0) as usize;
+                                .max(0.0) as usize;
                             app.paste_at_beat(beat.round().max(0.0), track);
                             app.window.request_redraw();
                         } else {
@@ -296,6 +316,10 @@ impl ApplicationHandler for AppHandler {
                         .map(|e| e.to_lowercase())
                         .unwrap_or_default();
                     if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
+                        // acumula o path para importação em lote
+                        if !app.drop_paths.contains(&p.to_string()) {
+                            app.drop_paths.push(p.to_string());
+                        }
                         // calcula beat/track onde o cursor está
                         let (beat, track) = app.cursor_to_snapped_beat_track(app.last_cursor);
                         app.drop_path = Some(p.to_string());
@@ -309,6 +333,8 @@ impl ApplicationHandler for AppHandler {
                 // Limpa preview se o usuário abandona o arrasto
                 app.drop_preview = None;
                 app.drop_path = None;
+                app.drop_paths.clear();
+                app.pending_drop_import = false;
                 app.is_dragging_file = false;
                 app.window.request_redraw();
             },
@@ -320,9 +346,12 @@ impl ApplicationHandler for AppHandler {
                         .map(|e| e.to_lowercase())
                         .unwrap_or_default();
                     if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
-                        // Usa a posição atual do cursor para inserir o áudio
-                        let (beat, track) = app.cursor_to_snapped_beat_track(app.last_cursor);
-                        app.load_audio_file(p, beat, track);
+                        // acumula; importa em lote após o fim do arrasto
+                        if !app.drop_paths.contains(&p.to_string()) {
+                            app.drop_paths.push(p.to_string());
+                        }
+                        app.pending_drop_import = true;
+                        app.last_drop_instant = Instant::now();
                         // Limpa o estado de drag de arquivo
                         app.drop_preview = None;
                         app.drop_path = None;

@@ -137,12 +137,62 @@ impl App {
         }
     }
 
+    /// Seleciona todos os clips da timeline.
+    pub fn select_all(&mut self) {
+        self.clip_interaction.sync_selection(self.clips.len());
+        self.clip_interaction.select_all();
+    }
+
+    /// Registra um snapshot do estado atual (clips + fades) na pilha de undo.
+    /// Limpa a pilha de redo (novo ramo de edição). Deve ser chamado ANTES de
+    /// qualquer mutação estrutural (import, paste, slice, erase, etc.).
+    pub fn record_undo(&mut self) {
+        use crate::app::TimelineSnapshot;
+        self.undo_stack.push(TimelineSnapshot {
+            clips: self.clips.clone(),
+            fades: self.fades.clone(),
+        });
+        self.redo_stack.clear();
+    }
+
+    /// Desfaz a última edição estrutural (clips + fades).
+    pub fn undo(&mut self) {
+        use crate::app::TimelineSnapshot;
+        if let Some(snap) = self.undo_stack.pop() {
+            // O estado atual vai para o redo (permite refazer).
+            self.redo_stack.push(TimelineSnapshot {
+                clips: self.clips.clone(),
+                fades: self.fades.clone(),
+            });
+            self.clips = snap.clips;
+            self.fades = snap.fades;
+            self.clip_interaction.sync_selection(self.clips.len());
+            self.rebuild_wave_data();
+        }
+    }
+
+    /// Refaz a edição que foi desfeita.
+    pub fn redo(&mut self) {
+        use crate::app::TimelineSnapshot;
+        if let Some(snap) = self.redo_stack.pop() {
+            self.undo_stack.push(TimelineSnapshot {
+                clips: self.clips.clone(),
+                fades: self.fades.clone(),
+            });
+            self.clips = snap.clips;
+            self.fades = snap.fades;
+            self.clip_interaction.sync_selection(self.clips.len());
+            self.rebuild_wave_data();
+        }
+    }
+
     /// Cola os clips do clipboard na posição alvo (beat, track), com snap ao grid (1 beat).
     /// Mantém a estrutura relativa dos clips copiados.
     pub fn paste_at_beat(&mut self, target_beat: f32, target_track: usize) {
         if self.clipboard.is_empty() {
             return;
         }
+        self.record_undo();
         // Encontra o beat mínimo dos clips copiados para manter offsets relativos
         let min_beat = self.clipboard.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
         let snap_beat = target_beat.round().max(0.0);
@@ -150,10 +200,12 @@ impl App {
         // Track offset: usa a track do primeiro clip copiado como referência
         let min_track = self.clipboard.iter().map(|c| c.track_index).min().unwrap_or(0);
         let track_offset = target_track as i32 - min_track as i32;
+        let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
         for clip in &self.clipboard {
             let mut new_clip = clip.clone();
             new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
-            new_clip.track_index = (clip.track_index as i32 + track_offset).clamp(0, 3) as usize;
+            new_clip.track_index = (clip.track_index as i32 + track_offset)
+                .clamp(0, (max_track + 1).max(1) as i32 - 1) as usize;
             self.clips.push(new_clip);
         }
         // Seleciona os clips colados
@@ -183,6 +235,7 @@ impl App {
         if selected_indices.is_empty() {
             return;
         }
+        self.record_undo();
         // Encontra o clip que termina mais tarde (maior beat + len)
         let max_end = selected_indices.iter()
             .map(|&i| self.clips[i].beat + self.clips[i].len)
@@ -223,6 +276,7 @@ impl App {
         if selected_indices.is_empty() {
             return;
         }
+        self.record_undo();
         // Remove em ordem reversa para manter índices válidos
         for &i in selected_indices.iter().rev() {
             self.clips.remove(i);
@@ -238,8 +292,7 @@ impl App {
         let row_height = 64.0 * self.zoom_y.max(0.001);
         let track = ((pos.1 - self.ruler_px + self.scroll_y) / row_height)
             .floor()
-            .max(0.0)
-            .min(3.0) as usize;
+            .max(0.0) as usize;
         (snapped_beat, track)
     }
 
@@ -298,6 +351,7 @@ impl App {
 
             // Só divide se o clique não estiver na borda
             if click_beat_snapped > clip.beat && click_beat_snapped < clip.beat + clip.len {
+                self.record_undo();
                 let left_len = click_beat_snapped - clip.beat;
                 let right_len = clip.beat + clip.len - click_beat_snapped;
 
@@ -341,6 +395,7 @@ impl App {
     pub fn tool_erase(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+            self.record_undo();
             self.clips.remove(idx);
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
@@ -371,6 +426,7 @@ impl App {
                 .map(|(i, _)| i);
 
             if let Some(next_idx) = next_idx {
+                self.record_undo();
                 let next_beat = self.clips[next_idx].beat;
                 if self.clips[chain_end_idx].pre_glue_len.is_none() {
                     self.clips[chain_end_idx].pre_glue_len = Some(end_clip.len);
@@ -427,6 +483,7 @@ impl App {
                     // Seam hover → un-glue (split) — funciona em qualquer ferramenta
                     if let Some(seam_idx) = self.clip_interaction.seam_hover_idx {
                         if self.clip_interaction.is_seam_hovered() {
+                            self.record_undo();
                             self.clip_interaction.unglue_seam(&mut self.clips, seam_idx);
                             self.rebuild_wave_data();
                             return;
@@ -496,6 +553,10 @@ impl App {
                     let snap = true;
                     let cm = self.clip_metrics();
                     self.clip_interaction.drag_move(pos, &cm, snap);
+                    // Registra undo apenas se houve movimento real
+                    if self.clip_interaction.did_drag_move() {
+                        self.record_undo();
+                    }
                     self.clip_interaction.end_drag(&mut self.clips, &cm, snap);
                     // Reseta auto-scroll ao finalizar o arrasto.
                     self.edge_scroll_x = 0.0;
@@ -503,6 +564,7 @@ impl App {
                     self.edge_scroll_dir = 0;
                 } else if self.clip_interaction.is_drawing() {
                     let cm = self.clip_metrics();
+                    self.record_undo();
                     self.clip_interaction.end_draw(&mut self.clips, &cm);
                     self.clip_interaction.sync_selection(self.clips.len());
                     self.rebuild_wave_data();

@@ -410,7 +410,9 @@ impl App {
         // largura toda do corpo e rolam verticalmente junto com scroll_y.
         let view_bottom = height - self.time_ruler_h;
         let max_track = self.clips.iter().map(|c| c.track_index as i32).max().unwrap_or(-1);
-        for tr in 0..=max_track {
+        // FICA: sempre ao menos 1 track visível (uma track padrão).
+        let track_count = ((max_track + 1).max(1)) as usize;
+        for tr in 0..track_count {
             let y = self.ruler_px + (tr as f32 + 1.0) * row_height - self.scroll_y;
             if y < self.ruler_px || y > view_bottom { continue; }
             instances.push(RectInstance {
@@ -432,6 +434,7 @@ impl App {
             scroll_y: self.scroll_y,
             ruler_px: self.ruler_px,
             theme: t,
+            max_track: self.clips.iter().map(|c| c.track_index).max().unwrap_or(0),
         };
         instances.extend(clips::build_clip_instances(
             &self.clips,

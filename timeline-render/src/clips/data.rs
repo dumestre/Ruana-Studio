@@ -46,6 +46,8 @@ pub struct ClipMetrics {
     pub scroll_y: f32,
     pub ruler_px: f32,
     pub theme: usize,
+    /// Maior índice de track em uso (para limitar arrasto dentro das tracks).
+    pub max_track: usize,
 }
 
 impl ClipMetrics {

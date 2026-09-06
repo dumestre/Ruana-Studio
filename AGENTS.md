@@ -52,8 +52,14 @@ RuanaStudio/
 - `src/app/audio.rs` — `load_audio_file`, `build_project`,
   `sync_audio_engine`.
 - `src/app/window.rs` — `AppHandler` (winit) + `run()`.
-- `src/clips.rs`, `src/fades.rs`, `src/waveform.rs`, `src/tools.rs`,
-  `src/shctx.rs` — apoiam a renderização (intactos, resolvem itens comuns via
+- `src/clips/` — módulo de clips, subdividido:
+  - `mod.rs` — re-exports públicos (`ClipDemo`, `ClipMetrics`,
+    `clip_rect`, `ClipInteraction`, `DrawToolState`, `build_clip_instances`).
+  - `data.rs` — tipos e geometria (`ClipDemo`, `ClipMetrics`, `clip_rect`).
+  - `interaction.rs` — hover/arrasto/stretch/marquee/draw/glue.
+  - `render.rs` — `build_clip_instances` e helpers de render.
+- `src/fades.rs`, `src/waveform.rs`, `src/tools.rs`,
+  `src/shctx.rs` — apoiam a renderização (resolvem itens comuns via
   re-exports do crate root).
 
 Comportamentos importantes já implementados:
