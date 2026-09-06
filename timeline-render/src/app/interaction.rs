@@ -6,7 +6,7 @@ use crate::app::{LoopDrag, App};
 use crate::clips;
 use crate::fades;
 use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, Tool};
-use windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos;
+use std::time::Instant;
 
 
 impl App {
@@ -49,11 +49,13 @@ impl App {
             }
             ElementState::Released => {
                 // Se houver preview de áudio pendente, insere ao liberar o botão.
-                if let Some(preview) = self.drop_preview.take() {
-                    if let Some(path) = self.drop_path.take() {
-                        self.load_audio_file(&path, preview.beat, preview.track);
+                    if let Some(preview) = self.drop_preview.take() {
+                        if let Some(path) = self.drop_path.take() {
+                            self.load_audio_file(&path, preview.beat, preview.track);
+                            // Inicia playback a partir do ponto onde o áudio foi solto.
+                            self.start_playback_at(preview.beat);
+                        }
                     }
-                }
                 self.panning = false;
             }
         }
@@ -105,6 +107,21 @@ impl App {
                 let new_start = (self.loop_drag_orig_start + delta_beats).max(0.0);
                 self.loop_start_beat = new_start;
                 self.loop_end_beat = new_start + span;
+            }
+        }
+    }
+
+    /// Inicia (Pressed) ou finaliza (Released) o *scrub* do playhead na régua.
+    /// Enquanto arrasta, `handle_cursor_moved` chama `set_playhead_from_x` em
+    /// tempo real para seguir o cursor.
+    pub fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), _ruler_px: f32) {
+        match state {
+            ElementState::Pressed => {
+                self.scrubbing = true;
+                self.set_playhead_from_x(pos.0);
+            }
+            ElementState::Released => {
+                self.scrubbing = false;
             }
         }
     }
@@ -469,23 +486,30 @@ impl App {
         }
     }
 
-    pub fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), ruler_h: f32) {
-        match state {
-            ElementState::Pressed => {
-                // Só inicia o scrub se o clique for dentro da régua.
-                if pos.1 < 0.0 || pos.1 > ruler_h { return; }
-                self.scrubbing = true;
-                self.set_playhead_from_x(pos.0);
+    /// Inicia a reprodução a partir de um beat especificado.
+    fn start_playback_at(&mut self, beat: f32) {
+        // Converte beat para segundos.
+        self.transport_seconds = beat * 60.0 / self.bpm;
+        // Sincroniza o motor de áudio.
+        self.sync_audio_engine();
+        // Configura o transporte e inicia a reprodução.
+        if let Ok(mut t) = self.transport.lock() {
+            t.bpm = self.bpm as u32;
+            t.loop_enabled = self.loop_enabled;
+            if self.loop_enabled {
+                t.loop_start_ticks = (self.loop_start_beat * t.ppq as f32) as u64;
+                t.loop_end_ticks = (self.loop_end_beat * t.ppq as f32) as u64;
             }
-            ElementState::Released => {
-                // Finaliza o scrub sempre, mesmo se soltar fora da régua
-                // (o playhead "dispara" na posição atual como se soltasse dentro).
-                if !self.scrubbing { return; }
-                self.scrubbing = false;
-                self.set_playhead_from_x(pos.0);
-            }
+            let beats = self.transport_seconds * self.bpm / 60.0;
+            t.position_ticks = (beats * t.ppq as f32) as u64;
+            t.playing = true;
         }
+        self.play_start_seconds = self.transport_seconds;
+        self.playing = true;
+        self.last_play_head_update = Instant::now();
+        self.window.request_redraw();
     }
+
 
     pub fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
         self.clip_interaction.sync_selection(self.clips.len());
@@ -501,9 +525,24 @@ impl App {
                     }
                 } else {
                     // Interação com bolinhas de fade (in/out) e volume/ganho
-                    if self.fade_interaction.hovered.is_some() {
-                        if self.fade_interaction.begin_drag(pos, &self.fades) {
-                            return;
+                    if let Some((clip_idx, _kind)) = self.fade_interaction.hovered {
+                        if let Some(clip) = self.clips.get(clip_idx) {
+                            let (cx, cy, cw, ch) = clips::clip_rect(clip, &cm);
+                            let header_h = 16.0;
+                            let body_x = cx;
+                            let body_y = cy + header_h;
+                            let body_w = cw;
+                            let body_h = ch - header_h;
+                            if body_h > 0.0 && body_w > 0.0 {
+                                if self.fade_interaction.begin_drag(
+                                    pos,
+                                    &self.fades,
+                                    self.px_per_beat,
+                                    body_x, body_y, body_w, body_h,
+                                ) {
+                                    return;
+                                }
+                            }
                         }
                     }
                     // Seam hover → un-glue (split) — funciona em qualquer ferramenta
@@ -518,11 +557,13 @@ impl App {
                     match tool {
                         Tool::Select => {
                 // Insere áudio arrastado se houver preview pendente.
-                if let Some(preview) = self.drop_preview.take() {
-                    if let Some(path) = self.drop_path.take() {
-                        self.load_audio_file(&path, preview.beat, preview.track);
-                    }
-                } else {
+                    if let Some(preview) = self.drop_preview.take() {
+                        if let Some(path) = self.drop_path.take() {
+                            self.load_audio_file(&path, preview.beat, preview.track);
+                            // Inicia playback a partir do ponto onde o áudio foi solto.
+                            self.start_playback_at(preview.beat);
+                        }
+                    } else {
                     // comportamento padrão já existente
                     if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
                         // Se o clip clicado já está selecionado, mantém a
@@ -637,6 +678,10 @@ impl App {
                         body_h,
                     );
                     self.rebuild_wave_data();
+                    // Se já está tocando, sincroniza ganho em tempo real.
+                    if self.playing {
+                        self.sync_audio_engine();
+                    }
                 }
             }
         } else if self.loop_drag.is_some() {
@@ -676,6 +721,47 @@ impl App {
                         ) {
                             self.fade_interaction.hovered = Some((i, kind));
                             break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Snap magnético: quando o cursor está perto de um handle, puxa-o
+        // para o centro exato da bolinha para arrasto preciso.
+        if !self.scrubbing
+            && !self.clip_interaction.is_dragging()
+            && !self.fade_interaction.is_dragging()
+        {
+            if let Some((clip_idx, kind)) = self.fade_interaction.hovered {
+                if let Some((clip, fade)) =
+                    self.clips.get(clip_idx).zip(self.fades.get(clip_idx))
+                {
+                    let (cx, cy, cw, ch) = clips::clip_rect(clip, &cm);
+                    let header_h = 16.0;
+                    let body_x = cx;
+                    let body_y = cy + header_h;
+                    let body_w = cw;
+                    let body_h = ch - header_h;
+                    if let Some((hx, hy)) = fades::handle_position(
+                        kind,
+                        fade,
+                        body_x,
+                        body_y,
+                        body_w,
+                        body_h,
+                        self.px_per_beat,
+                    ) {
+                        let dist_sq =
+                            (pos.0 - hx) * (pos.0 - hx) + (pos.1 - hy) * (pos.1 - hy);
+                        let snap_threshold = 14.0;
+                        if dist_sq <= snap_threshold * snap_threshold {
+                            use winit::dpi::LogicalPosition;
+                            let _ = self
+                                .window
+                                .set_cursor_position(LogicalPosition::new(hx, hy));
+                            self.cursor_warp_pending = true;
+                            self.last_cursor = (hx, hy);
                         }
                     }
                 }
@@ -743,7 +829,13 @@ if self.fade_interaction.is_dragging() {
 
         // Se o cursor foi ajustado por trava de eixo, reposiciona o cursor do SO
         // para que ele "grude" visualmente ao handle.
-
+        if constrained != pos {
+            use winit::dpi::LogicalPosition;
+            let _ = self
+                .window
+                .set_cursor_position(LogicalPosition::new(constrained.0, constrained.1));
+            self.cursor_warp_pending = true;
+        }
     }
 
     /// Detecta quando o cursor está perto das bordas da janela durante um

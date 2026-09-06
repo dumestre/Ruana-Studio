@@ -202,14 +202,35 @@ impl FadeInteraction {
     }
 
     /// Inicia o arrasto se um handle estiver com hover.
-    pub fn begin_drag(&mut self, cursor: (f32, f32), fades: &[ClipFade]) -> bool {
+    ///
+    /// O cursor é *snapado* para a posição exata do handle para que o arrasto
+    /// comece do centro da bolinha, garantindo movimento suave e preciso.
+    pub fn begin_drag(
+        &mut self,
+        cursor: (f32, f32),
+        fades: &[ClipFade],
+        px_per_beat: f32,
+        body_x: f32,
+        body_y: f32,
+        body_w: f32,
+        body_h: f32,
+    ) -> bool {
         if let Some((clip_idx, kind)) = self.hovered {
             if let Some(fade) = fades.get(clip_idx) {
+                // Snap: ajusta o cursor inicial para a posição exata do handle.
+                let snapped_cursor = match kind {
+                    FadeHandleKind::GainLevel => {
+                        let gain_y = body_y + body_h * fade.gain_to_norm_y();
+                        (cursor.0, gain_y)
+                    }
+                    _ => handle_position(kind, fade, body_x, body_y, body_w, body_h, px_per_beat)
+                        .unwrap_or(cursor),
+                };
                 self.active_drag = Some(ActiveFadeDrag {
                     clip_index: clip_idx,
                     kind,
                     axis_lock: kind.drag_axis(),
-                    start_cursor: cursor,
+                    start_cursor: snapped_cursor,
                     orig_in_len: fade.in_len,
                     orig_in_curve_x: fade.in_curve_x,
                     orig_in_curve_y: fade.in_curve_y,
@@ -478,6 +499,51 @@ pub fn build_clip_fade_instances(
         });
     }
 }
+/// Calcula a posição (x, y) na tela de um handle de fade (bolinha).
+pub fn handle_position(
+    kind: FadeHandleKind,
+    fade: &ClipFade,
+    body_x: f32,
+    body_y: f32,
+    body_w: f32,
+    body_h: f32,
+    px_per_beat: f32,
+) -> Option<(f32, f32)> {
+    match kind {
+        FadeHandleKind::FadeInLen => {
+            let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
+            let x = if in_px > 1.0 { body_x + in_px } else { body_x + 4.0 };
+            Some((x, body_y + 4.0))
+        }
+        FadeHandleKind::FadeInCurve => {
+            let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
+            if in_px > 1.0 {
+                let cx = body_x + fade.in_curve_x * in_px;
+                let cy = body_y + body_h - fade.in_curve_y * body_h;
+                Some((cx, cy))
+            } else {
+                None
+            }
+        }
+        FadeHandleKind::FadeOutLen => {
+            let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
+            let x = if out_px > 1.0 { body_x + body_w - out_px } else { body_x + body_w - 4.0 };
+            Some((x, body_y + 4.0))
+        }
+        FadeHandleKind::FadeOutCurve => {
+            let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
+            if out_px > 1.0 {
+                let start_x = body_x + body_w - out_px;
+                let cx = start_x + fade.out_curve_x * out_px;
+                let cy = body_y + body_h - fade.out_curve_y * body_h;
+                Some((cx, cy))
+            } else {
+                None
+            }
+        }
+        FadeHandleKind::GainLevel => None,
+    }
+}
 
 // ============================================================================
 // Hit Testing para detecção do cursor do mouse sobre as bolinhas
@@ -500,46 +566,27 @@ pub fn hit_test_clip_handles(
         dx * dx + dy * dy <= (r + 5.0) * (r + 5.0) // margem de 5px para clique confortável
     };
 
-    // 1. Handle Fade In Length
-    let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
-    let handle_in_x = if in_px > 1.0 { body_x + in_px } else { body_x + 4.0 };
-    let handle_in_y = body_y + 4.0;
-    if hit_dist_sq(handle_in_x, handle_in_y, 5.0) {
-        return Some(FadeHandleKind::FadeInLen);
-    }
-
-    // 2. Handle Fade In Curve (ponto cx, cy)
-    if in_px > 1.0 {
-        let handle_curve_x = body_x + fade.in_curve_x * in_px;
-        let handle_curve_y = body_y + body_h - fade.in_curve_y * body_h;
-        if hit_dist_sq(handle_curve_x, handle_curve_y, 5.0) {
-            return Some(FadeHandleKind::FadeInCurve);
+    for kind in [
+        FadeHandleKind::FadeInLen,
+        FadeHandleKind::FadeInCurve,
+        FadeHandleKind::FadeOutLen,
+        FadeHandleKind::FadeOutCurve,
+    ] {
+        if let Some((hx, hy)) =
+            handle_position(kind, fade, body_x, body_y, body_w, body_h, px_per_beat)
+        {
+            if hit_dist_sq(hx, hy, 5.0) {
+                return Some(kind);
+            }
         }
     }
 
-    // 3. Handle Fade Out Length
-    let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
-    let handle_out_x = if out_px > 1.0 { body_x + body_w - out_px } else { body_x + body_w - 4.0 };
-    let handle_out_y = body_y + 4.0;
-    if hit_dist_sq(handle_out_x, handle_out_y, 5.0) {
-        return Some(FadeHandleKind::FadeOutLen);
-    }
-
-    // 4. Handle Fade Out Curve (ponto cx, cy)
-    if out_px > 1.0 {
-        let start_x = body_x + body_w - out_px;
-        let handle_curve_x = start_x + fade.out_curve_x * out_px;
-        let handle_curve_y = body_y + body_h - fade.out_curve_y * body_h;
-        if hit_dist_sq(handle_curve_x, handle_curve_y, 5.0) {
-            return Some(FadeHandleKind::FadeOutCurve);
-        }
-    }
-
-    // 5. Handle Gain / Volume — área no topo do corpo (14px abaixo do header)
+    // Handle de ganho/volume — área retangular no topo do corpo
     let gain_area_h = 14.0;
     let gain_area_y = body_y;
     if cursor.0 >= body_x && cursor.0 <= body_x + body_w
-        && cursor.1 >= gain_area_y && cursor.1 <= gain_area_y + gain_area_h {
+        && cursor.1 >= gain_area_y && cursor.1 <= gain_area_y + gain_area_h
+    {
         return Some(FadeHandleKind::GainLevel);
     }
 
