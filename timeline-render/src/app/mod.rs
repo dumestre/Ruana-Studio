@@ -142,6 +142,8 @@ pub struct App {
         pub drop_path: Option<String>,            // caminho do arquivo arrastado
         pub drop_preview: Option<DropPreview>,   // preview visual enquanto ainda não inserido
         pub is_dragging_file: bool,              // true enquanto um arquivo está sendo arrastado sobre a janela
+        /// Se true, o próximo CursorMoved é ignorado (resposta a set_cursor_position).
+        pub cursor_warp_pending: bool,
         // ------------------------------------------------------------
 }
 
@@ -397,6 +399,7 @@ impl App {
             drop_path: None,
             drop_preview: None,
             is_dragging_file: false,
+            cursor_warp_pending: false,
         })
     }
 

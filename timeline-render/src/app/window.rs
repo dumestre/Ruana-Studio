@@ -299,6 +299,10 @@ impl ApplicationHandler for AppHandler {
                 position,
                 ..
             } => {
+                // Ignora evento gerado pelo warp de travamento de eixo (set_cursor_position).
+                if app.cursor_warp_pending {
+                    app.cursor_warp_pending = false;
+                } else {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
                 // Mantém o cursor da ferramenta ativa persistente (evita voltar pro
                 // cursor padrão do SO a cada movimento).
@@ -316,6 +320,7 @@ impl ApplicationHandler for AppHandler {
                     || app.drop_preview.is_some()
                     || current_tool() == Tool::Slice || current_tool() == Tool::Stretch {
                     app.window.request_redraw();
+                }
                 }
             }
             WindowEvent::HoveredFile(path) => {

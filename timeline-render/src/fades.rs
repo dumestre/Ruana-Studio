@@ -22,6 +22,28 @@ pub enum FadeHandleKind {
     GainLevel,
 }
 
+/// Eixo de trava durante o arrasto de um handle.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DragAxisLock {
+    /// Arrasto responde apenas ao movimento horizontal (fades in/out).
+    Horizontal,
+    /// Arrasto responde apenas ao movimento vertical (ganho/volume).
+    Vertical,
+}
+
+impl FadeHandleKind {
+    /// Eixo travado durante o arrasto de cada tipo de handle.
+    fn drag_axis(self) -> Option<DragAxisLock> {
+        match self {
+            FadeHandleKind::GainLevel => Some(DragAxisLock::Vertical),
+            FadeHandleKind::FadeInLen
+            | FadeHandleKind::FadeInCurve
+            | FadeHandleKind::FadeOutLen
+            | FadeHandleKind::FadeOutCurve => Some(DragAxisLock::Horizontal),
+        }
+    }
+}
+
 /// Parâmetros de Fade e Ganho de um clip de áudio.
 #[derive(Clone, Debug)]
 pub struct ClipFade {
@@ -151,6 +173,8 @@ pub fn eval_bezier_2d_out(x: f32, cx: f32, cy: f32) -> f32 {
 pub struct ActiveFadeDrag {
     pub clip_index: usize,
     pub kind: FadeHandleKind,
+    /// Eixo travado durante o arrasto (vazio = livre em 2D).
+    pub axis_lock: Option<DragAxisLock>,
     pub start_cursor: (f32, f32),
     pub orig_in_len: f32,
     pub orig_in_curve_x: f32,
@@ -184,6 +208,7 @@ impl FadeInteraction {
                 self.active_drag = Some(ActiveFadeDrag {
                     clip_index: clip_idx,
                     kind,
+                    axis_lock: kind.drag_axis(),
                     start_cursor: cursor,
                     orig_in_len: fade.in_len,
                     orig_in_curve_x: fade.in_curve_x,
@@ -215,8 +240,16 @@ impl FadeInteraction {
         let Some(ref drag) = self.active_drag else { return };
         let Some(fade) = fades.get_mut(drag.clip_index) else { return };
 
-        let dx = cursor.0 - drag.start_cursor.0;
-        let dy = cursor.1 - drag.start_cursor.1;
+        let mut dx = cursor.0 - drag.start_cursor.0;
+        let mut dy = cursor.1 - drag.start_cursor.1;
+
+        // Travamento de eixo: handle de fade (in/out) responde apenas a X;
+        // handle de ganho/volume responde apenas a Y. Ao soltar, destrava.
+        match drag.axis_lock {
+            Some(DragAxisLock::Horizontal) => dy = 0.0,
+            Some(DragAxisLock::Vertical) => dx = 0.0,
+            None => {}
+        }
 
         match drag.kind {
             FadeHandleKind::FadeInLen => {
