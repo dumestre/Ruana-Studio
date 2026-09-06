@@ -35,7 +35,7 @@ mod piano_roll;
 mod playback;
 mod timeline;
 mod theme;
-mod timeline_canvas;
+
 mod timeline_gpu;
 mod waveform;
 mod waveform_gpu;

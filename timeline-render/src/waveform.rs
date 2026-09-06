@@ -1,274 +1,845 @@
 //! Waveforms procedurais de teste (placeholder com aparência real).
 //!
 //! Gera MIN/MAX por coluna — o "osciloscópio" da timeline.
-//! O shader liga as amostras com segmentos de reta (1 coluna = 2 valores:
-//! min e max), então mais colunas = linha mais suave e nítida. Sem dependências externas:
-//! cada amostra vem de um hash determinístico, estável entre execuções mas
-//! com textura de áudio de verdade (ataque, sustentação, reverberação de
-//! caixa, variação de dinâmica).
+//! O shader liga as amostras com segmentos de reta.
+//!
+//! O buffer usa 2 floats por coluna:
+//!   [L, R]
+//!
+//! Para waveform procedural, L e R recebem o mesmo valor.
+//! Para áudio real, cada canal é calculado separadamente.
 
 use crate::clips::ClipDemo;
-use crate::fades::{ClipFade, eval_bezier_2d_in, eval_bezier_2d_out};
+use crate::fades::{
+    eval_bezier_2d_in,
+    eval_bezier_2d_out,
+    ClipFade,
+};
 use daw_media::waveform::decode_audio;
 use std::path::Path;
 
-/// Número de colunas de waveform de um clip de áudio. Deve bater com o
-/// mesmo cálculo usado na geração — 1 vértice por coluna.
-pub fn wave_cols(len: f32, px_per_beat: f32) -> u32 {
-    ((len * px_per_beat * 4.0).ceil() as u32).max(1).min(16384)
+/// Número de colunas de waveform de um clip de áudio.
+///
+/// Deve bater com o mesmo cálculo usado na geração.
+pub fn wave_cols(
+    len: f32,
+    px_per_beat: f32,
+) -> u32 {
+    (
+        (
+            len *
+            px_per_beat *
+            4.0
+        )
+        .ceil()
+        as u32
+    )
+    .max(1)
+    .min(16384)
 }
 
 /// Hash determinístico 64-bit, sem dependências.
 fn hash01(mut x: u64) -> f32 {
-    x = x.wrapping_mul(0x9E3779B97F4A7C15);
-    x = (x ^ (x >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-    x = x ^ (x >> 27);
-    x = x.wrapping_mul(0x94D049BB133111EB);
-    x = x ^ (x >> 31);
-    (x >> 33) as f32 / (1u64 << 31) as f32
+    x = x.wrapping_mul(
+        0x9E3779B97F4A7C15
+    );
+
+    x = (
+        x ^
+        (x >> 30)
+    )
+    .wrapping_mul(
+        0xBF58476D1CE4E5B9
+    );
+
+    x ^= x >> 27;
+
+    x = x.wrapping_mul(
+        0x94D049BB133111EB
+    );
+
+    x ^= x >> 31;
+
+    (x >> 33) as f32 /
+    (1u64 << 31) as f32
 }
 
-/// Envelope de ganho do clip: nunca zera (piso 35%) para a linha não ficar
-/// reta/morta nas bordas e nas quedas — tipo um indicador RSI/MA contínuo.
+/// Envelope de ganho do clip.
+///
+/// Nunca zera para evitar que a linha fique completamente morta
+/// nas bordas e nas quedas.
 fn gain(frac: f32) -> f32 {
-    let fade_in = (frac / 0.06).min(1.0);
-    let fade_out = ((1.0 - frac) / 0.08).min(1.0);
-    0.35 + 0.65 * fade_in * fade_out
+    let fade_in =
+        (frac / 0.06)
+        .min(1.0);
+
+    let fade_out =
+        ((1.0 - frac) / 0.08)
+        .min(1.0);
+
+    0.35 +
+    0.65 *
+    fade_in *
+    fade_out
 }
 
-/// Baixo: 2 oscilações lentas superpostas — curva única e contínua.
-fn sample_bass(i: u32, n: u32, seed: u64) -> f32 {
-    let frac = i as f32 / n as f32;
-    let t = frac * std::f32::consts::TAU;
-    let phase = hash01(seed);
-    (t * 2.0 + phase).sin() * 0.85 + (t * 4.3 + phase * 2.0).sin() * 0.15
+/// Baixo:
+/// duas oscilações lentas superpostas.
+fn sample_bass(
+    i: u32,
+    n: u32,
+    seed: u64,
+) -> f32 {
+    let frac =
+        i as f32 /
+        n as f32;
+
+    let t =
+        frac *
+        std::f32::consts::TAU;
+
+    let phase =
+        hash01(seed);
+
+    (
+        (t * 2.0 + phase).sin() *
+        0.85
+    ) +
+    (
+        (t * 4.3 + phase * 2.0).sin() *
+        0.15
+    )
 }
 
-/// Bateria: onda oscilante modulada em amplitude — pulsos largos, sem spikes.
-fn sample_drums(i: u32, n: u32, seed: u64) -> f32 {
-    let frac = i as f32 / n as f32;
-    let t = frac * std::f32::consts::TAU;
-    let phase = hash01(seed.wrapping_mul(3));
-    let pulse = 0.5 + 0.5 * (t * 6.0 + phase).sin();
-    (t * 3.0 + phase).sin() * (0.35 + 0.65 * pulse)
+/// Bateria:
+/// onda oscilante modulada em amplitude.
+fn sample_drums(
+    i: u32,
+    n: u32,
+    seed: u64,
+) -> f32 {
+    let frac =
+        i as f32 /
+        n as f32;
+
+    let t =
+        frac *
+        std::f32::consts::TAU;
+
+    let phase =
+        hash01(
+            seed.wrapping_mul(3)
+        );
+
+    let pulse =
+        0.5 +
+        0.5 *
+        (
+            t * 6.0 +
+            phase
+        )
+        .sin();
+
+    (
+        t * 3.0 +
+        phase
+    )
+    .sin()
+    *
+    (
+        0.35 +
+        0.65 * pulse
+    )
 }
 
-/// Pad: oscilação lenta com leve variação — linha aberta e constante.
-fn sample_pads(i: u32, n: u32, seed: u64) -> f32 {
-    let frac = i as f32 / n as f32;
-    let t = frac * std::f32::consts::TAU;
-    let phase = hash01(seed.wrapping_add(9));
-    (t * 1.5 + phase).sin() * 0.7 + (t * 4.0 + phase * 3.0).sin() * 0.3
+/// Pad:
+/// oscilação lenta com leve variação.
+fn sample_pads(
+    i: u32,
+    n: u32,
+    seed: u64,
+) -> f32 {
+    let frac =
+        i as f32 /
+        n as f32;
+
+    let t =
+        frac *
+        std::f32::consts::TAU;
+
+    let phase =
+        hash01(
+            seed.wrapping_add(9)
+        );
+
+    (
+        t * 1.5 +
+        phase
+    )
+    .sin()
+    *
+    0.7
+    +
+    (
+        t * 4.0 +
+        phase * 3.0
+    )
+    .sin()
+    *
+    0.3
 }
 
-/// Estilo da waveform por índice de clip de áudio (3 estilos para teste).
-fn sample_wave(style: usize, i: u32, n: u32, seed: u64) -> f32 {
+/// Estilo da waveform por índice de clip de áudio.
+fn sample_wave(
+    style: usize,
+    i: u32,
+    n: u32,
+    seed: u64,
+) -> f32 {
     match style % 3 {
-        0 => sample_bass(i, n, seed),
-        1 => sample_drums(i, n, seed),
-        _ => sample_pads(i, n, seed),
+        0 => sample_bass(
+            i,
+            n,
+            seed,
+        ),
+
+        1 => sample_drums(
+            i,
+            n,
+            seed,
+        ),
+
+        _ => sample_pads(
+            i,
+            n,
+            seed,
+        ),
     }
 }
 
-/// Constrói todas as amplitudes MIN/MAX (2 por coluna) dos clips de áudio,
-/// concatenadas na mesma ordem em que os clips aparecem (os offsets de
-/// `clips.rs` coincidem com a segmentação: cada clip é seu próprio trecho).
+/// Constrói todas as amplitudes L/R dos clips de áudio.
 ///
-/// Além do buffer concatenado, devolve a segmentação (offset_em_colunas, count_em_colunas) por id
-/// de clip e ARMAZENA as amostras em `clip.wave` — a fonte da verdade por
-/// clip. Um slice futura divide `clip.wave` ao meio (corte verdadeiro, sem
-/// regenerar as peças).
+/// O buffer final contém:
+///
+/// [L0, R0, L1, R1, L2, R2, ...]
+///
+/// Os offsets são armazenados em unidades de COLUNA,
+/// e não em unidades de float.
 pub fn build_wave_bars_and_segments(
     clips: &mut [ClipDemo],
     px_per_beat: f32,
-) -> (Vec<f32>, Vec<(u32, u32)>) {
-    let mut bars = Vec::new();
-    let mut segments = Vec::with_capacity(clips.len());
-    let mut audio_idx = 0u64;
-    for clip in clips.iter_mut() {
+) -> (
+    Vec<f32>,
+    Vec<(u32, u32)>
+) {
+    let mut bars =
+        Vec::new();
+
+    let mut segments =
+        Vec::with_capacity(
+            clips.len()
+        );
+
+    let mut audio_idx =
+        0u64;
+
+    for clip in
+        clips.iter_mut()
+    {
+        // MIDI não possui waveform.
         if clip.is_midi {
-            segments.push((0u32, 0u32));
-            clip.wave = Vec::new();
+            segments.push(
+                (0u32, 0u32)
+            );
+
+            clip.wave =
+                Vec::new();
+
             continue;
         }
 
-        let n_cols = wave_cols(clip.len, px_per_beat);
-        let wave: Vec<f32> = if let Some(ref path) = clip.file_path {
-            match decode_real_wave(path, n_cols) {
-                Ok(w) => w,
-                Err(_) => generate_procedural_wave(clip, n_cols, audio_idx),
-            }
-        } else {
-            let style = (audio_idx % 3) as usize;
-            let seed = audio_idx.wrapping_mul(0x9E3779B97F4A7C15)
-                ^ (clip.beat as u32 as u64).wrapping_mul(11)
-                ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
-            let mut w = Vec::with_capacity(n_cols as usize * 2);
-            for col in 0..n_cols {
-                let v = sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32);
-                w.push(v); // L
-                w.push(v); // R (mesmo valor para procedural)
-            }
-            w
-        };
+        let n_cols =
+            wave_cols(
+                clip.len,
+                px_per_beat,
+            );
 
-        let offset_cols = bars.len() as u32 / 2;
-        bars.extend_from_slice(&wave);
-        segments.push((offset_cols, n_cols));
-        clip.wave = wave;
+        let wave: Vec<f32> =
+            if let Some(ref path) =
+                clip.file_path
+            {
+                match decode_real_wave(
+                    path,
+                    n_cols,
+                ) {
+                    Ok(w) => w,
+
+                    Err(_) =>
+                        generate_procedural_wave(
+                            clip,
+                            n_cols,
+                            audio_idx,
+                        ),
+                }
+            } else {
+                let style =
+                    (audio_idx % 3)
+                    as usize;
+
+                let seed =
+                    audio_idx
+                    .wrapping_mul(
+                        0x9E3779B97F4A7C15
+                    )
+                    ^
+                    (clip.beat as u32 as u64)
+                        .wrapping_mul(11)
+                    ^
+                    (clip.track_index as u64)
+                        .wrapping_mul(
+                            0xD1B54A32D192ED03
+                        );
+
+                let mut w =
+                    Vec::with_capacity(
+                        n_cols as usize * 2
+                    );
+
+                for col in
+                    0..n_cols
+                {
+                    let frac =
+                        col as f32 /
+                        n_cols as f32;
+
+                    let v =
+                        sample_wave(
+                            style,
+                            col,
+                            n_cols,
+                            seed,
+                        )
+                        *
+                        gain(frac);
+
+                    // L
+                    w.push(v);
+
+                    // R
+                    w.push(v);
+                }
+
+                w
+            };
+
+        // Offset em COLUNAS.
+        let offset_cols =
+            bars.len() as u32 / 2;
+
+        bars.extend_from_slice(
+            &wave
+        );
+
+        segments.push(
+            (
+                offset_cols,
+                n_cols,
+            )
+        );
+
+        // A wave armazenada no clip é a fonte da verdade.
+        clip.wave =
+            wave;
+
         audio_idx += 1;
     }
-    (bars, segments)
+
+    (
+        bars,
+        segments
+    )
 }
 
-/// Decodifica um arquivo de áudio real e converte para amplitudes por coluna.
-/// Mono: 1 float por coluna (valor com sinal, positivo/negativo).
-/// Stereo: 2 floats por coluna (L, R com sinal).
-pub(crate) fn decode_real_wave(path: &str, n_cols: u32) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
-    let data = decode_audio(Path::new(path))?;
-    let samples = &data.samples;
-    if samples.is_empty() || n_cols == 0 {
-        return Ok(vec![0.0; n_cols as usize * data.channels.max(1) as usize]);
+/// Decodifica um arquivo de áudio real.
+///
+/// Mono:
+///   1 float por coluna.
+///
+/// Stereo:
+///   2 floats por coluna: L/R.
+///
+/// O valor usado é a média com sinal do bloco correspondente.
+pub(crate) fn decode_real_wave(
+    path: &str,
+    n_cols: u32,
+) -> Result<
+    Vec<f32>,
+    Box<dyn std::error::Error>,
+> {
+    let data =
+        decode_audio(
+            Path::new(path)
+        )?;
+
+    let samples =
+        &data.samples;
+
+    if samples.is_empty() ||
+       n_cols == 0
+    {
+        return Ok(
+            vec![
+                0.0;
+                n_cols as usize *
+                data.channels.max(1)
+                    as usize
+            ]
+        );
     }
 
-    let channels = data.channels.max(1) as usize;
-    let mut wave = Vec::with_capacity(n_cols as usize * channels);
-    let total_frames = samples.len() / channels;
-    let cols = n_cols as usize;
+    let channels =
+        data.channels
+            .max(1)
+            as usize;
 
-    for col in 0..cols {
-        let frame_start = (col * total_frames / cols).min(total_frames.saturating_sub(1));
-        let frame_end = ((col + 1) * total_frames / cols).min(total_frames);
-        if frame_start >= frame_end {
-            for _ in 0..channels {
+    let mut wave =
+        Vec::with_capacity(
+            n_cols as usize *
+            channels
+        );
+
+    let total_frames =
+        samples.len() /
+        channels;
+
+    let cols =
+        n_cols as usize;
+
+    for col in
+        0..cols
+    {
+        let frame_start =
+            (
+                col *
+                total_frames /
+                cols
+            )
+            .min(
+                total_frames
+                    .saturating_sub(1)
+            );
+
+        let frame_end =
+            (
+                (col + 1) *
+                total_frames /
+                cols
+            )
+            .min(
+                total_frames
+            );
+
+        if frame_start >=
+           frame_end
+        {
+            for _ in
+                0..channels
+            {
                 wave.push(0.0);
             }
+
             continue;
         }
+
+        // ================================================================
+        // MONO
+        // ================================================================
+
         if channels == 1 {
-            // Mono: média com sinal (preserva positivo/negativo)
-            let start_sample = frame_start;
-            let end_sample = frame_end;
-            let sum: f32 = samples[start_sample..end_sample].iter().sum();
-            let avg = if (end_sample - start_sample) > 0 {
-                sum / (end_sample - start_sample) as f32
-            } else {
-                0.0
-            };
-            wave.push(if avg.is_finite() { avg } else { 0.0 });
-        } else {
-            // Stereo: média com sinal por canal (L, R)
-            for ch in 0..channels {
-                let start_sample = frame_start * channels + ch;
-                let end_sample = frame_end * channels + ch;
-                let step = channels;
-                let mut sum: f32 = 0.0;
-                let mut count: usize = 0;
-                let mut i = start_sample;
-                while i < end_sample && i < samples.len() {
-                    sum += samples[i];
-                    count += 1;
-                    i += step;
+            let start_sample =
+                frame_start;
+
+            let end_sample =
+                frame_end;
+
+            let sum: f32 =
+                samples[
+                    start_sample
+                    ..
+                    end_sample
+                ]
+                .iter()
+                .sum();
+
+            let count =
+                end_sample -
+                start_sample;
+
+            let avg =
+                if count > 0 {
+                    sum /
+                    count as f32
+                } else {
+                    0.0
+                };
+
+            wave.push(
+                if avg.is_finite() {
+                    avg
+                } else {
+                    0.0
                 }
-                let avg = if count > 0 { sum / count as f32 } else { 0.0 };
-                wave.push(if avg.is_finite() { avg } else { 0.0 });
+            );
+
+            continue;
+        }
+
+        // ================================================================
+        // STEREO / MULTICANAL
+        // ================================================================
+
+        for ch in
+            0..channels
+        {
+            let start_sample =
+                frame_start *
+                channels +
+                ch;
+
+            let end_sample =
+                frame_end *
+                channels +
+                ch;
+
+            let step =
+                channels;
+
+            let mut sum =
+                0.0f32;
+
+            let mut count =
+                0usize;
+
+            let mut i =
+                start_sample;
+
+            while i <
+                  end_sample &&
+                  i <
+                  samples.len()
+            {
+                sum +=
+                    samples[i];
+
+                count += 1;
+
+                i +=
+                    step;
             }
+
+            let avg =
+                if count > 0 {
+                    sum /
+                    count as f32
+                } else {
+                    0.0
+                };
+
+            wave.push(
+                if avg.is_finite() {
+                    avg
+                } else {
+                    0.0
+                }
+            );
         }
     }
 
     Ok(wave)
 }
 
-/// Gera waveform procedural para um clip (fallback) com 2 floats por coluna (L,R).
-pub(crate) fn generate_procedural_wave(clip: &ClipDemo, n_cols: u32, seed: u64) -> Vec<f32> {
-    let style = (seed % 3) as usize;
-    let seed = seed.wrapping_mul(0x9E3779B97F4A7C15)
-        ^ (clip.beat as u32 as u64).wrapping_mul(11)
-        ^ (clip.track_index as u64).wrapping_mul(0xD1B54A32D192ED03);
-    let mut wave = Vec::with_capacity(n_cols as usize * 2);
-    for col in 0..n_cols {
-        let v = sample_wave(style, col, n_cols, seed) * gain(col as f32 / n_cols as f32);
-        wave.push(v); // L
-        wave.push(v); // R (mesmo valor para procedural)
+/// Gera waveform procedural para um clip.
+///
+/// Retorna:
+///
+/// [L0, R0, L1, R1, ...]
+pub(crate) fn generate_procedural_wave(
+    clip: &ClipDemo,
+    n_cols: u32,
+    seed: u64,
+) -> Vec<f32> {
+    let style =
+        (seed % 3) as usize;
+
+    let seed =
+        seed.wrapping_mul(
+            0x9E3779B97F4A7C15
+        )
+        ^
+        (clip.beat as u32 as u64)
+            .wrapping_mul(11)
+        ^
+        (clip.track_index as u64)
+            .wrapping_mul(
+                0xD1B54A32D192ED03
+            );
+
+    let mut wave =
+        Vec::with_capacity(
+            n_cols as usize * 2
+        );
+
+    for col in
+        0..n_cols
+    {
+        let frac =
+            col as f32 /
+            n_cols as f32;
+
+        let v =
+            sample_wave(
+                style,
+                col,
+                n_cols,
+                seed,
+            )
+            *
+            gain(frac);
+
+        // L
+        wave.push(v);
+
+        // R
+        wave.push(v);
     }
+
     wave
 }
 
-/// Concatena as ondas ARMAZENADAS nos clips (fonte da verdade, campo `wave`)
-/// num buffer único com a segmentação (offset_em_colunas, count_em_colunas) por id. Não regenera
-/// nada: cortes, glues, erases etc. refletem as ondas persistidas.
-pub fn concat_wave_data(clips: &[ClipDemo]) -> (Vec<f32>, Vec<(u32, u32)>) {
-    let mut bars = Vec::new();
-    let mut segments = Vec::with_capacity(clips.len());
-    let mut col_offset = 0u32;
-    for clip in clips {
-        if clip.is_midi || clip.wave.is_empty() {
-            segments.push((0u32, 0u32));
+/// Concatena as ondas armazenadas nos clips.
+///
+/// Não regenera as waves.
+///
+/// Retorna:
+///   (buffer, segments)
+///
+/// `segments` usa:
+///   (offset_em_colunas, quantidade_de_colunas)
+pub fn concat_wave_data(
+    clips: &[ClipDemo],
+) -> (
+    Vec<f32>,
+    Vec<(u32, u32)>
+) {
+    let mut bars =
+        Vec::new();
+
+    let mut segments =
+        Vec::with_capacity(
+            clips.len()
+        );
+
+    let mut col_offset =
+        0u32;
+
+    for clip in
+        clips
+    {
+        if clip.is_midi ||
+           clip.wave.is_empty()
+        {
+            segments.push(
+                (0u32, 0u32)
+            );
+
             continue;
         }
-        let n_cols = (clip.wave.len() / 2) as u32;
-        segments.push((col_offset, n_cols));
-        bars.extend_from_slice(&clip.wave);
-        col_offset += n_cols;
+
+        let n_cols =
+            (clip.wave.len() / 2)
+                as u32;
+
+        segments.push(
+            (
+                col_offset,
+                n_cols,
+            )
+        );
+
+        bars.extend_from_slice(
+            &clip.wave
+        );
+
+        col_offset +=
+            n_cols;
     }
-    (bars, segments)
+
+    (
+        bars,
+        segments
+    )
 }
 
-/// Aplica o envelope de fade in/out e ganho às amostras da waveform.
-/// Cada coluna ocupa 2 posições no buffer (L, R) e o fade é aplicado
-/// em AMBOS os valores.
+/// Aplica envelope de fade in/out e ganho às amostras.
+///
+/// Cada coluna ocupa:
+///   L, R
+///
+/// O envelope é aplicado aos dois canais.
 pub fn apply_fade_envelope(
     bars: Vec<f32>,
     segments: &[(u32, u32)],
     clips: &[ClipDemo],
     fades: &[ClipFade],
 ) -> Vec<f32> {
-    let mut out = bars;
+    let mut out =
+        bars;
 
-    for (i, clip) in clips.iter().enumerate() {
-        if clip.is_midi || clip.wave.is_empty() {
+    for (i, clip) in
+        clips.iter().enumerate()
+    {
+        if clip.is_midi ||
+           clip.wave.is_empty()
+        {
             continue;
         }
-        if i >= fades.len() {
+
+        if i >=
+           fades.len()
+        {
             continue;
         }
-        let fade = &fades[i];
-        let (offset_cols, count_cols) = segments[i];
-        let n_cols = count_cols as usize;
+
+        let fade =
+            &fades[i];
+
+        let (
+            offset_cols,
+            count_cols,
+        ) =
+            segments[i];
+
+        let n_cols =
+            count_cols as usize;
+
         if n_cols == 0 {
             continue;
         }
 
-        let clip_len = clip.wave.len() as f32 / 160.0;
+        // 2 floats por coluna.
+        let clip_len =
+            clip.wave.len()
+                as f32 /
+            160.0;
+
         if clip_len <= 0.0 {
             continue;
         }
 
-        let gain_linear = fade.gain_linear();
+        let gain_linear =
+            fade.gain_linear();
 
-        for j in 0..n_cols {
-            let frac = if n_cols > 1 { j as f32 / (n_cols - 1) as f32 } else { 0.0 };
-            let beat_pos = frac * clip_len;
+        for j in
+            0..n_cols
+        {
+            let frac =
+                if n_cols > 1 {
+                    j as f32 /
+                    (n_cols - 1)
+                        as f32
+                } else {
+                    0.0
+                };
 
-            let env_in = if fade.in_len > 0.0 && beat_pos < fade.in_len {
-                let t = (beat_pos / fade.in_len).clamp(0.0, 1.0);
-                eval_bezier_2d_in(t, fade.in_curve_x, fade.in_curve_y)
-            } else {
-                1.0
-            };
+            let beat_pos =
+                frac *
+                clip_len;
 
-            let env_out = if fade.out_len > 0.0 && beat_pos > clip_len - fade.out_len {
-                let t = ((beat_pos - (clip_len - fade.out_len)) / fade.out_len).clamp(0.0, 1.0);
-                eval_bezier_2d_out(t, fade.out_curve_x, fade.out_curve_y)
-            } else {
-                1.0
-            };
+            // ============================================================
+            // FADE IN
+            // ============================================================
 
-            let envelope = env_in * env_out * gain_linear;
-            let idx = (offset_cols as usize + j) * 2;
-            if idx + 1 < out.len() {
-                out[idx] = out[idx] * envelope;     // L
-                out[idx + 1] = out[idx + 1] * envelope; // R
+            let env_in =
+                if fade.in_len > 0.0 &&
+                   beat_pos < fade.in_len
+                {
+                    let t =
+                        (
+                            beat_pos /
+                            fade.in_len
+                        )
+                        .clamp(
+                            0.0,
+                            1.0
+                        );
+
+                    eval_bezier_2d_in(
+                        t,
+                        fade.in_curve_x,
+                        fade.in_curve_y,
+                    )
+                } else {
+                    1.0
+                };
+
+            // ============================================================
+            // FADE OUT
+            // ============================================================
+
+            let env_out =
+                if fade.out_len > 0.0 &&
+                   beat_pos >
+                       clip_len -
+                       fade.out_len
+                {
+                    let t =
+                        (
+                            (
+                                beat_pos -
+                                (
+                                    clip_len -
+                                    fade.out_len
+                                )
+                            )
+                            /
+                            fade.out_len
+                        )
+                        .clamp(
+                            0.0,
+                            1.0
+                        );
+
+                    eval_bezier_2d_out(
+                        t,
+                        fade.out_curve_x,
+                        fade.out_curve_y,
+                    )
+                } else {
+                    1.0
+                };
+
+            let envelope =
+                env_in *
+                env_out *
+                gain_linear;
+
+            // L/R
+            let idx =
+                (
+                    offset_cols
+                    as usize +
+                    j
+                )
+                * 2;
+
+            if idx + 1 <
+               out.len()
+            {
+                out[idx] *=
+                    envelope;
+
+                out[idx + 1] *=
+                    envelope;
             }
         }
     }
