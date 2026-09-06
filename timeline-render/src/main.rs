@@ -269,6 +269,13 @@ pub struct OrthoCamera {
     pub viewport_h: f32,
 }
 
+/// Estrutura temporária para exibir o preview de um áudio arrastado antes da inserção.
+struct DropPreview {
+    beat: f32,
+    track: usize,
+    len_beats: f32,
+}
+
 impl OrthoCamera {
     pub fn proj(&self) -> [f32; 16] {
         let sx = self.scroll_x;
@@ -352,16 +359,20 @@ struct App {
     focus_saved: Option<(f32, f32, f32)>,
     clipboard: Vec<ClipDemo>,
 
-    // Auto-scroll nas bordas durante drag de clips.
-    // Quando o cursor se aproxima de uma borda durante um arrasto ativo,
-    // a viewport rola suavemente nessa direção para permitir arrastar
-    // clips para fora da área visível.
-     edge_scroll_x: f32, // velocidade px/frame (0 = desativado)
-    edge_scroll_y: f32, // velocidade px/frame (0 = desativado)
-    edge_scroll_dir: i32, // -1 = esquerda/cima, +1 = direita/baixo, 0 = nenhuma
-    bpm: f32,
-    time_ruler_h: f32,
-    follow_playhead: bool,
+        // Auto-scroll nas bordas durante drag de clips.
+        // Quando o cursor se aproxima de uma borda durante um arrasto ativo,
+        // a viewport rola suavemente nessa direção para permitir arrastar
+        // clips para fora da área visível.
+        edge_scroll_x: f32, // velocidade px/frame (0 = desativado)
+        edge_scroll_y: f32, // velocidade px/frame (0 = desativado)
+        edge_scroll_dir: i32, // -1 = esquerda/cima, +1 = direita/baixo, 0 = nenhuma
+        bpm: f32,
+        time_ruler_h: f32,
+        follow_playhead: bool,
+        // ---------- estado para preview de drop de áudio ----------
+        drop_path: Option<String>,            // caminho do arquivo arrastado
+        drop_preview: Option<DropPreview>,   // preview visual enquanto ainda não inserido
+        // ------------------------------------------------------------
 }
 
 impl App {
@@ -571,7 +582,7 @@ impl App {
             config,
             size,
 
-            theme: 6,
+theme: 6,
             scroll_x: 0.0,
             scroll_y: 0.0,
             px_per_beat: 40.0,
@@ -612,6 +623,8 @@ impl App {
             bpm: 120.0,
             time_ruler_h: 30.0,
             follow_playhead: false,
+            drop_path: None,
+            drop_preview: None,
         })
     }
 
@@ -742,6 +755,12 @@ impl App {
                 if let Some(p) = pos { self.last_cursor = p; }
             }
             ElementState::Released => {
+                // Se houver preview de áudio pendente, insere ao liberar o botão.
+                if let Some(preview) = self.drop_preview.take() {
+                    if let Some(path) = self.drop_path.take() {
+                        self.load_audio_file(&path, preview.beat, preview.track);
+                    }
+                }
                 self.panning = false;
             }
         }
@@ -1216,17 +1235,25 @@ impl App {
                     }
                     match tool {
                         Tool::Select => {
-                            if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-                                self.clip_interaction.begin_drag(&self.clips, pos, &cm);
-                                // Seleciona todo o grupo de clips grudados
-                                let chain = clips::ClipInteraction::find_group(&self.clips, idx);
-                                self.clip_interaction.select_chain(&self.clips, &chain);
-                                self.edge_scroll_x = 0.0;
-                                self.edge_scroll_y = 0.0;
-                                self.edge_scroll_dir = 0;
-                            } else {
-                                self.clip_interaction.begin_marquee(pos);
-                            }
+                // Insere áudio arrastado se houver preview pendente.
+                if let Some(preview) = self.drop_preview.take() {
+                    if let Some(path) = self.drop_path.take() {
+                        self.load_audio_file(&path, preview.beat, preview.track);
+                    }
+                } else {
+                    // comportamento padrão já existente
+                    if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+                        self.clip_interaction.begin_drag(&self.clips, pos, &cm);
+                        // Seleciona todo o grupo de clips grudados
+                        let chain = clips::ClipInteraction::find_group(&self.clips, idx);
+                        self.clip_interaction.select_chain(&self.clips, &chain);
+                        self.edge_scroll_x = 0.0;
+                        self.edge_scroll_y = 0.0;
+                        self.edge_scroll_dir = 0;
+                    } else {
+                        self.clip_interaction.begin_marquee(pos);
+                    }
+                }
                         }
                         Tool::Draw => {
                             if pos.1 >= self.ruler_px {
