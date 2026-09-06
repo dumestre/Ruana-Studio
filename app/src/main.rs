@@ -39,6 +39,7 @@ mod theme;
 mod timeline_gpu;
 mod waveform;
 mod waveform_gpu;
+mod timewarp;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

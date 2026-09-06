@@ -512,6 +512,22 @@ impl App {
 
 
     pub fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
+        // Intercepta arrasto da splitter do piano roll
+        if self.show_piano_roll && self.splitter_drag {
+            if state == ElementState::Released {
+                self.end_splitter_drag();
+            } else {
+                self.splitter_drag_move(pos.1, self.size.height as f32);
+            }
+            return;
+        }
+
+        // Intercepta clique dentro da área do piano roll (quando visível)
+        if self.show_piano_roll && pos.1 >= self.ruler_px + (self.size.height as f32 - self.ruler_px - self.time_ruler_h - self.piano_roll_height) {
+            self.handle_piano_roll_click(state, pos);
+            return;
+        }
+
         self.clip_interaction.sync_selection(self.clips.len());
         let cm = self.clip_metrics();
         let tool = current_tool();
@@ -657,6 +673,12 @@ impl App {
     }
 
     pub fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
+        // Se a splitter está sendo arrastada, redimensiona o piano roll
+        if self.splitter_drag {
+            self.splitter_drag_move(pos.1, self.size.height as f32);
+            return;
+        }
+
         let cm = self.clip_metrics();
         if self.fade_interaction.is_dragging() {
             if let Some(ref drag) = self.fade_interaction.active_drag {
@@ -915,6 +937,85 @@ if self.fade_interaction.is_dragging() {
             let pps = self.px_per_beat.max(0.001);
             let actual_dx = self.scroll_x - prev_sx;
             self.clip_interaction.drag_live_beat += actual_dx / pps;
+        }
+    }
+}
+
+// ===== Piano roll interaction helpers =====
+
+impl App {
+    fn piano_roll_metrics(&self) -> super::piano_roll::PianoRollMetrics {
+        let cm = self.clip_metrics();
+        let mut m = super::piano_roll::PianoRollMetrics::from_clip_metrics(&cm, self.piano_roll_height);
+        m.scroll_y = self.piano_roll_scroll_y;
+        m.ruler_px = self.ruler_px;
+        m
+    }
+
+    pub fn splitter_hit_test(&self, cursor_y: f32, height: f32) -> bool {
+        if !self.show_piano_roll {
+            return false;
+        }
+        let splitter_y = height - self.piano_roll_height - 4.0;
+        cursor_y >= splitter_y - 4.0 && cursor_y <= splitter_y + 4.0
+    }
+
+    fn handle_piano_roll_click(&mut self, state: ElementState, pos: (f32, f32)) {
+        let m = self.piano_roll_metrics();
+        let tool = current_tool();
+
+        match state {
+            ElementState::Pressed => {
+                if self.splitter_hit_test(pos.1, self.size.height as f32) {
+                    self.splitter_drag = true;
+                    return;
+                }
+
+                self.piano_roll_inter.sync_selection(self.piano_roll_notes.len());
+
+                match tool {
+                    Tool::Select => {
+                        if self.piano_roll_inter.is_dragging() {
+                            self.piano_roll_inter.drag_move(pos, &m);
+                        } else if !self.piano_roll_inter.begin_drag(&self.piano_roll_notes, pos, &m) {
+                            self.piano_roll_inter.begin_marquee(pos);
+                        }
+                    }
+                    Tool::Draw => {
+                        self.piano_roll_inter.begin_draw(pos, &m);
+                    }
+                    _ => {}
+                }
+            }
+            ElementState::Released => {
+                if self.splitter_drag {
+                    self.end_splitter_drag();
+                    return;
+                }
+
+                match tool {
+                    Tool::Select => {
+                        if self.piano_roll_inter.is_dragging() {
+                            self.piano_roll_inter.end_drag(&mut self.piano_roll_notes);
+                            self.sync_piano_roll_to_core();
+                        } else if self.piano_roll_inter.is_marqueeing() {
+                            self.piano_roll_inter.end_marquee(&self.piano_roll_notes, &m);
+                        }
+                    }
+                    Tool::Draw => {
+                        if self.piano_roll_inter.is_drawing() {
+                            let created = self.piano_roll_inter.end_draw(&mut self.piano_roll_notes, &m);
+                            for &idx in &created {
+                                if let Some(note) = self.piano_roll_notes.get(idx) {
+                                    self.note_editor.add(note.pitch, note.start, note.length, note.velocity);
+                                }
+                            }
+                            self.sync_piano_roll_from_core();
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }

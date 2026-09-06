@@ -170,6 +170,16 @@ impl ApplicationHandler for AppHandler {
                 if pressed && vk == Key::Named(NamedKey::Escape) {
                     event_loop.exit();
                 }
+                if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("p")) {
+                    app.toggle_piano_roll();
+                    if app.show_piano_roll && app.note_editor.notes().is_empty() {
+                        app.note_editor.add(60, 0.0, 1.0, 100);
+                        app.note_editor.add(64, 1.0, 0.5, 80);
+                        app.note_editor.add(67, 2.0, 1.5, 100);
+                        app.sync_piano_roll_from_core();
+                    }
+                    app.window.request_redraw();
+                }
                 // F: foca o clip sob o cursor; Ctrl+F: toggle follow playhead.
                 if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("f")) {
                     if self.ctrl_pressed {
@@ -285,9 +295,9 @@ impl ApplicationHandler for AppHandler {
                                 .max(0.0) as usize;
                             app.paste_at_beat(beat.round().max(0.0), track);
                             app.window.request_redraw();
-                        } else {
-                            app.handle_primary_button(state, app.last_cursor);
-                        }
+                } else {
+                    app.handle_primary_button(state, app.last_cursor);
+                }
                     } else {
                         app.handle_primary_button(state, app.last_cursor);
                     }

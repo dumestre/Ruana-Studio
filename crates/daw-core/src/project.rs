@@ -13,6 +13,7 @@ use std::cell::RefCell;
 use crate::clip::{Clip, ClipKind};
 use crate::history::History;
 use crate::mixer::{MixerChannel, MixerParam};
+use crate::timeline::TempoMap;
 use crate::track::{Track, TrackKind};
 use daw_midi::{BeatPatterns, DrumPattern, DrumTrackParams};
 
@@ -86,18 +87,25 @@ pub enum DocumentEvent {
         old: Clip,
         new: Clip,
     },
+    /// Mudança no mapa de tempo (time-warp: BPM varies by beat).
+    TempoChanged {
+        old: TempoMap,
+        new: TempoMap,
+    },
 }
 
 /// Um projeto da DAW.
 pub struct Project {
     pub tracks: Vec<Track>,
     pub clips: Vec<Clip>,
+    /// Mapa de tempo (tempo-warp: BPM varia ao longo da timeline).
+    pub tempo_map: TempoMap,
     /// Canal master do mixer.
     pub master_mixer: MixerChannel,
     /// Padrões de bateria / step sequencer.
     pub beat_patterns: BeatPatterns,
     history: History,
-    subscribers: RefCell<Vec<Option<Box<dyn Fn(&DocumentEvent, ChangeKind)>>>>,
+    subscribers: RefCell<Vec<Option<Box<dyn Fn(&DocumentEvent, ChangeKind) + 'static>>>>,
 }
 
 impl Default for Project {
@@ -105,6 +113,7 @@ impl Default for Project {
         Self {
             tracks: Vec::new(),
             clips: Vec::new(),
+            tempo_map: TempoMap::from_bpm(120.0),
             master_mixer: MixerChannel::default(),
             beat_patterns: BeatPatterns::new(),
             history: History::default(),
@@ -297,6 +306,9 @@ impl Project {
                     *existing = new.clone();
                 }
             }
+            DocumentEvent::TempoChanged { new, .. } => {
+                self.tempo_map = (*new).clone();
+            }
         }
         self.emit(event, ChangeKind::Apply);
     }
@@ -365,6 +377,9 @@ impl Project {
                 if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
                     *existing = old.clone();
                 }
+            }
+            DocumentEvent::TempoChanged { old, .. } => {
+                self.tempo_map = (*old).clone();
             }
         }
         self.emit(event, ChangeKind::Undo);
@@ -883,8 +898,33 @@ impl Project {
         true
     }
 
+    /// Define o BPM no beat especificado (time-warp). Cria uma
+    /// mudança de tempo se ainda não existe; atualiza se existir.
+    /// O beat 0 sempre tem uma entrada (BPM base do projeto).
+    pub fn set_tempo_at(&mut self, beat: f32, bpm: f32) -> bool {
+        let old = self.tempo_map.clone();
+        self.tempo_map.set_change(beat, bpm);
+        let new = self.tempo_map.clone();
+        let event = DocumentEvent::TempoChanged { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// Remove uma mudança de tempo (exceto a do beat 0).
+    pub fn remove_tempo_change(&mut self, beat: f32) -> bool {
+        let old = self.tempo_map.clone();
+        if !self.tempo_map.remove_change(beat) {
+            return false;
+        }
+        let new = self.tempo_map.clone();
+        let event = DocumentEvent::TempoChanged { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
     /// Altera um parâmetro do mixer.
-    ///
     /// `channel`: 0..tracks.len() = trilhas, tracks.len() = master.
     /// Retorna `false` se o canal não existe.
     pub fn set_mixer_param(

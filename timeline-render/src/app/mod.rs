@@ -3,6 +3,7 @@
 
 pub(crate) mod audio;
 pub(crate) mod interaction;
+pub(crate) mod piano_roll;
 pub(crate) mod render;
 pub(crate) mod window;
 
@@ -142,9 +143,25 @@ pub struct App {
         pub drop_path: Option<String>,            // caminho do arquivo arrastado
         pub drop_preview: Option<DropPreview>,   // preview visual enquanto ainda não inserido
         pub is_dragging_file: bool,              // true enquanto um arquivo está sendo arrastado sobre a janela
-        /// Se true, o próximo CursorMoved é ignorado (resposta a set_cursor_position).
         pub cursor_warp_pending: bool,
         // ------------------------------------------------------------
+
+    /// ===== Piano roll (editor MIDI) =====
+    /// Editor de notas: fonte de verdade compartilhado com o Slint (daw-midi::NoteEditor).
+    /// Quando `show_piano_roll` é verdadeiro, a área inferior da janela exibe
+    /// o editor em grade em vez da time_ruler.
+    pub note_editor: daw_midi::NoteEditor,
+    pub piano_roll_notes: Vec<piano_roll::PianoRollNote>,
+    pub piano_roll_inter: piano_roll::PianoRollInteraction,
+    pub piano_roll_scroll_y: f32,
+    pub show_piano_roll: bool,
+    /// Altura atual do piano roll (drag da splitter).
+    pub piano_roll_height: f32,
+    /// Altura mínima/máxima do piano roll.
+    pub piano_roll_min_h: f32,
+    pub piano_roll_max_h: f32,
+    /// true quando a splitter está sendo arrastada.
+    pub splitter_drag: bool,
 }
 
 impl App {
@@ -400,6 +417,17 @@ impl App {
             drop_preview: None,
             is_dragging_file: false,
             cursor_warp_pending: false,
+
+            // Piano roll: inicialmente oculto, com altura padrão.
+            note_editor: daw_midi::NoteEditor::new(),
+            piano_roll_notes: Vec::new(),
+            piano_roll_inter: piano_roll::PianoRollInteraction::new(),
+            piano_roll_scroll_y: 0.0,
+            show_piano_roll: false,
+            piano_roll_height: 160.0,
+            piano_roll_min_h: 60.0,
+            piano_roll_max_h: 480.0,
+            splitter_drag: false,
         })
     }
 
@@ -496,6 +524,111 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Sincroniza o estado de notas do `NoteEditor` (fonte de verdade do daw-midi)
+    /// para o cache local usado pela renderização do piano roll.
+    /// Esta função é chamada no início de `build_instances` para que o wgpu
+    /// reflita sempre as últimas edições feitas no Slint UI.
+    pub fn sync_piano_roll_from_core(&mut self) {
+        self.piano_roll_notes.clear();
+        for note in self.note_editor.notes() {
+            self.piano_roll_notes.push(piano_roll::PianoRollNote {
+                id: note.id,
+                pitch: note.pitch,
+                start: note.start,
+                length: note.length,
+                velocity: note.velocity,
+                selected: false,
+            });
+        }
+        self.piano_roll_inter.sync_selection(self.piano_roll_notes.len());
+    }
+
+    /// Aplica as notas editadas no wgpu de volta ao `NoteEditor`.
+    /// Chamar após movimento de nota ou criação via draw tool.
+    pub fn sync_piano_roll_to_core(&mut self) {
+        for note in &self.piano_roll_notes {
+            let core_note = self.note_editor.notes().iter().find(|n| n.id == note.id);
+            if let Some(core_note) = core_note {
+                let needs_move = (core_note.start - note.start).abs() > 0.001
+                    || core_note.pitch != note.pitch;
+                let needs_resize = (core_note.length - note.length).abs() > 0.001;
+                let needs_vel = core_note.velocity != note.velocity;
+
+                if needs_move {
+                    self.note_editor.move_note(note.id, note.start);
+                }
+                if needs_resize {
+                    self.note_editor.resize_note(note.id, note.length);
+                }
+                if needs_vel {
+                    self.note_editor.change_note_velocity(note.id, note.velocity);
+                }
+            }
+        }
+    }
+
+    /// Alterna a visibilidade do piano roll (tecla P).
+    pub fn toggle_piano_roll(&mut self) {
+        self.show_piano_roll = !self.show_piano_roll;
+    }
+
+    /// Começa o arrasto da splitter entre timeline e piano roll.
+    pub fn begin_splitter_drag(&mut self, cursor_y: f32, height: f32) {
+        if !self.show_piano_roll {
+            return;
+        }
+        let splitter_y = height - self.piano_roll_height - 4.0;
+        if cursor_y >= splitter_y - 4.0 && cursor_y <= splitter_y + 4.0 {
+            self.splitter_drag = true;
+        }
+    }
+
+    /// Arrasta a splitter para redimensionar o piano roll.
+    pub fn splitter_drag_move(&mut self, cursor_y: f32, height: f32) {
+        if self.splitter_drag {
+            let new_h = (height - cursor_y).clamp(self.piano_roll_min_h, self.piano_roll_max_h);
+            self.piano_roll_height = new_h;
+        }
+    }
+
+    /// Finaliza o arrasto da splitter.
+    pub fn end_splitter_drag(&mut self) {
+        self.splitter_drag = false;
+    }
+
+    /// Gera as instâncias do piano roll e da splitter.
+    /// Deve ser chamado de dentro de `build_instances`.
+    pub fn piano_roll_instances(&self, width: f32, height: f32) -> Vec<crate::RectInstance> {
+        if !self.show_piano_roll {
+            return Vec::new();
+        }
+
+        let cm = self.clip_metrics();
+        let mut m = piano_roll::PianoRollMetrics::from_clip_metrics(&cm, self.piano_roll_height);
+        m.scroll_y = self.piano_roll_scroll_y;
+        m.ruler_px = self.ruler_px;
+
+        let mut instances = piano_roll::build_piano_roll_instances(
+            &self.piano_roll_notes,
+            &self.piano_roll_inter,
+            &m,
+            width,
+            height,
+        );
+
+        let splitter_hovered = self.splitter_hit_test(self.last_cursor.1, height);
+        instances.extend(piano_roll::build_splitter_instances(
+            width,
+            height,
+            self.ruler_px,
+            self.piano_roll_height,
+            splitter_hovered,
+            self.theme.clamp(0, 6),
+        ));
+
+        instances
     }
 }
 

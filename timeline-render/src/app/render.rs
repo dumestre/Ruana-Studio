@@ -257,12 +257,17 @@ impl OrthoCamera {
 }
 
 impl App {
-    pub fn build_instances(&self, width: f32, height: f32) -> Vec<RectInstance> {
+    pub fn build_instances(&mut self, width: f32, height: f32) -> Vec<RectInstance> {
         let t = self.theme.clamp(0, 6) as usize;
         let mut instances = Vec::new();
         let px_per_bar = self.px_per_beat * 4.0;
         let _total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
         let row_height = 64.0 * self.zoom_y;
+
+        // Sincroniza notas MIDI do daw-core (fonte de verdade) para o cache do wgpu
+        if self.show_piano_roll {
+            self.sync_piano_roll_from_core();
+        }
 
         // Fundo geral - cobre desde a régua até o fundo
         instances.push(RectInstance {
@@ -807,6 +812,9 @@ impl App {
             color: [tr_border.0, tr_border.1, tr_border.2, 255],
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
+
+        // ===== Piano roll (editor MIDI) + splitter (se visível) =====
+        instances.extend(self.piano_roll_instances(width, height));
 
         instances
     }
