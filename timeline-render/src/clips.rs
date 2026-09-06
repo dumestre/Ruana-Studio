@@ -977,7 +977,7 @@ pub fn build_clip_instances(
             let ac =
                 [0x26, 0x26, 0x26, 255];
 
-            let thin = 4.0;
+            let thin = 2.0;
 
             instances.push(RectInstance {
                 x,
@@ -989,7 +989,7 @@ pub fn build_clip_instances(
                 wave_count: 0,
                 clip_w: 0.0,
                 clip_h: 0.0,
-                radius: 6.0,
+                radius: 3.0,
             });
 
             instances.push(RectInstance {
@@ -1002,7 +1002,7 @@ pub fn build_clip_instances(
                 wave_count: 0,
                 clip_w: 0.0,
                 clip_h: 0.0,
-                radius: 6.0,
+                radius: 3.0,
             });
 
             instances.push(RectInstance {
@@ -1222,7 +1222,7 @@ pub fn build_clip_instances(
                 let border_col =
                     (0x26, 0x26, 0x26);
 
-                let th = 4.0;
+                let th = 2.0;
 
                 instances.push(RectInstance {
                     x,
@@ -1239,7 +1239,7 @@ pub fn build_clip_instances(
                     wave_count: 0,
                     clip_w: 0.0,
                     clip_h: 0.0,
-                    radius: 6.0,
+                    radius: 3.0,
                 });
 
                 instances.push(RectInstance {
@@ -1430,7 +1430,7 @@ pub fn build_clip_instances(
                         let border_col =
                             (0x26, 0x26, 0x26);
 
-                        let th = 4.0;
+                        let th = 2.0;
 
                         instances.push(
                             RectInstance {
@@ -1448,7 +1448,7 @@ pub fn build_clip_instances(
                                 wave_count: 0,
                                 clip_w: 0.0,
                                 clip_h: 0.0,
-                                radius: 6.0,
+                                radius: 3.0,
                             },
                         );
                     }
@@ -1742,7 +1742,7 @@ fn push_clip(
     row_height: f32,
     _wave_natural_w: f32,
 ) {
-    let clip_r = 6.0;
+    let clip_r = 3.0;
 
     let decor_alpha: u8 =
         if body_alpha < 0.15 {
