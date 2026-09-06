@@ -84,6 +84,7 @@ pub struct ToolManager {
     cursors: HashMap<Tool, CursorHandle>,
     dark_cursors: HashMap<Tool, CursorHandle>,
     gain_cursor: Option<CursorHandle>,
+    hand_cursor: Option<CursorHandle>,
     current_tool: Tool,
     dark_mode: bool,
     hwnd: Option<WindowHandle>,
@@ -114,11 +115,13 @@ impl ToolManager {
         }
 
         let gain_cursor = Self::load_cursor(&cursor_dir, "gain.cur");
+        let hand_cursor = Self::load_cursor(&cursor_dir, "hand.cur");
 
         Ok(Self {
             cursors,
             dark_cursors,
             gain_cursor,
+            hand_cursor,
             current_tool: Tool::Select,
             dark_mode: false,
             hwnd: None,
@@ -155,11 +158,36 @@ impl ToolManager {
         self.apply_cursor();
     }
 
+    /// Aplica um cursor override (gain/hand) de forma PERSISTENTE, além do
+/// SetCursor imediato. Sem o GCLP_HCURSOR, o WM_SETCURSOR combinado com o
+/// movimento do mouse restauraria o cursor da ferramenta a cada frame.
+    fn apply_override_cursor(&self, hcursor: HCURSOR) {
+        if let Some(hwnd) = self.hwnd {
+            unsafe {
+                SetClassLongPtrW(hwnd.0, GCLP_HCURSOR, hcursor as isize);
+                SetCursor(hcursor);
+            }
+        } else {
+            unsafe { SetCursor(hcursor); }
+        }
+    }
+
     /// Mostra o cursor de ganho (area amarela do fade) ou volta ao cursor da ferramenta.
     pub fn set_gain_override(&mut self, active: bool) {
         if active {
             if let Some(handle) = self.gain_cursor {
-                unsafe { SetCursor(handle.hcursor); }
+                self.apply_override_cursor(handle.hcursor);
+                return;
+            }
+        }
+        self.apply_cursor();
+    }
+
+    /// Mostra o cursor de mão (handles de fade) ou volta ao cursor da ferramenta.
+    pub fn set_hand_override(&mut self, active: bool) {
+        if active {
+            if let Some(handle) = self.hand_cursor {
+                self.apply_override_cursor(handle.hcursor);
                 return;
             }
         }
@@ -315,6 +343,14 @@ pub fn set_gain_override(active: bool) {
     if let Some(mut guard) = get_tool_manager() {
         if let Some(mgr) = guard.as_mut() {
             mgr.set_gain_override(active);
+        }
+    }
+}
+
+pub fn set_hand_override(active: bool) {
+    if let Some(mut guard) = get_tool_manager() {
+        if let Some(mgr) = guard.as_mut() {
+            mgr.set_hand_override(active);
         }
     }
 }

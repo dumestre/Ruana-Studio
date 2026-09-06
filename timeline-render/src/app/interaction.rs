@@ -5,7 +5,7 @@ use winit::event::ElementState;
 use crate::app::{LoopDrag, App};
 use crate::clips;
 use crate::fades;
-use crate::tools::{current_tool, set_cursor_override, set_gain_override, Tool};
+use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, Tool};
 
 impl App {
     pub fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_ctrl: bool, with_alt: bool) {
@@ -652,19 +652,19 @@ impl App {
         }
 
 // Cursor override: seam hover → cursor de slice (visual feedback de des-colagem);
-// hover na área de ganho → cursor de ganho (gain.cur).
+// hover na área de ganho → cursor de ganho (gain.cur);
+// hover em bolinhas de fade → cursor de mão (hand.cur).
 if let Some((_, kind)) = self.fade_interaction.hovered {
     if kind == fades::FadeHandleKind::GainLevel {
         set_gain_override(true);
-    } else if self.clip_interaction.is_seam_hovered() {
-        set_cursor_override(Tool::Slice);
     } else {
-        set_gain_override(false);
+        set_hand_override(true);
     }
 } else if self.clip_interaction.is_seam_hovered() {
     set_cursor_override(Tool::Slice);
 } else {
     set_gain_override(false);
+    set_hand_override(false);
 }
 
         if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() && !self.clip_interaction.is_drawing() && !self.clip_interaction.is_stretching() {
