@@ -543,17 +543,19 @@ impl App {
             ClipDemo { track_index: 3, beat: 4.0, len: 20.0, is_midi: false, color: 5, name: None, seam_beat: None, pre_glue_len: None, pre_glue_color: None, wave: Vec::new(), file_path: None, source_start_beats: 0.0, source_length_beats: 0.0, channels: 1 },
         ];
 
-        // Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
-        // (a fonte da verdade). Buffer e segmentação derivam disso.
-        let (wave_bars, wave_segments) = waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB);
+// Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
+      // (a fonte da verdade). Buffer e segmentação derivam disso.
+      let (wave_bars, wave_segments) = waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB);
+      // Cria um vetor de fades padrão para esses clips (não‑midi).
+      let fades = clips.iter().map(|c| {
+          if !c.is_midi {
+              fades::ClipFade::default()
+          } else {
+              fades::ClipFade::none()
+          }
+      }).collect::<Vec<_>>();
 
-        let fades = clips.iter().map(|c| {
-            if !c.is_midi {
-                fades::ClipFade::default()
-            } else {
-                fades::ClipFade::none()
-            }
-        }).collect();
+        // O vetor `fades` já foi criado acima (linhas 546‑556).
 
         let transport = Arc::new(Mutex::new(Transport::default()));
         let audio_engine = AudioEngine::start(transport.clone()).ok();
@@ -944,6 +946,11 @@ impl App {
 
     /// Carrega um arquivo de áudio e cria um clip na posição especificada.
     fn load_audio_file(&mut self, path: &str, beat: f32, track: usize) {
+        // Esta função cria um clip de áudio a partir de um arquivo e garante
+        // que o clip tenha um `ClipFade` associado (como os clips placeholder).
+        // O fade padrão inclui gain, fade‑in e fade‑out configurados por
+        // `ClipFade::default()`, garantindo comportamento visual consistente.
+
         use daw_media::waveform::decode_audio;
         use std::path::Path;
 
@@ -955,42 +962,44 @@ impl App {
                 let beats_per_second = bpm / 60.0;
                 let source_length_beats = data.duration_seconds as f32 * beats_per_second;
 
-                let mut clip = ClipDemo {
-                    track_index: track,
-                    beat,
-                    len: source_length_beats,
-                    is_midi: false,
-                    color: 0,
-                    name: Some(std::path::Path::new(path)
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("Audio")
-                        .to_string()),
-                    seam_beat: None,
-                    pre_glue_len: None,
-                    pre_glue_color: None,
-                    wave: Vec::new(),
-                    file_path: Some(path.to_string()),
-                    source_start_beats: 0.0,
-                    source_length_beats,
-                    channels,
-                };
-
-                let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
-                let clip_idx = self.clips.len();
-                let seed = clip_idx as u64;
-                clip.wave = match waveform::decode_real_wave(path, n_cols) {
-                    Ok(w) => w,
-                    Err(_) => waveform::generate_procedural_wave(&clip, n_cols, seed),
-                };
-
-                self.clips.push(clip);
-                self.rebuild_wave_data();
-                self.window.request_redraw();
-            }
-            Err(e) => {
-                eprintln!("falha ao decodificar {}: {}", path, e);
-            }
+            // Cria o clip de áudio
+            let mut clip = ClipDemo {
+                track_index: track,
+                beat,
+                len: source_length_beats,
+                is_midi: false,
+                color: 0,
+                name: Some(std::path::Path::new(path)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Audio")
+                    .to_string()),
+                seam_beat: None,
+                pre_glue_len: None,
+                pre_glue_color: None,
+                wave: Vec::new(),
+                file_path: Some(path.to_string()),
+                source_start_beats: 0.0,
+                source_length_beats,
+                channels,
+            };
+            // Gera a waveform (real ou procedural)
+            let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
+            clip.wave = match waveform::decode_real_wave(path, n_cols) {
+                Ok(w) => w,
+                Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
+            };
+            // Insere o clip
+            self.clips.push(clip);
+            // Insere um fade correspondente (mesmo que o placeholder usa)
+            self.fades.push(fades::ClipFade::default());
+            // Atualiza buffers de waveform
+            self.rebuild_wave_data();
+            self.window.request_redraw();
+        },
+        Err(e) => {
+            eprintln!("falha ao decodificar {}: {}", path, e);
+        }
         }
     }
 
