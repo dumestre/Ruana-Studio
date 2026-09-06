@@ -13,8 +13,8 @@ pub mod waveform;
 
 pub use app::App;
 
-// Re-exports usados pelos submódulos `clips`/`fades` (que resolvem via
-// `super::`) e por código externo que consuma a biblioteca.
+// Re-exports usados pelos submódulos `clips`/`fades` e por código externo
+// que consuma a biblioteca.
 pub use app::render::{
     build_text_instances,
     build_text_instances_font,
