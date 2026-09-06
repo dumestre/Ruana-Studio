@@ -135,7 +135,14 @@ impl ApplicationHandler for AppHandler {
                             t.playing = false;
                         }
                         app.playing = false;
+                        // Guarda o ponto onde o play foi interrompido para,
+                        // ao retomar com espaço, pular de volta pro início do
+                        // último play (comportamento de DAW comum).
+                        app.last_play_start = app.play_start_seconds;
                     } else {
+                        // Se houve um play anterior interrompido por espaço,
+                        // o próximo espaço volta ao início daquele play.
+                        app.transport_seconds = app.last_play_start;
                         // Sincroniza o projeto com o motor de áudio antes de tocar.
                         app.sync_audio_engine();
                         // Sincroniza o estado do loop no transporte compartilhado.

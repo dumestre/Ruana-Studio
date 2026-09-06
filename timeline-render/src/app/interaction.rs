@@ -107,20 +107,44 @@ impl App {
         }
     }
 
-    /// Alterna o foco no clip sob o cursor: F centraliza o clip na view e
+    /// Alterna o foco no clip SELECIONADO: F centraliza o clip na view e
     /// lembra o estado anterior; F de novo restaura o estado anterior ao foco.
+    /// Sem seleção, usa o clip sob o cursor.
     pub fn toggle_clip_focus(&mut self, width: f32) {
-        if let Some((sx, ppb, sy)) = self.focus_saved.take() {
+        if let Some((sx, ppb, sy, zoom_y)) = self.focus_saved.take() {
             self.scroll_x = sx;
             self.px_per_beat = ppb;
             self.scroll_y = sy;
+            self.zoom_y = zoom_y;
             return;
         }
-        let Some(idx) = self.clip_interaction.hover_idx else { return };
+
+        // Prioriza o primeiro clip selecionado; senão usa o hover.
+        let idx = self
+            .clip_interaction
+            .selected
+            .iter()
+            .position(|&s| s)
+            .or(self.clip_interaction.hover_idx);
+
+        let Some(idx) = idx else { return };
         let Some(clip) = self.clips.get(idx) else { return };
-        self.focus_saved = Some((self.scroll_x, self.px_per_beat, self.scroll_y));
+
+        self.focus_saved = Some((
+            self.scroll_x,
+            self.px_per_beat,
+            self.scroll_y,
+            self.zoom_y,
+        ));
+
+        // Centraliza horizontal e verticalmente no clip selecionado.
         let clip_x = clip.beat * self.px_per_beat;
         self.scroll_x = (clip_x - width * 0.5).max(0.0);
+
+        let row_height = 64.0 * self.zoom_y.max(0.001);
+        let view_h = (self.size.height as f32 - self.ruler_px - self.time_ruler_h).max(0.0);
+        let clip_y = clip.track_index as f32 * row_height;
+        self.scroll_y = (clip_y - view_h * 0.5).max(0.0);
     }
 
     /// Copia os clips selecionados para o clipboard, preservando posições relativas.

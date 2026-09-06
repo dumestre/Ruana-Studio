@@ -249,12 +249,15 @@ impl FadeInteraction {
                 fade.out_curve_y = (drag.orig_out_curve_y + delta_norm_y).clamp(0.0, 1.0);
             }
             FadeHandleKind::GainLevel => {
-                // Área de ganho: 14px no topo do corpo. Ajusta ganho com base na
-                // posição vertical dentro dessa faixa (topo = +12dB, base = -24dB).
-                let gain_area_h: f32 = 14.0;
-                let delta_norm = dy / gain_area_h.max(1.0);
+                // Área de ganho: ajusta ganho com base na posição vertical.
+                // O divisor é a altura útil do corpo (x2): para varrer todo o
+                // range de dB é preciso arrastar bastante, então cada pixel
+                // mexe pouco no ganho (arrastar mais, mover menos).
                 let min_db = -24.0;
                 let max_db = 12.0;
+                let gain_drag_range =
+                    (body_h * 2.0).max(48.0);
+                let delta_norm = dy / gain_drag_range.max(1.0);
                 let delta_db = -delta_norm * (max_db - min_db);
                 fade.gain_db = (drag.orig_gain_db + delta_db).clamp(min_db, max_db);
             }

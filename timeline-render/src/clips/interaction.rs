@@ -453,39 +453,62 @@ impl ClipInteraction {
                     self.drag_group
                         .iter()
                         .map(|(_, ob, _)| *ob)
-                        .fold(f32::INFINITY, f32::min)
+                        .fold(self.drag_orig_beat, f32::min)
                 };
 
+            // O snap arredonda o DELTA (não o beat resultante do âncora),
+            // preservando os offsets relativos entre os membros do grupo.
             let clamped_delta =
                 delta_beats.max(-min_group_beat);
 
-            let live_beat = if snap {
-                (self.drag_orig_beat + clamped_delta)
-                    .max(0.0)
+            let snapped_delta = if snap {
+                clamped_delta
                     .round()
+                    .max(-min_group_beat)
             } else {
-                (self.drag_orig_beat + clamped_delta)
-                    .max(0.0)
+                clamped_delta
             };
 
-            self.drag_live_beat = live_beat;
+            self.drag_live_beat =
+                (self.drag_orig_beat + snapped_delta)
+                    .max(0.0);
 
             let row_delta =
-                (dy / m.row_height.max(0.001)).round();
+                (dy / m.row_height.max(0.001)).round() as i32;
 
             let n_tracks = (m.max_track + 1).max(1);
 
-            let min_track = m.visible_min_track();
+            // Limites do TRACK consideram o GRUPO inteiro, para que empurrar
+            // contra o topo/rodapé não desencaixe os clips entre si.
+            let min_track = m.visible_min_track() as i32;
+            let max_track = (n_tracks - 1) as i32;
 
-            let live_track =
-                (self.drag_orig_track as f32 + row_delta)
-                    .clamp(
-                        min_track as f32,
-                        (n_tracks - 1) as f32,
-                    ) as usize;
+            let (gmin_track, gmax_track) =
+                self.group_track_bounds();
 
-            self.drag_live_track = live_track;
+            let min_delta =
+                min_track - gmin_track as i32;
+            let max_delta =
+                max_track - gmax_track as i32;
+
+            let clamped_row =
+                row_delta.clamp(min_delta, max_delta);
+
+            self.drag_live_track =
+                (self.drag_orig_track as i32 + clamped_row)
+                    .max(0) as usize;
         }
+    }
+
+    /// Menor e maior track dos membros do grupo (incluindo o âncora).
+    pub fn group_track_bounds(&self) -> (usize, usize) {
+        let mut gmin = self.drag_orig_track;
+        let mut gmax = self.drag_orig_track;
+        for (_, _, ot) in self.drag_group.iter() {
+            gmin = gmin.min(*ot);
+            gmax = gmax.max(*ot);
+        }
+        (gmin, gmax)
     }
 
     /// Termina o arrasto e aplica a nova posição.
@@ -493,25 +516,19 @@ impl ClipInteraction {
         &mut self,
         clips: &mut [ClipDemo],
         m: &ClipMetrics,
-        snap: bool,
+        _snap: bool,
     ) {
         if let Some(idx) = self.drag_idx {
             if self.drag_moved {
                 if self.stretch_mode {
                     clips[idx].len =
                         self.stretch_live_len;
-                } else {
-                    let final_beat = if snap {
-                        self.drag_live_beat
-                            .round()
-                            .max(0.0)
-                    } else {
-                        self.drag_live_beat
-                    };
-
-                    clips[idx].beat = final_beat;
-                    clips[idx].track_index =
-                        self.drag_live_track;
+} else {
+                    // Deltas de grupo: preservam offsets relativos entre os
+                    // membros; o clamp é feito no DELTA (limites do grupo),
+                    // nunca individualmente por clip.
+                    let final_beat =
+                        self.drag_live_beat;
 
                     let beat_delta =
                         final_beat - self.drag_orig_beat;
@@ -527,17 +544,39 @@ impl ClipInteraction {
                             self.drag_group
                                 .iter()
                                 .map(|(_, ob, _)| *ob)
-                                .fold(f32::INFINITY, f32::min)
+                                .fold(self.drag_orig_beat, f32::min)
                         };
 
-                    let clamped_delta =
+                    let clamped_beat_delta =
                         beat_delta.max(-min_group_beat);
+
+                    let (gmin, gmax) =
+                        self.group_track_bounds();
+
+                    let min_track =
+                        m.visible_min_track() as i32;
+                    let max_track =
+                        (m.max_track + 1).max(1) as i32 - 1;
+
+                    let clamped_track_delta =
+                        track_delta.clamp(
+                            min_track - gmin as i32,
+                            max_track - gmax as i32,
+                        );
+
+                    clips[idx].beat =
+                        (self.drag_orig_beat + clamped_beat_delta)
+                            .max(0.0);
+                    clips[idx].track_index =
+                        (self.drag_orig_track as i32
+                            + clamped_track_delta)
+                            .max(0) as usize;
 
                     if let Some(sb) =
                         clips[idx].seam_beat
                     {
                         clips[idx].seam_beat =
-                            Some((sb + clamped_delta).max(0.0));
+                            Some((sb + clamped_beat_delta).max(0.0));
                     }
 
                     for (gi, orig_beat, orig_track)
@@ -548,25 +587,19 @@ impl ClipInteraction {
                         }
 
                         clips[*gi].beat =
-                            (orig_beat + clamped_delta)
+                            (orig_beat + clamped_beat_delta)
                                 .max(0.0);
 
-let min_track = m.visible_min_track();
-
-                    let new_track =
-                        (*orig_track as i32
-                            + track_delta)
-                            .clamp(min_track as i32, (m.max_track + 1).max(1) as i32 - 1)
-                            as usize;
-
                         clips[*gi].track_index =
-                            new_track;
+                            (*orig_track as i32
+                                + clamped_track_delta)
+                                .max(0) as usize;
 
                         if let Some(sb) =
                             clips[*gi].seam_beat
                         {
                             clips[*gi].seam_beat =
-                                Some((sb + clamped_delta).max(0.0));
+                                Some((sb + clamped_beat_delta).max(0.0));
                         }
                     }
                 }

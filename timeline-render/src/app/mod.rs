@@ -88,6 +88,8 @@ pub struct App {
     pub playing: bool,
     pub transport_seconds: f32,
     pub play_start_seconds: f32,
+    /// Início do último play, para o espaço retomar do começo (comportamento DAM).
+    pub last_play_start: f32,
     pub last_play_head_update: Instant,
     pub panning: bool,
     pub scrubbing: bool,
@@ -112,7 +114,7 @@ pub struct App {
     pub loop_drag_orig_start: f32,
     pub loop_drag_orig_end: f32,
 
-    pub focus_saved: Option<(f32, f32, f32)>,
+    pub focus_saved: Option<(f32, f32, f32, f32)>,
     pub clipboard: Vec<clips::ClipDemo>,
 
     pub undo_stack: Vec<TimelineSnapshot>,
@@ -352,6 +354,7 @@ impl App {
             playing: false,
             transport_seconds: 0.0,
             play_start_seconds: 0.0,
+            last_play_start: 0.0,
             last_play_head_update: Instant::now(),
             panning: false,
             scrubbing: false,
@@ -416,6 +419,8 @@ impl App {
         let bpm = self.bpm;
         let pps = self.px_per_beat * bpm / 60.0;
         self.transport_seconds = ((mx + self.scroll_x) / pps).max(0.0);
+        // Um clique/posicionamento manual zera o "retomar do último play".
+        self.last_play_start = self.transport_seconds;
     }
 
     /// Converte um beat (tempo musical) para a coordenada x de janela.

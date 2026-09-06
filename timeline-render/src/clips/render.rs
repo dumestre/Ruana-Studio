@@ -522,7 +522,7 @@ pub fn build_clip_instances(
                 inter.drag_group
                     .iter()
                     .map(|(_, ob, _)| *ob)
-                    .fold(f32::INFINITY, f32::min);
+                    .fold(inter.drag_orig_beat, f32::min);
 
             let clamped_delta =
                 beat_delta.max(-min_group_beat);
@@ -541,14 +541,12 @@ pub fn build_clip_instances(
                         (orig_beat + clamped_delta)
                             .max(0.0);
 
+                    // Aplica o mesmo delta de track clampado dos limites do
+                    // grupo (calculado no drag_move), preservando a colagem.
                     let live_track =
                         (*orig_track as i32
                             + track_delta)
-                            .clamp(
-                                m.visible_min_track() as i32,
-                                (m.max_track + 1).max(1) as i32 - 1,
-                            )
-                            as usize;
+                            .max(0) as usize;
 
                     let live = ClipDemo {
                         track_index:
