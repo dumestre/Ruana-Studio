@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use windows_sys::Win32::Foundation::{HINSTANCE, HWND};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     HCURSOR, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, LoadImageW, SetCursor, LoadCursorW, IDC_ARROW,
-    SetClassLongPtrW, GCLP_HCURSOR,
+    SetClassLongPtrW, GCLP_HCURSOR, CreateCursor,
 };
 
 // Wrapper para HWND que implementa Send + Sync (HWND é apenas um ponteiro opaco).
@@ -229,7 +229,18 @@ impl ToolManager {
 
         if hcursor.is_null() {
             eprintln!("[tool] LoadImageW failed for: {}", cur_path.display());
-            None
+            // Fallback: sintetiza um cursor a partir de um desenho interno.
+            let syn = match file_name {
+                "gain.cur" => unsafe { synthesize_gain_cursor() },
+                "hand.cur" => unsafe { synthesize_hand_cursor() },
+                _ => std::ptr::null_mut(),
+            };
+            if syn.is_null() {
+                eprintln!("[tool] CreateCursor sintetizado falhou para {}", file_name);
+                return None;
+            }
+            eprintln!("[tool] cursor sintetizado usado: {}", file_name);
+            Some(CursorHandle { hcursor: syn })
         } else {
             Some(CursorHandle { hcursor })
         }
@@ -352,5 +363,140 @@ pub fn set_hand_override(active: bool) {
         if let Some(mgr) = guard.as_mut() {
             mgr.set_hand_override(active);
         }
+    }
+}
+
+// ============================================================================
+// Síntese de cursores (fallback quando gain.cur/hand.cur não carregam)
+// ============================================================================
+// Cria um HCURSOR a partir de um desenho em monochrome (AND/XOR masks),
+// usado quando o arquivo .cur correspondente está corrompido/ausente.
+
+/// Tamanho do canvas dos cursores sintetizados (quadrado).
+const SYNTH_SIZE: u32 = 32;
+
+/// Gera as AND/XOR masks 1bpp a partir de uma flag opaca (pixels `true` são opacos).
+/// Inverte-se a smiles para AND mask (0 = desenhar, 1 = manter fundo).
+fn synth_masks(opaque: &[bool]) -> (Vec<u8>, Vec<u8>) {
+    let w = SYNTH_SIZE as usize;
+    let h = SYNTH_SIZE as usize;
+    let scan_bytes = (w + 7) / 8; // 1bpp: 4 bytes p/ 32px
+    let mut and = vec![0xFFu8; scan_bytes * h];
+    // XOR mask é irrelevante aqui porque o AND mask já recorta o formato.
+    let xor = vec![0u8; scan_bytes * h];
+
+    for y in 0..h {
+        for x in 0..w {
+            let idx = y * w + x;
+            if opaque[idx] {
+                // Opaco: AND bit = 0 → desenha a cor (XOR preta = preto sólido).
+                let byte = y * scan_bytes + x / 8;
+                and[byte] &= !(0x80 >> (x % 8));
+            }
+        }
+    }
+    (and, xor)
+}
+
+/// Gera um cursor de "mão" (open hand) com palma e dedos em preto.
+unsafe fn synthesize_hand_cursor() -> HCURSOR {
+    let w = SYNTH_SIZE as usize;
+    let h = SYNTH_SIZE as usize;
+    let mut opaque = vec![false; w * h];
+
+    // Hotspot na palma (aproximadamente).
+    let hx = 10i32;
+    let hy = 9i32;
+
+    // Desenha uma mão aberta simples (aproximação por discos/retângulos).
+    let set_rect = |op: &mut Vec<bool>, x0: i32, y0: i32, x1: i32, y1: i32| {
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
+                    op[(y as usize) * w + (x as usize)] = true;
+                }
+            }
+        }
+    };
+    let fill_disk = |op: &mut Vec<bool>, cx: i32, cy: i32, r: i32| {
+        for dy in -r..=r {
+            for dx in -r..=r {
+                if dx * dx + dy * dy <= r * r {
+                    let x = cx + dx;
+                    let y = cy + dy;
+                    if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
+                        op[(y as usize) * w + (x as usize)] = true;
+                    }
+                }
+            }
+        }
+    };
+
+    // Palma (arredondada).
+    fill_disk(&mut opaque, 10, 12, 7);
+    // Dedos (4 verticais).
+    fill_disk(&mut opaque, 12, 3, 3);
+    fill_disk(&mut opaque, 16, 2, 3);
+    fill_disk(&mut opaque, 20, 3, 3);
+    fill_disk(&mut opaque, 24, 6, 3);
+    // Polegar.
+    fill_disk(&mut opaque, 4, 10, 3);
+    // Pulsa/mão para cima.
+    set_rect(&mut opaque, 7, 14, 13, 26);
+
+    let (and, xor) = synth_masks(&opaque);
+    unsafe {
+        CreateCursor(
+            std::ptr::null_mut() as HINSTANCE,
+            hx,
+            hy,
+            w as i32,
+            h as i32,
+            and.as_ptr() as *const std::ffi::c_void,
+            xor.as_ptr() as *const std::ffi::c_void,
+        )
+    }
+}
+
+/// Gera um cursor de "ganho": seta apontando para cima com uma linha dupla
+/// (símbolo de volume/ganho).
+unsafe fn synthesize_gain_cursor() -> HCURSOR {
+    let w = SYNTH_SIZE as usize;
+    let h = SYNTH_SIZE as usize;
+    let mut opaque = vec![false; w * h];
+
+    // Seta apontando para cima (clássico "up arrow" de ganho).
+    let set_px = |op: &mut Vec<bool>, x: i32, y: i32| {
+        if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
+            op[(y as usize) * w + (x as usize)] = true;
+        }
+    };
+    // Corpo da seta: do centro subindo até o topo.
+    for i in 0..26i32 {
+        set_px(&mut opaque, 7, 5 + i); // borda esq
+        set_px(&mut opaque, 9, 5 + i); // centro
+        set_px(&mut opaque, 11, 5 + i); // borda dir
+    }
+    // Ponta triangular no topo.
+    for i in 0..6i32 {
+        for j in (-i)..=i {
+            set_px(&mut opaque, 9 + j, 5 + i);
+        }
+    }
+    // Hotspot no centro do corpo da seta.
+    let hx = 9i32;
+    let hy = 12i32;
+
+    let (and, xor) = synth_masks(&opaque);
+    unsafe {
+        CreateCursor(
+            std::ptr::null_mut() as HINSTANCE,
+            hx,
+            hy,
+            w as i32,
+            h as i32,
+            and.as_ptr() as *const std::ffi::c_void,
+            xor.as_ptr() as *const std::ffi::c_void,
+        )
     }
 }

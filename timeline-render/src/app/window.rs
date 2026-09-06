@@ -51,17 +51,20 @@ impl ApplicationHandler for AppHandler {
                 .expect("failed to create window");
             self.window_id = window.id();
             let win = Arc::new(window);
-            // Get HWND for Win32 cursor class override
-            if let Ok(handle) = win.window_handle() {
-                if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                    crate::tools::set_hwnd(h.hwnd.get() as HWND);
-                }
-            }
             self.app = Some(App::new(win).expect("app init failed"));
-            // Initialize tools and set dark mode for Paper theme
+            // Initialize tools first (creates the ToolManager singleton),
+            // THEN set the HWND so the ToolManager can use SetClassLongPtrW.
             if let Some(app) = &self.app {
                 app.init_tools();
                 app.window.request_redraw();
+            }
+            // Get HWND for Win32 cursor class override (MUST be after init_tools)
+            if let Some(app) = &self.app {
+                if let Ok(handle) = app.window.window_handle() {
+                    if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                        crate::tools::set_hwnd(h.hwnd.get() as HWND);
+                    }
+                }
             }
         }
     }

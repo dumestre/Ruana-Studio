@@ -115,6 +115,8 @@ fn build_cursors() -> Result<(), Box<dyn std::error::Error>> {
         ("gluecursor.svg", "glue.cur", (16, 16)),
         ("slicecursor.svg", "slice.cur", (16, 16)),
         ("stretchcursor.svg", "stretch.cur", (16, 16)),
+        ("gain.svg", "gain.cur", (16, 16)),
+        ("hand.svg", "hand.cur", (16, 16)),
     ];
 
     for (svg_name, cur_name, hotspot) in cursors {
