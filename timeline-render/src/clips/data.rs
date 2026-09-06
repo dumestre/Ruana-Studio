@@ -70,6 +70,16 @@ impl ClipMetrics {
 
         (beat, track)
     }
+
+    /// Menor índice de track que ainda fica visível abaixo da régua com o
+    /// scroll atual. Usado para impedir que clips arrastados "saiam para
+    /// fora" pelo topo (atrás da régua) quando a timeline está rolada.
+    pub fn visible_min_track(&self) -> usize {
+        if self.row_height <= 0.0 {
+            return 0;
+        }
+        (self.scroll_y / self.row_height).ceil() as usize
+    }
 }
 
 /// Retângulo de um clip em coordenadas de janela (já descontando scroll).

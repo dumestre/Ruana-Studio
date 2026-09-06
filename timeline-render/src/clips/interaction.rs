@@ -475,10 +475,12 @@ impl ClipInteraction {
 
             let n_tracks = (m.max_track + 1).max(1);
 
+            let min_track = m.visible_min_track();
+
             let live_track =
                 (self.drag_orig_track as f32 + row_delta)
                     .clamp(
-                        0.0,
+                        min_track as f32,
                         (n_tracks - 1) as f32,
                     ) as usize;
 
@@ -549,11 +551,13 @@ impl ClipInteraction {
                             (orig_beat + clamped_delta)
                                 .max(0.0);
 
-                        let new_track =
-                            (*orig_track as i32
-                                + track_delta)
-                                .clamp(0, (m.max_track + 1).max(1) as i32 - 1)
-                                as usize;
+let min_track = m.visible_min_track();
+
+                    let new_track =
+                        (*orig_track as i32
+                            + track_delta)
+                            .clamp(min_track as i32, (m.max_track + 1).max(1) as i32 - 1)
+                            as usize;
 
                         clips[*gi].track_index =
                             new_track;

@@ -544,7 +544,10 @@ pub fn build_clip_instances(
                     let live_track =
                         (*orig_track as i32
                             + track_delta)
-                            .clamp(0, (m.max_track + 1).max(1) as i32 - 1)
+                            .clamp(
+                                m.visible_min_track() as i32,
+                                (m.max_track + 1).max(1) as i32 - 1,
+                            )
                             as usize;
 
                     let live = ClipDemo {
