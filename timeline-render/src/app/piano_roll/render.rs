@@ -160,14 +160,14 @@ pub fn build_piano_roll_instances(
 /// Gera as instâncias do splitter entre timeline e piano roll.
 pub fn build_splitter_instances(
     width: f32,
-    height: f32,
-    _ruler_px: f32,
-    roll_height: f32,
+    piano_top: f32,
+    _roll_height: f32,
+    _height: f32,
     hovered: bool,
     theme: usize,
 ) -> Vec<RectInstance> {
     let t = theme.clamp(0, 6);
-    let splitter_y = height - roll_height - 4.0;
+    let splitter_y = piano_top;
     let splitter_h = 4.0;
     let col = if hovered {
         palette::ACCENT[t]

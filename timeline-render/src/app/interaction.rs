@@ -5,7 +5,7 @@ use winit::event::ElementState;
 use crate::app::{LoopDrag, App};
 use crate::clips;
 use crate::fades;
-use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, Tool};
+use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, set_vresize_override, Tool};
 use std::time::Instant;
 
 
@@ -522,11 +522,17 @@ impl App {
             return;
         }
 
-        // Intercepta clique dentro da área do piano roll (quando visível)
+        // Intercepta clique dentro da área do piano roll ou splitter (quando visível)
         if self.show_piano_roll {
             let height = self.size.height as f32;
-            let timeline_bottom = (height - self.time_ruler_h - self.piano_roll_height - 4.0).max(self.ruler_px + 4.0);
-            if pos.1 >= timeline_bottom {
+            let tr_y = height - self.time_ruler_h;
+            let piano_top = (tr_y - self.piano_roll_height - 4.0).clamp(self.ruler_px + 4.0, tr_y - self.piano_roll_min_h - 4.0);
+            let splitter_hit = pos.1 >= piano_top - 4.0 && pos.1 <= piano_top + 8.0;
+            if splitter_hit {
+                self.splitter_drag = true;
+                return;
+            }
+            if pos.1 >= piano_top + 4.0 {
                 self.handle_piano_roll_click(state, pos);
                 return;
             }
@@ -823,11 +829,18 @@ if self.fade_interaction.is_dragging() {
     } else {
         set_hand_override(true);
     }
-} else if self.clip_interaction.is_seam_hovered() {
+        } else if self.clip_interaction.is_seam_hovered() {
     set_cursor_override(Tool::Slice);
 }
 
-        if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() && !self.clip_interaction.is_drawing() && !self.clip_interaction.is_stretching() {
+    // Cursor de resize vertical sobre a splitter do piano roll
+    if self.splitter_drag || self.splitter_hit_test(self.last_cursor.1, self.size.height as f32) {
+        set_vresize_override(true);
+    } else {
+        set_vresize_override(false);
+    }
+
+    if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() && !self.clip_interaction.is_drawing() && !self.clip_interaction.is_stretching() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
@@ -952,10 +965,10 @@ impl App {
         let cm = self.clip_metrics();
         let mut m = super::piano_roll::PianoRollMetrics::from_clip_metrics(&cm, self.piano_roll_height);
         m.scroll_y = self.piano_roll_scroll_y;
-        // O topo do piano roll é abaixo da timeline (encolhida quando PR visível).
         let height = self.size.height as f32;
-        let timeline_bottom = (height - self.time_ruler_h - self.piano_roll_height - 4.0).max(self.ruler_px + 4.0);
-        m.ruler_px = timeline_bottom;
+        let tr_y = height - self.time_ruler_h;
+        let piano_top = (tr_y - self.piano_roll_height - 4.0).clamp(self.ruler_px + 4.0, tr_y - self.piano_roll_min_h - 4.0);
+        m.ruler_px = piano_top;
         m
     }
 
@@ -963,8 +976,9 @@ impl App {
         if !self.show_piano_roll {
             return false;
         }
-        let splitter_y = height - self.piano_roll_height - 4.0;
-        cursor_y >= splitter_y - 4.0 && cursor_y <= splitter_y + 4.0
+        let tr_y = height - self.time_ruler_h;
+        let piano_top = (tr_y - self.piano_roll_height - 4.0).clamp(self.ruler_px + 4.0, tr_y - self.piano_roll_min_h - 4.0);
+        cursor_y >= piano_top - 4.0 && cursor_y <= piano_top + 8.0
     }
 
     fn handle_piano_roll_click(&mut self, state: ElementState, pos: (f32, f32)) {

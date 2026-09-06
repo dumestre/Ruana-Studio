@@ -94,6 +94,10 @@ impl ApplicationHandler for AppHandler {
                     app.update_edge_scroll(app.last_cursor);
                     app.apply_edge_scroll();
                 }
+                // Redesenha continuamente enquanto a splitter do piano roll está sendo arrastada
+                if app.show_piano_roll && app.splitter_drag {
+                    app.window.request_redraw();
+                }
                 // Se um arquivo estiver sendo arrastado, atualiza a posição do preview
                 // usando a posição global do cursor (já que o OS não envia CursorMoved
                 // durante drag de arquivo).
@@ -279,6 +283,15 @@ impl ApplicationHandler for AppHandler {
                 ..
             } => {
                 tools::update_cursor();
+                // Inicia/finaliza arrasto da splitter do piano roll
+                if state == ElementState::Pressed && app.show_piano_roll
+                    && app.splitter_hit_test(app.last_cursor.1, app.size.height as f32)
+                {
+                    app.splitter_drag = true;
+                }
+                if state == ElementState::Released && app.splitter_drag {
+                    app.splitter_drag = false;
+                }
                 if button == winit::event::MouseButton::Middle {
                     let pos = Some(app.last_cursor);
                     app.handle_mouse_button(state, pos);

@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use windows_sys::Win32::Foundation::{HINSTANCE, HWND};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    HCURSOR, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, LoadImageW, SetCursor, LoadCursorW, IDC_ARROW,
+    HCURSOR, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, LoadImageW, SetCursor, LoadCursorW,
+    IDC_ARROW, IDC_SIZENS,
     SetClassLongPtrW, GCLP_HCURSOR, CreateCursor,
 };
 
@@ -165,8 +166,8 @@ impl ToolManager {
     }
 
     /// Aplica um cursor override (gain/hand) de forma PERSISTENTE, além do
-/// SetCursor imediato. Sem o GCLP_HCURSOR, o WM_SETCURSOR combinado com o
-/// movimento do mouse restauraria o cursor da ferramenta a cada frame.
+    /// SetCursor imediato. Sem o GCLP_HCURSOR, o WM_SETCURSOR combinado com o
+    /// movimento do mouse restauraria o cursor da ferramenta a cada frame.
     fn apply_override_cursor(&self, hcursor: HCURSOR) {
         if let Some(hwnd) = self.hwnd {
             unsafe {
@@ -176,6 +177,18 @@ impl ToolManager {
         } else {
             unsafe { SetCursor(hcursor); }
         }
+    }
+
+    /// Mostra o cursor de resize vertical (SizeNS) ou volta ao cursor da ferramenta.
+    pub fn set_vresize_override(&mut self, active: bool) {
+        if active {
+            let size_ns = unsafe { LoadCursorW(core::ptr::null_mut(), IDC_SIZENS as usize as *const u16) };
+            if !size_ns.is_null() {
+                self.apply_override_cursor(size_ns);
+                return;
+            }
+        }
+        self.apply_cursor();
     }
 
     /// Mostra o cursor de ganho (area amarela do fade) ou volta ao cursor da ferramenta.
@@ -370,6 +383,14 @@ pub fn set_hand_override(active: bool) {
     if let Some(mut guard) = get_tool_manager() {
         if let Some(mgr) = guard.as_mut() {
             mgr.set_hand_override(active);
+        }
+    }
+}
+
+pub fn set_vresize_override(active: bool) {
+    if let Some(mut guard) = get_tool_manager() {
+        if let Some(mgr) = guard.as_mut() {
+            mgr.set_vresize_override(active);
         }
     }
 }

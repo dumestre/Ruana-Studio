@@ -608,9 +608,11 @@ impl App {
         let cm = self.clip_metrics();
         let mut m = piano_roll::PianoRollMetrics::from_clip_metrics(&cm, self.piano_roll_height);
         m.scroll_y = self.piano_roll_scroll_y;
-        // O piano roll é ancorado embaixo, acima da time_ruler.
-        let timeline_bottom = (height - self.time_ruler_h - self.piano_roll_height - 4.0).max(self.ruler_px + 4.0);
-        m.ruler_px = timeline_bottom;
+        // O piano roll é ancorado embaixo (acima da time_ruler).
+        // splitter_y = topo do time_ruler menos a altura do PR e 4px da splitter.
+        let tr_y = height - self.time_ruler_h;
+        let piano_top = (tr_y - self.piano_roll_height - 4.0).clamp(self.ruler_px + 4.0, tr_y - self.piano_roll_min_h - 4.0);
+        m.ruler_px = piano_top;
 
         let mut instances = piano_roll::build_piano_roll_instances(
             &self.piano_roll_notes,
@@ -623,9 +625,9 @@ impl App {
         let splitter_hovered = self.splitter_hit_test(self.last_cursor.1, height);
         instances.extend(piano_roll::build_splitter_instances(
             width,
-            height,
-            timeline_bottom,
+            piano_top,
             self.piano_roll_height,
+            height,
             splitter_hovered,
             self.theme.clamp(0, 6),
         ));
