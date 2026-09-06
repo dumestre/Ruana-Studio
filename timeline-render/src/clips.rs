@@ -1790,7 +1790,8 @@ fn push_clip(
         );
 
     // Header – retângulo superior com cantos arredondados (apenas canto superior).
-    let header_h_total = header_h + clip_r; // estende ligeiro para cobrir cantos do corpo
+    // Garante que a soma do header e do corpo ocupe exatamente a altura da track.
+    let header_h_total = (header_h + clip_r).min(row_height);
     instances.push(RectInstance {
         x: x + bw,
         y,
@@ -1805,7 +1806,7 @@ fn push_clip(
     });
 
     // Corpo – retângulo inferior com cantos arredondados apenas na parte de baixo.
-    let body_h_adj = if body_h > clip_r { body_h - clip_r } else { 0.0 };
+    let body_h_adj = if row_height > header_h_total { row_height - header_h_total } else { 0.0 };
     instances.push(RectInstance {
         x: x + bw,
         y: y + header_h,
