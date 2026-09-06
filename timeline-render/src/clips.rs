@@ -1789,20 +1789,33 @@ fn push_clip(
             body_alpha,
         );
 
-    // Corpo inteiro — UM retângulo.
+    // Header – retângulo superior com cantos arredondados (apenas canto superior).
+    let header_h_total = header_h + clip_r; // estende ligeiro para cobrir cantos do corpo
+    instances.push(RectInstance {
+        x: x + bw,
+        y,
+        w: w,
+        h: header_h_total,
+        color: body_col, // mesmo tom usado no corpo
+        wave_offset: 0,
+        wave_count: 0,
+        clip_w: 0.0,
+        clip_h: header_h_total,
+        radius: clip_r,
+    });
+
+    // Corpo – retângulo inferior com cantos arredondados apenas na parte de baixo.
+    let body_h_adj = if body_h > clip_r { body_h - clip_r } else { 0.0 };
     instances.push(RectInstance {
         x: x + bw,
         y: y + header_h,
         w: w,
-        h: body_h,
+        h: body_h_adj,
         color: body_col,
-
-        // Sem waveform neste retângulo.
         wave_offset: 0,
         wave_count: 0,
         clip_w: 0.0,
-        clip_h: body_h,
-
+        clip_h: body_h_adj,
         radius: clip_r,
     });
 
