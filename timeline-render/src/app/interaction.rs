@@ -8,6 +8,7 @@ use crate::fades;
 use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, Tool};
 use windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos;
 
+
 impl App {
     pub fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_ctrl: bool, with_alt: bool) {
         let (dx, dy) = match *delta {
@@ -681,7 +682,8 @@ impl App {
             }
         }
 
-// Cursor override handling:
+
+
 // - Enquanto arrasta um handle, força o cursor apropriado (hand ou gain).
 // - Quando não está arrastando, usa hover para escolher o cursor.
 // - Caso contrário, limpa quaisquer sobrescrições de cursor.
@@ -720,46 +722,27 @@ if self.fade_interaction.is_dragging() {
             }
         }
 
-        // Atualiza a posição do cursor em caso de arrasto de handle.
-        // Quando o handle possui travamento de eixo, mantemos o cursor "grudado"
-        // ao eixo permitido para evitar que ele se afaste visualmente.
-        let mut cursor_to_store = pos;
+        let mut constrained = pos;
         if self.fade_interaction.is_dragging() {
             if let Some(ref drag) = self.fade_interaction.active_drag {
                 match drag.axis_lock {
                     Some(fades::DragAxisLock::Horizontal) => {
-                        // mantém a coordenada Y fixa no início do arrasto
-                        cursor_to_store.1 = drag.start_cursor.1;
+                        // fixa a coordenada Y ao início do arrasto
+                        constrained.1 = drag.start_cursor.1;
                     }
                     Some(fades::DragAxisLock::Vertical) => {
-                        // mantém a coordenada X fixa no início do arrasto
-                        cursor_to_store.0 = drag.start_cursor.0;
+                        // fixa a coordenada X ao início do arrasto
+                        constrained.0 = drag.start_cursor.0;
                     }
                     None => {}
                 }
+
             }
         }
-        self.last_cursor = cursor_to_store;
+        self.last_cursor = constrained;
+
         // Se o cursor foi ajustado por trava de eixo, reposiciona o cursor do SO
         // para que ele "grude" visualmente ao handle.
-        if self.fade_interaction.is_dragging() {
-            // Converte coordenadas lógicas (da janela) para coordenadas de tela.
-            // Usa a escala da janela e a posição externa da mesma.
-            if let Ok(window_pos) = self.window.outer_position() {
-                let scale = self.window.scale_factor() as f32;
-                let window_size = self.window.inner_size();
-                let max_x = window_pos.x + ((window_size.width as f32 * scale) as i32) - 1;
-                let max_y = window_pos.y + ((window_size.height as f32 * scale) as i32) - 1;
-                let mut screen_x = ((cursor_to_store.0 * scale) as i32) + window_pos.x;
-                let mut screen_y = ((cursor_to_store.1 * scale) as i32) + window_pos.y;
-                // Garantir que o cursor não saia da área da janela.
-                if screen_x < window_pos.x { screen_x = window_pos.x; }
-                if screen_y < window_pos.y { screen_y = window_pos.y; }
-                if screen_x > max_x { screen_x = max_x; }
-                if screen_y > max_y { screen_y = max_y; }
-                unsafe { SetCursorPos(screen_x, screen_y); }
-            }
-        }
 
     }
 
