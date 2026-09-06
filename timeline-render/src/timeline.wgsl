@@ -555,7 +555,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // INTERPOLAÇÃO LINEAR
     // ========================================================================
 
-    let val =
+    let _val =
         mix(
             v0,
             v1,
@@ -611,19 +611,27 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // ========================================================================
 
     if px_per_sample < 1.0 {
+        let env_val =
+            mix(
+                abs(v0),
+                abs(v1),
+                t
+            );
+
         let y_top =
-            c - val * a;
+            c - env_val * a;
 
         let y_bottom =
-            c + val * a;
+            c + env_val * a;
 
         let outside =
             max(
-                y_bottom - p.y,
-                p.y - y_top
+                y_top - p.y,
+                p.y - y_bottom
             );
 
-        let aa = 0.5;
+        let aa =
+            0.35;
 
         let cov =
             1.0 -

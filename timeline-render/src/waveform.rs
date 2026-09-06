@@ -462,30 +462,25 @@ pub(crate) fn decode_real_wave(
             let end_sample =
                 frame_end;
 
-            let sum: f32 =
+            let peak =
                 samples[
                     start_sample
                     ..
                     end_sample
                 ]
                 .iter()
-                .sum();
-
-            let count =
-                end_sample -
-                start_sample;
-
-            let avg =
-                if count > 0 {
-                    sum /
-                    count as f32
-                } else {
-                    0.0
-                };
+                .copied()
+                .fold(0.0f32, |acc, s| {
+                    if s.abs() > acc.abs() {
+                        s
+                    } else {
+                        acc
+                    }
+                });
 
             wave.push(
-                if avg.is_finite() {
-                    avg
+                if peak.is_finite() {
+                    peak
                 } else {
                     0.0
                 }
@@ -514,11 +509,8 @@ pub(crate) fn decode_real_wave(
             let step =
                 channels;
 
-            let mut sum =
+            let mut peak =
                 0.0f32;
-
-            let mut count =
-                0usize;
 
             let mut i =
                 start_sample;
@@ -528,26 +520,20 @@ pub(crate) fn decode_real_wave(
                   i <
                   samples.len()
             {
-                sum +=
-                    samples[i];
-
-                count += 1;
+                if samples[i].abs() >
+                   peak.abs()
+                {
+                    peak =
+                        samples[i];
+                }
 
                 i +=
                     step;
             }
 
-            let avg =
-                if count > 0 {
-                    sum /
-                    count as f32
-                } else {
-                    0.0
-                };
-
             wave.push(
-                if avg.is_finite() {
-                    avg
+                if peak.is_finite() {
+                    peak
                 } else {
                     0.0
                 }
