@@ -23,3 +23,8 @@ daw-midi = { path = "../crates/daw-midi" }
 [features]
 default = ["audio"]
 audio = ["dep:daw-audio"]
+
+[build-dependencies]
+resvg = { version = "0.48", features = ["raster-images"] }
+usvg = "0.48"
+png = "0.18"

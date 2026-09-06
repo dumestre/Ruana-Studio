@@ -84,7 +84,9 @@ pub struct ToolManager {
     cursors: HashMap<Tool, CursorHandle>,
     dark_cursors: HashMap<Tool, CursorHandle>,
     gain_cursor: Option<CursorHandle>,
+    gain_dark_cursor: Option<CursorHandle>,
     hand_cursor: Option<CursorHandle>,
+    hand_dark_cursor: Option<CursorHandle>,
     current_tool: Tool,
     dark_mode: bool,
     hwnd: Option<WindowHandle>,
@@ -115,13 +117,17 @@ impl ToolManager {
         }
 
         let gain_cursor = Self::load_cursor(&cursor_dir, "gain.cur");
+        let gain_dark_cursor = Self::load_cursor(&cursor_dir, "gain-dark.cur");
         let hand_cursor = Self::load_cursor(&cursor_dir, "hand.cur");
+        let hand_dark_cursor = Self::load_cursor(&cursor_dir, "hand-dark.cur");
 
         Ok(Self {
             cursors,
             dark_cursors,
             gain_cursor,
+            gain_dark_cursor,
             hand_cursor,
+            hand_dark_cursor,
             current_tool: Tool::Select,
             dark_mode: false,
             hwnd: None,
@@ -175,7 +181,8 @@ impl ToolManager {
     /// Mostra o cursor de ganho (area amarela do fade) ou volta ao cursor da ferramenta.
     pub fn set_gain_override(&mut self, active: bool) {
         if active {
-            if let Some(handle) = self.gain_cursor {
+            let handle = if self.dark_mode { self.gain_dark_cursor } else { self.gain_cursor };
+            if let Some(handle) = handle {
                 self.apply_override_cursor(handle.hcursor);
                 return;
             }
@@ -186,7 +193,8 @@ impl ToolManager {
     /// Mostra o cursor de mão (handles de fade) ou volta ao cursor da ferramenta.
     pub fn set_hand_override(&mut self, active: bool) {
         if active {
-            if let Some(handle) = self.hand_cursor {
+            let handle = if self.dark_mode { self.hand_dark_cursor } else { self.hand_cursor };
+            if let Some(handle) = handle {
                 self.apply_override_cursor(handle.hcursor);
                 return;
             }
