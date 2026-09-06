@@ -83,6 +83,7 @@ unsafe impl Sync for CursorHandle {}
 pub struct ToolManager {
     cursors: HashMap<Tool, CursorHandle>,
     dark_cursors: HashMap<Tool, CursorHandle>,
+    gain_cursor: Option<CursorHandle>,
     current_tool: Tool,
     dark_mode: bool,
     hwnd: Option<WindowHandle>,
@@ -112,9 +113,12 @@ impl ToolManager {
             }
         }
 
+        let gain_cursor = Self::load_cursor(&cursor_dir, "gain.cur");
+
         Ok(Self {
             cursors,
             dark_cursors,
+            gain_cursor,
             current_tool: Tool::Select,
             dark_mode: false,
             hwnd: None,
@@ -148,6 +152,17 @@ impl ToolManager {
 
     pub fn set_tool(&mut self, tool: Tool) {
         self.current_tool = tool;
+        self.apply_cursor();
+    }
+
+    /// Mostra o cursor de ganho (area amarela do fade) ou volta ao cursor da ferramenta.
+    pub fn set_gain_override(&mut self, active: bool) {
+        if active {
+            if let Some(handle) = self.gain_cursor {
+                unsafe { SetCursor(handle.hcursor); }
+                return;
+            }
+        }
         self.apply_cursor();
     }
 
@@ -292,6 +307,14 @@ pub fn set_cursor_override(tool: Tool) {
             if let Some(handle) = map.get(&tool) {
                 unsafe { SetCursor(handle.hcursor); }
             }
+        }
+    }
+}
+
+pub fn set_gain_override(active: bool) {
+    if let Some(mut guard) = get_tool_manager() {
+        if let Some(mgr) = guard.as_mut() {
+            mgr.set_gain_override(active);
         }
     }
 }

@@ -419,28 +419,21 @@ pub fn build_clip_fade_instances(
         // 3. GAIN / VOLUME — Área no topo do corpo (abaixo do header)
     // ========================================================================
     // Área de ganho: faixa de 14px no topo do corpo do clip.
+    // Gradiente: amarelo sólido no topo → transparente embaixo (fade).
+    // O gradiente é composto por faixas horizontais com alpha decrescente.
     let gain_area_h = 14.0;
     let gain_area_y = body_y;
-    // Fundo dourado suave da área de ganho, sempre visível
-    instances.push(RectInstance {
-        x: body_x,
-        y: gain_area_y,
-        w: body_w,
-        h: gain_area_h,
-        color: [255, 215, 0, 60],
-        wave_offset: 0,
-        wave_count: 0,
-        clip_w: 0.0,
-        clip_h: 0.0,
-        radius: 0.0,
-    });
-    if is_hovered(FadeHandleKind::GainLevel) {
+    let gradient_strips: i32 = 7;
+    let base_alpha = if is_hovered(FadeHandleKind::GainLevel) { 110 } else { 70 };
+    for i in 0..gradient_strips {
+        let frac = i as f32 / gradient_strips as f32;
+        let strip_alpha = (base_alpha as f32 * (1.0 - frac * 0.85)).round() as u8;
         instances.push(RectInstance {
             x: body_x,
-            y: gain_area_y,
+            y: gain_area_y + i as f32 * gain_area_h / gradient_strips as f32,
             w: body_w,
-            h: gain_area_h,
-            color: [255, 215, 90, 90],
+            h: gain_area_h / gradient_strips as f32 + 0.5,
+            color: [255, 215, 0, strip_alpha],
             wave_offset: 0,
             wave_count: 0,
             clip_w: 0.0,
