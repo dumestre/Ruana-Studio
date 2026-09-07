@@ -3,15 +3,18 @@
 
 use crate::{
     darker,
+    get_font,
     rgba,
     rgba_alpha,
     palette,
     RectInstance,
-    build_text_instances,
+    build_text_instances_font,
 };
+use ab_glyph::{Font, ScaleFont};
 use super::{clip_rect, ClipDemo, ClipInteraction, ClipMetrics};
 
-/// Desenha o nome do clip no header.
+/// Desenha o nome do clip no header, alinhado à esquerda com padding fixo.
+/// Trunca com "..." se não couber.
 fn push_clip_name(
     instances: &mut Vec<RectInstance>,
     clip: &ClipDemo,
@@ -23,40 +26,78 @@ fn push_clip_name(
 ) {
     if let Some(ref name) = clip.name {
         let scale = 1.0;
-        let char_w = 8.0 * scale;
-        let gap = 1.0 * scale;
+        let pad = 6.0;
 
-        let total_w =
-            (name.len() as f32 - 1.0) * gap
-                + name.len() as f32 * char_w;
+        let available = (w - 2.0 * bw - 2.0 * pad).max(0.0);
 
-        let available =
-            w - 2.0 * bw;
+        let font = get_font();
+        let px_scale = ab_glyph::PxScale::from(scale * 14.0);
+        let sf = font.as_scaled(px_scale);
 
-        if total_w <= available {
-            let text_y =
-                y + header_h / 2.0
-                    - 4.0 * scale;
+        let dot_str = "...";
+        let dot_width: f32 = dot_str
+            .chars()
+            .filter_map(|ch| {
+                let gid = font.glyph_id(ch);
+                Some(sf.h_advance(gid))
+            })
+            .sum();
 
-            let start_x =
-                x + bw + 4.0;
+        let full_width: f32 = name
+            .chars()
+            .filter_map(|ch| {
+                let gid = font.glyph_id(ch);
+                Some(sf.h_advance(gid))
+            })
+            .sum();
 
-            let center_x =
-                start_x + total_w / 2.0;
+        let text_to_draw = if full_width <= available {
+            name.as_str()
+        } else {
+            let mut width = 0.0;
+            let mut end = 0;
+            for (i, ch) in name.chars().enumerate() {
+                let gid = font.glyph_id(ch);
+                let advance = sf.h_advance(gid);
+                if width + advance + dot_width > available {
+                    break;
+                }
+                width += advance;
+                end = i + 1;
+            }
+            &name[..end]
+        };
 
-            let text_color =
-                [0u8, 0, 0, 255];
+        let text_y = y + header_h / 2.0 - 4.0 * scale;
+        let start_x = x + bw + pad;
+        let text_color = [0u8, 0, 0, 255];
 
-            instances.extend(
-                build_text_instances(
-                    name,
-                    center_x,
-                    text_y,
-                    text_color,
-                    scale,
-                ),
-            );
-        }
+        let draw_str = if text_to_draw.len() < name.len() {
+            format!("{}{}", text_to_draw, dot_str)
+        } else {
+            text_to_draw.to_string()
+        };
+
+        let final_width: f32 = draw_str
+            .chars()
+            .filter_map(|ch| {
+                let gid = font.glyph_id(ch);
+                Some(sf.h_advance(gid))
+            })
+            .sum();
+
+        let final_center_x = start_x + final_width / 2.0;
+
+        instances.extend(
+            build_text_instances_font(
+                font,
+                &draw_str,
+                final_center_x,
+                text_y,
+                text_color,
+                scale,
+            ),
+        );
     }
 }
 

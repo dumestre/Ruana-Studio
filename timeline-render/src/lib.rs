@@ -19,6 +19,7 @@ pub use app::render::{
     build_text_instances,
     build_text_instances_font,
     darker,
+    get_font,
     get_regular_font,
     palette,
     rgba,

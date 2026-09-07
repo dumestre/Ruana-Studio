@@ -115,7 +115,7 @@ pub fn srgb_to_linear(c: f32) -> f32 {
 static FONT: std::sync::OnceLock<ab_glyph::FontRef<'static>> = std::sync::OnceLock::new();
 static FONT_REGULAR: std::sync::OnceLock<ab_glyph::FontRef<'static>> = std::sync::OnceLock::new();
 
-fn get_font() -> &'static ab_glyph::FontRef<'static> {
+pub fn get_font() -> &'static ab_glyph::FontRef<'static> {
     FONT.get_or_init(|| {
         ab_glyph::FontRef::try_from_slice(include_bytes!("../../assets/arialbd.ttf"))
             .expect("Failed to load font")

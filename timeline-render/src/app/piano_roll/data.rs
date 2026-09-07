@@ -245,19 +245,13 @@ impl PianoRollMetrics {
             if y < piano_top || y > roll_bottom {
                 continue;
             }
-            let is_black = [1, 3, 6, 8, 11].contains(&(pitch.rem_euclid(12)));
-            let col = if is_black { palette::GRID_SUB[t] } else { palette::GRID_LINE[t] };
+            let col = palette::GRID_LINE[t];
             instances.push(RectInstance {
                 x: 0.0,
                 y,
                 w: width,
                 h: 1.0,
-                color: [
-                    col.0,
-                    col.1,
-                    col.2,
-                    if is_black { 40 } else { 80 },
-                ],
+                color: [col.0, col.1, col.2, 80],
                 wave_offset: 0,
                 wave_count: 0,
                 clip_w: 0.0,
@@ -306,6 +300,8 @@ impl PianoRollMetrics {
 
             let is_black = [1, 3, 6, 8, 11].contains(&(pitch.rem_euclid(12)));
             let key_h = self.key_height;
+            let note_in_octave = pitch.rem_euclid(12);
+            let is_alt = matches!(note_in_octave, 0 | 2 | 4 | 5 | 7 | 9 | 11);
 
             if is_black {
                 let kb_x = kb_w - 14.0;
@@ -328,7 +324,7 @@ impl PianoRollMetrics {
                     y,
                     w: kb_w,
                     h: key_h,
-                    color: rgba(palette::SURFACE_HIGH[t], 255),
+                    color: rgba(if is_alt { palette::SURFACE_HIGH[t] } else { palette::SURFACE_STEP[t] }, 255),
                     wave_offset: 0,
                     wave_count: 0,
                     clip_w: 0.0,
@@ -355,3 +351,4 @@ impl PianoRollMetrics {
         instances
     }
 }
+

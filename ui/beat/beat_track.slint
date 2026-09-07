@@ -92,8 +92,8 @@ export component BeatTrack inherits Rectangle {
         // ========================================================
 
         Rectangle {
-            width: root.pan-width;
-            height: 28px;
+            width: 18px;
+            height: 18px;
 
             PanKnobWithoutText {
                 width: 100%;
@@ -114,8 +114,8 @@ export component BeatTrack inherits Rectangle {
         // ========================================================
 
         Rectangle {
-            width: root.volume-width;
-            height: 28px;
+            width: 18px;
+            height: 18px;
 
             KnobWithoutText {
                 width: 100%;
@@ -137,7 +137,7 @@ export component BeatTrack inherits Rectangle {
 
         Rectangle {
             width: root.channel-width;
-            height: 24px;
+            height: 18px;
 
             background: Theme.surface-high;
 
@@ -179,8 +179,8 @@ export component BeatTrack inherits Rectangle {
         // ========================================================
 
         Rectangle {
-            width: root.mute-width;
-            height: 24px;
+            width: 18px;
+            height: 18px;
 
             background: !root.active
                 ? Theme.accent
@@ -225,8 +225,8 @@ export component BeatTrack inherits Rectangle {
         // ========================================================
 
         Rectangle {
-            width: root.solo-width;
-            height: 24px;
+            width: 18px;
+            height: 18px;
 
             background: root.solo
                 ? Theme.accent
