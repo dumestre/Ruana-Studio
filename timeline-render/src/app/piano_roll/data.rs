@@ -119,6 +119,8 @@ impl PianoRollMetrics {
     }
 
     /// Retorna as instâncias de fundo da grade (grid horizontal + vertical).
+    /// Usa as MESMAS cores da timeline (SURFACE_HIGH/SURFACE_STEP alternados,
+    /// mesmas opacidades de subdivisão).
     pub fn build_grid_instances(&self, width: f32, _height: f32) -> Vec<RectInstance> {
         let t = self.theme.clamp(0, 6);
         let mut instances = Vec::new();
@@ -127,13 +129,13 @@ impl PianoRollMetrics {
         let roll_bottom = piano_top + self.roll_height;
         let body_h = (roll_bottom - piano_top).max(0.0);
 
-        // Fundo do piano roll (cor distinta da timeline)
+        // Fundo base do piano roll
         instances.push(RectInstance {
             x: 0.0,
             y: piano_top,
             w: width,
             h: body_h,
-            color: rgba(palette::SURFACE_HIGH[t], 255),
+            color: rgba(palette::TIMELINE_BG[t], 255),
             wave_offset: 0,
             wave_count: 0,
             clip_w: 0.0,
@@ -141,95 +143,97 @@ impl PianoRollMetrics {
             radius: 0.0,
         });
 
-        // Grid vertical (linhas de tonalidade)
+        // Fundos alternados dos compassos (mesmo padrão da timeline)
         let px_per_bar = self.px_per_beat * 4.0;
-        let total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as i32 + 1;
+        let total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
-            if bx > width + px_per_bar || bx < -px_per_bar {
-                continue;
+            if bx > width + px_per_bar || bx < -px_per_bar { continue; }
+            let is_odd = i % 2 == 1;
+            let bg = if is_odd { palette::SURFACE_HIGH[t] } else { palette::SURFACE_STEP[t] };
+            let bw = px_per_bar;
+            let bh = body_h;
+            if bw > 0.0 && bh > 0.0 {
+                instances.push(RectInstance {
+                    x: bx, y: piano_top, w: bw, h: bh,
+                    color: [bg.0, bg.1, bg.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
             }
-            // Subdivisões 1/16
+        }
+
+        // Grid vertical — subdivisões (mesma opacidade da timeline)
+        for i in 0..total_bars {
+            let bx = i as f32 * px_per_bar - self.scroll_x;
+            if bx > width || bx < -px_per_bar { continue; }
+
+            // 1/64
+            if px_per_bar >= 960.0 {
+                let n = 64u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let xs = bx + m as f32 * step;
+                    if xs <= 0.0 || xs > width { continue; }
+                    instances.push(RectInstance {
+                        x: xs, y: piano_top, w: 1.0, h: body_h,
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 70],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+            }
+            // 1/32
+            if px_per_bar >= 480.0 {
+                let n = 32u32;
+                let step = px_per_bar / n as f32;
+                for m in 1..n {
+                    let xs = bx + m as f32 * step;
+                    if xs <= 0.0 || xs > width { continue; }
+                    instances.push(RectInstance {
+                        x: xs, y: piano_top, w: 1.0, h: body_h,
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 90],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    });
+                }
+            }
+            // 1/16
             if px_per_bar >= 240.0 {
                 let n = 16u32;
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width {
-                        continue;
-                    }
+                    if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
-                        x: xs,
-                        y: piano_top,
-                        w: 1.0,
-                        h: body_h,
-                        color: [
-                            palette::GRID_SUB[t].0,
-                            palette::GRID_SUB[t].1,
-                            palette::GRID_SUB[t].2,
-                            40,
-                        ],
-                        wave_offset: 0,
-                        wave_count: 0,
-                        clip_w: 0.0,
-                        clip_h: 0.0,
-                        radius: 0.0,
+                        x: xs, y: piano_top, w: 1.0, h: body_h,
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 110],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
             }
-            // Subdivisões 1/8
+            // 1/8
             if px_per_bar >= 120.0 {
                 let n = 8u32;
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width {
-                        continue;
-                    }
+                    if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
-                        x: xs,
-                        y: piano_top,
-                        w: 1.0,
-                        h: body_h,
-                        color: [
-                            palette::GRID_LINE[t].0,
-                            palette::GRID_LINE[t].1,
-                            palette::GRID_LINE[t].2,
-                            60,
-                        ],
-                        wave_offset: 0,
-                        wave_count: 0,
-                        clip_w: 0.0,
-                        clip_h: 0.0,
-                        radius: 0.0,
+                        x: xs, y: piano_top, w: 1.0, h: body_h,
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 130],
+                        wave_offset: 0, wave_count: 0,                         clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
             }
-            // Linhas de compasso (1/4)
+            // Batidas (1/4) — mais grossas, por cima das subdivisões
             if px_per_bar >= 40.0 {
                 let n = 4u32;
                 let step = px_per_bar / n as f32;
-                for m in 0..=n {
+                for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width {
-                        continue;
-                    }
+                    if xs <= 0.0 || xs > width { continue; }
                     instances.push(RectInstance {
-                        x: xs,
-                        y: piano_top,
-                        w: 1.0,
-                        h: body_h,
-                        color: [
-                            palette::GRID_LINE[t].0,
-                            palette::GRID_LINE[t].1,
-                            palette::GRID_LINE[t].2,
-                            100,
-                        ],
-                        wave_offset: 0,
-                        wave_count: 0,
-                        clip_w: 0.0,
-                        clip_h: 0.0,
-                        radius: 0.0,
+                        x: xs, y: piano_top, w: 1.0, h: body_h,
+                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 150],
+                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                     });
                 }
             }
@@ -242,11 +246,7 @@ impl PianoRollMetrics {
                 continue;
             }
             let is_black = [1, 3, 6, 8, 11].contains(&(pitch.rem_euclid(12)));
-            let col = if is_black {
-                palette::GRID_SUB[t]
-            } else {
-                palette::GRID_LINE[t]
-            };
+            let col = if is_black { palette::GRID_SUB[t] } else { palette::GRID_LINE[t] };
             instances.push(RectInstance {
                 x: 0.0,
                 y,
