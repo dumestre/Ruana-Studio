@@ -154,8 +154,14 @@ pub struct App {
     pub note_editor: daw_midi::NoteEditor,
     pub piano_roll_notes: Vec<piano_roll::PianoRollNote>,
     pub piano_roll_inter: piano_roll::PianoRollInteraction,
-    pub piano_roll_scroll_y: f32,
-    pub show_piano_roll: bool,
+        pub piano_roll_scroll_y: f32,
+        pub piano_roll_px_per_beat: f32,
+        pub piano_roll_scroll_x: f32,
+        pub show_piano_roll: bool,
+        /// Estado de teclas modificadoras (para scroll/zoom contextual).
+        pub ctrl_pressed: bool,
+        pub alt_pressed: bool,
+        pub shift_pressed: bool,
     /// Altura atual do piano roll (drag da splitter).
     pub piano_roll_height: f32,
     /// Altura mínima/máxima do piano roll.
@@ -424,7 +430,12 @@ impl App {
             piano_roll_notes: Vec::new(),
             piano_roll_inter: piano_roll::PianoRollInteraction::new(),
             piano_roll_scroll_y: 0.0,
+            piano_roll_px_per_beat: 40.0,
+            piano_roll_scroll_x: 0.0,
             show_piano_roll: false,
+            ctrl_pressed: false,
+            alt_pressed: false,
+            shift_pressed: false,
             piano_roll_height: 160.0,
             piano_roll_min_h: 60.0,
             piano_roll_max_h: 480.0,
@@ -622,24 +633,24 @@ impl App {
 
         // PianoRollMetrics: ruler_px = topo da régua do PR.
         let m = piano_roll::PianoRollMetrics {
-            px_per_beat: self.px_per_beat,
-            scroll_x: 0.0,
+            px_per_beat: self.piano_roll_px_per_beat,
+            scroll_x: self.piano_roll_scroll_x,
             scroll_y: self.piano_roll_scroll_y,
-            ruler_px: pr_ruler.y + piano_roll::PIANO_RULER_H, // conteúdo ABAIXO da régua
+            ruler_px: pr_ruler.y + piano_roll::PIANO_RULER_H,
             row_height: 6.0,
             theme: self.theme.clamp(0, 6),
             top_pitch: 96,
             bottom_pitch: 0,
             key_height: 6.0,
-            roll_height: pr_rect.height, // apenas conteúdo
+            roll_height: pr_rect.height,
         };
 
         let mut instances = piano_roll::build_piano_ruler_instances(
             &m,
             width,
             self.transport_seconds * self.bpm / 60.0,
-            self.px_per_beat,
-            self.scroll_x,
+            self.piano_roll_px_per_beat,
+            self.piano_roll_scroll_x,
             self.theme.clamp(0, 6),
         );
         instances.extend(piano_roll::build_piano_roll_instances(

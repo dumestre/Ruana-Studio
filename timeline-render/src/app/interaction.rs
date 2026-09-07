@@ -17,26 +17,52 @@ impl App {
         };
         let (mx, my) = self.last_cursor;
 
-        if with_ctrl && dy.abs() >= 1.0 {
-            // Zoom horizontal — mantém o ponto sob o cursor fixo.
-            let old_px = self.px_per_beat;
-            let new_px = (old_px + dy * 0.05).clamp(8.0, 640.0);
-            // Beat sob o cursor antes do zoom.
-            let beat_under = (mx + self.scroll_x) / old_px.max(0.01);
-            self.px_per_beat = new_px;
-            self.scroll_x = (beat_under * new_px - mx).max(0.0);
-        } else if with_alt && dy.abs() >= 1.0 {
-            // Zoom vertical — mantém a linha sob o cursor fixa.
-            let old_zy = self.zoom_y;
-            let new_zy = (old_zy + dy * 0.01).clamp(0.25, 6.0);
-            // Linha sob o cursor antes do zoom (base 64px).
-            let row_under = (my - self.ruler_px + self.scroll_y) / (64.0 * old_zy.max(0.01)).max(0.01);
-            self.zoom_y = new_zy;
-            self.scroll_y = (row_under * 64.0 * new_zy - (my - self.ruler_px)).max(0.0);
+        // Determina qual área está sob o cursor (timeline ou piano roll)
+        let pr_active = self.show_piano_roll;
+        let (px_per_beat, scroll_x, scroll_y, in_pr_area) = if pr_active {
+            let layout = self.layout(self.size.width as f32, self.size.height as f32);
+            if let Some(pr) = &layout.piano_roll {
+                if my >= pr.y && my <= pr.y + pr.height {
+                    (self.piano_roll_px_per_beat, self.piano_roll_scroll_x, self.piano_roll_scroll_y, true)
+                } else {
+                    (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+                }
+            } else {
+                (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+            }
         } else {
-            // Scroll pelos eixos reais do delta: x → horizontal, y → vertical.
-            self.scroll_x = (self.scroll_x - dx).max(0.0);
-            self.scroll_y = (self.scroll_y - dy).max(0.0);
+            (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+        };
+
+        if with_ctrl && dy.abs() >= 1.0 {
+            let old_px = px_per_beat;
+            let new_px = (old_px + dy * 0.05).clamp(8.0, 640.0);
+            let beat_under = (mx + scroll_x) / old_px.max(0.01);
+            if in_pr_area {
+                self.piano_roll_px_per_beat = new_px;
+                self.piano_roll_scroll_x = (beat_under * new_px - mx).max(0.0);
+            } else {
+                self.px_per_beat = new_px;
+                self.scroll_x = (beat_under * new_px - mx).max(0.0);
+            }
+        } else if with_alt && dy.abs() >= 1.0 {
+            if in_pr_area {
+                self.piano_roll_scroll_x = (self.piano_roll_scroll_x - dx).max(0.0);
+            } else {
+                let old_zy = self.zoom_y;
+                let new_zy = (old_zy + dy * 0.01).clamp(0.25, 6.0);
+                let row_under = (my - self.ruler_px + scroll_y) / (64.0 * old_zy.max(0.01)).max(0.01);
+                self.zoom_y = new_zy;
+                self.scroll_y = (row_under * 64.0 * new_zy - (my - self.ruler_px)).max(0.0);
+            }
+        } else {
+            if in_pr_area {
+                self.piano_roll_scroll_y = (self.piano_roll_scroll_y - dy).max(0.0);
+                self.piano_roll_scroll_x = (self.piano_roll_scroll_x - dx).max(0.0);
+            } else {
+                self.scroll_x = (self.scroll_x - dx).max(0.0);
+                self.scroll_y = (self.scroll_y - dy).max(0.0);
+            }
         }
         self.clamp_scroll_y(self.size.height as f32);
     }
@@ -972,8 +998,8 @@ impl App {
         let pr_rect = layout.piano_roll.unwrap();
 
         let m = super::piano_roll::PianoRollMetrics {
-            px_per_beat: self.px_per_beat,
-            scroll_x: 0.0,
+            px_per_beat: self.piano_roll_px_per_beat,
+            scroll_x: self.piano_roll_scroll_x,
             scroll_y: self.piano_roll_scroll_y,
             ruler_px: pr_ruler.y + super::piano_roll::PIANO_RULER_H,
             row_height: 6.0,

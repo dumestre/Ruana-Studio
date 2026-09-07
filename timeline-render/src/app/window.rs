@@ -22,9 +22,6 @@ use crate::tools::{self, current_tool, set_tool, Tool};
 struct AppHandler {
     app: Option<App>,
     window_id: WindowId,
-    ctrl_pressed: bool,
-    alt_pressed: bool,
-    shift_pressed: bool,
 }
 
 impl AppHandler {
@@ -32,9 +29,6 @@ impl AppHandler {
         Self {
             app: None,
             window_id: WindowId::dummy(),
-            ctrl_pressed: false,
-            alt_pressed: false,
-            shift_pressed: false,
         }
     }
 }
@@ -126,7 +120,7 @@ impl ApplicationHandler for AppHandler {
                 delta,
                 phase: _,
             } => {
-                app.handle_scroll(&delta, self.ctrl_pressed, self.alt_pressed);
+                app.handle_scroll(&delta, app.ctrl_pressed, app.alt_pressed);
                 app.window.request_redraw();
             }
             WindowEvent::KeyboardInput {
@@ -186,7 +180,7 @@ impl ApplicationHandler for AppHandler {
                 }
                 // F: foca o clip sob o cursor; Ctrl+F: toggle follow playhead.
                 if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("f")) {
-                    if self.ctrl_pressed {
+                    if app.ctrl_pressed {
                         app.follow_playhead = !app.follow_playhead;
                     } else {
                         app.toggle_clip_focus(app.size.width as f32);
@@ -194,7 +188,7 @@ impl ApplicationHandler for AppHandler {
                     app.window.request_redraw();
                 }
                 // Tool switching keys (1-6)
-                if pressed && !self.ctrl_pressed && !self.alt_pressed {
+                if pressed && !app.ctrl_pressed && !app.alt_pressed {
                     match vk {
                         Key::Character(ref s) if s == "1" => { set_tool(Tool::Select); app.window.request_redraw(); }
                         Key::Character(ref s) if s == "2" => { set_tool(Tool::Draw); app.window.request_redraw(); }
@@ -207,7 +201,7 @@ impl ApplicationHandler for AppHandler {
                 }
                 // Clipboard/editing shortcuts (Ctrl+C, Ctrl+V, Ctrl+D, Ctrl+A,
                 // Ctrl+Z, Ctrl+Y, Delete, Backspace)
-                if pressed && self.ctrl_pressed {
+                if pressed && app.ctrl_pressed {
                     match vk {
                         Key::Character(ref s) if s.eq_ignore_ascii_case("c") => {
                             app.copy_selected();
@@ -218,7 +212,7 @@ impl ApplicationHandler for AppHandler {
                             app.window.request_redraw();
                         }
                         Key::Character(ref s) if s.eq_ignore_ascii_case("z") => {
-                            if self.shift_pressed {
+                            if app.shift_pressed {
                                 app.redo();
                             } else {
                                 app.undo();
@@ -267,13 +261,13 @@ impl ApplicationHandler for AppHandler {
                 let is_shift_key = matches!(vk, Key::Named(NamedKey::Shift))
                     || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight));
                 if is_ctrl_key {
-                    self.ctrl_pressed = pressed;
+                    app.ctrl_pressed = pressed;
                 }
                 if is_alt_key {
-                    self.alt_pressed = pressed;
+                    app.alt_pressed = pressed;
                 }
                 if is_shift_key {
-                    self.shift_pressed = pressed;
+                    app.shift_pressed = pressed;
                 }
             }
             WindowEvent::MouseInput {
@@ -297,7 +291,7 @@ impl ApplicationHandler for AppHandler {
                     app.handle_mouse_button(state, pos);
                 } else if button == winit::event::MouseButton::Left {
                     // Shift+Left Click: cola o clipboard na posição do cursor (qualquer track)
-                    if state == ElementState::Pressed && self.shift_pressed {
+                    if state == ElementState::Pressed && app.shift_pressed {
                         let pos = app.last_cursor;
                         if pos.1 >= app.ruler_px {
                             // Converte cursor para beat e track com snap
