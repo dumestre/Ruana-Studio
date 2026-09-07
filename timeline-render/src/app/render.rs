@@ -265,8 +265,8 @@ impl App {
         let row_height = 64.0 * self.zoom_y;
 
         // Altura efetiva da timeline.
-        // Quando o piano roll está visível, a timeline termina acima da time_ruler.
-        // A splitter fica ENTRE a time_ruler e a régua do piano roll.
+        // Quando o piano roll está visível, a timeline termina na time_ruler
+        // (que é empurrada para cima). A splitter fica ENTRE a time_ruler e o piano roll.
         let layout = self.layout(width, height);
         let timeline_bottom = if self.show_piano_roll {
             layout.time_ruler.y

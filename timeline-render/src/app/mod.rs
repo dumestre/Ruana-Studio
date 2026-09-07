@@ -593,14 +593,15 @@ impl App {
             return;
         }
         let h = self.size.height as f32;
-        let tr_y = h - self.time_ruler_h;
-        let ruler_h = self.ruler_px;
+        let tr_h = self.time_ruler_h;
         let pr_ruler_h = piano_roll::PIANO_RULER_H;
-        // Nova altura total do piano roll (régua + conteúdo).
-        // O cursor está entre time_ruler.y e piano_ruler.y.
-        let new_total = (tr_y - cursor_y)
-            .clamp(self.piano_roll_min_h + pr_ruler_h, (tr_y - ruler_h - 4.0).max(self.piano_roll_min_h + pr_ruler_h));
-        self.piano_roll_height = new_total - pr_ruler_h;
+        // A splitter está em tr_y + tr_h. O cursor está na splitter.
+        // Nova posição da splitter = cursor_y (aproximadamente).
+        // tr_y = splitter_y - tr_h = cursor_y - tr_h
+        let new_tr_y = (cursor_y - tr_h).clamp(self.ruler_px + 4.0, h - tr_h - 4.0);
+        let pr_ruler_y = new_tr_y + tr_h + 4.0;
+        let new_total = (h - pr_ruler_y).max(0.0);
+        self.piano_roll_height = (new_total - pr_ruler_h).max(self.piano_roll_min_h);
     }
 
     /// Finaliza o arrasto da splitter.
@@ -619,18 +620,18 @@ impl App {
         let pr_ruler = layout.piano_ruler.unwrap();
         let pr_rect = layout.piano_roll.unwrap();
 
-        // PianoRollMetrics: o ruler_px é o topo da área do PR (régua incluída).
+        // PianoRollMetrics: ruler_px = topo da régua do PR.
         let m = piano_roll::PianoRollMetrics {
             px_per_beat: self.px_per_beat,
             scroll_x: 0.0,
             scroll_y: self.piano_roll_scroll_y,
-            ruler_px: pr_ruler.y, // topo da régua do PR
+            ruler_px: pr_ruler.y,
             row_height: 6.0,
             theme: self.theme.clamp(0, 6),
             top_pitch: 96,
             bottom_pitch: 0,
             key_height: 6.0,
-            roll_height: pr_rect.height + piano_roll::PIANO_RULER_H, // ruler + content
+            roll_height: pr_rect.height + piano_roll::PIANO_RULER_H,
         };
 
         let mut instances = piano_roll::build_piano_ruler_instances(
