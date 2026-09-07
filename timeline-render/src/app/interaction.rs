@@ -975,13 +975,13 @@ impl App {
             px_per_beat: self.px_per_beat,
             scroll_x: 0.0,
             scroll_y: self.piano_roll_scroll_y,
-            ruler_px: pr_ruler.y,
+            ruler_px: pr_ruler.y + super::piano_roll::PIANO_RULER_H,
             row_height: 6.0,
             theme: self.theme.clamp(0, 6),
             top_pitch: 96,
             bottom_pitch: 0,
             key_height: 6.0,
-            roll_height: pr_rect.height + super::piano_roll::PIANO_RULER_H,
+            roll_height: pr_rect.height,
         };
         m
     }

@@ -2,8 +2,8 @@
 //! splitter e indicador de hover. Reutiliza `RectInstance` e a paleta do
 //! `app::render`.
 
-use crate::{rgba, rgba_alpha, palette, RectInstance};
-use super::{PianoRollInteraction, PianoRollMetrics, PianoRollNote};
+use crate::{rgba, rgba_alpha, palette, RectInstance, build_text_instances};
+use super::{PianoRollInteraction, PianoRollMetrics, PianoRollNote, PIANO_RULER_H};
 
 /// Altura fixa de cada nota em pixels.
 pub const NOTE_HEIGHT: f32 = 12.0;
@@ -157,8 +157,9 @@ pub fn build_piano_roll_instances(
     instances
 }
 
-/// Gera as instâncias da régua do piano roll (régua própria, com playhead próprio).
-/// Fica entre a splitter e o conteúdo do piano roll.
+/// Gera as instâncias da régua do piano roll (réplica da régua da timeline,
+/// com playhead próprio). Fica entre a splitter e o conteúdo do piano roll.
+/// Usa os mesmos `px_per_beat` e `scroll_x` da timeline.
 pub fn build_piano_ruler_instances(
     m: &PianoRollMetrics,
     width: f32,
@@ -170,11 +171,11 @@ pub fn build_piano_ruler_instances(
     let t = theme.clamp(0, 6);
     let mut instances = Vec::new();
 
-    let ruler_y = m.ruler_px;
-    let ruler_h = super::PIANO_RULER_H;
+    let ruler_y = m.ruler_px - PIANO_RULER_H; // topo da régua (ruler_px é o topo do conteúdo)
+    let ruler_h = PIANO_RULER_H;
     let ruler_bottom = ruler_y + ruler_h;
 
-    // Fundo da régua do piano roll
+    // Fundo da régua do piano roll (mesmo estilo da timeline)
     instances.push(RectInstance {
         x: 0.0,
         y: ruler_y,
@@ -188,58 +189,80 @@ pub fn build_piano_ruler_instances(
         radius: 0.0,
     });
 
-    // Grid vertical leve na régua do PR (alinhado com a timeline)
+    // Réplica da régua da timeline: fundos alternados dos compassos
     let px_per_bar = px_per_beat * 4.0;
-    let total_bars = ((width + scroll_x) / px_per_bar).ceil() as i32 + 1;
+    let total_bars = ((width + scroll_x) / px_per_bar).ceil() as usize + 1;
     for i in 0..total_bars {
         let bx = i as f32 * px_per_bar - scroll_x;
         if bx > width + px_per_bar || bx < -px_per_bar {
             continue;
         }
-        // Linha de compasso
-        instances.push(RectInstance {
-            x: bx,
-            y: ruler_y,
-            w: 1.0,
-            h: ruler_h,
-            color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 120],
-            wave_offset: 0,
-            wave_count: 0,
-            clip_w: 0.0,
-            clip_h: 0.0,
-            radius: 0.0,
-        });
+        let bw = px_per_bar;
+        let bg = if i % 2 == 1 {
+            palette::SURFACE_HIGH[t]
+        } else {
+            palette::SURFACE_STEP[t]
+        };
+        if bx + bw > 0.0 && bx < width && bw > 0.0 {
+            let draw_x = bx.max(0.0);
+            let draw_w = (bx + bw).min(width) - draw_x;
+            if draw_w > 0.0 {
+                instances.push(RectInstance {
+                    x: draw_x, y: ruler_y, w: draw_w, h: ruler_h,
+                    color: [bg.0, bg.1, bg.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+        }
+    }
+
+    // Linhas de batida (1/4) — mesma densidade da timeline
+    if px_per_bar >= 40.0 {
+        let n = 4u32;
+        let step = px_per_bar / n as f32;
+        for i in 0..total_bars {
+            let bx = i as f32 * px_per_bar - scroll_x;
+            if bx > width || bx < -px_per_bar { continue; }
+            for k in 0..n {
+                let x = bx + k as f32 * step;
+                if x <= 0.0 || x > width { continue; }
+                instances.push(RectInstance {
+                    x, y: ruler_y + 2.0, w: 1.0, h: ruler_h - 4.0,
+                    color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 150],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+        }
+    }
+
+    // Números de compasso (mesmo estilo da timeline)
+    for i in 0..total_bars {
+        let bx = i as f32 * px_per_bar - scroll_x;
+        if bx > width || bx < -px_per_bar { continue; }
+        let ruler_text_color = [palette::TEXT_PRIMARY[t].0, palette::TEXT_PRIMARY[t].1, palette::TEXT_PRIMARY[t].2, 220];
+        if bx > -px_per_bar * 0.5 && bx < width {
+            instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, ruler_y + 3.0, ruler_text_color, 1.0));
+        }
     }
 
     // Playhead do piano roll (independente da timeline)
     let head_x = transport_beat * px_per_beat - scroll_x;
     if head_x >= -20.0 && head_x <= width + 20.0 {
+        let col = palette::PLAYHEAD_COLOR;
         instances.push(RectInstance {
-            x: head_x - 1.0,
-            y: ruler_y,
-            w: 2.0,
-            h: ruler_h,
-            color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 180],
-            wave_offset: 0,
-            wave_count: 0,
-            clip_w: 0.0,
-            clip_h: 0.0,
-            radius: 0.0,
+            x: head_x - 1.0, y: ruler_y,
+            w: 2.0, h: ruler_h,
+            color: [col.0, col.1, col.2, 180],
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
     }
 
     // Borda inferior da régua do PR
     instances.push(RectInstance {
-        x: 0.0,
-        y: ruler_bottom - 1.0,
-        w: width,
-        h: 1.0,
+        x: 0.0, y: ruler_bottom - 1.0,
+        w: width, h: 1.0,
         color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
-        wave_offset: 0,
-        wave_count: 0,
-        clip_w: 0.0,
-        clip_h: 0.0,
-        radius: 0.0,
+        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
 
     instances
