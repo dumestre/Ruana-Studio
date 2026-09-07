@@ -264,14 +264,16 @@ impl App {
         let _total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
         let row_height = 64.0 * self.zoom_y;
 
-        let tr_y = height - self.time_ruler_h;
-        // Altura efetiva da timeline (encolhe quando piano roll está visível)
-        let piano_roll_area = if self.show_piano_roll {
-            self.piano_roll_height + 4.0 // 4px = altura da splitter
+        // Altura efetiva da timeline.
+        // Quando o piano roll está visível, a timeline termina acima da time_ruler.
+        // A splitter fica ENTRE a time_ruler e a régua do piano roll.
+        let layout = self.layout(width, height);
+        let timeline_bottom = if self.show_piano_roll {
+            layout.time_ruler.y
         } else {
-            0.0
+            height - self.time_ruler_h
         };
-        let timeline_bottom = (tr_y - piano_roll_area).max(self.ruler_px + 4.0);
+        let timeline_bottom = timeline_bottom.max(self.ruler_px + 4.0);
 
         // Sincroniza notas MIDI do daw-core (fonte de verdade) para o cache do wgpu
         if self.show_piano_roll {
@@ -716,11 +718,10 @@ impl App {
         }
 
         // =====================================================================
-        // Time ruler fixo na parte inferior — mostra tempo em s:ms
-        // (não recebe scroll_y, sempre visível na bottom da janela)
+        // Time ruler — posicionada pelo layout (pode ficar acima do piano roll)
         // =====================================================================
         let tr_h = self.time_ruler_h;
-        let tr_y = height - tr_h;
+        let tr_y = layout.time_ruler.y;
         let tr_bg = palette::SURFACE_HIGH[t];
         let tr_border = palette::BASE[t];
 

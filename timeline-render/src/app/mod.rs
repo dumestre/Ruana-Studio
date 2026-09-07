@@ -3,6 +3,7 @@
 
 pub(crate) mod audio;
 pub(crate) mod interaction;
+pub(crate) mod layout;
 pub(crate) mod piano_roll;
 pub(crate) mod render;
 pub(crate) mod window;
@@ -575,22 +576,31 @@ impl App {
     }
 
     /// Começa o arrasto da splitter entre timeline e piano roll.
-    pub fn begin_splitter_drag(&mut self, cursor_y: f32, height: f32) {
+    pub fn begin_splitter_drag(&mut self, cursor: (f32, f32)) {
         if !self.show_piano_roll {
             return;
         }
-        let splitter_y = height - self.piano_roll_height - 4.0;
-        if cursor_y >= splitter_y - 4.0 && cursor_y <= splitter_y + 4.0 {
+        let h = self.size.height as f32;
+        if self.splitter_hit_test(cursor.1, h) {
             self.splitter_drag = true;
         }
     }
 
-    /// Arrasta a splitter para redimensionar o piano roll.
-    pub fn splitter_drag_move(&mut self, cursor_y: f32, height: f32) {
-        if self.splitter_drag {
-            let new_h = (height - cursor_y).clamp(self.piano_roll_min_h, self.piano_roll_max_h);
-            self.piano_roll_height = new_h;
+    /// Arrasta a splitter (entre time_ruler e piano_ruler) para redimensionar
+    /// a altura do piano roll em tempo real.
+    pub fn splitter_drag_move(&mut self, cursor_y: f32) {
+        if !self.splitter_drag {
+            return;
         }
+        let h = self.size.height as f32;
+        let tr_y = h - self.time_ruler_h;
+        let ruler_h = self.ruler_px;
+        let pr_ruler_h = piano_roll::PIANO_RULER_H;
+        // Nova altura total do piano roll (régua + conteúdo).
+        // O cursor está entre time_ruler.y e piano_ruler.y.
+        let new_total = (tr_y - cursor_y)
+            .clamp(self.piano_roll_min_h + pr_ruler_h, (tr_y - ruler_h - 4.0).max(self.piano_roll_min_h + pr_ruler_h));
+        self.piano_roll_height = new_total - pr_ruler_h;
     }
 
     /// Finaliza o arrasto da splitter.
@@ -599,33 +609,51 @@ impl App {
     }
 
     /// Gera as instâncias do piano roll e da splitter.
-    /// Deve ser chamado de dentro de `build_instances`.
+    /// O piano roll é uma área independente (não dentro da timeline).
     pub fn piano_roll_instances(&self, width: f32, height: f32) -> Vec<crate::RectInstance> {
         if !self.show_piano_roll {
             return Vec::new();
         }
 
-        let cm = self.clip_metrics();
-        let mut m = piano_roll::PianoRollMetrics::from_clip_metrics(&cm, self.piano_roll_height);
-        m.scroll_y = self.piano_roll_scroll_y;
-        // O piano roll é ancorado embaixo (acima da time_ruler).
-        // splitter_y = topo do time_ruler menos a altura do PR e 4px da splitter.
-        let tr_y = height - self.time_ruler_h;
-        let piano_top = (tr_y - self.piano_roll_height - 4.0).clamp(self.ruler_px + 4.0, tr_y - self.piano_roll_min_h - 4.0);
-        m.ruler_px = piano_top;
+        let layout = self.layout(width, height);
+        let pr_ruler = layout.piano_ruler.unwrap();
+        let pr_rect = layout.piano_roll.unwrap();
 
-        let mut instances = piano_roll::build_piano_roll_instances(
+        // PianoRollMetrics: o ruler_px é o topo da área do PR (régua incluída).
+        let m = piano_roll::PianoRollMetrics {
+            px_per_beat: self.px_per_beat,
+            scroll_x: 0.0,
+            scroll_y: self.piano_roll_scroll_y,
+            ruler_px: pr_ruler.y, // topo da régua do PR
+            row_height: 6.0,
+            theme: self.theme.clamp(0, 6),
+            top_pitch: 96,
+            bottom_pitch: 0,
+            key_height: 6.0,
+            roll_height: pr_rect.height + piano_roll::PIANO_RULER_H, // ruler + content
+        };
+
+        let mut instances = piano_roll::build_piano_ruler_instances(
+            &m,
+            width,
+            self.transport_seconds * self.bpm / 60.0,
+            self.px_per_beat,
+            self.scroll_x,
+            self.theme.clamp(0, 6),
+        );
+        instances.extend(piano_roll::build_piano_roll_instances(
             &self.piano_roll_notes,
             &self.piano_roll_inter,
             &m,
             width,
             height,
-        );
+        ));
 
+        // Splitter
         let splitter_hovered = self.splitter_hit_test(self.last_cursor.1, height);
         instances.extend(piano_roll::build_splitter_instances(
             width,
-            piano_top,
+            layout.splitter.y,
             self.piano_roll_height,
             height,
             splitter_hovered,

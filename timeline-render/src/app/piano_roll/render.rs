@@ -157,6 +157,94 @@ pub fn build_piano_roll_instances(
     instances
 }
 
+/// Gera as instâncias da régua do piano roll (régua própria, com playhead próprio).
+/// Fica entre a splitter e o conteúdo do piano roll.
+pub fn build_piano_ruler_instances(
+    m: &PianoRollMetrics,
+    width: f32,
+    transport_beat: f32,
+    px_per_beat: f32,
+    scroll_x: f32,
+    theme: usize,
+) -> Vec<RectInstance> {
+    let t = theme.clamp(0, 6);
+    let mut instances = Vec::new();
+
+    let ruler_y = m.ruler_px;
+    let ruler_h = super::PIANO_RULER_H;
+    let ruler_bottom = ruler_y + ruler_h;
+
+    // Fundo da régua do piano roll
+    instances.push(RectInstance {
+        x: 0.0,
+        y: ruler_y,
+        w: width,
+        h: ruler_h,
+        color: [palette::SURFACE_HIGH[t].0, palette::SURFACE_HIGH[t].1, palette::SURFACE_HIGH[t].2, 255],
+        wave_offset: 0,
+        wave_count: 0,
+        clip_w: 0.0,
+        clip_h: 0.0,
+        radius: 0.0,
+    });
+
+    // Grid vertical leve na régua do PR (alinhado com a timeline)
+    let px_per_bar = px_per_beat * 4.0;
+    let total_bars = ((width + scroll_x) / px_per_bar).ceil() as i32 + 1;
+    for i in 0..total_bars {
+        let bx = i as f32 * px_per_bar - scroll_x;
+        if bx > width + px_per_bar || bx < -px_per_bar {
+            continue;
+        }
+        // Linha de compasso
+        instances.push(RectInstance {
+            x: bx,
+            y: ruler_y,
+            w: 1.0,
+            h: ruler_h,
+            color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 120],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+    }
+
+    // Playhead do piano roll (independente da timeline)
+    let head_x = transport_beat * px_per_beat - scroll_x;
+    if head_x >= -20.0 && head_x <= width + 20.0 {
+        instances.push(RectInstance {
+            x: head_x - 1.0,
+            y: ruler_y,
+            w: 2.0,
+            h: ruler_h,
+            color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 180],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+    }
+
+    // Borda inferior da régua do PR
+    instances.push(RectInstance {
+        x: 0.0,
+        y: ruler_bottom - 1.0,
+        w: width,
+        h: 1.0,
+        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
+        wave_offset: 0,
+        wave_count: 0,
+        clip_w: 0.0,
+        clip_h: 0.0,
+        radius: 0.0,
+    });
+
+    instances
+}
+
 /// Gera as instâncias do splitter entre timeline e piano roll.
 pub fn build_splitter_instances(
     width: f32,

@@ -127,13 +127,13 @@ impl PianoRollMetrics {
         let roll_bottom = piano_top + self.roll_height;
         let body_h = (roll_bottom - piano_top).max(0.0);
 
-        // Fundo do piano roll
+        // Fundo do piano roll (cor distinta da timeline)
         instances.push(RectInstance {
             x: 0.0,
             y: piano_top,
             w: width,
             h: body_h,
-            color: rgba(palette::TIMELINE_BG[t], 255),
+            color: rgba(palette::SURFACE_HIGH[t], 255),
             wave_offset: 0,
             wave_count: 0,
             clip_w: 0.0,

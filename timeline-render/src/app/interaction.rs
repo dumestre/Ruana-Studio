@@ -517,7 +517,7 @@ impl App {
             if state == ElementState::Released {
                 self.end_splitter_drag();
             } else {
-                self.splitter_drag_move(pos.1, self.size.height as f32);
+                self.splitter_drag_move(pos.1);
             }
             return;
         }
@@ -525,16 +525,19 @@ impl App {
         // Intercepta clique dentro da área do piano roll ou splitter (quando visível)
         if self.show_piano_roll {
             let height = self.size.height as f32;
-            let tr_y = height - self.time_ruler_h;
-            let piano_top = (tr_y - self.piano_roll_height - 4.0).clamp(self.ruler_px + 4.0, tr_y - self.piano_roll_min_h - 4.0);
-            let splitter_hit = pos.1 >= piano_top - 4.0 && pos.1 <= piano_top + 8.0;
-            if splitter_hit {
+            let width = self.size.width as f32;
+            let layout = self.layout(width, height);
+            // Clique na splitter
+            if self.splitter_hit_test(pos.1, height) {
                 self.splitter_drag = true;
                 return;
             }
-            if pos.1 >= piano_top + 4.0 {
-                self.handle_piano_roll_click(state, pos);
-                return;
+            // Clique na área do piano roll (régua + conteúdo)
+            if let Some(pr_ruler) = &layout.piano_ruler {
+                if pos.1 >= pr_ruler.y {
+                    self.handle_piano_roll_click(state, pos);
+                    return;
+                }
             }
         }
 
@@ -683,9 +686,9 @@ impl App {
     }
 
     pub fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
-        // Se a splitter está sendo arrastada, redimensiona o piano roll
+        // Se a splitter está sendo arrastada, redimensiona o piano roll em tempo real
         if self.splitter_drag {
-            self.splitter_drag_move(pos.1, self.size.height as f32);
+            self.splitter_drag_move(pos.1);
             return;
         }
 
@@ -962,23 +965,25 @@ if self.fade_interaction.is_dragging() {
 
 impl App {
     fn piano_roll_metrics(&self) -> super::piano_roll::PianoRollMetrics {
-        let cm = self.clip_metrics();
-        let mut m = super::piano_roll::PianoRollMetrics::from_clip_metrics(&cm, self.piano_roll_height);
-        m.scroll_y = self.piano_roll_scroll_y;
         let height = self.size.height as f32;
-        let tr_y = height - self.time_ruler_h;
-        let piano_top = (tr_y - self.piano_roll_height - 4.0).clamp(self.ruler_px + 4.0, tr_y - self.piano_roll_min_h - 4.0);
-        m.ruler_px = piano_top;
-        m
-    }
+        let width = self.size.width as f32;
+        let layout = self.layout(width, height);
+        let pr_ruler = layout.piano_ruler.unwrap();
+        let pr_rect = layout.piano_roll.unwrap();
 
-    pub fn splitter_hit_test(&self, cursor_y: f32, height: f32) -> bool {
-        if !self.show_piano_roll {
-            return false;
-        }
-        let tr_y = height - self.time_ruler_h;
-        let piano_top = (tr_y - self.piano_roll_height - 4.0).clamp(self.ruler_px + 4.0, tr_y - self.piano_roll_min_h - 4.0);
-        cursor_y >= piano_top - 4.0 && cursor_y <= piano_top + 8.0
+        let m = super::piano_roll::PianoRollMetrics {
+            px_per_beat: self.px_per_beat,
+            scroll_x: 0.0,
+            scroll_y: self.piano_roll_scroll_y,
+            ruler_px: pr_ruler.y,
+            row_height: 6.0,
+            theme: self.theme.clamp(0, 6),
+            top_pitch: 96,
+            bottom_pitch: 0,
+            key_height: 6.0,
+            roll_height: pr_rect.height + super::piano_roll::PIANO_RULER_H,
+        };
+        m
     }
 
     fn handle_piano_roll_click(&mut self, state: ElementState, pos: (f32, f32)) {
