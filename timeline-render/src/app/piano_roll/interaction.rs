@@ -159,13 +159,13 @@ impl PianoRollInteraction {
             .clamp(m.bottom_pitch, m.top_pitch);
     }
 
-    /// Finaliza o arrasto e aplica a nova posição.
-    pub fn end_drag(&mut self, notes: &mut [PianoRollNote]) {
+    /// Finaliza o arrasto e aplica a nova posição (com clamp nos bounds).
+    pub fn end_drag(&mut self, notes: &mut [PianoRollNote], m: &PianoRollMetrics) {
         if let Some(idx) = self.drag_idx {
             if self.drag_moved {
                 if let Some(note) = notes.get_mut(idx) {
-                    note.start = self.drag_live_start;
-                    note.pitch = self.drag_live_pitch;
+                    note.start = self.drag_live_start.max(0.0);
+                    note.pitch = self.drag_live_pitch.clamp(m.bottom_pitch, m.top_pitch);
                 }
             }
         }
@@ -261,7 +261,7 @@ impl PianoRollInteraction {
     ) -> Vec<usize> {
         let mut created = Vec::new();
         if self.draw_active {
-            let start_beat = self.draw_start.0.min(self.draw_current.0);
+            let start_beat = self.draw_start.0.min(self.draw_current.0).max(0.0);
             let end_beat = self.draw_start.0.max(self.draw_current.0);
             let len = (end_beat - start_beat).max(0.25);
 

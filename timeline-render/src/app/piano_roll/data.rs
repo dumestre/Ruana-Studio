@@ -281,7 +281,7 @@ impl PianoRollMetrics {
         let piano_top = self.ruler_px;
         let roll_bottom = piano_top + self.roll_height;
         let body_h = (roll_bottom - piano_top).max(0.0);
-        let kb_w = 28.0;
+        let kb_w = 60.0;
 
         // Fundo do teclado
         instances.push(RectInstance {
@@ -308,8 +308,8 @@ impl PianoRollMetrics {
             let key_h = self.key_height;
 
             if is_black {
-                let kb_x = kb_w - 12.0;
-                let kb_w = 12.0;
+                let kb_x = kb_w - 14.0;
+                let kb_w = 14.0;
                 instances.push(RectInstance {
                     x: kb_x,
                     y,

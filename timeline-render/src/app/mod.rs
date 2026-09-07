@@ -154,10 +154,11 @@ pub struct App {
     pub note_editor: daw_midi::NoteEditor,
     pub piano_roll_notes: Vec<piano_roll::PianoRollNote>,
     pub piano_roll_inter: piano_roll::PianoRollInteraction,
-        pub piano_roll_scroll_y: f32,
-        pub piano_roll_px_per_beat: f32,
-        pub piano_roll_scroll_x: f32,
-        pub show_piano_roll: bool,
+    pub piano_roll_scroll_y: f32,
+    pub piano_roll_px_per_beat: f32,
+    pub piano_roll_scroll_x: f32,
+    pub piano_roll_key_height: f32,
+    pub show_piano_roll: bool,
         /// Estado de teclas modificadoras (para scroll/zoom contextual).
         pub ctrl_pressed: bool,
         pub alt_pressed: bool,
@@ -432,6 +433,7 @@ impl App {
             piano_roll_scroll_y: 0.0,
             piano_roll_px_per_beat: 40.0,
             piano_roll_scroll_x: 0.0,
+            piano_roll_key_height: 6.0,
             show_piano_roll: false,
             ctrl_pressed: false,
             alt_pressed: false,
@@ -641,7 +643,7 @@ impl App {
             theme: self.theme.clamp(0, 6),
             top_pitch: 96,
             bottom_pitch: 0,
-            key_height: 6.0,
+            key_height: self.piano_roll_key_height,
             roll_height: pr_rect.height,
         };
 

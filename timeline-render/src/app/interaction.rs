@@ -47,7 +47,9 @@ impl App {
             }
         } else if with_alt && dy.abs() >= 1.0 {
             if in_pr_area {
-                self.piano_roll_scroll_x = (self.piano_roll_scroll_x - dx).max(0.0);
+                let old_kh = self.piano_roll_key_height;
+                let new_kh = (old_kh + dy * 0.1).clamp(2.0, 24.0);
+                self.piano_roll_key_height = new_kh;
             } else {
                 let old_zy = self.zoom_y;
                 let new_zy = (old_zy + dy * 0.01).clamp(0.25, 6.0);
@@ -1006,7 +1008,7 @@ impl App {
             theme: self.theme.clamp(0, 6),
             top_pitch: 96,
             bottom_pitch: 0,
-            key_height: 6.0,
+            key_height: self.piano_roll_key_height,
             roll_height: pr_rect.height,
         };
         m
@@ -1048,7 +1050,7 @@ impl App {
                 match tool {
                     Tool::Select => {
                         if self.piano_roll_inter.is_dragging() {
-                            self.piano_roll_inter.end_drag(&mut self.piano_roll_notes);
+                            self.piano_roll_inter.end_drag(&mut self.piano_roll_notes, &m);
                             self.sync_piano_roll_to_core();
                         } else if self.piano_roll_inter.is_marqueeing() {
                             self.piano_roll_inter.end_marquee(&self.piano_roll_notes, &m);
