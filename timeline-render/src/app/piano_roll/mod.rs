@@ -14,7 +14,7 @@ mod render;
 
 pub const PIANO_RULER_H: f32 = 24.0;
 
-pub use data::{PianoRollMetrics, PianoRollNote};
+pub use data::{PianoRollMetrics, PianoRollNote, KEYBOARD_W};
 pub use interaction::PianoRollInteraction;
 pub use render::{
     build_piano_roll_instances,

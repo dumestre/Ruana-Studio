@@ -5,6 +5,9 @@
 use crate::clips::ClipMetrics;
 use crate::{palette, rgba, RectInstance};
 
+/// Largura (px) do teclado do piano à esquerda.
+pub const KEYBOARD_W: f32 = 60.0;
+
 /// Uma nota exibida no piano roll. Espelha `daw_midi::Note` para desacoplar
 /// o estado de render da fonte de verdade (`NoteEditor`).
 #[derive(Clone, Debug)]
@@ -62,8 +65,9 @@ impl PianoRollMetrics {
     }
 
     /// Converte posição do cursor em coordenadas de janela para (beat, pitch).
+    /// O conteúdo começa na borda direita do teclado (KEYBOARD_W).
     pub fn cursor_to_beat_pitch(&self, cursor: (f32, f32)) -> (f32, i32) {
-        let content_x = cursor.0 + self.scroll_x;
+        let content_x = (cursor.0 - KEYBOARD_W + self.scroll_x).max(0.0);
         let beat = if self.px_per_beat > 0.0 {
             content_x / self.px_per_beat
         } else {
@@ -84,17 +88,18 @@ impl PianoRollMetrics {
     }
 
     /// Converte (beat, pitch) para coordenadas de janela (x, y).
+    /// O conteúdo começa na borda direita do teclado (KEYBOARD_W).
     pub fn beat_pitch_to_xy(&self, beat: f32, pitch: i32) -> (f32, f32) {
-        let x = beat * self.px_per_beat - self.scroll_x;
+        let x = KEYBOARD_W + beat * self.px_per_beat - self.scroll_x;
         let piano_top = self.ruler_px;
         let rel_y = (self.top_pitch - pitch) as f32 * self.key_height;
         let y = piano_top + rel_y - self.scroll_y;
         (x, y)
     }
 
-    /// Converte um beat em coordenada x de janela.
+    /// Converte um beat em coordenada x de janela (a partir do teclado).
     pub fn beat_to_x(&self, beat: f32) -> f32 {
-        beat * self.px_per_beat - self.scroll_x
+        KEYBOARD_W + beat * self.px_per_beat - self.scroll_x
     }
 
     /// Retorna as teclas do piano para o range visível.
@@ -143,19 +148,22 @@ impl PianoRollMetrics {
             radius: 0.0,
         });
 
-        // Fundos alternados dos compassos (mesmo padrão da timeline)
+        // Fundos alternados dos compassos (mesmo padrão da timeline) — só a
+        // partir do teclado.
         let px_per_bar = self.px_per_beat * 4.0;
         let total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
         for i in 0..total_bars {
-            let bx = i as f32 * px_per_bar - self.scroll_x;
+            let bx = KEYBOARD_W + i as f32 * px_per_bar - self.scroll_x;
             if bx > width + px_per_bar || bx < -px_per_bar { continue; }
             let is_odd = i % 2 == 1;
             let bg = if is_odd { palette::SURFACE_HIGH[t] } else { palette::SURFACE_STEP[t] };
             let bw = px_per_bar;
             let bh = body_h;
-            if bw > 0.0 && bh > 0.0 {
+            let draw_x = bx.max(KEYBOARD_W);
+            let draw_w = (bx + bw).min(width) - draw_x;
+            if draw_w > 0.0 && bh > 0.0 {
                 instances.push(RectInstance {
-                    x: bx, y: piano_top, w: bw, h: bh,
+                    x: draw_x, y: piano_top, w: draw_w, h: bh,
                     color: [bg.0, bg.1, bg.2, 255],
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });
@@ -164,7 +172,7 @@ impl PianoRollMetrics {
 
         // Grid vertical — subdivisões (mesma opacidade da timeline)
         for i in 0..total_bars {
-            let bx = i as f32 * px_per_bar - self.scroll_x;
+            let bx = KEYBOARD_W + i as f32 * px_per_bar - self.scroll_x;
             if bx > width || bx < -px_per_bar { continue; }
 
             // 1/64
@@ -173,7 +181,7 @@ impl PianoRollMetrics {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs < KEYBOARD_W || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: piano_top, w: 1.0, h: body_h,
                         color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 70],
@@ -187,7 +195,7 @@ impl PianoRollMetrics {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs < KEYBOARD_W || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: piano_top, w: 1.0, h: body_h,
                         color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 90],
@@ -201,7 +209,7 @@ impl PianoRollMetrics {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs < KEYBOARD_W || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: piano_top, w: 1.0, h: body_h,
                         color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 110],
@@ -215,7 +223,7 @@ impl PianoRollMetrics {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs < KEYBOARD_W || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: piano_top, w: 1.0, h: body_h,
                         color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 130],
@@ -229,7 +237,7 @@ impl PianoRollMetrics {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs < KEYBOARD_W || xs > width { continue; }
                     instances.push(RectInstance {
                         x: xs, y: piano_top, w: 1.0, h: body_h,
                         color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 150],
@@ -239,6 +247,21 @@ impl PianoRollMetrics {
             }
         }
 
+        // Linha vertical na borda direita do teclado — marca o início do
+        // compasso 1 (o grid visível começa aqui).
+        instances.push(RectInstance {
+            x: KEYBOARD_W,
+            y: piano_top,
+            w: 1.0,
+            h: body_h,
+            color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+
         // Grid horizontal (teclas do piano) — mesmas cores da timeline (BASE)
         for pitch in (self.bottom_pitch..=self.top_pitch).rev() {
             let y = piano_top + (self.top_pitch - pitch) as f32 * self.key_height - self.scroll_y;
@@ -247,9 +270,9 @@ impl PianoRollMetrics {
             }
             let col = palette::BASE[t];
             instances.push(RectInstance {
-                x: 0.0,
+                x: KEYBOARD_W,
                 y,
-                w: width,
+                w: (width - KEYBOARD_W).max(0.0),
                 h: 1.0,
                 color: [col.0, col.1, col.2, 150],
                 wave_offset: 0,
@@ -275,7 +298,7 @@ impl PianoRollMetrics {
         let piano_top = self.ruler_px;
         let roll_bottom = piano_top + self.roll_height;
         let body_h = (roll_bottom - piano_top).max(0.0);
-        let kb_w = 60.0;
+        let kb_w = KEYBOARD_W;
 
         // Fundo do teclado
         instances.push(RectInstance {
