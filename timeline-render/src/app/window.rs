@@ -92,6 +92,12 @@ impl ApplicationHandler for AppHandler {
                 if app.show_piano_roll && app.splitter_drag {
                     app.window.request_redraw();
                 }
+                // Redesenha continuamente enquanto houver scrub ou loop drag no
+                // piano roll (INDEPENDENTES). Evita que o arrasto pare de atualizar
+                // se o cursor parar de se mover (por exemplo, durante um snap).
+                if app.show_piano_roll && (app.pr_loop_drag.is_some() || app.pr_scrubbing) {
+                    app.window.request_redraw();
+                }
                 // Se um arquivo estiver sendo arrastado, atualiza a posição do preview
                 // usando a posição global do cursor (já que o OS não envia CursorMoved
                 // durante drag de arquivo).
@@ -368,7 +374,13 @@ impl ApplicationHandler for AppHandler {
                     || app.fade_interaction.hovered.is_some()
                     || app.fade_interaction.is_dragging()
                     || app.drop_preview.is_some()
-                    || current_tool() == Tool::Slice || current_tool() == Tool::Stretch {
+                    || current_tool() == Tool::Slice || current_tool() == Tool::Stretch
+                    // ====== Piano roll: drag/scrub independentes ======
+                    // Sem essas flags, não há request_redraw no cursor
+                    // moved e a playhead/loop do PR parece "travada" (só
+                    // atualiza no clique/release).
+                    || app.pr_loop_drag.is_some()
+                    || app.pr_scrubbing {
                     app.window.request_redraw();
                 }
                 }

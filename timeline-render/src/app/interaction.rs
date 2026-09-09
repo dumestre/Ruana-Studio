@@ -540,6 +540,18 @@ impl App {
 
 
     pub fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
+        // ====== Piano roll: Released sempre finaliza drags de loop/scrub ======
+        // (coloquei ANTES dos "early returns de arrasto ativo" porque, se um
+        //  drag estiver ativo, Released tem que encerrá-lo SEMPRE.)
+        if self.show_piano_roll && state == ElementState::Released {
+            if self.pr_loop_drag.is_some() {
+                self.pr_loop_drag = None;
+            }
+            if self.pr_scrubbing {
+                self.pr_handle_ruler_click(state, pos);
+            }
+        }
+
         // Intercepta arrasto da splitter do piano roll
         if self.show_piano_roll && self.splitter_drag {
             if state == ElementState::Released {
@@ -550,15 +562,18 @@ impl App {
             return;
         }
 
-        // Intercepta clique no LOOP DRAG do piano roll (só durante arrasto ativo)
+        // Piano roll: durante arrasto de loop ativo (Pressed) — nada a fazer,
+        // Released já foi tratado acima. Para garantir que não re-ativamos por
+        // engano, damos return quando há um loop drag ativo (só importa no
+        // Pressed, mas no Released o bloco acima já o zerou).
         if self.show_piano_roll && self.pr_loop_drag.is_some() {
-            if state == ElementState::Released {
-                self.pr_loop_drag = None;
-                return;
-            }
+            return;
         }
-        // Intercepta clique no SCRUBBING do piano roll (só durante arrasto ativo)
-        if self.show_piano_roll && self.pr_scrubbing {
+
+        // Intercepta clique no SCRUBBING do piano roll (só durante arrasto ativo / Pressed)
+        if self.show_piano_roll && self.pr_scrubbing && state == ElementState::Pressed {
+            // Durante scrubbing + Pressed: realinha a playhead (redundante com
+            // cursor_moved, mas garante boa UX em clicks rápidos).
             self.pr_handle_ruler_click(state, pos);
             return;
         }
@@ -578,7 +593,8 @@ impl App {
                 let ruler_top = pr_ruler.y;
                 let ruler_bottom = pr_ruler.y + pr_ruler.height;
                 if pos.1 >= ruler_top && pos.1 < ruler_bottom {
-                    // Na régua: primeiro tenta loop drag, senão scrub
+                    // Na régua: PRIMEIRO tenta loop drag (apenas alças 6px,
+                    // não o centro). Se falhar → scrub/playhead.
                     match state {
                         ElementState::Pressed => {
                             if !self.pr_begin_loop_drag(pos.0) {
@@ -586,6 +602,15 @@ impl App {
                             }
                         }
                         ElementState::Released => {
+                            // Released já foi tratado no topo da função (fecha
+                            // scrub/loop), mas garantimos aqui que, caso o
+                            // usuário tenha feito um clique rápido (Pressed +
+                            // Released sem mover), o pr_handle_ruler_click seja
+                            // chamado no Released caso o scrub ainda não existia
+                            // (Pressed caiu aqui via begin_loop_drag=false e
+                            // setou pr_scrubbing = true).
+                            // Esse bloco é safety-net — o bloco do topo já
+                            // cobre o caso geral.
                             self.pr_handle_ruler_click(state, pos);
                         }
                     }
@@ -746,6 +771,13 @@ impl App {
     }
 
     pub fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
+        // ====== CRÍTICO (winit 0.30): atualiza last_cursor ANTES de qualquer
+        // lógica. O evento MouseInput (clique) NÃO traz a posição — ele usa
+        // `app.last_cursor` para saber onde o clique foi. Sem isso, todos os
+        // hit tests (splitter, ruler do piano roll, loop handles etc.) usam
+        // a posição ANTERIOR do mouse e a interação FICA COMPLETAMENTE FORA.
+        self.last_cursor = pos;
+
         // Se a splitter está sendo arrastada, redimensiona o piano roll em tempo real
         if self.splitter_drag {
             self.splitter_drag_move(pos.1);

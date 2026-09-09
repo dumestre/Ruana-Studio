@@ -805,7 +805,9 @@ impl App {
     }
 
     /// Inicia arrasto do loop na ruler do PIANO ROLL.
-    /// Retorna true se iniciou um arrasto (sobre as alças ou centro do loop).
+    /// SÓ inicia se o clique caiu EXATAMENTE numa das alças de 6px
+    /// (Start ou End). Qualquer ponto intermediário (incluindo o centro
+    /// do loop) retorna false — o clique vira scrub da playhead.
     pub fn pr_begin_loop_drag(&mut self, mx: f32) -> bool {
         if !self.pr_loop_enabled {
             return false;
@@ -820,9 +822,13 @@ impl App {
             self.pr_loop_drag = Some(LoopDrag::Start);
         } else if (mx - ex).abs() <= grab {
             self.pr_loop_drag = Some(LoopDrag::End);
-        } else if mx >= sx && mx <= ex {
-            self.pr_loop_drag = Some(LoopDrag::Move);
         } else {
+            // ===== Removido: LoopDrag::Move no centro =====
+            // Antes, qualquer clique DENTRO do loop virava "mover loop
+            // inteiro", o que bloqueava o scrub em quase toda a ruler.
+            // Agora: clique no centro = scrub. Para mover o loop, o
+            // usuário arrasta as alças de Start/End (6px cada) ou usa
+            // Shift+clique para manter o Move, se quiser depois.
             return false;
         }
         true
