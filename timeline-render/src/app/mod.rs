@@ -978,6 +978,48 @@ impl App {
             self.theme.clamp(0, 6),
         ));
 
+        // ====== Playhead do PIANO ROLL — desenhada POR ÚLTIMO (z-order mais alto) ======
+        // Garante que a linha fique por CIMA de:
+        //   - fill do loop (corpo e ruler)
+        //   - grid vertical/horizontal do PR
+        //   - teclas brancas/pretas do teclado à esquerda
+        //   - notas coloridas
+        //   - splitter (fica por baixo, a splitter desenha por último? não —
+        //     desenhamos a splitter ANTES, então a playhead fica por CIMA da
+        //     splitter; é o comportamento desejado: a linha do playhead atravessa
+        //     a splitter do PR igual atravessa na timeline.)
+        {
+            use piano_roll::KEYBOARD_W;
+            use crate::palette;
+            let px_per_beat = self.piano_roll_px_per_beat;
+            let scroll_x = self.piano_roll_scroll_x;
+            let beat_to_x = |beat: f32| -> f32 {
+                KEYBOARD_W + beat * px_per_beat - scroll_x
+            };
+            let head_x = beat_to_x(self.pr_playhead_beat);
+            if head_x >= -20.0 && head_x <= width + 20.0 {
+                let col = palette::PLAYHEAD_COLOR;
+                // Linha vertical vermelha: DESCE DO TOPO DA RÉGUA (círculo)
+                // ATÉ A BASE DO CORPO DO PIANO ROLL, sem gaps.
+                let body_bottom = body_top + body_h.max(0.0);
+                let line_top = ruler_y + 1.0;
+                let line_h = (body_bottom - line_top).max(0.0);
+                instances.push(crate::RectInstance {
+                    x: head_x - 1.0, y: line_top,
+                    w: 2.0, h: line_h,
+                    color: [col.0, col.1, col.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+                // Círculo (cabeça da playhead) no topo da régua.
+                instances.push(crate::RectInstance {
+                    x: head_x - 6.0, y: ruler_y + 1.0,
+                    w: 12.0, h: 12.0,
+                    color: [col.0, col.1, col.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0,
+                });
+            }
+        }
+
         instances
     }
 }
