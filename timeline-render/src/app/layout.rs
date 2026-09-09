@@ -2,11 +2,11 @@
 //!
 //! Quando o piano roll está visível (`show_piano_roll`), ele expande de baixo,
 //! **empurrando a timeline e a time_ruler para cima**. A splitter separa a
-//! timeline content do piano roll. A edit toolbar (ferramentas) fica numa
-//! faixa entre a time_ruler e a splitter.
+//! timeline content do bloco do piano roll. A edit toolbar (ferramentas) fica
+//! numa faixa entre a splitter e a piano_ruler.
 //!
 //! Layout com piano roll (de cima para baixo):
-//!   ruler → timeline → time_ruler → toolbar → SPLITTER → piano_ruler → piano_roll
+//!   ruler → timeline → time_ruler → SPLITTER → toolbar → piano_ruler → piano_roll
 
 use crate::app::edit_toolbar::TOOLBAR_H;
 use crate::App;
@@ -81,8 +81,8 @@ impl App {
                     .max(self.piano_roll_min_h + PIANO_RULER_H),
             );
 
-        // A splitter fica ENTRE a toolbar e a régua do piano roll.
-        // time_ruler é empurrada para cima pelo piano roll + toolbar.
+        // A splitter fica ACIMA da toolbar (que por sua vez fica acima da
+        // régua do piano roll). time_ruler é empurrada para cima pelo bloco.
         let tr_y = height - tr_h - toolbar_h - pr_total - 4.0;
 
         let timeline = Rect {
@@ -92,11 +92,11 @@ impl App {
 
         let time_ruler = Rect { x: 0.0, y: tr_y, width, height: tr_h };
 
-        let edit_toolbar = Rect { x: 0.0, y: tr_y + tr_h, width, height: toolbar_h };
+        let splitter = Rect { x: 0.0, y: tr_y + tr_h, width, height: 4.0 };
 
-        let splitter = Rect { x: 0.0, y: tr_y + tr_h + toolbar_h, width, height: 4.0 };
+        let edit_toolbar = Rect { x: 0.0, y: tr_y + tr_h + 4.0, width, height: toolbar_h };
 
-        let pr_ruler_y = tr_y + tr_h + toolbar_h + 4.0;
+        let pr_ruler_y = tr_y + tr_h + 4.0 + toolbar_h;
         let pr_roll_y = pr_ruler_y + pr_ruler_h;
 
         Layout {

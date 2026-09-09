@@ -300,8 +300,6 @@ impl PianoRollMetrics {
 
             let is_black = [1, 3, 6, 8, 11].contains(&(pitch.rem_euclid(12)));
             let key_h = self.key_height;
-            let note_in_octave = pitch.rem_euclid(12);
-            let is_alt = matches!(note_in_octave, 0 | 2 | 4 | 5 | 7 | 9 | 11);
 
             if is_black {
                 let kb_x = kb_w - 14.0;
@@ -311,7 +309,7 @@ impl PianoRollMetrics {
                     y,
                     w: kb_w,
                     h: key_h,
-                    color: rgba(palette::BASE[t], 200),
+                    color: [0x1A, 0x1A, 0x1A, 255],
                     wave_offset: 0,
                     wave_count: 0,
                     clip_w: 0.0,
@@ -324,7 +322,7 @@ impl PianoRollMetrics {
                     y,
                     w: kb_w,
                     h: key_h,
-                    color: rgba(if is_alt { palette::SURFACE_HIGH[t] } else { palette::SURFACE_STEP[t] }, 255),
+                    color: [0xF2, 0xEF, 0xE9, 255],
                     wave_offset: 0,
                     wave_count: 0,
                     clip_w: 0.0,

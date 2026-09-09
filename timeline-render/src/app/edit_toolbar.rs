@@ -186,9 +186,9 @@ impl crate::App {
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
 
-        // Borda inferior (separa do splitter do piano roll).
+        // Borda superior (separa a toolbar da splitter acima).
         out.push(RectInstance {
-            x: strip.x, y: strip.y + strip.height - 1.0,
+            x: strip.x, y: strip.y,
             w: strip.width, h: 1.0,
             color: rgba(palette::BASE[t], 255),
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
