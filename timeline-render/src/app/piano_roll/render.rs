@@ -144,7 +144,7 @@ pub fn build_piano_roll_instances(
 pub fn build_piano_ruler_instances(
     _m: &PianoRollMetrics,
     width: f32,
-    transport_beat: f32,
+    pr_playhead_beat: f32,
     px_per_beat: f32,
     scroll_x: f32,
     theme: usize,
@@ -299,18 +299,23 @@ pub fn build_piano_ruler_instances(
         instances.extend(build_text_instances("FOLLOW", px, py, rgba(palette::ACCENT[t], 255), 1.0));
     }
 
-    // ===== Playhead do piano roll — linha + círculo (igual timeline) =====
-    let head_x = beat_to_x(transport_beat);
+    // ===== Playhead do piano roll — linha + círculo (INDEPENDENTE da timeline) =====
+    // Linha DESCE DO TOPO DA RÉGUA ATÉ A BASE DO CORPO (todo o comprimento).
+    let head_x = beat_to_x(pr_playhead_beat);
     if head_x >= -20.0 && head_x <= width + 20.0 {
         let col = palette::PLAYHEAD_COLOR;
-        // Linha vertical vermelha (atravessa ruler + corpo)
+        // Ponto final da linha: base do corpo do piano roll.
+        let body_bottom = body_top + body_h.max(0.0);
+        let line_top = ruler_y + 1.0;
+        let line_h = (body_bottom - line_top).max(0.0);
+        // Linha vertical vermelha (ruler + corpo INTEIRO, até embaixo).
         instances.push(RectInstance {
-            x: head_x - 1.0, y: ruler_y + 1.0,
-            w: 2.0, h: ruler_h - 1.0 + body_h.max(0.0),
+            x: head_x - 1.0, y: line_top,
+            w: 2.0, h: line_h,
             color: [col.0, col.1, col.2, 255],
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
-        // Cabeça circular (triângulo arredondado) no topo da régua
+        // Cabeça circular (triângulo arredondado) no topo da régua.
         instances.push(RectInstance {
             x: head_x - 6.0, y: ruler_y + 1.0,
             w: 12.0, h: 12.0,

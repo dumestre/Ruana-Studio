@@ -173,6 +173,9 @@ pub struct App {
     pub splitter_drag: bool,
 
     /// ===== Piano roll: estado independente da ruler =====
+    /// Posição INDEPENDENTE da playhead no piano roll (em beats).
+    /// Não compartilha com `transport_seconds` da timeline.
+    pub pr_playhead_beat: f32,
     /// Loop no piano roll (INDEPENDENTE da timeline).
     pub pr_loop_start_beat: f32,
     pub pr_loop_end_beat: f32,
@@ -623,6 +626,7 @@ impl App {
             splitter_drag: false,
 
             // Piano roll ruler (estado INDEPENDENTE da timeline)
+            pr_playhead_beat: 0.0,
             pr_loop_start_beat: 0.0,
             pr_loop_end_beat: 8.0,
             pr_loop_enabled: true,
@@ -793,13 +797,11 @@ impl App {
         ((x - KEYBOARD_W) + self.piano_roll_scroll_x) / self.piano_roll_px_per_beat.max(0.001)
     }
 
-    /// Posiciona o playhead a partir do x na ruler do piano roll.
-    /// Ajusta transport_seconds (compartilhado) usando o BPM.
+    /// Posiciona a playhead INDEPENDENTE do piano roll a partir do x na ruler.
+    /// **NÃO** toca em `transport_seconds` (tocaria a timeline).
     pub fn pr_set_playhead_from_x(&mut self, mx: f32) {
         let beat = self.pr_x_to_beat(mx).max(0.0);
-        let seconds = beat * 60.0 / self.bpm;
-        self.transport_seconds = seconds;
-        self.last_play_start = seconds;
+        self.pr_playhead_beat = beat;
     }
 
     /// Inicia arrasto do loop na ruler do PIANO ROLL.
@@ -938,7 +940,7 @@ impl App {
         let mut instances = piano_roll::build_piano_ruler_instances(
             &m,
             width,
-            self.transport_seconds * self.bpm / 60.0,
+            self.pr_playhead_beat,
             self.piano_roll_px_per_beat,
             self.piano_roll_scroll_x,
             t,
