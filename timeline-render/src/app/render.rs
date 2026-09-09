@@ -823,6 +823,9 @@ impl App {
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
         });
 
+        // ===== Edit toolbar (ferramentas) — entre time_ruler e splitter =====
+        instances.extend(self.edit_toolbar_rect_instances(width, height));
+
         // ===== Piano roll (editor MIDI) + splitter (se visível) =====
         instances.extend(self.piano_roll_instances(width, height));
 
@@ -924,6 +927,58 @@ impl App {
             rpass.set_vertex_buffer(0, self.unit_quad.slice(..));
             rpass.set_vertex_buffer(1, instance_buf.slice(..));
             rpass.draw(0..4, 0..instances.len() as u32);
+        }
+
+        // === 2º pass: ícones (edit toolbar) — quads texturizados ===
+        let icon_instances = self.edit_toolbar_icon_instances(width, height);
+        if !icon_instances.is_empty() {
+            let icon_data: Vec<f32> = icon_instances.iter().flat_map(|i| i.to_f32()).collect();
+            let icon_instance_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("icon-instances"),
+                contents: bytemuck::cast_slice(&icon_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+            let icon_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("icon-bg"),
+                layout: &self.icon_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.icon_sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&self.icon_atlas_view),
+                    },
+                ],
+            });
+
+            let mut ipass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("icon-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            ipass.set_pipeline(&self.icon_pipeline);
+            ipass.set_bind_group(0, &icon_bind_group, &[]);
+            ipass.set_vertex_buffer(0, self.unit_quad.slice(..));
+            ipass.set_vertex_buffer(1, icon_instance_buf.slice(..));
+            ipass.draw(0..4, 0..icon_instances.len() as u32);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

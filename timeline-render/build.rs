@@ -9,6 +9,9 @@ fn main() {
     if let Err(e) = build_cursors() {
         eprintln!("cargo:warning=timeline-render: cursores nao gerados ({e})");
     }
+    if let Err(e) = build_icons() {
+        eprintln!("cargo:warning=timeline-render: atlas de icones nao gerado ({e})");
+    }
 }
 
 fn build_cursors() -> Result<(), Box<dyn std::error::Error>> {
@@ -199,5 +202,122 @@ fn write_cur_file(
         file.write_all(&row)?;
     }
 
+    Ok(())
+}
+
+// ============================================================================
+// Atlas de ícones da edit toolbar
+// ============================================================================
+// Rasteriza os 12 SVGs da toolbar (6 normais + 6 "filled") em 16x16 RGBA e
+// monta um atlas 4x3, emitindo um módulo Rust em $OUT_DIR/icons_atlas.rs com
+// os pixels (alpha straight). O código usa `include!` via env!("OUT_DIR").
+
+/// Rasteriza um SVG em RGBA straight (des-premultiplicando o alpha do
+/// tiny_skia, que é premultiplied), pronto para textura wgpu.
+fn render_svg_to_rgba(
+    svg_path: &Path,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    use resvg::render;
+    use resvg::tiny_skia::{Pixmap, Transform};
+    use usvg::{Options, Tree};
+
+    let svg_data = std::fs::read(svg_path)?;
+    let opt = Options::default();
+    let tree = Tree::from_data(&svg_data, &opt)?;
+
+    let art_w = tree.size().width().max(0.001) as f32;
+    let art_h = tree.size().height().max(0.001) as f32;
+
+    let scale = (width as f32 / art_w).min(height as f32 / art_h);
+    let offset_x = (width as f32 - art_w * scale) / 2.0;
+    let offset_y = (height as f32 - art_h * scale) / 2.0;
+    let transform = Transform::from_translate(offset_x, offset_y).pre_scale(scale, scale);
+
+    let mut pixmap = Pixmap::new(width, height).ok_or("Failed to create pixmap")?;
+    render(&tree, transform, &mut pixmap.as_mut());
+
+    let premul = pixmap.data();
+    let mut out = vec![0u8; (width * height * 4) as usize];
+    for (i, px) in premul.chunks_exact(4).enumerate() {
+        let a = px[3] as u16;
+        if a == 0 {
+            continue;
+        }
+        out[i * 4] = ((px[0] as u16 * 255 / a).min(255)) as u8;
+        out[i * 4 + 1] = ((px[1] as u16 * 255 / a).min(255)) as u8;
+        out[i * 4 + 2] = ((px[2] as u16 * 255 / a).min(255)) as u8;
+        out[i * 4 + 3] = px[3];
+    }
+    Ok(out)
+}
+
+fn build_icons() -> Result<(), Box<dyn std::error::Error>> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let svg_dir = manifest_dir.join("../ui/icons");
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR")?);
+
+    // Mesma ordem do EditToolbar no Slint: cada entrada é o par (normal, filled)
+    // e o índice no atlas é a ordem desta lista.
+    let icons = [
+        ("select.svg", "select_filled.svg"),
+        ("slice.svg", "slice_filled.svg"),
+        ("glue.svg", "glue_filled.svg"),
+        ("expand_diag.svg", "stretch_filled.svg"),
+        ("draw.svg", "draw_filled.svg"),
+        ("erase.svg", "erase_filled.svg"),
+    ];
+
+    const CELL: u32 = 16;
+    const COLS: u32 = 4;
+    let rows = ((icons.len() * 2) as u32 + COLS - 1) / COLS; // 12 ícones → 3 linhas
+    let w = CELL * COLS;
+    let h = CELL * rows;
+    let mut atlas = vec![0u8; (w * h * 4) as usize];
+
+    let mut emitted = false;
+    for (pair_idx, (normal_name, filled_name)) in icons.iter().enumerate() {
+        for (offset, name) in [*normal_name, *filled_name].iter().enumerate() {
+            let svg_path = svg_dir.join(name);
+            println!("cargo:rerun-if-changed={}", svg_path.display());
+            if !svg_path.exists() {
+                continue;
+            }
+            let rgba = render_svg_to_rgba(&svg_path, CELL, CELL)?;
+            let idx = (pair_idx * 2 + offset) as u32;
+            let col = idx % COLS;
+            let row = idx / COLS;
+            let ox = (col * CELL) as usize * 4;
+            let oy = (row * CELL) as usize * w as usize * 4;
+            for y in 0..CELL as usize {
+                let src = y * (CELL as usize) * 4;
+                let dst = oy + y * (w as usize) * 4 + ox;
+                atlas[dst..dst + (CELL as usize) * 4].copy_from_slice(&rgba[src..src + (CELL as usize) * 4]);
+            }
+            emitted = true;
+        }
+    }
+
+    // Gera $OUT_DIR/icons_atlas.rs
+    let mut code = String::new();
+    code.push_str(&format!("pub const ICON_ATLAS_W: u32 = {w};\n"));
+    code.push_str(&format!("pub const ICON_ATLAS_H: u32 = {h};\n"));
+    code.push_str("pub const ICON_CELL: u32 = 16;\n");
+    code.push_str(&format!("pub const ICON_COLS: u32 = {COLS};\n"));
+    code.push_str("pub const ICON_ATLAS_RGBA: &[u8] = &[\n");
+    if emitted {
+        for chunk in atlas.chunks(16) {
+            let s: Vec<String> = chunk.iter().map(|b| format!("{b},")).collect();
+            code.push_str("    ");
+            code.push_str(&s.join(""));
+            code.push('\n');
+        }
+    }
+    code.push_str("];\n");
+
+    let out_path = out_dir.join("icons_atlas.rs");
+    std::fs::write(&out_path, code)?;
+    println!("Generated: {}", out_path.display());
     Ok(())
 }

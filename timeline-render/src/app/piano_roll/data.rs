@@ -239,19 +239,19 @@ impl PianoRollMetrics {
             }
         }
 
-        // Grid horizontal (teclas do piano)
+        // Grid horizontal (teclas do piano) — mesmas cores da timeline (BASE)
         for pitch in (self.bottom_pitch..=self.top_pitch).rev() {
             let y = piano_top + (self.top_pitch - pitch) as f32 * self.key_height - self.scroll_y;
             if y < piano_top || y > roll_bottom {
                 continue;
             }
-            let col = palette::GRID_LINE[t];
+            let col = palette::BASE[t];
             instances.push(RectInstance {
                 x: 0.0,
                 y,
                 w: width,
                 h: 1.0,
-                color: [col.0, col.1, col.2, 80],
+                color: [col.0, col.1, col.2, 150],
                 wave_offset: 0,
                 wave_count: 0,
                 clip_w: 0.0,

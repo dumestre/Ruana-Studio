@@ -170,6 +170,7 @@ impl ApplicationHandler for AppHandler {
                 }
                 if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("p")) {
                     app.toggle_piano_roll();
+                    app.toolbar_hover = None;
                     if app.show_piano_roll && app.note_editor.notes().is_empty() {
                         app.note_editor.add(60, 0.0, 1.0, 100);
                         app.note_editor.add(64, 1.0, 0.5, 80);
@@ -276,7 +277,9 @@ impl ApplicationHandler for AppHandler {
                 button,
                 ..
             } => {
-                tools::update_cursor();
+                if app.toolbar_hover.is_none() {
+                    tools::update_cursor();
+                }
                 // Inicia/finaliza arrasto da splitter do piano roll
                 if state == ElementState::Pressed && app.show_piano_roll
                     && app.splitter_hit_test(app.last_cursor.1, app.size.height as f32)
@@ -290,6 +293,20 @@ impl ApplicationHandler for AppHandler {
                     let pos = Some(app.last_cursor);
                     app.handle_mouse_button(state, pos);
                 } else if button == winit::event::MouseButton::Left {
+                    // Edit toolbar: clique muda a ferramenta e NÃO propaga.
+                    if state == ElementState::Pressed {
+                        if let Some(idx) = app.toolbar_hit(
+                            app.size.width as f32,
+                            app.size.height as f32,
+                            app.last_cursor,
+                        ) {
+                            if let Some(tool) = crate::app::edit_toolbar::tool_from_index(idx) {
+                                set_tool(tool);
+                            }
+                            app.window.request_redraw();
+                            return;
+                        }
+                    }
                     // Shift+Left Click: cola o clipboard na posição do cursor (qualquer track)
                     if state == ElementState::Pressed && app.shift_pressed {
                         let pos = app.last_cursor;
@@ -321,11 +338,27 @@ impl ApplicationHandler for AppHandler {
                     app.cursor_warp_pending = false;
                 } else {
                 app.handle_cursor_moved((position.x as f32, position.y as f32));
+                // Hit-test da edit toolbar — tem prioridade sobre o resto.
+                let hit = app.toolbar_hit(
+                    app.size.width as f32,
+                    app.size.height as f32,
+                    (position.x as f32, position.y as f32),
+                );
+                if hit != app.toolbar_hover {
+                    app.toolbar_hover = hit;
+                    app.window.request_redraw();
+                }
+                if app.toolbar_hover.is_some() {
+                    tools::set_hand_override(true);
+                }
                 // Mantém o cursor da ferramenta ativa persistente (evita voltar pro
                 // cursor padrão do SO a cada movimento).
                 // Só chama update_cursor() se NÃO houver override ativo (seam/fade hover),
                 // pois o handle_cursor_moved já fez set_cursor_override.
-                if !app.clip_interaction.is_seam_hovered() && app.fade_interaction.hovered.is_none() {
+                if app.toolbar_hover.is_none()
+                    && !app.clip_interaction.is_seam_hovered()
+                    && app.fade_interaction.hovered.is_none()
+                {
                     tools::update_cursor();
                 }
                 if app.loop_drag.is_some() || app.scrubbing || app.clip_interaction.is_dragging()
@@ -406,7 +439,10 @@ impl ApplicationHandler for AppHandler {
             // Reaplica o cursor da ferramenta a cada ciclo (evita reset do SO
             // após clique/solta, WM_SETCURSOR, etc.).
             // Não sobrescreve overrides de seam/fade hover.
-            if !app.clip_interaction.is_seam_hovered() && app.fade_interaction.hovered.is_none() {
+            if app.toolbar_hover.is_none()
+                && !app.clip_interaction.is_seam_hovered()
+                && app.fade_interaction.hovered.is_none()
+            {
                 tools::update_cursor();
             }
             if app.playing || app.clip_interaction.is_drawing() {

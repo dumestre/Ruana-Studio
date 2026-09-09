@@ -2,6 +2,7 @@
 //! base e o laço de eventos ((re)exporta `run`).
 
 pub(crate) mod audio;
+pub(crate) mod edit_toolbar;
 pub(crate) mod interaction;
 pub(crate) mod layout;
 pub(crate) mod piano_roll;
@@ -21,7 +22,7 @@ use winit::window::Window;
 
 use crate::clips;
 use crate::fades;
-use crate::shctx::SHADER_WGSL;
+use crate::shctx::{ICON_SHADER_WGSL, SHADER_WGSL};
 use crate::tools::{init_tool_manager, set_dark_mode};
 use crate::waveform;
 
@@ -170,6 +171,15 @@ pub struct App {
     pub piano_roll_max_h: f32,
     /// true quando a splitter está sendo arrastada.
     pub splitter_drag: bool,
+
+    /// ===== Edit toolbar (ferramentas do piano roll) =====
+    /// Pipeline de quads texturizados (ícones da toolbar).
+    pub icon_pipeline: wgpu::RenderPipeline,
+    pub icon_bind_group_layout: wgpu::BindGroupLayout,
+    pub icon_sampler: wgpu::Sampler,
+    pub icon_atlas_view: wgpu::TextureView,
+    /// Índice (0..5) do botão sob o cursor, ou None.
+    pub toolbar_hover: Option<usize>,
 }
 
 impl App {
@@ -341,6 +351,161 @@ impl App {
             cache: None,
         });
 
+        // === Pipeline de ícones (edit toolbar) ===
+        let icon_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("timeline-icon-shader"),
+            source: wgpu::ShaderSource::Wgsl(ICON_SHADER_WGSL.into()),
+        });
+
+        let icon_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("timeline-icon-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let icon_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("timeline-icon-pl"),
+            bind_group_layouts: &[Some(&icon_bind_group_layout)],
+            immediate_size: 0,
+        });
+
+        let icon_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("timeline-icon-rp"),
+            layout: Some(&icon_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &icon_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: 8,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &[wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x2,
+                            offset: 0,
+                            shader_location: 0,
+                        }],
+                    }),
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: 48,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &[
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: 0,
+                                shader_location: 1,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: 16,
+                                shader_location: 2,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: 32,
+                                shader_location: 3,
+                            },
+                        ],
+                    }),
+                ],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &icon_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        // Textura do atlas de ícones (sRGB, alpha straight).
+        let icon_atlas_w = edit_toolbar::ICON_ATLAS_W;
+        let icon_atlas_h = edit_toolbar::ICON_ATLAS_H;
+        let icon_atlas = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("icon-atlas"),
+            size: wgpu::Extent3d {
+                width: icon_atlas_w.max(1),
+                height: icon_atlas_h.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let atlas_pixels = edit_toolbar::ICON_ATLAS_RGBA;
+        if !atlas_pixels.is_empty() {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &icon_atlas,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                atlas_pixels,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(icon_atlas_w * 4),
+                    rows_per_image: Some(icon_atlas_h),
+                },
+                wgpu::Extent3d {
+                    width: icon_atlas_w,
+                    height: icon_atlas_h,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        let icon_atlas_view = icon_atlas.create_view(&wgpu::TextureViewDescriptor::default());
+        let icon_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("icon-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+
         // === Dados demo ===
         // Abre com apenas UMA track padrão, sem clips. O usuário importa o
         // áudio (por drag & drop ou menu) e a timeline cria as tracks.
@@ -442,6 +607,13 @@ impl App {
             piano_roll_min_h: 60.0,
             piano_roll_max_h: 480.0,
             splitter_drag: false,
+
+            // Edit toolbar
+            icon_pipeline,
+            icon_bind_group_layout,
+            icon_sampler,
+            icon_atlas_view,
+            toolbar_hover: None,
         })
     }
 
