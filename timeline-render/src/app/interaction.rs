@@ -550,6 +550,19 @@ impl App {
             return;
         }
 
+        // Intercepta clique no LOOP DRAG do piano roll (só durante arrasto ativo)
+        if self.show_piano_roll && self.pr_loop_drag.is_some() {
+            if state == ElementState::Released {
+                self.pr_loop_drag = None;
+                return;
+            }
+        }
+        // Intercepta clique no SCRUBBING do piano roll (só durante arrasto ativo)
+        if self.show_piano_roll && self.pr_scrubbing {
+            self.pr_handle_ruler_click(state, pos);
+            return;
+        }
+
         // Intercepta clique dentro da área do piano roll ou splitter (quando visível)
         if self.show_piano_roll {
             let height = self.size.height as f32;
@@ -560,9 +573,28 @@ impl App {
                 self.splitter_drag = true;
                 return;
             }
-            // Clique na área do piano roll (régua + conteúdo)
+            // Clique na RÉGUA do piano roll (loop drag + scrub) — SEPARADO do conteúdo
             if let Some(pr_ruler) = &layout.piano_ruler {
-                if pos.1 >= pr_ruler.y {
+                let ruler_top = pr_ruler.y;
+                let ruler_bottom = pr_ruler.y + pr_ruler.height;
+                if pos.1 >= ruler_top && pos.1 < ruler_bottom {
+                    // Na régua: primeiro tenta loop drag, senão scrub
+                    match state {
+                        ElementState::Pressed => {
+                            if !self.pr_begin_loop_drag(pos.0) {
+                                self.pr_handle_ruler_click(state, pos);
+                            }
+                        }
+                        ElementState::Released => {
+                            self.pr_handle_ruler_click(state, pos);
+                        }
+                    }
+                    return;
+                }
+            }
+            // Clique no CONTEÚDO do piano roll (abaixo da régua)
+            if let Some(pr_ruler) = &layout.piano_ruler {
+                if pos.1 >= pr_ruler.y + pr_ruler.height {
                     self.handle_piano_roll_click(state, pos);
                     return;
                 }
@@ -718,6 +750,15 @@ impl App {
         if self.splitter_drag {
             self.splitter_drag_move(pos.1);
             return;
+        }
+
+        // ====== Piano roll: loop drag / scrubbing (INDEPENDENTES da timeline) ======
+        if self.show_piano_roll {
+            if self.pr_loop_drag.is_some() {
+                self.pr_handle_loop_drag(pos.0);
+            } else if self.pr_scrubbing {
+                self.pr_set_playhead_from_x(pos.0);
+            }
         }
 
         let cm = self.clip_metrics();

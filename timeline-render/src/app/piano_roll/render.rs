@@ -3,7 +3,7 @@
 //! `app::render`.
 
 use crate::{rgba, rgba_alpha, palette, RectInstance, build_text_instances};
-use super::{PianoRollInteraction, PianoRollMetrics, PianoRollNote, PIANO_RULER_H, KEYBOARD_W};
+use super::{PianoRollInteraction, PianoRollMetrics, PianoRollNote, KEYBOARD_W};
 
 /// Altura fixa de cada nota em pixels.
 pub const NOTE_HEIGHT: f32 = 12.0;
@@ -135,75 +135,56 @@ pub fn build_piano_roll_instances(
         }
     }
 
-    // Playhead (vertical line)
-    instances.push(RectInstance {
-        x: m.beat_to_x(0.0),
-        y: m.ruler_px,
-        w: 1.0,
-        h: m.roll_height,
-        color: [
-            palette::PLAYHEAD_COLOR.0,
-            palette::PLAYHEAD_COLOR.1,
-            palette::PLAYHEAD_COLOR.2,
-            180,
-        ],
-        wave_offset: 0,
-        wave_count: 0,
-        clip_w: 0.0,
-        clip_h: 0.0,
-        radius: 0.0,
-    });
-
     instances
 }
 
-/// Gera as instâncias da régua do piano roll (réplica da régua da timeline,
-/// com playhead próprio). Fica entre a splitter e o conteúdo do piano roll.
-/// Usa os mesmos `px_per_beat` e `scroll_x` da timeline.
+/// Gera as instâncias da régua do piano roll (RÉPLICA EXATA da régua da
+/// timeline, com playhead, loop, subdivisões, FOLLOW etc. INDEPENDENTES).
+/// A área do conteúdo abaixo (corpo do piano roll) recebe fill do loop + bordas.
 pub fn build_piano_ruler_instances(
-    m: &PianoRollMetrics,
+    _m: &PianoRollMetrics,
     width: f32,
     transport_beat: f32,
     px_per_beat: f32,
     scroll_x: f32,
     theme: usize,
+    ruler_y: f32,
+    ruler_h: f32,
+    body_top: f32,
+    body_h: f32,
+    loop_enabled: bool,
+    loop_start_beat: f32,
+    loop_end_beat: f32,
+    follow_playhead: bool,
 ) -> Vec<RectInstance> {
     let t = theme.clamp(0, 6);
     let mut instances = Vec::new();
 
-    let ruler_y = m.ruler_px - PIANO_RULER_H; // topo da régua (ruler_px é o topo do conteúdo)
-    let ruler_h = PIANO_RULER_H;
     let ruler_bottom = ruler_y + ruler_h;
+    let px_per_bar = px_per_beat * 4.0;
+    let total_bars = ((width + scroll_x) / px_per_bar).ceil() as usize + 1;
 
-    // Fundo da régua do piano roll (mesmo estilo da timeline)
+    // Helper: converte beat → x considerando KEYBOARD_W + scroll_x
+    let beat_to_x = |beat: f32| -> f32 {
+        KEYBOARD_W + beat * px_per_beat - scroll_x
+    };
+
+    // ===== Fundo base da régua =====
     instances.push(RectInstance {
         x: 0.0,
         y: ruler_y,
         w: width,
         h: ruler_h,
-        color: [palette::SURFACE_HIGH[t].0, palette::SURFACE_HIGH[t].1, palette::SURFACE_HIGH[t].2, 255],
-        wave_offset: 0,
-        wave_count: 0,
-        clip_w: 0.0,
-        clip_h: 0.0,
-        radius: 0.0,
+        color: rgba(palette::SURFACE_HIGH[t], 255),
+        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
 
-    // Réplica da régua da timeline: fundos alternados dos compassos — só a
-    // partir do teclado (KEYBOARD_W), alinhado com o grid abaixo.
-    let px_per_bar = px_per_beat * 4.0;
-    let total_bars = ((width + scroll_x) / px_per_bar).ceil() as usize + 1;
+    // ===== Fundos alternados dos compassos (par/ímpar) — a partir do teclado =====
     for i in 0..total_bars {
         let bx = KEYBOARD_W + i as f32 * px_per_bar - scroll_x;
-        if bx > width + px_per_bar || bx < -px_per_bar {
-            continue;
-        }
+        if bx > width + px_per_bar || bx < -px_per_bar { continue; }
+        let bg = if i % 2 == 1 { palette::SURFACE_HIGH[t] } else { palette::SURFACE_STEP[t] };
         let bw = px_per_bar;
-        let bg = if i % 2 == 1 {
-            palette::SURFACE_HIGH[t]
-        } else {
-            palette::SURFACE_STEP[t]
-        };
         let draw_x = bx.max(KEYBOARD_W);
         let draw_w = (bx + bw).min(width) - draw_x;
         if draw_w > 0.0 {
@@ -215,57 +196,186 @@ pub fn build_piano_ruler_instances(
         }
     }
 
-    // Linhas de batida (1/4) — mesma densidade da timeline, a partir do teclado
-    if px_per_bar >= 40.0 {
-        let n = 4u32;
-        let step = px_per_bar / n as f32;
-        for i in 0..total_bars {
-            let bx = KEYBOARD_W + i as f32 * px_per_bar - scroll_x;
-            if bx > width || bx < -px_per_bar { continue; }
-            for k in 0..n {
-                let x = bx + k as f32 * step;
-                if x < KEYBOARD_W || x > width { continue; }
+    // ===== Linhas de compasso + números + subdivisões =====
+    for i in 0..total_bars {
+        let bx = KEYBOARD_W + i as f32 * px_per_bar - scroll_x;
+        if bx > width || bx < -px_per_bar { continue; }
+
+        // Número do compasso
+        let ruler_text_color = rgba(palette::TEXT_PRIMARY[t], 220);
+        if bx > -px_per_bar * 0.5 && bx < width {
+            instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, ruler_y + 3.0, ruler_text_color, 1.0));
+        }
+        // Linha vertical do compasso (altura cheia)
+        if bx >= KEYBOARD_W && bx <= width {
+            instances.push(RectInstance {
+                x: bx, y: ruler_y, w: 1.0, h: ruler_h,
+                color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            });
+        }
+        // Batidas (1/4) — quando px_per_bar >= 40
+        let beat_px = px_per_bar / 4.0;
+        for k in 0..4 {
+            let x = bx + k as f32 * beat_px;
+            if x < KEYBOARD_W || x > width { continue; }
+            if px_per_bar >= 40.0 {
                 instances.push(RectInstance {
-                    x, y: ruler_y + 2.0, w: 1.0, h: ruler_h - 4.0,
+                    x, y: 2.0 + ruler_y, w: 1.0, h: ruler_h - 2.0,
                     color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 150],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+        }
+        // Subdivisão 1/8 (tiques menores na parte de baixo) — zoom >= 120
+        if px_per_bar >= 120.0 {
+            let n = 8u32;
+            let step = px_per_bar / n as f32;
+            for m in 1..n {
+                let x8 = bx + m as f32 * step;
+                if x8 < KEYBOARD_W || x8 > width { continue; }
+                instances.push(RectInstance {
+                    x: x8, y: ruler_y + ruler_h - 8.0, w: 1.0, h: 8.0,
+                    color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 130],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+        }
+        // Subdivisão 1/16 (zoom >= 240)
+        if px_per_bar >= 240.0 {
+            let n = 16u32;
+            let step = px_per_bar / n as f32;
+            for m in 1..n {
+                let x16 = bx + m as f32 * step;
+                if x16 < KEYBOARD_W || x16 > width { continue; }
+                instances.push(RectInstance {
+                    x: x16, y: ruler_y + ruler_h - 6.0, w: 1.0, h: 6.0,
+                    color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 110],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+        }
+        // Subdivisão 1/32 (zoom >= 480)
+        if px_per_bar >= 480.0 {
+            let n = 32u32;
+            let step = px_per_bar / n as f32;
+            for m in 1..n {
+                let x32 = bx + m as f32 * step;
+                if x32 < KEYBOARD_W || x32 > width { continue; }
+                instances.push(RectInstance {
+                    x: x32, y: ruler_y + ruler_h - 5.0, w: 1.0, h: 5.0,
+                    color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 90],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+        }
+        // Subdivisão 1/64 (zoom >= 960)
+        if px_per_bar >= 960.0 {
+            let n = 64u32;
+            let step = px_per_bar / n as f32;
+            for m in 1..n {
+                let x64 = bx + m as f32 * step;
+                if x64 < KEYBOARD_W || x64 > width { continue; }
+                instances.push(RectInstance {
+                    x: x64, y: ruler_y + ruler_h - 4.0, w: 1.0, h: 4.0,
+                    color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 70],
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });
             }
         }
     }
 
-    // Números de compasso (mesmo estilo da timeline) — o conteúdo (e o "1")
-    // começa naturalmente na borda direita do teclado.
-    for i in 0..total_bars {
-        let bx = KEYBOARD_W + i as f32 * px_per_bar - scroll_x;
-        if bx > width || bx < -px_per_bar { continue; }
-        let ruler_text_color = [palette::TEXT_PRIMARY[t].0, palette::TEXT_PRIMARY[t].1, palette::TEXT_PRIMARY[t].2, 220];
-        if bx > -px_per_bar * 0.5 && bx < width {
-            instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, ruler_y + 3.0, ruler_text_color, 1.0));
-        }
-    }
-
-    // Linha vertical na borda direita do teclado — marca o início do
-    // compasso 1 (continuação da linha do grid abaixo).
+    // Linha vertical na borda direita do teclado (marca início do compasso 1)
     instances.push(RectInstance {
         x: KEYBOARD_W, y: ruler_y, w: 1.0, h: ruler_h,
         color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
 
-    // Playhead do piano roll (independente da timeline) — com offset do teclado
-    let head_x = KEYBOARD_W + transport_beat * px_per_beat - scroll_x;
+    // ===== Indicador FOLLOW playhead (canto superior direito da régua) =====
+    if follow_playhead {
+        let px = width - 120.0;
+        let py = ruler_y + 2.0;
+        instances.extend(build_text_instances("FOLLOW", px, py, rgba(palette::ACCENT[t], 255), 1.0));
+    }
+
+    // ===== Playhead do piano roll — linha + círculo (igual timeline) =====
+    let head_x = beat_to_x(transport_beat);
     if head_x >= -20.0 && head_x <= width + 20.0 {
         let col = palette::PLAYHEAD_COLOR;
+        // Linha vertical vermelha (atravessa ruler + corpo)
         instances.push(RectInstance {
-            x: head_x - 1.0, y: ruler_y,
-            w: 2.0, h: ruler_h,
-            color: [col.0, col.1, col.2, 180],
+            x: head_x - 1.0, y: ruler_y + 1.0,
+            w: 2.0, h: ruler_h - 1.0 + body_h.max(0.0),
+            color: [col.0, col.1, col.2, 255],
             wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+        });
+        // Cabeça circular (triângulo arredondado) no topo da régua
+        instances.push(RectInstance {
+            x: head_x - 6.0, y: ruler_y + 1.0,
+            w: 12.0, h: 12.0,
+            color: [col.0, col.1, col.2, 255],
+            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0,
         });
     }
 
-    // Borda inferior da régua do PR
+    // ===== Seletor de loop — handles + fill na ruler + fill + bordas no corpo =====
+    if loop_enabled {
+        let r: (u8, u8, u8) = (0x3A, 0x3A, 0x3A);
+        let border = [r.0, r.1, r.2, 255];
+        let fill_ruler = [r.0, r.1, r.2, 45];
+        let fill_body = [r.0, r.1, r.2, 70];
+        let border_body = [r.0, r.1, r.2, 185];
+        let sx = beat_to_x(loop_start_beat);
+        let ex = beat_to_x(loop_end_beat);
+        let lw = (ex - sx).max(0.0);
+        let bw = 6.0;
+
+        if lw > 0.0 {
+            // --- Fill no CORPO do piano roll (abaixo da régua) ---
+            instances.push(RectInstance {
+                x: sx, y: body_top, w: lw, h: body_h.max(0.0),
+                color: fill_body,
+                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            });
+            // --- Fill na RÉGUA ---
+            if sx + lw > 0.0 && sx < width {
+                instances.push(RectInstance {
+                    x: sx, y: ruler_y, w: lw.min(width - sx).max(0.0), h: ruler_h,
+                    color: fill_ruler,
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+            // --- Bordas laterais grossas NA RÉGUA (handles de arrasto) ---
+            if sx + lw >= -bw && sx <= width {
+                instances.push(RectInstance {
+                    x: sx, y: ruler_y, w: bw, h: ruler_h, color: border,
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+            if ex >= 0.0 && ex - bw <= width {
+                instances.push(RectInstance {
+                    x: ex - bw, y: ruler_y, w: bw, h: ruler_h, color: border,
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+            // --- Bordas laterais descendo pelo CORPO ---
+            if sx + lw >= -bw && sx <= width {
+                instances.push(RectInstance {
+                    x: sx, y: body_top, w: 2.0, h: body_h.max(0.0), color: border_body,
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+            if ex >= 0.0 && ex - bw <= width {
+                instances.push(RectInstance {
+                    x: ex - 2.0, y: body_top, w: 2.0, h: body_h.max(0.0), color: border_body,
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
+            }
+        }
+    }
+
+    // ===== Borda inferior da régua =====
     instances.push(RectInstance {
         x: 0.0, y: ruler_bottom - 1.0,
         w: width, h: 1.0,

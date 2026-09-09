@@ -172,6 +172,20 @@ pub struct App {
     /// true quando a splitter está sendo arrastada.
     pub splitter_drag: bool,
 
+    /// ===== Piano roll: estado independente da ruler =====
+    /// Loop no piano roll (INDEPENDENTE da timeline).
+    pub pr_loop_start_beat: f32,
+    pub pr_loop_end_beat: f32,
+    pub pr_loop_enabled: bool,
+    pub pr_loop_drag: Option<LoopDrag>,
+    pub pr_loop_drag_start_x: f32,
+    pub pr_loop_drag_orig_start: f32,
+    pub pr_loop_drag_orig_end: f32,
+    /// Scrubbing na ruler do piano roll (INDEPENDENTE).
+    pub pr_scrubbing: bool,
+    /// Follow playhead no piano roll (INDEPENDENTE).
+    pub pr_follow_playhead: bool,
+
     /// ===== Edit toolbar (ferramentas do piano roll) =====
     /// Pipeline de quads texturizados (ícones da toolbar).
     pub icon_pipeline: wgpu::RenderPipeline,
@@ -608,6 +622,17 @@ impl App {
             piano_roll_max_h: 480.0,
             splitter_drag: false,
 
+            // Piano roll ruler (estado INDEPENDENTE da timeline)
+            pr_loop_start_beat: 0.0,
+            pr_loop_end_beat: 8.0,
+            pr_loop_enabled: true,
+            pr_loop_drag: None,
+            pr_loop_drag_start_x: 0.0,
+            pr_loop_drag_orig_start: 0.0,
+            pr_loop_drag_orig_end: 0.0,
+            pr_scrubbing: false,
+            pr_follow_playhead: false,
+
             // Edit toolbar
             icon_pipeline,
             icon_bind_group_layout,
@@ -755,6 +780,91 @@ impl App {
         }
     }
 
+    /// Converte beat → x na ruler do PIANO ROLL (leva em conta KEYBOARD_W,
+    /// px_per_beat e scroll_x INDEPENDENTES do piano roll).
+    pub fn pr_beat_to_x(&self, beat: f32) -> f32 {
+        use piano_roll::KEYBOARD_W;
+        KEYBOARD_W + beat * self.piano_roll_px_per_beat - self.piano_roll_scroll_x
+    }
+
+    /// Converte x da janela → beat na ruler do PIANO ROLL (considera KEYBOARD_W).
+    pub fn pr_x_to_beat(&self, x: f32) -> f32 {
+        use piano_roll::KEYBOARD_W;
+        ((x - KEYBOARD_W) + self.piano_roll_scroll_x) / self.piano_roll_px_per_beat.max(0.001)
+    }
+
+    /// Posiciona o playhead a partir do x na ruler do piano roll.
+    /// Ajusta transport_seconds (compartilhado) usando o BPM.
+    pub fn pr_set_playhead_from_x(&mut self, mx: f32) {
+        let beat = self.pr_x_to_beat(mx).max(0.0);
+        let seconds = beat * 60.0 / self.bpm;
+        self.transport_seconds = seconds;
+        self.last_play_start = seconds;
+    }
+
+    /// Inicia arrasto do loop na ruler do PIANO ROLL.
+    /// Retorna true se iniciou um arrasto (sobre as alças ou centro do loop).
+    pub fn pr_begin_loop_drag(&mut self, mx: f32) -> bool {
+        if !self.pr_loop_enabled {
+            return false;
+        }
+        let sx = self.pr_beat_to_x(self.pr_loop_start_beat);
+        let ex = self.pr_beat_to_x(self.pr_loop_end_beat);
+        let grab = 6.0;
+        self.pr_loop_drag_orig_start = self.pr_loop_start_beat;
+        self.pr_loop_drag_orig_end = self.pr_loop_end_beat;
+        self.pr_loop_drag_start_x = mx;
+        if (mx - sx).abs() <= grab {
+            self.pr_loop_drag = Some(LoopDrag::Start);
+        } else if (mx - ex).abs() <= grab {
+            self.pr_loop_drag = Some(LoopDrag::End);
+        } else if mx >= sx && mx <= ex {
+            self.pr_loop_drag = Some(LoopDrag::Move);
+        } else {
+            return false;
+        }
+        true
+    }
+
+    /// Move a seleção de loop do PIANO ROLL com snap de 1 beat.
+    pub fn pr_handle_loop_drag(&mut self, mx: f32) {
+        let Some(kind) = self.pr_loop_drag else { return };
+        let dx = mx - self.pr_loop_drag_start_x;
+        let delta_beats = (dx / self.piano_roll_px_per_beat.max(0.001)).round();
+        match kind {
+            LoopDrag::Start => {
+                let new = (self.pr_loop_drag_orig_start + delta_beats)
+                    .max(0.0)
+                    .min(self.pr_loop_end_beat - 1.0);
+                self.pr_loop_start_beat = new.max(0.0);
+            }
+            LoopDrag::End => {
+                let new = (self.pr_loop_drag_orig_end + delta_beats)
+                    .max(self.pr_loop_start_beat + 1.0);
+                self.pr_loop_end_beat = new;
+            }
+            LoopDrag::Move => {
+                let span = self.pr_loop_drag_orig_end - self.pr_loop_drag_orig_start;
+                let new_start = (self.pr_loop_drag_orig_start + delta_beats).max(0.0);
+                self.pr_loop_start_beat = new_start;
+                self.pr_loop_end_beat = new_start + span;
+            }
+        }
+    }
+
+    /// Clique na ruler do PIANO ROLL: inicia/finaliza scrub.
+    pub fn pr_handle_ruler_click(&mut self, state: winit::event::ElementState, pos: (f32, f32)) {
+        match state {
+            winit::event::ElementState::Pressed => {
+                self.pr_scrubbing = true;
+                self.pr_set_playhead_from_x(pos.0);
+            }
+            winit::event::ElementState::Released => {
+                self.pr_scrubbing = false;
+            }
+        }
+    }
+
     /// Alterna a visibilidade do piano roll (tecla P).
     pub fn toggle_piano_roll(&mut self) {
         self.show_piano_roll = !self.show_piano_roll;
@@ -819,13 +929,27 @@ impl App {
             roll_height: pr_rect.height,
         };
 
+        let t = self.theme.clamp(0, 6);
+        let ruler_y = pr_ruler.y;
+        let ruler_h = piano_roll::PIANO_RULER_H;
+        let body_top = pr_rect.y;
+        let body_h = pr_rect.height;
+
         let mut instances = piano_roll::build_piano_ruler_instances(
             &m,
             width,
             self.transport_seconds * self.bpm / 60.0,
             self.piano_roll_px_per_beat,
             self.piano_roll_scroll_x,
-            self.theme.clamp(0, 6),
+            t,
+            ruler_y,
+            ruler_h,
+            body_top,
+            body_h,
+            self.pr_loop_enabled,
+            self.pr_loop_start_beat,
+            self.pr_loop_end_beat,
+            self.pr_follow_playhead,
         );
         instances.extend(piano_roll::build_piano_roll_instances(
             &self.piano_roll_notes,
