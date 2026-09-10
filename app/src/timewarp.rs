@@ -15,6 +15,7 @@ use std::rc::Rc;
 use daw_core::project::Project;
 use daw_core::timeline::{TempoChange, TempoMap};
 use daw_core::transport::Transport;
+use slint::ComponentHandle;
 
 use crate::MainWindow;
 
@@ -136,7 +137,7 @@ pub fn clip_stretch_ratio(
         .tempo_map
         .beats_to_seconds(clip.start_beat + clip.length_beats)
         - project.tempo_map.beats_to_seconds(clip.start_beat);
-    timeline_seconds / source_duration_seconds
+    (timeline_seconds / source_duration_seconds) as f32
 }
 
 /// Snap de um beat à grade musical, respeitando o mapa de tempo.

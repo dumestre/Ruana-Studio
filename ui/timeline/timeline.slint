@@ -1,0 +1,122 @@
+import { Theme } from "../theme.slint";
+import { ClipData } from "clip_data.slint";
+
+// ============================================================
+// TIMELINE (STUB / PLACEHOLDER)
+//
+// A timeline legada em Slint foi substituída pela janela nativa
+// winit/wgpu (`timeline-render`), com a timeline, o piano roll
+// e (futuramente) timewarp/timepitch no mesmo workspace.
+//
+// Este componente apenas PRESERVA a interface pública que o
+// Workspace e o Rust esperam (props + callbacks), para que o
+// restante da UI Slint (mixer, explorer, beat, sampler...) e
+// todo o wiring permaneçam compilando.
+//
+// RENDER: placeholder estático — a timeline real vive na
+// janela nativa aberta pelo app numa thread dedicada.
+// ============================================================
+
+export component Timeline inherits Rectangle {
+
+    // ========================================================
+    // INTERFACE (imutável — consumida por workspace.slint/Rust)
+    // ========================================================
+
+    in-out property <length> scroll-x: 0px;
+    in-out property <length> scroll-y: 0px;
+    in-out property <length> timeline-left-padding: 0px;
+
+    in-out property <length> px-per-beat: 40px;
+    in-out property <length> row-height: 42px;
+    in-out property <length> ruler-height: 25px;
+    in-out property <length> max-scroll-x: 0px;
+    in-out property <length> max-scroll-y: 0px;
+
+    in-out property <image> canvas: @image-url("");
+    in-out property <length> canvas-content-width: 0px;
+    in-out property <length> canvas-content-height: 0px;
+
+    in-out property <int> selected-track: 0;
+
+    in property <float> current-time-seconds: 0;
+    in property <bool> playing: false;
+    in property <int> bpm: 120;
+    in property <int> beats-per-bar: 4;
+    in property <int> total-bars: 32;
+    in-out property <float> zoom: 1.0;
+    in-out property <float> zoom-y: 1.0;
+
+    in property <bool> loop-enabled: false;
+    in property <float> loop-start-beat: 0.0;
+    in property <float> loop-end-beat: 16.0;
+
+    in property <[string]> track-names: [];
+    in property <int> active-tool: 0;
+    in property <[ClipData]> clips: [];
+
+    in property <bool> drop-visible: false;
+    in property <bool> follow-playhead: true;
+    in property <length> drop-x: 0px;
+    in property <int> drop-track: 0;
+    in property <float> drop-len-beats: 4.0;
+
+    callback canvas-render-requested();
+    callback select-track(int);
+    callback seek-to(float);
+    callback marquee-select(float, float, int, int);
+    callback multi-delete-requested();
+    callback keyboard-focus-requested();
+    callback scroll-input(float, float, bool, bool, bool, float, float);
+    callback clip-selected(int);
+    callback clip-slice-requested(int, float);
+    callback clip-glue-requested(int);
+    callback glue-clip-at(float, length, length, length) -> int;
+    callback clip-move-committed(int, int, float);
+    callback clip-resize-committed(int, int, float, float);
+    callback clip-delete-requested(int);
+    callback clip-rename-requested(int, string);
+    callback clip-color-cycle-requested(int);
+    callback clip-copy-requested(int);
+    callback piano-roll-open-requested(int);
+    callback clip-fade-committed(int, float, float);
+    callback clip-gain-committed(int, float);
+    callback paste-requested(float, int);
+    callback pencil-created(float, int, float);
+
+    // ========================================================
+    // APARÊNCIA (placeholder neutro — a timeline real é a janela
+    // nativa `timeline-render`, aberta pelo app como processo filho)
+    // ========================================================
+
+    background: Theme.surface;
+
+    Rectangle {
+        y: 0px;
+        width: parent.width;
+        height: root.ruler-height;
+        background: Theme.surface-step;
+    }
+
+    Text {
+        width: min(parent.width - 40px, 420px);
+        height: 40px;
+        x: (parent.width - self.width) / 2;
+        y: parent.height / 2 - 20px;
+        text: "Timeline nativa (wgpu)";
+        color: Theme.text-dim;
+        font-size: 12px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    // Clique na área devolve o foco de teclado aos atalhos globais.
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+
+        clicked => {
+            root.keyboard-focus-requested();
+        }
+    }
+}
