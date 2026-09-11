@@ -96,11 +96,13 @@ Comportamentos importantes já implementados:
   `timeline_render::run_docked_window(transport, rx, DockSpec { parent_title, top, left, right, bottom })`,
   que espawana uma thread com a timeline rastreando a janela Makepad (por
   título, `FindWindowW`) e se mantém **colada ao client area com margens**
-  (ex.: top=46 header, laterais 10, bottom 34 rodapé). Segue mover/redimensionar/
-  maximizar da main. A filha é registrada como janela **owned** da main
-  (`GWLP_HWNDPARENT`): o Windows esconde/restaura ela junto no minimize e ela
-  nunca fica atrás do app. `Transport` compartilhado (`Arc<Mutex>`) + clips
-  espelhados via `WindowCommand` (read-only).
+  (ex.: top=46 header, laterais 10, bottom 34 rodapé). A filha é registrada como
+  janela **owned** da main (`GWLP_HWNDPARENT`): o Windows esconde/restaura ela
+  junto no minimize e ela nunca fica atrás do app. O rastreio é **instantâneo**:
+  um hook `WH_CALLWNDPROC` na thread da main reposiciona a filha no mesmo ciclo
+  de `WM_MOVE`/`WM_SIZE`/`WM_WINDOWPOSCHANGED` (sem lag de polling; um loop de
+  150ms fica só como fallback de DPI/estado inicial). `Transport` compartilhado
+  (`Arc<Mutex>`) + clips espelhados via `WindowCommand` (read-only).
 - `EventLoop` winit fora da main thread exige
   `EventLoopBuilderExtWindows::with_any_thread(true)` (timeline-render já faz).
 - O app antigo (`app/`, Slint) permanece no workspace até o port cobrir os

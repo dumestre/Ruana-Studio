@@ -193,7 +193,7 @@ fn resumed(&mut self, event_loop: &ActiveEventLoop) {
                 if let Some(window) = &app.window {
                     if let Ok(handle) = window.window_handle() {
                         if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                            spawn_dock_tracker(h.hwnd.get() as HWND, dock);
+                            dock::spawn_dock_tracker(h.hwnd.get() as HWND, dock);
                         }
                     }
                 }
@@ -694,103 +694,98 @@ pub fn run_docked_window(
 }
 
 /// Mantém a janela `child` encaixada na janela mãe (por título), como painel
-/// com margens. Roda numa thread própria, em loop de ~40ms, até a janela filha
-/// ser destruída. A filha é registrada como janela OWNED da mãe
-/// (`GWLP_HWNDPARENT`), então o Windows já a esconde/restaura junto com a
-/// minimização da mãe e ela nunca fica atrás da main em z-order.
+/// com margens. Roda numa thread própria. A filha é registrada como janela
+/// OWNED da mãe (`GWLP_HWNDPARENT`): o Windows a esconde/restaura junto com o
+/// minimize da main e ela nunca fica atrás do app em z-order. Para não haver
+/// "arrasto" a mais que a main se move/redimensiona, um hook `WH_CALLWNDPROC`
+/// é instalado NA THREAD da janela mãe e reposiciona a filha sincronamente em
+/// `WM_MOVE`/`WM_SIZE`/`WM_WINDOWPOSCHANGED`; o loop de ~150ms só fica como
+/// fallback (DPI/monitor, estado inicial).
 #[cfg(windows)]
-fn spawn_dock_tracker(child: HWND, spec: DockSpec) {
-    // `HWND` é um ponteiro cru (não `Send`); vira `usize` ANTES de mover pra
-    // thread, e é convertido de volta nos calls.
-    let child = child as usize;
-    std::thread::Builder::new()
-        .name("timeline-dock".into())
-        .spawn(move || {
-            use std::time::Duration;
-            use windows_sys::Win32::Foundation::{RECT, HWND as RawHWND};
-            use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
-            use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
-            use windows_sys::Win32::UI::WindowsAndMessaging::{
-                FindWindowW, GetClientRect, IsIconic, IsWindow, IsWindowVisible,
-                SetWindowLongPtrW, SetWindowPos, ShowWindow, GWLP_HWNDPARENT, HWND_TOP,
-                SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE,
-            };
+mod dock {
+    use std::sync::Mutex;
 
-            let to_wide = |s: &str| -> Vec<u16> {
-                s.encode_utf16().chain(std::iter::once(0)).collect()
-            };
-            let parent_title = to_wide(&spec.parent_title);
-            let ptr = |v: usize| v as RawHWND;
-            let mut owner_set = false;
+    use super::{DockSpec, HWND, POINT};
+    use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+    use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
+    use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, FindWindowW, GetClientRect, GetWindowRect, GetWindowThreadProcessId,
+        IsIconic, IsWindow, IsWindowVisible, SetWindowLongPtrW, SetWindowsHookExW, SetWindowPos,
+        ShowWindow, UnhookWindowsHookEx, CWPSTRUCT, GWLP_HWNDPARENT, HWND_TOP, SWP_NOACTIVATE,
+        SWP_SHOWWINDOW, SW_HIDE, WH_CALLWNDPROC, WM_MOVE, WM_SIZE, WM_WINDOWPOSCHANGED,
+    };
 
-            loop {
-                if unsafe { IsWindow(ptr(child)) } == 0 {
-                    break;
+    struct HookState {
+        child: usize,
+        parent: usize,
+        spec: DockSpec,
+        hook: usize,
+    }
+
+    static HOOK_STATE: Mutex<Option<HookState>> = Mutex::new(None);
+
+    /// Geometria da filha encaixada a partir do client area da mãe; `None`
+    /// quando a mãe está oculta/minimizada ou não deu pra encaixar.
+    fn dock_layout(parent: usize, spec: &DockSpec) -> Option<(i32, i32, i32, i32)> {
+        let parent = parent as HWND;
+        if unsafe { IsWindowVisible(parent) } == 0 || unsafe { IsIconic(parent) } != 0 {
+            return None;
+        }
+        let mut client = windows_sys::Win32::Foundation::RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        let mut origin = POINT { x: 0, y: 0 };
+        unsafe {
+            GetClientRect(parent, &mut client);
+            ClientToScreen(parent, &mut origin);
+        }
+        let dpi = unsafe { GetDpiForWindow(parent) };
+        let top = (spec.top as i32 * dpi as i32 / 96).max(0);
+        let left = (spec.left as i32 * dpi as i32 / 96).max(0);
+        let right = (spec.right as i32 * dpi as i32 / 96).max(0);
+        let bottom = (spec.bottom as i32 * dpi as i32 / 96).max(0);
+        let cw = client.right - client.left;
+        let ch = client.bottom - client.top;
+        let x = origin.x + left;
+        let y = origin.y + top;
+        let w = cw.saturating_sub(left + right);
+        let h = ch.saturating_sub(top + bottom);
+        if w > 0 && h > 0 {
+            Some((x, y, w, h))
+        } else {
+            None
+        }
+    }
+
+    /// Reposiciona/mostra/esconde a filha conforme a mãe.
+    fn dock_apply(child: usize, parent: usize, spec: &DockSpec) {
+        let child = child as HWND;
+        match dock_layout(parent, spec) {
+            None => {
+                if unsafe { IsWindowVisible(child) } != 0 {
+                    unsafe { ShowWindow(child, SW_HIDE) };
                 }
-                let parent = unsafe { FindWindowW(std::ptr::null::<u16>(), parent_title.as_ptr()) }
-                    as usize;
-                if parent == 0 {
-                    // Mãe ainda não encontrada: esconde a filha pra não ficar
-                    // uma janela solta flutuando.
-                    unsafe { ShowWindow(ptr(child), SW_HIDE) };
-                    std::thread::sleep(Duration::from_millis(40));
-                    continue;
-                }
-
-                // Registro único como janela owned da mãe: o Windows esconde/
-                // mostra a filha junto com min/max da main e garante z-order
-                // sempre acima dela (a timeline nunca fica atrás do app).
-                if !owner_set {
-                    unsafe {
-                        SetWindowLongPtrW(
-                            ptr(child),
-                            GWLP_HWNDPARENT,
-                            parent as isize,
-                        );
-                    }
-                    owner_set = true;
-                }
-
-                // Mãe oculta/minimizada → oculta a filha também (quando a mãe
-                // voltar, o Win32 restaura owned windows e o SetWindowPos
-                // abaixo re-mostra e re-posiciona).
-                if unsafe { IsWindowVisible(ptr(parent)) } == 0
-                    || unsafe { IsIconic(ptr(parent)) } != 0
-                {
-                    if unsafe { IsWindowVisible(ptr(child)) } != 0 {
-                        unsafe { ShowWindow(ptr(child), SW_HIDE) };
-                    }
-                    std::thread::sleep(Duration::from_millis(40));
-                    continue;
-                }
-
-                let mut client = RECT {
+            }
+            Some((x, y, w, h)) => {
+                let mut r = windows_sys::Win32::Foundation::RECT {
                     left: 0,
                     top: 0,
                     right: 0,
                     bottom: 0,
                 };
-                let mut origin = POINT { x: 0, y: 0 };
-                unsafe {
-                    GetClientRect(ptr(parent), &mut client);
-                    ClientToScreen(ptr(parent), &mut origin);
-                }
-                let dpi = unsafe { GetDpiForWindow(ptr(parent)) };
-                // Margens em px físicos (logical * dpi / 96).
-                let top = (spec.top as i32 * dpi as i32 / 96).max(0);
-                let left = (spec.left as i32 * dpi as i32 / 96).max(0);
-                let right = (spec.right as i32 * dpi as i32 / 96).max(0);
-                let bottom = (spec.bottom as i32 * dpi as i32 / 96).max(0);
-                let cw = client.right - client.left;
-                let ch = client.bottom - client.top;
-                let x = origin.x + left;
-                let y = origin.y + top;
-                let w = cw.saturating_sub(left + right);
-                let h = ch.saturating_sub(top + bottom);
-                if w > 0 && h > 0 {
+                unsafe { GetWindowRect(child, &mut r) };
+                let same = x == r.left
+                    && y == r.top
+                    && w == r.right - r.left
+                    && h == r.bottom - r.top;
+                if !same || unsafe { IsWindowVisible(child) } == 0 {
                     unsafe {
                         SetWindowPos(
-                            ptr(child),
+                            child,
                             HWND_TOP,
                             x,
                             y,
@@ -800,9 +795,107 @@ fn spawn_dock_tracker(child: HWND, spec: DockSpec) {
                         );
                     }
                 }
-                std::thread::sleep(Duration::from_millis(40));
             }
-        })
-        .ok();
+        }
+    }
+
+    /// Hook em `WH_CALLWNDPROC` na thread da janela mãe: reposiciona a filha no
+    /// mesmo ciclo de mensagem em que a main move/redimensiona — sem polling.
+    unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        if code >= 0 {
+            let cw = lparam as *const CWPSTRUCT;
+            let msg = (*cw).message;
+            let hwnd = (*cw).hwnd as usize;
+            let snapshot = HOOK_STATE.lock().ok().and_then(|g| {
+                let st = g.as_ref()?;
+                let active = st.hook != 0;
+                if active
+                    && hwnd == st.parent
+                    && (msg == WM_MOVE || msg == WM_SIZE || msg == WM_WINDOWPOSCHANGED)
+                {
+                    Some((st.child, st.parent, st.spec.clone()))
+                } else {
+                    None
+                }
+            });
+            if let Some((child, parent, spec)) = snapshot {
+                dock_apply(child, parent, &spec);
+            }
+        }
+        CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
+    }
+
+    pub fn spawn_dock_tracker(child: HWND, spec: DockSpec) {
+        // `HWND` é um ponteiro cru (não `Send`); vira `usize` ANTES de mover pra
+        // thread, e é convertido de volta nos calls.
+        let child = child as usize;
+        std::thread::Builder::new()
+            .name("timeline-dock".into())
+            .spawn(move || {
+                let to_wide = |s: &str| -> Vec<u16> {
+                    s.encode_utf16().chain(std::iter::once(0)).collect()
+                };
+                let parent_title = to_wide(&spec.parent_title);
+                let ptr = |v: usize| v as HWND;
+
+                // Espera a mãe (pode não existir ainda no 1º frame do app).
+                let parent = loop {
+                    if unsafe { IsWindow(ptr(child)) } == 0 {
+                        return;
+                    }
+                    let p =
+                        unsafe { FindWindowW(std::ptr::null::<u16>(), parent_title.as_ptr()) }
+                            as usize;
+                    if p != 0 {
+                        break p;
+                    }
+                    unsafe { ShowWindow(ptr(child), SW_HIDE) };
+                    std::thread::sleep(std::time::Duration::from_millis(40));
+                };
+
+                // Owned window: minimize/restore + z-order controlados pela main.
+                unsafe {
+                    SetWindowLongPtrW(ptr(child), GWLP_HWNDPARENT, parent as isize);
+                }
+                let thread_id = unsafe { GetWindowThreadProcessId(ptr(parent), std::ptr::null_mut()) };
+                let hook = unsafe {
+                    SetWindowsHookExW(
+                        WH_CALLWNDPROC,
+                        Some(hook_proc),
+                        std::ptr::null_mut(),
+                        thread_id,
+                    )
+                };
+                let hook_usize = hook as usize;
+                if let Ok(mut g) = HOOK_STATE.lock() {
+                    *g = Some(HookState {
+                        child,
+                        parent,
+                        spec: spec.clone(),
+                        hook: hook_usize,
+                    });
+                }
+
+                // Fallback (~150ms): reposiciona/apresenta no 1º ciclo, corrige
+                // DPI/monitor e garante limpeza quando a filha é destruída.
+                loop {
+                    if unsafe { IsWindow(ptr(child)) } == 0 {
+                        if hook_usize != 0 {
+                            unsafe { UnhookWindowsHookEx(hook_usize as *mut core::ffi::c_void) };
+                        }
+                        if let Ok(mut g) = HOOK_STATE.lock() {
+                            *g = None;
+                        }
+                        return;
+                    }
+                    dock_apply(child, parent, &spec);
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
+            })
+            .ok();
+    }
 }
+
+#[cfg(not(windows))]
+fn spawn_dock_tracker(_child: HWND, _spec: DockSpec) {}
 
