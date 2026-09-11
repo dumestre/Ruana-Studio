@@ -234,6 +234,13 @@ export component MainWindow inherits Window {
     in property <length> timeline-canvas-content-height:
         workspace.timeline-canvas-content-height;
 
+    // Área REAL (lógico) do canvas da engine (buffer offscreen).
+    in property <length> timeline-canvas-area-width:
+        workspace.timeline-canvas-area-width;
+
+    in property <length> timeline-canvas-area-height:
+        workspace.timeline-canvas-area-height;
+
     callback focus-selected-clip-requested(int, float, length, length, length);
 
     // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
@@ -243,6 +250,13 @@ export component MainWindow inherits Window {
     // pede re-render quando scroll/zoom/dimensões mudam.
     in-out property <image> timeline-canvas-background: @image-url("");
     callback timeline-canvas-render-requested();
+
+    // Eventos crus → engine wgpu headless do timeline-render (Fase 3).
+    callback engine-pointer-down(float, float, int, bool, bool, bool);
+    callback engine-pointer-move(float, float);
+    callback engine-pointer-up(float, float, int);
+    callback engine-scroll(float, float, bool, bool, bool);
+    callback engine-key-event(string, bool, bool, bool);
 
     in-out property <[ClipData]> clips:
         [
@@ -798,6 +812,12 @@ export component MainWindow inherits Window {
         timeline-canvas-render-requested() => {
             root.timeline-canvas-render-requested();
         }
+        // Eventos crus → engine wgpu headless (Rust em Fase 3).
+        engine-pointer-down(x, y, b, c, s, a) => { root.engine-pointer-down(x, y, b, c, s, a); }
+        engine-pointer-move(x, y) => { root.engine-pointer-move(x, y); }
+        engine-pointer-up(x, y, b) => { root.engine-pointer-up(x, y, b); }
+        engine-scroll(dx, dy, c, s, a) => { root.engine-scroll(dx, dy, c, s, a); }
+        engine-key-event(t, c, s, a) => { root.engine-key-event(t, c, s, a); }
         loop-enabled <=> root.loop-enabled;
         loop-start-beat <=> root.loop-start-beat;
         loop-end-beat <=> root.loop-end-beat;

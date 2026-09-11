@@ -12,6 +12,10 @@ pub mod tools;
 pub mod waveform;
 
 pub use app::App;
+pub use app::window::run_docked_window;
+pub use app::window::run_native_window;
+pub use app::window::DockSpec;
+pub use app::window::WindowCommand;
 
 // Re-exports usados pelos submódulos `clips`/`fades` e por código externo
 // que consuma a biblioteca.

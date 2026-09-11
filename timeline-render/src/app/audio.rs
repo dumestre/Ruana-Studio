@@ -62,6 +62,7 @@ impl App {
     }
 
     /// Sincroniza o projeto atual com o motor de áudio.
+    #[cfg(feature = "audio")]
     pub fn sync_audio_engine(&self) {
         if let Some(ref engine) = self.audio_engine {
             let project = self.build_project();
@@ -134,7 +135,7 @@ impl App {
         }
 
         self.rebuild_wave_data();
-        self.window.request_redraw();
+        self.request_redraw();
     }
 
     /// Importa o lote de arquivos acumulados pelo drag & drop quando há um
@@ -145,7 +146,7 @@ impl App {
             return;
         }
         if self.last_drop_instant.elapsed().as_millis() < 80 {
-            self.window.request_redraw();
+            self.request_redraw();
             return;
         }
         let paths = std::mem::take(&mut self.drop_paths);
@@ -208,7 +209,7 @@ impl App {
                 self.fades.push(fades::ClipFade::none());
                 // Atualiza buffers de waveform
                 self.rebuild_wave_data();
-                self.window.request_redraw();
+                self.request_redraw();
             },
             Err(e) => {
                 eprintln!("falha ao decodificar {}: {}", path, e);

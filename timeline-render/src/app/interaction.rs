@@ -1,8 +1,6 @@
 //! Interação: mouse, scroll, ferramentas, clipboard, loop, foco e edge-scroll.
 
-use winit::event::ElementState;
-
-use crate::app::{LoopDrag, App};
+use crate::app::{ButtonState, LoopDrag, App};
 use crate::clips;
 use crate::fades;
 use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, set_vresize_override, Tool};
@@ -10,17 +8,13 @@ use std::time::Instant;
 
 
 impl App {
-    pub fn handle_scroll(&mut self, delta: &winit::event::MouseScrollDelta, with_ctrl: bool, with_alt: bool) {
-        let (dx, dy) = match *delta {
-            winit::event::MouseScrollDelta::LineDelta(x, y) => (x * 40.0, y * 40.0),
-            winit::event::MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
-        };
+    pub fn handle_scroll(&mut self, dx: f32, dy: f32, with_ctrl: bool, with_alt: bool) {
         let (mx, my) = self.last_cursor;
 
         // Determina qual área está sob o cursor (timeline ou piano roll)
         let pr_active = self.show_piano_roll;
         let (px_per_beat, scroll_x, scroll_y, in_pr_area) = if pr_active {
-            let layout = self.layout(self.size.width as f32, self.size.height as f32);
+            let layout = self.layout(self.size.0 as f32, self.size.1 as f32);
             if let Some(pr) = &layout.piano_roll {
                 if my >= pr.y && my <= pr.y + pr.height {
                     (self.piano_roll_px_per_beat, self.piano_roll_scroll_x, self.piano_roll_scroll_y, true)
@@ -66,16 +60,16 @@ impl App {
                 self.scroll_y = (self.scroll_y - dy).max(0.0);
             }
         }
-        self.clamp_scroll_y(self.size.height as f32);
+        self.clamp_scroll_y(self.size.1 as f32);
     }
 
-    pub fn handle_mouse_button(&mut self, state: ElementState, pos: Option<(f32, f32)>) {
+    pub fn handle_mouse_button(&mut self, state: ButtonState, pos: Option<(f32, f32)>) {
         match state {
-            ElementState::Pressed => {
+            ButtonState::Pressed => {
                 self.panning = true;
                 if let Some(p) = pos { self.last_cursor = p; }
             }
-            ElementState::Released => {
+            ButtonState::Released => {
                 // Se houver preview de áudio pendente, insere ao liberar o botão.
                     if let Some(preview) = self.drop_preview.take() {
                         if let Some(path) = self.drop_path.take() {
@@ -142,13 +136,13 @@ impl App {
     /// Inicia (Pressed) ou finaliza (Released) o *scrub* do playhead na régua.
     /// Enquanto arrasta, `handle_cursor_moved` chama `set_playhead_from_x` em
     /// tempo real para seguir o cursor.
-    pub fn handle_ruler_click(&mut self, state: ElementState, pos: (f32, f32), _ruler_px: f32) {
+    pub fn handle_ruler_click(&mut self, state: ButtonState, pos: (f32, f32), _ruler_px: f32) {
         match state {
-            ElementState::Pressed => {
+            ButtonState::Pressed => {
                 self.scrubbing = true;
                 self.set_playhead_from_x(pos.0);
             }
-            ElementState::Released => {
+            ButtonState::Released => {
                 self.scrubbing = false;
             }
         }
@@ -189,7 +183,7 @@ impl App {
         self.scroll_x = (clip_x - width * 0.5).max(0.0);
 
         let row_height = 64.0 * self.zoom_y.max(0.001);
-        let view_h = (self.size.height as f32 - self.ruler_px - self.time_ruler_h).max(0.0);
+        let view_h = (self.size.1 as f32 - self.ruler_px - self.time_ruler_h).max(0.0);
         let clip_y = clip.track_index as f32 * row_height;
         self.scroll_y = (clip_y - view_h * 0.5).max(0.0);
     }
@@ -517,8 +511,9 @@ impl App {
     /// Inicia a reprodução a partir de um beat especificado.
     fn start_playback_at(&mut self, beat: f32) {
         // Converte beat para segundos.
-        self.transport_seconds = beat * 60.0 / self.bpm;
+self.transport_seconds = beat * 60.0 / self.bpm;
         // Sincroniza o motor de áudio.
+        #[cfg(feature = "audio")]
         self.sync_audio_engine();
         // Configura o transporte e inicia a reprodução.
         if let Ok(mut t) = self.transport.lock() {
@@ -532,18 +527,18 @@ impl App {
             t.position_ticks = (beats * t.ppq as f32) as u64;
             t.playing = true;
         }
-        self.play_start_seconds = self.transport_seconds;
+self.play_start_seconds = self.transport_seconds;
         self.playing = true;
         self.last_play_head_update = Instant::now();
-        self.window.request_redraw();
+        self.request_redraw();
     }
 
 
-    pub fn handle_primary_button(&mut self, state: ElementState, pos: (f32, f32)) {
+    pub fn handle_primary_button(&mut self, state: ButtonState, pos: (f32, f32)) {
         // ====== Piano roll: Released sempre finaliza drags de loop/scrub ======
         // (coloquei ANTES dos "early returns de arrasto ativo" porque, se um
         //  drag estiver ativo, Released tem que encerrá-lo SEMPRE.)
-        if self.show_piano_roll && state == ElementState::Released {
+        if self.show_piano_roll && state == ButtonState::Released {
             if self.pr_loop_drag.is_some() {
                 self.pr_loop_drag = None;
             }
@@ -554,7 +549,7 @@ impl App {
 
         // Intercepta arrasto da splitter do piano roll
         if self.show_piano_roll && self.splitter_drag {
-            if state == ElementState::Released {
+            if state == ButtonState::Released {
                 self.end_splitter_drag();
             } else {
                 self.splitter_drag_move(pos.1);
@@ -571,7 +566,7 @@ impl App {
         }
 
         // Intercepta clique no SCRUBBING do piano roll (só durante arrasto ativo / Pressed)
-        if self.show_piano_roll && self.pr_scrubbing && state == ElementState::Pressed {
+        if self.show_piano_roll && self.pr_scrubbing && state == ButtonState::Pressed {
             // Durante scrubbing + Pressed: realinha a playhead (redundante com
             // cursor_moved, mas garante boa UX em clicks rápidos).
             self.pr_handle_ruler_click(state, pos);
@@ -580,8 +575,8 @@ impl App {
 
         // Intercepta clique dentro da área do piano roll ou splitter (quando visível)
         if self.show_piano_roll {
-            let height = self.size.height as f32;
-            let width = self.size.width as f32;
+            let height = self.size.1 as f32;
+            let width = self.size.0 as f32;
             let layout = self.layout(width, height);
             // Clique na splitter
             if self.splitter_hit_test(pos.1, height) {
@@ -596,12 +591,12 @@ impl App {
                     // Na régua: PRIMEIRO tenta loop drag (apenas alças 6px,
                     // não o centro). Se falhar → scrub/playhead.
                     match state {
-                        ElementState::Pressed => {
+                        ButtonState::Pressed => {
                             if !self.pr_begin_loop_drag(pos.0) {
                                 self.pr_handle_ruler_click(state, pos);
                             }
                         }
-                        ElementState::Released => {
+                        ButtonState::Released => {
                             // Released já foi tratado no topo da função (fecha
                             // scrub/loop), mas garantimos aqui que, caso o
                             // usuário tenha feito um clique rápido (Pressed +
@@ -631,7 +626,7 @@ impl App {
         let tool = current_tool();
 
         match state {
-            ElementState::Pressed => {
+            ButtonState::Pressed => {
                 if pos.1 < self.ruler_px {
                     // Régua → loop drag ou scrub (funciona em qualquer ferramenta)
                     if !self.begin_loop_drag(pos.0) {
@@ -733,7 +728,7 @@ impl App {
                     }
                 }
             }
-            ElementState::Released => {
+            ButtonState::Released => {
                 if self.fade_interaction.is_dragging() {
                     self.fade_interaction.end_drag();
                     return;
@@ -813,8 +808,9 @@ impl App {
                         body_w,
                         body_h,
                     );
-                    self.rebuild_wave_data();
+self.rebuild_wave_data();
                     // Se já está tocando, sincroniza ganho em tempo real.
+                    #[cfg(feature = "audio")]
                     if self.playing {
                         self.sync_audio_engine();
                     }
@@ -892,14 +888,14 @@ impl App {
                         let dist_sq =
                             (pos.0 - hx) * (pos.0 - hx) + (pos.1 - hy) * (pos.1 - hy);
                         let snap_threshold = 14.0;
-                        // Snap apenas se ainda não foi disparado nesta sessão de hover
+// Snap apenas se ainda não foi disparado nesta sessão de hover
                         if !self.fade_interaction.snap_active
                             && dist_sq <= snap_threshold * snap_threshold
                         {
-                            use winit::dpi::LogicalPosition;
-                            let _ = self
-                                .window
-                                .set_cursor_position(LogicalPosition::new(hx, hy));
+                            if let Some(window) = &self.window {
+                                use winit::dpi::LogicalPosition;
+                                let _ = window.set_cursor_position(LogicalPosition::new(hx, hy));
+                            }
                             self.cursor_warp_pending = true;
                             self.last_cursor = (hx, hy);
                             self.fade_interaction.snap_active = true;
@@ -938,7 +934,7 @@ if self.fade_interaction.is_dragging() {
 }
 
     // Cursor de resize vertical sobre a splitter do piano roll
-    if self.splitter_drag || self.splitter_hit_test(self.last_cursor.1, self.size.height as f32) {
+    if self.splitter_drag || self.splitter_hit_test(self.last_cursor.1, self.size.1 as f32) {
         set_vresize_override(true);
     } else {
         set_vresize_override(false);
@@ -948,7 +944,7 @@ if self.fade_interaction.is_dragging() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
-            self.clamp_scroll_y(self.size.height as f32);
+            self.clamp_scroll_y(self.size.1 as f32);
         }
         // Atualiza a posição do preview de áudio arrastado
         if self.drop_preview.is_some() {
@@ -989,8 +985,8 @@ if self.fade_interaction.is_dragging() {
     /// proximidade (quanto mais perto da borda, mais rápido rola).
     /// Zona de trigger: 40px de cada borda. Velocidade máxima: 24px/frame.
     pub fn update_edge_scroll(&mut self, pos: (f32, f32)) {
-        let width = self.size.width as f32;
-        let height = self.size.height as f32;
+        let width = self.size.0 as f32;
+        let height = self.size.1 as f32;
         let edge_zone = 40.0;
         let max_speed = 24.0;
 
@@ -1045,7 +1041,7 @@ if self.fade_interaction.is_dragging() {
         self.scroll_x = (self.scroll_x + dx).max(0.0);
         // Ajusta scroll vertical
         self.scroll_y = (self.scroll_y + dy).max(0.0);
-        self.clamp_scroll_y(self.size.height as f32);
+        self.clamp_scroll_y(self.size.1 as f32);
 
         // Compensa o beat virtual do clip em arrasto para que ele não "salte"
         // na tela. O overlay é renderizado em:
@@ -1066,8 +1062,8 @@ if self.fade_interaction.is_dragging() {
 
 impl App {
     fn piano_roll_metrics(&self) -> super::piano_roll::PianoRollMetrics {
-        let height = self.size.height as f32;
-        let width = self.size.width as f32;
+        let height = self.size.1 as f32;
+        let width = self.size.0 as f32;
         let layout = self.layout(width, height);
         let pr_ruler = layout.piano_ruler.unwrap();
         let pr_rect = layout.piano_roll.unwrap();
@@ -1087,13 +1083,13 @@ impl App {
         m
     }
 
-    fn handle_piano_roll_click(&mut self, state: ElementState, pos: (f32, f32)) {
+    fn handle_piano_roll_click(&mut self, state: ButtonState, pos: (f32, f32)) {
         let m = self.piano_roll_metrics();
         let tool = current_tool();
 
         match state {
-            ElementState::Pressed => {
-                if self.splitter_hit_test(pos.1, self.size.height as f32) {
+            ButtonState::Pressed => {
+                if self.splitter_hit_test(pos.1, self.size.1 as f32) {
                     self.splitter_drag = true;
                     return;
                 }
@@ -1114,7 +1110,7 @@ impl App {
                     _ => {}
                 }
             }
-            ElementState::Released => {
+            ButtonState::Released => {
                 if self.splitter_drag {
                     self.end_splitter_drag();
                     return;
@@ -1146,3 +1142,4 @@ impl App {
         }
     }
 }
+

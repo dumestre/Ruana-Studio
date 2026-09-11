@@ -339,7 +339,22 @@ export component Workspace inherits Rectangle {
     out property <length> timeline-canvas-content-height:
         timeline.canvas-content-height;
 
+    // Área REAL (lógico) do canvas da engine — o Rust dimensiona o buffer
+    // offscreen a partir dela (× scale factor do monitor).
+    out property <length> timeline-canvas-area-width:
+        timeline.canvas-area-width;
+
+    out property <length> timeline-canvas-area-height:
+        timeline.canvas-area-height;
+
     callback timeline-canvas-render-requested();
+
+    // Eventos crus → engine wgpu headless do timeline-render (Fase 3).
+    callback engine-pointer-down(float, float, int, bool, bool, bool);
+    callback engine-pointer-move(float, float);
+    callback engine-pointer-up(float, float, int);
+    callback engine-scroll(float, float, bool, bool, bool);
+    callback engine-key-event(string, bool, bool, bool);
 
 
     // ========================================================
@@ -1193,6 +1208,30 @@ export component Workspace inherits Rectangle {
 
                             canvas-render-requested() => {
                                 root.timeline-canvas-render-requested();
+                            }
+
+                            // ---------------------------------
+                            // EVENTOS CRUS → ENGINE (Fase 3)
+                            // ---------------------------------
+
+                            engine-pointer-down(x, y, b, c, s, a) => {
+                                root.engine-pointer-down(x, y, b, c, s, a);
+                            }
+
+                            engine-pointer-move(x, y) => {
+                                root.engine-pointer-move(x, y);
+                            }
+
+                            engine-pointer-up(x, y, b) => {
+                                root.engine-pointer-up(x, y, b);
+                            }
+
+                            engine-scroll(dx, dy, c, s, a) => {
+                                root.engine-scroll(dx, dy, c, s, a);
+                            }
+
+                            engine-key-event(t, c, s, a) => {
+                                root.engine-key-event(t, c, s, a);
                             }
 
 

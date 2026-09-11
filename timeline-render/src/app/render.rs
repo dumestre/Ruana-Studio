@@ -832,31 +832,20 @@ impl App {
         instances
     }
 
-    pub fn render(&mut self) {
-        let size = self.size;
-        if size.width == 0 || size.height == 0 {
-            return;
-        }
-
-        let surface_texture = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface.configure(&self.device, &self.config);
-                return;
-            }
-            _ => return,
-        };
-        let view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+/// Registra todos os passes da cena num command encoder novo (não submetido).
+    /// Desenha em `view` nas dimensões `width x height`.
+    fn record_scene(
+        &mut self,
+        width: f32,
+        height: f32,
+        view: &wgpu::TextureView,
+    ) -> wgpu::CommandEncoder {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("timeline-encoder"),
             });
 
-        let width = size.width as f32;
-        let height = size.height as f32;
         let instances = self.build_instances(width, height);
 
         let data: Vec<f32> = instances.iter().flat_map(|i| i.to_f32()).collect();
@@ -907,7 +896,7 @@ impl App {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("timeline-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
@@ -961,7 +950,7 @@ impl App {
             let mut ipass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("icon-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
@@ -981,7 +970,180 @@ impl App {
             ipass.draw(0..4, 0..icon_instances.len() as u32);
         }
 
+        encoder
+    }
+
+    /// Render do modo standalone (apresenta na surface da janela).
+    /// No-op quando não há janela (engine pura — use [`App::render_to_rgba`]).
+    pub fn render(&mut self) {
+        let (width, height) = self.size;
+        if width == 0 || height == 0 {
+            return;
+        }
+        let Some(surface) = &self.surface else { return };
+        let surface_texture = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                if let Some(config) = self.config.as_ref() {
+                    surface.configure(&self.device, config);
+                }
+                return;
+            }
+            _ => return,
+        };
+        let view = surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let encoder = self.record_scene(width as f32, height as f32, &view);
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(surface_texture);
+    }
+
+    /// Desenha a cena num buffer offscreen (engine pura) e agenda a cópia
+    /// para memória. NÃO bloqueia a UI thread — o readback é coletado depois
+    /// em [`App::take_rgba`]. Retorna `false` se um readback anterior ainda
+    /// está em voo (o frame é descartado; a última imagem é reapresentada).
+    pub fn submit_frame(&mut self, width: u32, height: u32) -> bool {
+        if width == 0 || height == 0 {
+            return false;
+        }
+        if self.readback_pending {
+            return false;
+        }
+        // A cena usa `self.size` (scroll clamp etc.).
+        self.size = (width, height);
+
+        let bytes_per_row = ((width * 4 + 255) / 256) * 256;
+
+        // (Re)cria textura/readback apenas quando o tamanho muda.
+        let recreate = self.offscreen_texture.as_ref().map_or(true, |t| {
+            t.width() != width || t.height() != height
+        });
+        if recreate {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("timeline-offscreen"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.render_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let readback_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("timeline-readback"),
+                size: (bytes_per_row as u64) * (height as u64),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            self.offscreen_texture = Some(texture);
+            self.readback_buffer = Some(readback_buffer);
+            self.readback_size = (width, height);
+        }
+
+        let texture = match self.offscreen_texture.clone() {
+            Some(t) => t,
+            None => return false,
+        };
+        let buffer = match self.readback_buffer.clone() {
+            Some(b) => b,
+            None => return false,
+        };
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self.record_scene(width as f32, height as f32, &view);
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        self.readback_done.store(false, std::sync::atomic::Ordering::Release);
+        let done = self.readback_done.clone();
+        buffer.slice(..).map_async(wgpu::MapMode::Read, move |_res| {
+            done.store(true, std::sync::atomic::Ordering::Release);
+        });
+        self.readback_pending = true;
+        true
+    }
+
+    /// Coleta o readback do último frame, SEM bloquear. Retorna
+    /// `Some((width, height, rgba))` (já despadded) quando a cópia terminou,
+    /// ou `None` se ainda está em voo ou nada foi submetido.
+    pub fn take_rgba(&mut self) -> Option<(u32, u32, Vec<u8>)> {
+        if !self.readback_pending {
+            return None;
+        }
+        // Polling não-bloqueante: dispara o callback do map_async (se pronto)
+        // e mantém a UI thread livre.
+        let _ = self.device.poll(wgpu::PollType::Poll).ok();
+        if !self.readback_done.load(std::sync::atomic::Ordering::Acquire) {
+            return None;
+        }
+
+        let (width, height) = self.readback_size;
+        let bytes_per_row = ((width * 4 + 255) / 256) * 256;
+        let buffer = self.readback_buffer.clone()?;
+        let data = buffer.slice(..).get_mapped_range().ok()?;
+        let rgba: Vec<u8> = data.to_vec();
+        drop(data);
+        buffer.unmap();
+        self.readback_pending = false;
+
+        if bytes_per_row == width * 4 {
+            Some((width, height, rgba))
+        } else {
+            let mut out = Vec::with_capacity((width as usize) * (height as usize) * 4);
+            for row in rgba.chunks(bytes_per_row as usize) {
+                out.extend_from_slice(&row[..(width as usize) * 4]);
+            }
+            Some((width, height, out))
+        }
+    }
+
+    /// Render offscreen (engine pura) + leitura de volta em RGBA já despadded.
+    /// Retorna `Vec<u8>` de tamanho `width * height * 4` (ou `None` se inválido).
+    ///
+    /// ⚠️ BLOQUEIA a thread atual até o GPU terminar. Para janela nativa/UI
+    /// prefira [`App::submit_frame`] + [`App::take_rgba`] (não-bloqueante).
+    pub fn render_to_rgba(&mut self, width: u32, height: u32) -> Option<Vec<u8>> {
+        if !self.submit_frame(width, height) {
+            return None;
+        }
+        let mut result = None;
+        for _ in 0..120 {
+            if let Some((_, _, rgba)) = self.take_rgba() {
+                result = Some(rgba);
+                break;
+            }
+            self.device
+                .poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(std::time::Duration::from_millis(2)),
+                })
+                .ok();
+        }
+        result
     }
 }

@@ -1,0 +1,21 @@
+[package]
+name = "ruana-studio-makepad"
+version.workspace = true
+edition.workspace = true
+
+# Fase 1 do port Slint → Makepad: shell nativo (janela + transport) com a
+# timeline real rodando em janela winit/wgpu dedicada (timeline-render).
+# A UI do app antigo (app/ com Slint) continua existindo até o port fechar.
+[lib]
+name = "ruana_studio_makepad"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ruana-studio-makepad"
+path = "src/main.rs"
+
+[dependencies]
+makepad-widgets = "1.0"
+daw-core = { path = "../crates/daw-core" }
+daw-audio = { path = "../crates/daw-audio" }
+timeline-render = { path = "../timeline-render", default-features = false }

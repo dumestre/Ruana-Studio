@@ -9,12 +9,13 @@ daw-core = { path = "../crates/daw-core" }
 daw-media = { path = "../crates/daw-media" }
 daw-audio = { path = "../crates/daw-audio" }
 daw-midi = { path = "../crates/daw-midi" }
+timeline-render = { path = "../timeline-render", default-features = false }
 slint = { workspace = true, features = ["renderer-skia", "renderer-femtovg", "raw-window-handle-06"] }
 i-slint-backend-winit = "1.17.1"
 raw-window-handle = "0.6"
 png = "0.18.1"
 glow = "0.18"
-wgpu = "23"
+wgpu = "30"
 bytemuck = "1.14"
 pollster = "0.4"
 glutin = "0.32.3"

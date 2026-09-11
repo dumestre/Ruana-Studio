@@ -2,19 +2,20 @@ import { Theme } from "../theme.slint";
 import { ClipData } from "clip_data.slint";
 
 // ============================================================
-// TIMELINE (STUB / PLACEHOLDER)
+// TIMELINE (ENGINE WGPU)
 //
-// A timeline legada em Slint foi substituída pela janela nativa
-// winit/wgpu (`timeline-render`), com a timeline, o piano roll
-// e (futuramente) timewarp/timepitch no mesmo workspace.
+// A timeline real é renderizada pela engine wgpu (`timeline-render`)
+// num buffer offscreen exibido aqui como `Image` (`canvas`). Toda a
+// interação (pan, zoom, clips, ruler, marquee, resize, fade...) vive
+// na engine; este componente apenas:
 //
-// Este componente apenas PRESERVA a interface pública que o
-// Workspace e o Rust esperam (props + callbacks), para que o
-// restante da UI Slint (mixer, explorer, beat, sampler...) e
-// todo o wiring permaneçam compilando.
+//   1. preserva a INTERFACE (props + callbacks) que workspace.slint
+//      e o wiring Rust esperam (imutável);
+//   2. mostra o buffer rasterizado pela engine;
+//   3. encaminha eventos crus (mouse/wheel/teclado) para a engine
+//      através dos callbacks `engine-*` (consumidos no app em Fase 3).
 //
-// RENDER: placeholder estático — a timeline real vive na
-// janela nativa aberta pelo app numa thread dedicada.
+// NENHUMA lógica de edição reside aqui.
 // ============================================================
 
 export component Timeline inherits Rectangle {
@@ -85,38 +86,131 @@ export component Timeline inherits Rectangle {
     callback pencil-created(float, int, float);
 
     // ========================================================
-    // APARÊNCIA (placeholder neutro — a timeline real é a janela
-    // nativa `timeline-render`, aberta pelo app como processo filho)
+    // EVENTOS CRUS → ENGINE (timeline-render)
+    // ========================================================
+
+    // down/up recebem o botão codificado (0=left, 1=right, 2=middle).
+    callback engine-pointer-down(float, float, int, bool, bool, bool);
+    callback engine-pointer-move(float, float);
+    callback engine-pointer-up(float, float, int);
+    callback engine-scroll(float, float, bool, bool, bool);
+    callback engine-key-event(string, bool, bool, bool);
+
+    // Tamanho REAL da área ocupada pelo canvas (lógico, px) — usado pelo
+    // Rust para dimensionar o buffer offscreen da engine (× scale factor).
+    out property <length> canvas-area-width:
+        max(0px, self.width - self.timeline-left-padding);
+    out property <length> canvas-area-height:
+        max(0px, self.height - self.ruler-height);
+
+
+    // ========================================================
+    // APARÊNCIA
     // ========================================================
 
     background: Theme.surface;
 
-    Rectangle {
+    // ========================================================
+    // CANVAS WGPU — o buffer rasterizado pela engine (`timeline-render`)
+    // contém régua, grid, clips, playhead e loops num único frame.
+    // ========================================================
+
+    canvas-image := Image {
+        x: root.timeline-left-padding;
         y: 0px;
-        width: parent.width;
-        height: root.ruler-height;
-        background: Theme.surface-step;
+        width: max(0px, parent.width - root.timeline-left-padding);
+        height: max(0px, parent.height);
+        source: root.canvas;
+        image-fit: fill;
     }
 
-    Text {
-        width: min(parent.width - 40px, 420px);
-        height: 40px;
-        x: (parent.width - self.width) / 2;
-        y: parent.height / 2 - 20px;
-        text: "Timeline nativa (wgpu)";
-        color: Theme.text-dim;
-        font-size: 12px;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-    }
+    // ========================================================
+    // CAPTURA DE INPUT → ENGINE
+    // ========================================================
 
-    // Clique na área devolve o foco de teclado aos atalhos globais.
-    TouchArea {
-        width: parent.width;
-        height: parent.height;
+    engine-input := TouchArea {
+        x: root.timeline-left-padding;
+        y: 0px;
+        width: max(0px, parent.width - root.timeline-left-padding);
+        height: max(0px, parent.height);
 
+        mouse-cursor: crosshair;
+
+        private property <length> observed-w: self.width;
+        private property <length> observed-h: self.height;
+        changed observed-w => {
+            root.canvas-render-requested();
+        }
+        changed observed-h => {
+            root.canvas-render-requested();
+        }
+
+        pointer-event(ev) => {
+            let btn = ev.button == PointerEventButton.left
+                ? 0
+                : ev.button == PointerEventButton.right
+                    ? 1
+                    : ev.button == PointerEventButton.middle
+                        ? 2
+                        : 3;
+            if ev.kind == PointerEventKind.down {
+                root.engine-pointer-down(
+                    self.mouse-x / 1px,
+                    self.mouse-y / 1px,
+                    btn,
+                    ev.modifiers.control,
+                    ev.modifiers.shift,
+                    ev.modifiers.alt
+                );
+            } else if ev.kind == PointerEventKind.move {
+                root.engine-pointer-move(
+                    self.mouse-x / 1px,
+                    self.mouse-y / 1px
+                );
+            } else if ev.kind == PointerEventKind.up {
+                root.engine-pointer-up(
+                    self.mouse-x / 1px,
+                    self.mouse-y / 1px,
+                    btn
+                );
+            }
+        }
+
+        scroll-event(ev) => {
+            root.engine-scroll(
+                ev.delta-x / 1px,
+                ev.delta-y / 1px,
+                ev.modifiers.control,
+                ev.modifiers.shift,
+                ev.modifiers.alt
+            );
+            accept;
+        }
+
+        // Clique na área devolve o foco aos atalhos globais.
         clicked => {
             root.keyboard-focus-requested();
+        }
+    }
+
+    // ========================================================
+    // FOCO DE TECLADO → ENGINE (Fase 3+)
+    // ========================================================
+
+    engine-keys := FocusScope {
+        x: root.timeline-left-padding;
+        y: 0px;
+        width: max(0px, parent.width - root.timeline-left-padding);
+        height: max(0px, parent.height);
+
+        key-pressed(ke) => {
+            root.engine-key-event(
+                ke.text,
+                ke.modifiers.control,
+                ke.modifiers.shift,
+                ke.modifiers.alt
+            );
+            accept;
         }
     }
 }

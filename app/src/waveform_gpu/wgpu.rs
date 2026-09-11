@@ -27,25 +27,33 @@ pub struct WgpuRenderer {
 impl WgpuRenderer {
     /// Inicializa o dispositivo wgpu (headless, sem surface).
     pub fn new() -> Result<Self, String> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            // DX12 + GL apenas: o driver Vulkan da Intel (igvk64.dll) derruba
+            // o processo com AV na criação do device nesta máquina.
+            backends: wgpu::Backends::DX12 | wgpu::Backends::GL,
+            flags: wgpu::InstanceFlags::empty(),
+            backend_options: wgpu::BackendOptions::default(),
+            memory_budget_thresholds: Default::default(),
+            display: None,
+        });
         let adapter = pollster::block_on(instance.request_adapter(
             &wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             },
         ))
-        .ok_or_else(|| "wgpu: no adapter available".to_string())?;
+        .map_err(|e| format!("wgpu: no adapter available: {e}"))?;
 
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("ruana-waveform-device"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: Default::default(),
-            },
-            None,
-        ))
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("ruana-waveform-device"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::default(),
+            memory_hints: wgpu::MemoryHints::default(),
+            trace: Default::default(),
+            experimental_features: Default::default(),
+        }))
         .map_err(|e| format!("wgpu: request_device failed: {e}"))?;
 
         let device = Arc::new(device);
@@ -85,8 +93,8 @@ impl WgpuRenderer {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("waveform-pl"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: 0,
         });
 
         // Quad unitário (0..1) expandido por instância.
@@ -105,7 +113,7 @@ impl WgpuRenderer {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
-                buffers: &[wgpu::VertexBufferLayout {
+                buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: 8,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[wgpu::VertexAttribute {
@@ -113,7 +121,7 @@ impl WgpuRenderer {
                         offset: 0,
                         shader_location: 0,
                     }],
-                }],
+                })],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -131,7 +139,7 @@ impl WgpuRenderer {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -254,6 +262,7 @@ impl WgpuRenderer {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
+                    depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Store,
@@ -262,6 +271,7 @@ impl WgpuRenderer {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             rpass.set_pipeline(&self.pipeline);
             rpass.set_bind_group(0, &bind_group, &[]);
@@ -270,15 +280,15 @@ impl WgpuRenderer {
         }
 
         encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            wgpu::ImageCopyBuffer {
+            wgpu::TexelCopyBufferInfo {
                 buffer: &readback,
-                layout: wgpu::ImageDataLayout {
+                layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(padded),
                     rows_per_image: Some(height),
@@ -298,7 +308,9 @@ impl WgpuRenderer {
         slice.map_async(wgpu::MapMode::Read, move |res| {
             let _ = tx.send(res);
         });
-        self.device.poll(wgpu::Maintain::Wait);
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .ok();
         let _ = rx.recv();
 
         // Shot da cor uma vez.
@@ -311,7 +323,7 @@ impl WgpuRenderer {
             ca,
         ];
 
-        let data = slice.get_mapped_range();
+        let data = slice.get_mapped_range().ok()?;
         let mut out = Vec::with_capacity((bytes_per_row as usize) * height as usize);
         for row in 0..height as usize {
             let start = row * padded as usize;

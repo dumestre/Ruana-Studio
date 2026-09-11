@@ -111,7 +111,8 @@ impl App {
     }
 
     pub fn splitter_hit_test(&self, cursor_y: f32, height: f32) -> bool {
-        let layout = self.layout(self.size.width as f32, height);
+        let layout = self.layout(self.size.0 as f32, height);
         layout.splitter.contains_y(cursor_y)
     }
 }
+

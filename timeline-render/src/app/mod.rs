@@ -7,18 +7,31 @@ pub(crate) mod interaction;
 pub(crate) mod layout;
 pub(crate) mod piano_roll;
 pub(crate) mod render;
-pub(crate) mod window;
+pub mod window;
 
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use windows_sys::Win32::Foundation::POINT;
-use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
-
 use wgpu::util::DeviceExt;
-use daw_audio::AudioEngine;
 use daw_core::Transport;
-use winit::window::Window;
+#[cfg(feature = "audio")]
+use daw_audio::AudioEngine;
+
+/// Estado de botão do mouse teclado (neutro; convertido do winit no entry point).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ButtonState {
+    Pressed,
+    Released,
+}
+
+impl From<winit::event::ElementState> for ButtonState {
+    fn from(s: winit::event::ElementState) -> Self {
+        match s {
+            winit::event::ElementState::Pressed => ButtonState::Pressed,
+            winit::event::ElementState::Released => ButtonState::Released,
+        }
+    }
+}
 
 use crate::clips;
 use crate::fades;
@@ -53,34 +66,31 @@ pub enum LoopDrag {
     Move,  // arrasta o centro (move o range inteiro)
 }
 
-/// Obtém a posição atual do cursor em coordenadas lógicas da janela, usando
-/// `GetCursorPos` (Win32) porque durante o arrasto de um arquivo o sistema
-/// operacional não envia eventos `CursorMoved` para a janela.
-pub(crate) fn current_cursor_pos(window: &Window) -> Option<(f32, f32)> {
-    unsafe {
-        let mut pt = POINT { x: 0, y: 0 };
-        if GetCursorPos(&mut pt) != 0 {
-            let window_pos = window.outer_position().ok()?;
-            let scale = window.scale_factor();
-            let x = (pt.x - window_pos.x) as f32 / scale as f32;
-            let y = (pt.y - window_pos.y) as f32 / scale as f32;
-            Some((x, y))
-        } else {
-            None
-        }
-    }
-}
-
 pub struct App {
-    pub window: Arc<Window>,
-    pub surface: wgpu::Surface<'static>,
+    /// Janela winit opcional (modo standalone). Em modo "engine pura"
+    /// (`None`) a renderização vai para textura offscreen via
+    /// [`App::render_to_rgba`].
+    pub window: Option<std::sync::Arc<winit::window::Window>>,
+    pub surface: Option<wgpu::Surface<'static>>,
+    pub config: Option<wgpu::SurfaceConfiguration>,
+    pub render_format: wgpu::TextureFormat,
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub unit_quad: wgpu::Buffer,
-    pub config: wgpu::SurfaceConfiguration,
-    pub size: winit::dpi::PhysicalSize<u32>,
+    pub size: (u32, u32),
+
+/// Textura alvo da renderização offscreen (engine pura). Reutilizada
+    /// enquanto o tamanho não mudar.
+    pub offscreen_texture: Option<wgpu::Texture>,
+    pub readback_buffer: Option<wgpu::Buffer>,
+    pub readback_size: (u32, u32),
+    /// Um frame foi submetido e o readback dele ainda não foi coletado.
+    /// Enquanto isso, novos `submit_frame` são descartados (não empilhar).
+    pub readback_pending: bool,
+    /// Sinalizado pelo callback do `map_async` quando a cópia terminou.
+    pub readback_done: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     pub theme: usize,
     pub scroll_x: f32,
@@ -99,6 +109,7 @@ pub struct App {
     pub last_cursor: (f32, f32),
 
     pub transport: Arc<Mutex<Transport>>,
+    #[cfg(feature = "audio")]
     pub audio_engine: Option<AudioEngine>,
 
     pub wave_bars: Vec<f32>,
@@ -200,9 +211,16 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(window: Arc<Window>) -> Result<Self, String> {
-        let size = window.inner_size();
-
+    /// Cria a engine. `window` é opcional:
+    /// - `Some(window)`: modo standalone (surface + present via winit).
+    /// - `None`: engine pura; a renderização usa [`App::render_to_rgba`].
+    /// `size` é o tamanho inicial (standalone: `window.inner_size()`).
+    /// `transport` compartilhado opcional (senão cria um próprio).
+    pub fn new(
+        window: Option<std::sync::Arc<winit::window::Window>>,
+        size: (u32, u32),
+        transport: Option<Arc<Mutex<Transport>>>,
+    ) -> Result<Self, String> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::DX12 | wgpu::Backends::GL,
             flags: wgpu::InstanceFlags::empty(),
@@ -210,13 +228,17 @@ impl App {
             memory_budget_thresholds: Default::default(),
             display: None,
         });
-        let surface = instance
-            .create_surface(window.clone())
-            .map_err(|e| format!("wgpu: create_surface failed: {e}"))?;
+        let surface = match &window {
+            Some(w) => instance
+                .create_surface(w.clone())
+                .map_err(|e| format!("wgpu: create_surface failed: {e}"))
+                .ok(),
+            None => None,
+        };
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
+            compatible_surface: surface.as_ref(),
             force_fallback_adapter: false,
             apply_limit_buckets: false,
         }))
@@ -282,26 +304,30 @@ impl App {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .copied()
-            .find(|f| f.is_srgb())
-            .unwrap_or(surface_caps.formats[0]);
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width.max(1),
-            height: size.height.max(1),
-            view_formats: vec![],
-            present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: surface_caps.alpha_modes[0],
-            desired_maximum_frame_latency: 1,
-            color_space: Default::default(),
+        let (render_format, config) = if let Some(surf) = &surface {
+            let surface_caps = surf.get_capabilities(&adapter);
+            let surface_format = surface_caps
+                .formats
+                .iter()
+                .copied()
+                .find(|f| f.is_srgb())
+                .unwrap_or(surface_caps.formats[0]);
+            let config = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: surface_format,
+                width: size.0.max(1),
+                height: size.1.max(1),
+                view_formats: vec![],
+                present_mode: wgpu::PresentMode::Fifo,
+                alpha_mode: surface_caps.alpha_modes[0],
+                desired_maximum_frame_latency: 1,
+                color_space: Default::default(),
+            };
+            surf.configure(&device, &config);
+            (surface_format, Some(config))
+        } else {
+            (wgpu::TextureFormat::Rgba8UnormSrgb, None)
         };
-        surface.configure(&device, &config);
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("timeline-rp"),
@@ -353,7 +379,7 @@ impl App {
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: surface_format,
+                    format: render_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -457,7 +483,7 @@ impl App {
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: surface_format,
+                    format: render_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -540,12 +566,16 @@ impl App {
             }
         }).collect::<Vec<_>>();
 
-        let transport = Arc::new(Mutex::new(Transport::default()));
+        let transport = transport.unwrap_or_else(|| Arc::new(Mutex::new(Transport::default())));
+        #[cfg(feature = "audio")]
         let audio_engine = AudioEngine::start(transport.clone()).ok();
+#[cfg(not(feature = "audio"))]
+        let _audio_engine: Option<()> = None;
 
         Ok(Self {
             window,
             surface,
+            render_format,
             device,
             queue,
             pipeline,
@@ -553,6 +583,11 @@ impl App {
             unit_quad,
             config,
             size,
+offscreen_texture: None,
+            readback_buffer: None,
+            readback_size: (0, 0),
+            readback_pending: false,
+            readback_done: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
 
             theme: 6,
             scroll_x: 0.0,
@@ -569,7 +604,8 @@ impl App {
             scrubbing: false,
             last_cursor: (0.0, 0.0),
 
-            transport,
+transport,
+            #[cfg(feature = "audio")]
             audio_engine,
 
             wave_bars,
@@ -651,14 +687,25 @@ impl App {
         let _ = set_dark_mode(self.theme == 6);
     }
 
-    pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        self.size = size;
-        if size.width > 0 && size.height > 0 {
-            self.config.width = size.width;
-            self.config.height = size.height;
-            self.surface.configure(&self.device, &self.config);
+    /// Redesenha a janela (no-op no modo engine pura, sem janela).
+    pub fn request_redraw(&self) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
         }
-        self.clamp_scroll_y(size.height as f32);
+    }
+
+    /// Aplica um novo tamanho (modo standalone reconfigure a surface; modo
+    /// engine pura apenas atualiza `size`).
+    pub fn resize(&mut self, size: (u32, u32)) {
+        self.size = size;
+        if let (Some(surface), Some(config)) = (&self.surface, self.config.as_mut()) {
+            if size.0 > 0 && size.1 > 0 {
+                config.width = size.0;
+                config.height = size.1;
+                surface.configure(&self.device, config);
+            }
+        }
+        self.clamp_scroll_y(size.1 as f32);
     }
 
     pub fn set_playhead_from_x(&mut self, mx: f32) {
@@ -731,7 +778,7 @@ impl App {
             let pps = self.px_per_beat * self.bpm / 60.0;
             if pps > 0.0 {
                 let head_x = self.transport_seconds * pps - self.scroll_x;
-                let center = self.size.width as f32 / 2.0;
+                let center = self.size.0 as f32 / 2.0;
                 // Se o playhead passou do centro, rola a timeline para segui-lo
                 if head_x >= center {
                     let target_scroll = self.transport_seconds * pps - center;
@@ -861,13 +908,13 @@ impl App {
     }
 
     /// Clique na ruler do PIANO ROLL: inicia/finaliza scrub.
-    pub fn pr_handle_ruler_click(&mut self, state: winit::event::ElementState, pos: (f32, f32)) {
+    pub fn pr_handle_ruler_click(&mut self, state: ButtonState, pos: (f32, f32)) {
         match state {
-            winit::event::ElementState::Pressed => {
+            ButtonState::Pressed => {
                 self.pr_scrubbing = true;
                 self.pr_set_playhead_from_x(pos.0);
             }
-            winit::event::ElementState::Released => {
+            ButtonState::Released => {
                 self.pr_scrubbing = false;
             }
         }
@@ -883,7 +930,7 @@ impl App {
         if !self.show_piano_roll {
             return;
         }
-        let h = self.size.height as f32;
+        let h = self.size.1 as f32;
         if self.splitter_hit_test(cursor.1, h) {
             self.splitter_drag = true;
         }
@@ -895,7 +942,7 @@ impl App {
         if !self.splitter_drag {
             return;
         }
-        let h = self.size.height as f32;
+        let h = self.size.1 as f32;
         let tr_h = self.time_ruler_h;
         let pr_ruler_h = piano_roll::PIANO_RULER_H;
         // A splitter está em tr_y + tr_h. O cursor está na splitter.

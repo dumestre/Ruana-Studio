@@ -34,9 +34,9 @@ mod os_drop;
 mod piano_roll;
 mod playback;
 mod timeline;
+mod timeline_slint;
 mod theme;
 
-mod timeline_gpu;
 mod waveform;
 mod waveform_gpu;
 mod timewarp;
@@ -409,13 +409,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // Motor de zoom/scroll: captura o input cru e suaviza por frame.
     interaction::install(&ui);
 
+    // Ponte Slint ↔ engine wgpu headless do timeline-render: preview dos
+    // clips do projeto (read-only) com playhead seguindo o Transport.
+    timeline_slint::install(&ui, transport.clone(), project.clone());
+
     // Waveform: re-render na resolução exata quando o zoom muda.
     waveform::wire_resolution_requests(&ui, waveforms.clone(), wgpu_renderer.clone(), clips_model.clone());
-
-    // TimelineCanvas: fundo da timeline (grid + faixas) via wgpu + clips
-    // (corpo/header) lidos direto do core + playhead 60fps + VU meters +
-    // waveforms, render-on-change.
-    timeline_canvas::wire(&ui, project.clone(), meter_state.clone(), waveforms.clone());
 
     // Explorador de arquivos: navegação, histórico e filtro.
     explorer::wire_explorer(&ui);
