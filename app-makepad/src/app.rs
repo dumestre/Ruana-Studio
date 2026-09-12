@@ -13,14 +13,14 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
 use makepad_widgets::makepad_platform::{CxOsOp, WindowId};
 use makepad_widgets::*;
 
 use crate::toolbar::{ToolbarAction, ToolbarCtl};
-use daw_core::transport::Transport;
 use daw_core::Project;
+use daw_core::transport::Transport;
 use timeline_render::clips::ClipDemo;
 use timeline_render::{DockSpec, WindowCommand};
 
@@ -121,7 +121,7 @@ struct ShellState {
     timeline_tx: Option<mpsc::Sender<WindowCommand>>,
     follow_on: bool,
     snap_on: bool,
-rec_armed: bool,
+    rec_armed: bool,
     active_tool: usize,
     window_drag: Option<WindowDrag>,
     dbg_logged: bool,
@@ -136,7 +136,7 @@ impl Default for ShellState {
             timeline_tx: None,
             follow_on: true,
             snap_on: true,
-rec_armed: false,
+            rec_armed: false,
             active_tool: 0,
             window_drag: None,
             dbg_logged: false,
@@ -208,7 +208,7 @@ impl ShellState {
             timeline_tx: Some(tx),
             follow_on: true,
             snap_on: true,
-rec_armed: false,
+            rec_armed: false,
             active_tool: 0,
             window_drag: None,
             dbg_logged: false,
@@ -406,13 +406,23 @@ impl MatchEvent for App {
         }
     }
 
-fn handle_timer(&mut self, cx: &mut Cx, _event: &TimerEvent) {
+    fn handle_timer(&mut self, cx: &mut Cx, _event: &TimerEvent) {
         if !self.shell.dbg_logged {
             self.shell.dbg_logged = true;
-            eprintln!("[dbg] main window rect = {:?}", self.ui.window(id!(main_window)).area().rect(cx));
-            eprintln!("[dbg] caption_bar valid = {}", self.ui.view(id!(caption_bar)).area().is_valid(cx));
+            eprintln!(
+                "[dbg] main window rect = {:?}",
+                self.ui.window(id!(main_window)).area().rect(cx)
+            );
+            eprintln!(
+                "[dbg] caption_bar valid = {}",
+                self.ui.view(id!(caption_bar)).area().is_valid(cx)
+            );
             let tb = self.ui.view(id!(toolbar)).area();
-            eprintln!("[dbg] toolbar valid = {}, rect = {:?}", tb.is_valid(cx), tb.rect(cx));
+            eprintln!(
+                "[dbg] toolbar valid = {}, rect = {:?}",
+                tb.is_valid(cx),
+                tb.rect(cx)
+            );
             for (name, widget) in [
                 ("body", id!(body)),
                 ("main_row", id!(main_row)),
@@ -428,9 +438,16 @@ fn handle_timer(&mut self, cx: &mut Cx, _event: &TimerEvent) {
                 ("mixer_area", id!(mixer_area)),
             ] {
                 let a = self.ui.view(widget).area();
-                eprintln!("[dbg] {name} valid={} rect={:?}", a.is_valid(cx), a.rect(cx));
+                eprintln!(
+                    "[dbg] {name} valid={} rect={:?}",
+                    a.is_valid(cx),
+                    a.rect(cx)
+                );
             }
-            eprintln!("[dbg] body-style rect do toolbar_area = {:?}", self.ui.view(id!(timeline_area)).area().rect(cx));
+            eprintln!(
+                "[dbg] body-style rect do toolbar_area = {:?}",
+                self.ui.view(id!(timeline_area)).area().rect(cx)
+            );
         }
         self.shell.refresh_status(&self.ui, cx);
     }
