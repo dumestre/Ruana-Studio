@@ -97,10 +97,8 @@ fn render_svg_to_png(
 
     let offset_x = (width as f32 * (1.0 - scale)) / 2.0;
     let offset_y = (height as f32 * (1.0 - scale)) / 2.0;
-    let transform = Transform::from_translate(offset_x, offset_y).pre_scale(
-        width as f32 * scale / art_w,
-        height as f32 * scale / art_h,
-    );
+    let transform = Transform::from_translate(offset_x, offset_y)
+        .pre_scale(width as f32 * scale / art_w, height as f32 * scale / art_h);
 
     let mut pixmap = Pixmap::new(width, height).ok_or("Failed to create pixmap")?;
     render(&tree, transform, &mut pixmap.as_mut());
@@ -293,7 +291,8 @@ fn build_icons() -> Result<(), Box<dyn std::error::Error>> {
             for y in 0..CELL as usize {
                 let src = y * (CELL as usize) * 4;
                 let dst = oy + y * (w as usize) * 4 + ox;
-                atlas[dst..dst + (CELL as usize) * 4].copy_from_slice(&rgba[src..src + (CELL as usize) * 4]);
+                atlas[dst..dst + (CELL as usize) * 4]
+                    .copy_from_slice(&rgba[src..src + (CELL as usize) * 4]);
             }
             emitted = true;
         }

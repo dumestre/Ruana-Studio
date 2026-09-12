@@ -12,10 +12,10 @@ pub mod window;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use wgpu::util::DeviceExt;
-use daw_core::Transport;
 #[cfg(feature = "audio")]
 use daw_audio::AudioEngine;
+use daw_core::Transport;
+use wgpu::util::DeviceExt;
 
 /// Estado de botão do mouse teclado (neutro; convertido do winit no entry point).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -81,7 +81,7 @@ pub struct App {
     pub unit_quad: wgpu::Buffer,
     pub size: (u32, u32),
 
-/// Textura alvo da renderização offscreen (engine pura). Reutilizada
+    /// Textura alvo da renderização offscreen (engine pura). Reutilizada
     /// enquanto o tamanho não mudar.
     pub offscreen_texture: Option<wgpu::Texture>,
     pub readback_buffer: Option<wgpu::Buffer>,
@@ -142,23 +142,22 @@ pub struct App {
     /// Momento do último `DroppedFile` (para detectar fim do lote).
     pub last_drop_instant: Instant,
 
-        // Auto-scroll nas bordas durante drag de clips.
-        // Quando o cursor se aproxima de uma borda durante um arrasto ativo,
-        // a viewport rola suavemente nessa direção para permitir arrastar
-        // clips para fora da área visível.
-        pub edge_scroll_x: f32, // velocidade px/frame (0 = desativado)
-        pub edge_scroll_y: f32, // velocidade px/frame (0 = desativado)
-        pub edge_scroll_dir: i32, // -1 = esquerda/cima, +1 = direita/baixo, 0 = nenhuma
-        pub bpm: f32,
-        pub time_ruler_h: f32,
-        pub follow_playhead: bool,
-        // ---------- estado para preview de drop de áudio ----------
-        pub drop_path: Option<String>,            // caminho do arquivo arrastado
-        pub drop_preview: Option<DropPreview>,   // preview visual enquanto ainda não inserido
-        pub is_dragging_file: bool,              // true enquanto um arquivo está sendo arrastado sobre a janela
-        pub cursor_warp_pending: bool,
-        // ------------------------------------------------------------
-
+    // Auto-scroll nas bordas durante drag de clips.
+    // Quando o cursor se aproxima de uma borda durante um arrasto ativo,
+    // a viewport rola suavemente nessa direção para permitir arrastar
+    // clips para fora da área visível.
+    pub edge_scroll_x: f32,   // velocidade px/frame (0 = desativado)
+    pub edge_scroll_y: f32,   // velocidade px/frame (0 = desativado)
+    pub edge_scroll_dir: i32, // -1 = esquerda/cima, +1 = direita/baixo, 0 = nenhuma
+    pub bpm: f32,
+    pub time_ruler_h: f32,
+    pub follow_playhead: bool,
+    // ---------- estado para preview de drop de áudio ----------
+    pub drop_path: Option<String>, // caminho do arquivo arrastado
+    pub drop_preview: Option<DropPreview>, // preview visual enquanto ainda não inserido
+    pub is_dragging_file: bool,    // true enquanto um arquivo está sendo arrastado sobre a janela
+    pub cursor_warp_pending: bool,
+    // ------------------------------------------------------------
     /// ===== Piano roll (editor MIDI) =====
     /// Editor de notas: fonte de verdade compartilhado com o Slint (daw-midi::NoteEditor).
     /// Quando `show_piano_roll` é verdadeiro, a área inferior da janela exibe
@@ -171,10 +170,10 @@ pub struct App {
     pub piano_roll_scroll_x: f32,
     pub piano_roll_key_height: f32,
     pub show_piano_roll: bool,
-        /// Estado de teclas modificadoras (para scroll/zoom contextual).
-        pub ctrl_pressed: bool,
-        pub alt_pressed: bool,
-        pub shift_pressed: bool,
+    /// Estado de teclas modificadoras (para scroll/zoom contextual).
+    pub ctrl_pressed: bool,
+    pub alt_pressed: bool,
+    pub shift_pressed: bool,
     /// Altura atual do piano roll (drag da splitter).
     pub piano_roll_height: f32,
     /// Altura mínima/máxima do piano roll.
@@ -244,16 +243,14 @@ impl App {
         }))
         .map_err(|e| format!("wgpu: no adapter available: {e}"))?;
 
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("ruana-timeline-device"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: Default::default(),
-                experimental_features: Default::default(),
-            },
-        ))
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("ruana-timeline-device"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::default(),
+            memory_hints: wgpu::MemoryHints::default(),
+            trace: Default::default(),
+            experimental_features: Default::default(),
+        }))
         .map_err(|e| format!("wgpu: request_device failed: {e}"))?;
 
         let device = Arc::new(device);
@@ -400,37 +397,38 @@ impl App {
             source: wgpu::ShaderSource::Wgsl(ICON_SHADER_WGSL.into()),
         });
 
-        let icon_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("timeline-icon-bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let icon_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("timeline-icon-bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
                     },
-                    count: None,
-                },
-            ],
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                ],
+            });
 
         let icon_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("timeline-icon-pl"),
@@ -556,20 +554,24 @@ impl App {
 
         // Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
         // (a fonte da verdade). Buffer e segmentação derivam disso.
-        let (wave_bars, wave_segments) = waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB);
+        let (wave_bars, wave_segments) =
+            waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB);
         // Cria um vetor de fades padrão para esses clips (não‑midi).
-        let fades = clips.iter().map(|c| {
-            if !c.is_midi {
-                fades::ClipFade::default()
-            } else {
-                fades::ClipFade::none()
-            }
-        }).collect::<Vec<_>>();
+        let fades = clips
+            .iter()
+            .map(|c| {
+                if !c.is_midi {
+                    fades::ClipFade::default()
+                } else {
+                    fades::ClipFade::none()
+                }
+            })
+            .collect::<Vec<_>>();
 
         let transport = transport.unwrap_or_else(|| Arc::new(Mutex::new(Transport::default())));
         #[cfg(feature = "audio")]
         let audio_engine = AudioEngine::start(transport.clone()).ok();
-#[cfg(not(feature = "audio"))]
+        #[cfg(not(feature = "audio"))]
         let _audio_engine: Option<()> = None;
 
         Ok(Self {
@@ -583,7 +585,7 @@ impl App {
             unit_quad,
             config,
             size,
-offscreen_texture: None,
+            offscreen_texture: None,
             readback_buffer: None,
             readback_size: (0, 0),
             readback_pending: false,
@@ -604,7 +606,7 @@ offscreen_texture: None,
             scrubbing: false,
             last_cursor: (0.0, 0.0),
 
-transport,
+            transport,
             #[cfg(feature = "audio")]
             audio_engine,
 
@@ -761,10 +763,14 @@ transport,
     }
 
     pub fn update_playhead(&mut self) {
-        if !self.playing { return; }
+        if !self.playing {
+            return;
+        }
 
         // Lê a posição do transporte compartilhado (avançado pelo AudioEngine).
-        let transport_seconds = self.transport.lock()
+        let transport_seconds = self
+            .transport
+            .lock()
             .map(|t| t.position_seconds() as f32)
             .unwrap_or(self.transport_seconds);
 
@@ -804,7 +810,8 @@ transport,
                 selected: false,
             });
         }
-        self.piano_roll_inter.sync_selection(self.piano_roll_notes.len());
+        self.piano_roll_inter
+            .sync_selection(self.piano_roll_notes.len());
     }
 
     /// Aplica as notas editadas no wgpu de volta ao `NoteEditor`.
@@ -813,8 +820,8 @@ transport,
         for note in &self.piano_roll_notes {
             let core_note = self.note_editor.notes().iter().find(|n| n.id == note.id);
             if let Some(core_note) = core_note {
-                let needs_move = (core_note.start - note.start).abs() > 0.001
-                    || core_note.pitch != note.pitch;
+                let needs_move =
+                    (core_note.start - note.start).abs() > 0.001 || core_note.pitch != note.pitch;
                 let needs_resize = (core_note.length - note.length).abs() > 0.001;
                 let needs_vel = core_note.velocity != note.velocity;
 
@@ -825,7 +832,8 @@ transport,
                     self.note_editor.resize_note(note.id, note.length);
                 }
                 if needs_vel {
-                    self.note_editor.change_note_velocity(note.id, note.velocity);
+                    self.note_editor
+                        .change_note_velocity(note.id, note.velocity);
                 }
             }
         }
@@ -883,7 +891,9 @@ transport,
 
     /// Move a seleção de loop do PIANO ROLL com snap de 1 beat.
     pub fn pr_handle_loop_drag(&mut self, mx: f32) {
-        let Some(kind) = self.pr_loop_drag else { return };
+        let Some(kind) = self.pr_loop_drag else {
+            return;
+        };
         let dx = mx - self.pr_loop_drag_start_x;
         let delta_beats = (dx / self.piano_roll_px_per_beat.max(0.001)).round();
         match kind {
@@ -894,8 +904,8 @@ transport,
                 self.pr_loop_start_beat = new.max(0.0);
             }
             LoopDrag::End => {
-                let new = (self.pr_loop_drag_orig_end + delta_beats)
-                    .max(self.pr_loop_start_beat + 1.0);
+                let new =
+                    (self.pr_loop_drag_orig_end + delta_beats).max(self.pr_loop_start_beat + 1.0);
                 self.pr_loop_end_beat = new;
             }
             LoopDrag::Move => {
@@ -1036,13 +1046,11 @@ transport,
         //     splitter; é o comportamento desejado: a linha do playhead atravessa
         //     a splitter do PR igual atravessa na timeline.)
         {
-            use piano_roll::KEYBOARD_W;
             use crate::palette;
+            use piano_roll::KEYBOARD_W;
             let px_per_beat = self.piano_roll_px_per_beat;
             let scroll_x = self.piano_roll_scroll_x;
-            let beat_to_x = |beat: f32| -> f32 {
-                KEYBOARD_W + beat * px_per_beat - scroll_x
-            };
+            let beat_to_x = |beat: f32| -> f32 { KEYBOARD_W + beat * px_per_beat - scroll_x };
             let head_x = beat_to_x(self.pr_playhead_beat);
             if head_x >= -20.0 && head_x <= width + 20.0 {
                 let col = palette::PLAYHEAD_COLOR;
@@ -1052,17 +1060,29 @@ transport,
                 let line_top = ruler_y + 1.0;
                 let line_h = (body_bottom - line_top).max(0.0);
                 instances.push(crate::RectInstance {
-                    x: head_x - 1.0, y: line_top,
-                    w: 2.0, h: line_h,
+                    x: head_x - 1.0,
+                    y: line_top,
+                    w: 2.0,
+                    h: line_h,
                     color: [col.0, col.1, col.2, 255],
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    wave_offset: 0,
+                    wave_count: 0,
+                    clip_w: 0.0,
+                    clip_h: 0.0,
+                    radius: 0.0,
                 });
                 // Círculo (cabeça da playhead) no topo da régua.
                 instances.push(crate::RectInstance {
-                    x: head_x - 6.0, y: ruler_y + 1.0,
-                    w: 12.0, h: 12.0,
+                    x: head_x - 6.0,
+                    y: ruler_y + 1.0,
+                    w: 12.0,
+                    h: 12.0,
                     color: [col.0, col.1, col.2, 255],
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0,
+                    wave_offset: 0,
+                    wave_count: 0,
+                    clip_w: 0.0,
+                    clip_h: 0.0,
+                    radius: 6.0,
                 });
             }
         }

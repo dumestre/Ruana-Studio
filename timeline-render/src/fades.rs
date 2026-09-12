@@ -66,13 +66,13 @@ pub struct ClipFade {
 impl Default for ClipFade {
     fn default() -> Self {
         Self {
-            in_len: 1.0,         // 1 beat de fade in demo
-            in_curve_x: 0.5,     // centro horizontal (curva linear/neutra)
-            in_curve_y: 0.5,     // centro vertical
-            out_len: 1.0,        // 1 beat de fade out demo
-            out_curve_x: 0.5,    // centro horizontal
-            out_curve_y: 0.5,    // centro vertical
-            gain_db: 0.0,        // 0 dB (100% volume)
+            in_len: 1.0,      // 1 beat de fade in demo
+            in_curve_x: 0.5,  // centro horizontal (curva linear/neutra)
+            in_curve_y: 0.5,  // centro vertical
+            out_len: 1.0,     // 1 beat de fade out demo
+            out_curve_x: 0.5, // centro horizontal
+            out_curve_y: 0.5, // centro vertical
+            gain_db: 0.0,     // 0 dB (100% volume)
         }
     }
 }
@@ -262,8 +262,12 @@ impl FadeInteraction {
         body_w: f32,
         body_h: f32,
     ) {
-        let Some(ref drag) = self.active_drag else { return };
-        let Some(fade) = fades.get_mut(drag.clip_index) else { return };
+        let Some(ref drag) = self.active_drag else {
+            return;
+        };
+        let Some(fade) = fades.get_mut(drag.clip_index) else {
+            return;
+        };
 
         let mut dx = cursor.0 - drag.start_cursor.0;
         let mut dy = cursor.1 - drag.start_cursor.1;
@@ -313,8 +317,7 @@ impl FadeInteraction {
                 // mexe pouco no ganho (arrastar mais, mover menos).
                 let min_db = -24.0;
                 let max_db = 12.0;
-                let gain_drag_range =
-                    (body_h * 2.0).max(48.0);
+                let gain_drag_range = (body_h * 2.0).max(48.0);
                 let delta_norm = dy / gain_drag_range.max(1.0);
                 let delta_db = -delta_norm * (max_db - min_db);
                 fade.gain_db = (drag.orig_gain_db + delta_db).clamp(min_db, max_db);
@@ -395,89 +398,135 @@ pub fn build_clip_fade_instances(
 
     let is_hovered = |kind: FadeHandleKind| -> bool {
         inter.hovered == Some((clip_index, kind))
-            || inter.active_drag.as_ref().map_or(false, |d| d.clip_index == clip_index && d.kind == kind)
+            || inter
+                .active_drag
+                .as_ref()
+                .map_or(false, |d| d.clip_index == clip_index && d.kind == kind)
     };
 
     // Cores profissionais estilo DAW
-    let _gain_line_color = [255, 215, 0, 160];       // Linha dourada suave para ganho
+    let _gain_line_color = [255, 215, 0, 160]; // Linha dourada suave para ganho
     let _handle_fill_normal = [250, 250, 255, 245];
-    let handle_fill_hover = [0, 210, 90, 255];      // Accent esmeralda no hover
+    let handle_fill_hover = [0, 210, 90, 255]; // Accent esmeralda no hover
     let handle_border_color = [25, 25, 30, 240];
 
-        // ========================================================================
-        // 1. FADE IN — SHADER ANALÍTICO SDF (overlay visível apenas no hover)
-        // ========================================================================
-        let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
-        let hover_fade_in = is_hovered(FadeHandleKind::FadeInLen) || is_hovered(FadeHandleKind::FadeInCurve);
-        if in_px > 1.0 && hover_fade_in {
-            let cx_code = (fade.in_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
-            let cy_code = (fade.in_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
-            instances.push(RectInstance {
-                x: body_x,
-                y: body_y,
-                w: in_px,
-                h: body_h,
-                color: [0, 0, 0, 0],
-                wave_offset: cx_code,
-                wave_count: cy_code,
-                clip_w: -2.0, // sinaliza Fade In SDF
-                clip_h: body_h,
-                radius: 0.0,
-            });
+    // ========================================================================
+    // 1. FADE IN — SHADER ANALÍTICO SDF (overlay visível apenas no hover)
+    // ========================================================================
+    let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
+    let hover_fade_in =
+        is_hovered(FadeHandleKind::FadeInLen) || is_hovered(FadeHandleKind::FadeInCurve);
+    if in_px > 1.0 && hover_fade_in {
+        let cx_code = (fade.in_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
+        let cy_code = (fade.in_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
+        instances.push(RectInstance {
+            x: body_x,
+            y: body_y,
+            w: in_px,
+            h: body_h,
+            color: [0, 0, 0, 0],
+            wave_offset: cx_code,
+            wave_count: cy_code,
+            clip_w: -2.0, // sinaliza Fade In SDF
+            clip_h: body_h,
+            radius: 0.0,
+        });
 
-            // Handles (apenas no hover)
-            let handle_in_x = body_x + in_px;
-            let handle_in_y = body_y + 4.0;
-            push_handle_circle(instances, handle_in_x, handle_in_y, 5.5, handle_fill_hover, handle_border_color);
+        // Handles (apenas no hover)
+        let handle_in_x = body_x + in_px;
+        let handle_in_y = body_y + 4.0;
+        push_handle_circle(
+            instances,
+            handle_in_x,
+            handle_in_y,
+            5.5,
+            handle_fill_hover,
+            handle_border_color,
+        );
 
-            let handle_curve_x = body_x + fade.in_curve_x * in_px;
-            let handle_curve_y = body_y + body_h - fade.in_curve_y * body_h;
-            push_handle_circle(instances, handle_curve_x, handle_curve_y, 5.0, handle_fill_hover, handle_border_color);
-        } else {
-            if is_hovered(FadeHandleKind::FadeInLen) {
-                push_handle_circle(instances, body_x + 4.0, body_y + 4.0, 4.0, handle_fill_hover, handle_border_color);
-            }
+        let handle_curve_x = body_x + fade.in_curve_x * in_px;
+        let handle_curve_y = body_y + body_h - fade.in_curve_y * body_h;
+        push_handle_circle(
+            instances,
+            handle_curve_x,
+            handle_curve_y,
+            5.0,
+            handle_fill_hover,
+            handle_border_color,
+        );
+    } else {
+        if is_hovered(FadeHandleKind::FadeInLen) {
+            push_handle_circle(
+                instances,
+                body_x + 4.0,
+                body_y + 4.0,
+                4.0,
+                handle_fill_hover,
+                handle_border_color,
+            );
         }
+    }
 
-        // ========================================================================
-        // 2. FADE OUT — SHADER ANALÍTICO SDF (overlay visível apenas no hover)
-        // ========================================================================
-        let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
-        let hover_fade_out = is_hovered(FadeHandleKind::FadeOutLen) || is_hovered(FadeHandleKind::FadeOutCurve);
-        if out_px > 1.0 && hover_fade_out {
-            let start_x = body_x + body_w - out_px;
-            let cx_code = (fade.out_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
-            let cy_code = (fade.out_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
-            instances.push(RectInstance {
-                x: start_x,
-                y: body_y,
-                w: out_px,
-                h: body_h,
-                color: [0, 0, 0, 0],
-                wave_offset: cx_code,
-                wave_count: cy_code,
-                clip_w: -3.0, // sinaliza Fade Out SDF
-                clip_h: body_h,
-                radius: 0.0,
-            });
+    // ========================================================================
+    // 2. FADE OUT — SHADER ANALÍTICO SDF (overlay visível apenas no hover)
+    // ========================================================================
+    let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
+    let hover_fade_out =
+        is_hovered(FadeHandleKind::FadeOutLen) || is_hovered(FadeHandleKind::FadeOutCurve);
+    if out_px > 1.0 && hover_fade_out {
+        let start_x = body_x + body_w - out_px;
+        let cx_code = (fade.out_curve_x.clamp(0.0, 1.0) * 1000.0).round() as u32;
+        let cy_code = (fade.out_curve_y.clamp(0.0, 1.0) * 1000.0).round() as u32;
+        instances.push(RectInstance {
+            x: start_x,
+            y: body_y,
+            w: out_px,
+            h: body_h,
+            color: [0, 0, 0, 0],
+            wave_offset: cx_code,
+            wave_count: cy_code,
+            clip_w: -3.0, // sinaliza Fade Out SDF
+            clip_h: body_h,
+            radius: 0.0,
+        });
 
-            // Handles (apenas no hover)
-            let handle_out_x = start_x;
-            let handle_out_y = body_y + 4.0;
-            push_handle_circle(instances, handle_out_x, handle_out_y, 5.5, handle_fill_hover, handle_border_color);
+        // Handles (apenas no hover)
+        let handle_out_x = start_x;
+        let handle_out_y = body_y + 4.0;
+        push_handle_circle(
+            instances,
+            handle_out_x,
+            handle_out_y,
+            5.5,
+            handle_fill_hover,
+            handle_border_color,
+        );
 
-            let handle_curve_x = start_x + fade.out_curve_x * out_px;
-            let handle_curve_y = body_y + body_h - fade.out_curve_y * body_h;
-            push_handle_circle(instances, handle_curve_x, handle_curve_y, 5.0, handle_fill_hover, handle_border_color);
-        } else {
-            if is_hovered(FadeHandleKind::FadeOutLen) {
-                push_handle_circle(instances, body_x + body_w - 4.0, body_y + 4.0, 4.0, handle_fill_hover, handle_border_color);
-            }
+        let handle_curve_x = start_x + fade.out_curve_x * out_px;
+        let handle_curve_y = body_y + body_h - fade.out_curve_y * body_h;
+        push_handle_circle(
+            instances,
+            handle_curve_x,
+            handle_curve_y,
+            5.0,
+            handle_fill_hover,
+            handle_border_color,
+        );
+    } else {
+        if is_hovered(FadeHandleKind::FadeOutLen) {
+            push_handle_circle(
+                instances,
+                body_x + body_w - 4.0,
+                body_y + 4.0,
+                4.0,
+                handle_fill_hover,
+                handle_border_color,
+            );
         }
+    }
 
-
-        // ========================================================================
-        // 3. GAIN / VOLUME — Área no topo do corpo (abaixo do header)
+    // ========================================================================
+    // 3. GAIN / VOLUME — Área no topo do corpo (abaixo do header)
     // ========================================================================
     // Área de ganho: faixa de 14px no topo do corpo do clip.
     // Sempre visível com alpha sutil; no hover fica mais opaca.
@@ -516,7 +565,11 @@ pub fn handle_position(
     match kind {
         FadeHandleKind::FadeInLen => {
             let in_px = (fade.in_len * px_per_beat).min(body_w).max(0.0);
-            let x = if in_px > 1.0 { body_x + in_px } else { body_x + 4.0 };
+            let x = if in_px > 1.0 {
+                body_x + in_px
+            } else {
+                body_x + 4.0
+            };
             Some((x, body_y + 4.0))
         }
         FadeHandleKind::FadeInCurve => {
@@ -531,7 +584,11 @@ pub fn handle_position(
         }
         FadeHandleKind::FadeOutLen => {
             let out_px = (fade.out_len * px_per_beat).min(body_w).max(0.0);
-            let x = if out_px > 1.0 { body_x + body_w - out_px } else { body_x + body_w - 4.0 };
+            let x = if out_px > 1.0 {
+                body_x + body_w - out_px
+            } else {
+                body_x + body_w - 4.0
+            };
             Some((x, body_y + 4.0))
         }
         FadeHandleKind::FadeOutCurve => {
@@ -588,8 +645,10 @@ pub fn hit_test_clip_handles(
     // Handle de ganho/volume — área retangular no topo do corpo
     let gain_area_h = 14.0;
     let gain_area_y = body_y;
-    if cursor.0 >= body_x && cursor.0 <= body_x + body_w
-        && cursor.1 >= gain_area_y && cursor.1 <= gain_area_y + gain_area_h
+    if cursor.0 >= body_x
+        && cursor.0 <= body_x + body_w
+        && cursor.1 >= gain_area_y
+        && cursor.1 <= gain_area_y + gain_area_h
     {
         return Some(FadeHandleKind::GainLevel);
     }

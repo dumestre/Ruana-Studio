@@ -1,11 +1,10 @@
-use std::sync::{Mutex, OnceLock};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use windows_sys::Win32::Foundation::{HINSTANCE, HWND};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    HCURSOR, IMAGE_CURSOR, LR_DEFAULTSIZE, LR_LOADFROMFILE, LoadImageW, SetCursor, LoadCursorW,
-    IDC_ARROW, IDC_SIZENS,
-    SetClassLongPtrW, GCLP_HCURSOR, CreateCursor,
+    CreateCursor, GCLP_HCURSOR, HCURSOR, IDC_ARROW, IDC_SIZENS, IMAGE_CURSOR, LR_DEFAULTSIZE,
+    LR_LOADFROMFILE, LoadCursorW, LoadImageW, SetClassLongPtrW, SetCursor,
 };
 
 // Wrapper para HWND que implementa Send + Sync (HWND é apenas um ponteiro opaco).
@@ -141,7 +140,11 @@ impl ToolManager {
 
     fn apply_cursor(&self) {
         if let Some(hwnd) = self.hwnd {
-            let map = if self.dark_mode { &self.dark_cursors } else { &self.cursors };
+            let map = if self.dark_mode {
+                &self.dark_cursors
+            } else {
+                &self.cursors
+            };
             if let Some(handle) = map.get(&self.current_tool) {
                 // Define o cursor na CLASSE da janela (GCLP_HCURSOR) — persistente,
                 // evita o flash do cursor do SO entre WM_SETCURSOR.
@@ -149,13 +152,21 @@ impl ToolManager {
                     SetClassLongPtrW(hwnd.0, GCLP_HCURSOR, handle.hcursor as isize);
                 }
                 // Também força imediato para a janela atual.
-                unsafe { SetCursor(handle.hcursor); }
+                unsafe {
+                    SetCursor(handle.hcursor);
+                }
             }
         } else {
             // Fallback sem HWND: apenas SetCursor (pode piscar).
-            let map = if self.dark_mode { &self.dark_cursors } else { &self.cursors };
+            let map = if self.dark_mode {
+                &self.dark_cursors
+            } else {
+                &self.cursors
+            };
             if let Some(handle) = map.get(&self.current_tool) {
-                unsafe { SetCursor(handle.hcursor); }
+                unsafe {
+                    SetCursor(handle.hcursor);
+                }
             }
         }
     }
@@ -175,14 +186,17 @@ impl ToolManager {
                 SetCursor(hcursor);
             }
         } else {
-            unsafe { SetCursor(hcursor); }
+            unsafe {
+                SetCursor(hcursor);
+            }
         }
     }
 
     /// Mostra o cursor de resize vertical (SizeNS) ou volta ao cursor da ferramenta.
     pub fn set_vresize_override(&mut self, active: bool) {
         if active {
-            let size_ns = unsafe { LoadCursorW(core::ptr::null_mut(), IDC_SIZENS as usize as *const u16) };
+            let size_ns =
+                unsafe { LoadCursorW(core::ptr::null_mut(), IDC_SIZENS as usize as *const u16) };
             if !size_ns.is_null() {
                 self.apply_override_cursor(size_ns);
                 return;
@@ -194,7 +208,11 @@ impl ToolManager {
     /// Mostra o cursor de ganho (area amarela do fade) ou volta ao cursor da ferramenta.
     pub fn set_gain_override(&mut self, active: bool) {
         if active {
-            let handle = if self.dark_mode { self.gain_dark_cursor } else { self.gain_cursor };
+            let handle = if self.dark_mode {
+                self.gain_dark_cursor
+            } else {
+                self.gain_cursor
+            };
             if let Some(handle) = handle {
                 self.apply_override_cursor(handle.hcursor);
                 return;
@@ -206,7 +224,11 @@ impl ToolManager {
     /// Mostra o cursor de mão (handles de fade) ou volta ao cursor da ferramenta.
     pub fn set_hand_override(&mut self, active: bool) {
         if active {
-            let handle = if self.dark_mode { self.hand_dark_cursor } else { self.hand_cursor };
+            let handle = if self.dark_mode {
+                self.hand_dark_cursor
+            } else {
+                self.hand_cursor
+            };
             if let Some(handle) = handle {
                 self.apply_override_cursor(handle.hcursor);
                 return;
@@ -274,8 +296,12 @@ impl ToolManager {
         let candidates = [
             exe_dir.join("cursors"),
             exe_dir.join("../cursors"),
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("cursors"),
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("timeline-render/cursors"),
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("cursors"),
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("timeline-render/cursors"),
         ];
 
         for cand in &candidates {
@@ -290,15 +316,21 @@ impl ToolManager {
             }
         }
 
-        eprintln!("[tool] cursor directory not found, using {}", exe_dir.join("cursors").display());
+        eprintln!(
+            "[tool] cursor directory not found, using {}",
+            exe_dir.join("cursors").display()
+        );
         Ok(exe_dir.join("cursors"))
     }
 
     #[allow(dead_code)]
     pub fn reset_to_default(&self) {
-        let default = unsafe { LoadCursorW(core::ptr::null_mut(), IDC_ARROW as usize as *const u16) };
+        let default =
+            unsafe { LoadCursorW(core::ptr::null_mut(), IDC_ARROW as usize as *const u16) };
         if !default.is_null() {
-            unsafe { SetCursor(default); }
+            unsafe {
+                SetCursor(default);
+            }
         }
     }
 
@@ -363,9 +395,15 @@ pub fn set_hwnd(hwnd: HWND) {
 pub fn set_cursor_override(tool: Tool) {
     if let Some(guard) = get_tool_manager() {
         if let Some(mgr) = guard.as_ref() {
-            let map = if mgr.dark_mode { &mgr.dark_cursors } else { &mgr.cursors };
+            let map = if mgr.dark_mode {
+                &mgr.dark_cursors
+            } else {
+                &mgr.cursors
+            };
             if let Some(handle) = map.get(&tool) {
-                unsafe { SetCursor(handle.hcursor); }
+                unsafe {
+                    SetCursor(handle.hcursor);
+                }
             }
         }
     }

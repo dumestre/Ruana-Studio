@@ -12,25 +12,16 @@ pub mod tools;
 pub mod waveform;
 
 pub use app::App;
-pub use app::window::run_docked_window;
-pub use app::window::run_native_window;
 pub use app::window::DockSpec;
 pub use app::window::WindowCommand;
+pub use app::window::run_docked_window;
+pub use app::window::run_native_window;
 
 // Re-exports usados pelos submódulos `clips`/`fades` e por código externo
 // que consuma a biblioteca.
 pub use app::render::{
-    build_text_instances,
-    build_text_instances_font,
-    darker,
-    get_font,
-    get_regular_font,
-    palette,
-    rgba,
-    rgba_alpha,
-    srgb_to_linear,
-    OrthoCamera,
-    RectInstance,
+    OrthoCamera, RectInstance, build_text_instances, build_text_instances_font, darker, get_font,
+    get_regular_font, palette, rgba, rgba_alpha, srgb_to_linear,
 };
 
 /// Ponto de entrada do binário: cria a `EventLoop` e roda o handler.

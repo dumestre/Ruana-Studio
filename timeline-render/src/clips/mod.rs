@@ -11,6 +11,6 @@ mod data;
 mod interaction;
 mod render;
 
-pub use data::{clip_rect, ClipDemo, ClipMetrics};
+pub use data::{ClipDemo, ClipMetrics, clip_rect};
 pub use interaction::{ClipInteraction, DrawToolState};
 pub use render::build_clip_instances;

@@ -5,10 +5,10 @@ use ab_glyph::{Font, ScaleFont};
 
 use wgpu::util::DeviceExt;
 
+use crate::App;
 use crate::clips;
 use crate::fades;
-use crate::tools::{current_tool, Tool};
-use crate::App;
+use crate::tools::{Tool, current_tool};
 
 // Paleta e tipo ----------------------------------------------------------------
 
@@ -17,72 +17,127 @@ pub mod palette {
 
     // Theme.base — cor usada para o grid da régua e da timeline.
     pub const BASE: [Rgb; 7] = [
-        (0x31, 0x31, 0x31), (0x16, 0x1A, 0x21), (0x19, 0x17, 0x22),
-        (0x14, 0x16, 0x0E), (0x21, 0x1A, 0x12), (0x0F, 0x1E, 0x21),
+        (0x31, 0x31, 0x31),
+        (0x16, 0x1A, 0x21),
+        (0x19, 0x17, 0x22),
+        (0x14, 0x16, 0x0E),
+        (0x21, 0x1A, 0x12),
+        (0x0F, 0x1E, 0x21),
         (0x64, 0x64, 0x64),
     ];
 
     // Theme.accent — seleção/clips selecionados.
     pub const ACCENT: [Rgb; 7] = [
-        (0x00, 0xC8, 0x53), (0x4F, 0xA8, 0xFF), (0xB8, 0x5C, 0xFF),
-        (0xA8, 0xFF, 0x00), (0xFF, 0x9F, 0x43), (0x2E, 0xC4, 0xB6),
+        (0x00, 0xC8, 0x53),
+        (0x4F, 0xA8, 0xFF),
+        (0xB8, 0x5C, 0xFF),
+        (0xA8, 0xFF, 0x00),
+        (0xFF, 0x9F, 0x43),
+        (0x2E, 0xC4, 0xB6),
         (0x00, 0xC8, 0x53),
     ];
 
     pub const SURFACE_HIGH: [Rgb; 7] = [
-        (0x55, 0x55, 0x55), (0x26, 0x30, 0x3D), (0x2D, 0x27, 0x40),
-        (0x26, 0x2A, 0x1D), (0x36, 0x2A, 0x1B), (0x1E, 0x30, 0x35),
+        (0x55, 0x55, 0x55),
+        (0x26, 0x30, 0x3D),
+        (0x2D, 0x27, 0x40),
+        (0x26, 0x2A, 0x1D),
+        (0x36, 0x2A, 0x1B),
+        (0x1E, 0x30, 0x35),
         (0x91, 0x91, 0x91),
     ];
     pub const SURFACE_STEP: [Rgb; 7] = [
-        (0x42, 0x42, 0x42), (0x23, 0x2D, 0x38), (0x27, 0x23, 0x34),
-        (0x20, 0x23, 0x1A), (0x30, 0x26, 0x1F), (0x19, 0x2C, 0x31),
+        (0x42, 0x42, 0x42),
+        (0x23, 0x2D, 0x38),
+        (0x27, 0x23, 0x34),
+        (0x20, 0x23, 0x1A),
+        (0x30, 0x26, 0x1F),
+        (0x19, 0x2C, 0x31),
         (0x7A, 0x7A, 0x7A),
     ];
     pub const GRID_LINE: [Rgb; 7] = [
-        (0x75, 0x75, 0x75), (0x4A, 0x5A, 0x70), (0x4A, 0x44, 0x66),
-        (0x4A, 0x4D, 0x3A), (0x5A, 0x4E, 0x3A), (0x3A, 0x5C, 0x66),
+        (0x75, 0x75, 0x75),
+        (0x4A, 0x5A, 0x70),
+        (0x4A, 0x44, 0x66),
+        (0x4A, 0x4D, 0x3A),
+        (0x5A, 0x4E, 0x3A),
+        (0x3A, 0x5C, 0x66),
         (0xD6, 0xD6, 0xD6),
     ];
     pub const GRID_SUB: [Rgb; 7] = [
-        (0x45, 0x45, 0x45), (0x2A, 0x36, 0x45), (0x2F, 0x2C, 0x42),
-        (0x2A, 0x2D, 0x24), (0x3A, 0x30, 0x28), (0x21, 0x36, 0x3C),
+        (0x45, 0x45, 0x45),
+        (0x2A, 0x36, 0x45),
+        (0x2F, 0x2C, 0x42),
+        (0x2A, 0x2D, 0x24),
+        (0x3A, 0x30, 0x28),
+        (0x21, 0x36, 0x3C),
         (0xEF, 0xEF, 0xEF),
     ];
     pub const TIMELINE_BG: [Rgb; 7] = [
-        (0x69, 0x69, 0x69), (0x1E, 0x2C, 0x35), (0x1F, 0x1B, 0x28),
-        (0x18, 0x1B, 0x11), (0x25, 0x21, 0x19), (0x12, 0x26, 0x28),
+        (0x69, 0x69, 0x69),
+        (0x1E, 0x2C, 0x35),
+        (0x1F, 0x1B, 0x28),
+        (0x18, 0x1B, 0x11),
+        (0x25, 0x21, 0x19),
+        (0x12, 0x26, 0x28),
         (0x79, 0x79, 0x79),
     ];
     pub const CLIP_PALETTE: [Rgb; 20] = [
-        (0x6F, 0xA8, 0x6B), (0x4F, 0x8A, 0xE0), (0xE0, 0xA9, 0x4F),
-        (0xE0, 0x5E, 0x5E), (0xA0, 0x60, 0xD8), (0xE0, 0x5E, 0xAA),
-        (0x3E, 0xC7, 0xB0), (0xC0, 0xC0, 0x50), (0xE0, 0x7A, 0x3E),
-        (0x8F, 0xD1, 0x4F), (0x3F, 0xA3, 0x4D), (0x35, 0xB5, 0xE5),
-        (0x5A, 0x8F, 0xE0), (0x55, 0x60, 0xD8), (0x9B, 0x5C, 0xE0),
-        (0xD8, 0x4F, 0xB2), (0xE0, 0x4F, 0x6F), (0xA8, 0x74, 0x4A),
-        (0xD8, 0xC0, 0x4F), (0x7A, 0x93, 0xA8),
+        (0x6F, 0xA8, 0x6B),
+        (0x4F, 0x8A, 0xE0),
+        (0xE0, 0xA9, 0x4F),
+        (0xE0, 0x5E, 0x5E),
+        (0xA0, 0x60, 0xD8),
+        (0xE0, 0x5E, 0xAA),
+        (0x3E, 0xC7, 0xB0),
+        (0xC0, 0xC0, 0x50),
+        (0xE0, 0x7A, 0x3E),
+        (0x8F, 0xD1, 0x4F),
+        (0x3F, 0xA3, 0x4D),
+        (0x35, 0xB5, 0xE5),
+        (0x5A, 0x8F, 0xE0),
+        (0x55, 0x60, 0xD8),
+        (0x9B, 0x5C, 0xE0),
+        (0xD8, 0x4F, 0xB2),
+        (0xE0, 0x4F, 0x6F),
+        (0xA8, 0x74, 0x4A),
+        (0xD8, 0xC0, 0x4F),
+        (0x7A, 0x93, 0xA8),
     ];
     pub const CLIP_MIDI_DEFAULT: [Rgb; 7] = [
-        (0x6F, 0xA8, 0x6B), (0x6F, 0xA8, 0x6B), (0x6F, 0xA8, 0x6B),
-        (0x8F, 0xC1, 0x4F), (0x8F, 0xAA, 0x6B), (0x6F, 0xA8, 0x6B),
+        (0x6F, 0xA8, 0x6B),
+        (0x6F, 0xA8, 0x6B),
+        (0x6F, 0xA8, 0x6B),
+        (0x8F, 0xC1, 0x4F),
+        (0x8F, 0xAA, 0x6B),
+        (0x6F, 0xA8, 0x6B),
         (0x52, 0xBA, 0x46),
     ];
     pub const CLIP_AUDIO_DEFAULT: Rgb = (0x00, 0xC8, 0x53);
     pub const TEXT_PRIMARY: [Rgb; 7] = [
-        (0xE0, 0xE0, 0xE0), (0xE2, 0xE6, 0xEE), (0xE0, 0xDA, 0xF0),
-        (0xD5, 0xE8, 0xB0), (0xE8, 0xD8, 0xC0), (0xC8, 0xE8, 0xE0),
+        (0xE0, 0xE0, 0xE0),
+        (0xE2, 0xE6, 0xEE),
+        (0xE0, 0xDA, 0xF0),
+        (0xD5, 0xE8, 0xB0),
+        (0xE8, 0xD8, 0xC0),
+        (0xC8, 0xE8, 0xE0),
         (0x17, 0x17, 0x17),
     ];
     pub const TEXT_DIM: [Rgb; 7] = [
-        (0x9A, 0x9A, 0x9A), (0x84, 0x9A, 0xB5), (0x8F, 0x8A, 0xB0),
-        (0x7A, 0x85, 0x9A), (0x9A, 0x94, 0x82), (0x82, 0xC2, 0x92),
+        (0x9A, 0x9A, 0x9A),
+        (0x84, 0x9A, 0xB5),
+        (0x8F, 0x8A, 0xB0),
+        (0x7A, 0x85, 0x9A),
+        (0x9A, 0x94, 0x82),
+        (0x82, 0xC2, 0x92),
         (0x5A, 0x5A, 0x5A),
     ];
     pub const PLAYHEAD_COLOR: Rgb = (0xDC, 0x14, 0x3C);
 }
 
-pub fn rgba((r, g, b): palette::Rgb, a: u8) -> [u8; 4] { [r, g, b, a] }
+pub fn rgba((r, g, b): palette::Rgb, a: u8) -> [u8; 4] {
+    [r, g, b, a]
+}
 
 pub fn darker((r, g, b): palette::Rgb, amount: f32) -> palette::Rgb {
     let f = (1.0 - amount).max(0.0);
@@ -156,7 +211,8 @@ pub fn build_text_instances_font(
 
     // First pass: measure total width for centering
     let sf = font.as_scaled(px_scale);
-    let total_width: f32 = text.chars()
+    let total_width: f32 = text
+        .chars()
         .filter_map(|ch| {
             let gid = font.glyph_id(ch);
             Some(sf.h_advance(gid))
@@ -169,10 +225,9 @@ pub fn build_text_instances_font(
         let gid = font.glyph_id(ch);
         let advance = sf.h_advance(gid);
 
-        let glyph = font.glyph_id(ch).with_scale_and_position(
-            px_scale,
-            ab_glyph::point(pen_x, y + sf.ascent() - 2.0),
-        );
+        let glyph = font
+            .glyph_id(ch)
+            .with_scale_and_position(px_scale, ab_glyph::point(pen_x, y + sf.ascent() - 2.0));
 
         if let Some(outlined) = font.outline_glyph(glyph) {
             let b = outlined.px_bounds();
@@ -220,13 +275,18 @@ impl RectInstance {
     fn to_f32(self) -> [f32; 13] {
         let [r, g, b, a] = self.color;
         [
-            self.x, self.y, self.w, self.h,
+            self.x,
+            self.y,
+            self.w,
+            self.h,
             srgb_to_linear(r as f32 / 255.0),
             srgb_to_linear(g as f32 / 255.0),
             srgb_to_linear(b as f32 / 255.0),
             a as f32 / 255.0,
-            self.wave_offset as f32, self.wave_count as f32,
-            self.clip_w, self.clip_h,
+            self.wave_offset as f32,
+            self.wave_count as f32,
+            self.clip_w,
+            self.clip_h,
             self.radius,
         ]
     }
@@ -248,10 +308,22 @@ impl OrthoCamera {
         let hw = (self.viewport_w / 2.0).max(1.0);
         let hh = (self.viewport_h / 2.0).max(1.0);
         [
-            1.0 / hw, 0.0, 0.0, 0.0,
-            0.0, -1.0 / hh, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            -sx / hw - 1.0, 1.0 + sy / hh, 0.0, 1.0,
+            1.0 / hw,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0 / hh,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            -sx / hw - 1.0,
+            1.0 + sy / hh,
+            0.0,
+            1.0,
         ]
     }
 }
@@ -282,10 +354,16 @@ impl App {
 
         // Fundo geral - cobre desde a régua até o fim da timeline (não o piano roll)
         instances.push(RectInstance {
-            x: 0.0, y: self.ruler_px,
-            w: width, h: (timeline_bottom - self.ruler_px).max(0.0),
+            x: 0.0,
+            y: self.ruler_px,
+            w: width,
+            h: (timeline_bottom - self.ruler_px).max(0.0),
             color: rgba(palette::TIMELINE_BG[t], 255),
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
         });
 
         // Régua — com listras alternadas (igualdade das faixas/tracks)
@@ -296,17 +374,24 @@ impl App {
             let seg_x = (seg as f32 * ruler_segment_w) - self.scroll_x;
             let is_odd = seg % 2 == 1;
             let bg_color = if is_odd {
-                palette::SURFACE_HIGH[t]   // ímpar: mais claro
+                palette::SURFACE_HIGH[t] // ímpar: mais claro
             } else {
-                palette::SURFACE_STEP[t]   // par: mais escuro (primeiro)
+                palette::SURFACE_STEP[t] // par: mais escuro (primeiro)
             };
             // Largura do segmento, limitado ao viewport
             let seg_w = ruler_segment_w.min(width - seg_x).max(0.0);
             if seg_w > 0.0 {
                 instances.push(RectInstance {
-                    x: seg_x, y: 0.0, w: seg_w, h: self.ruler_px,
+                    x: seg_x,
+                    y: 0.0,
+                    w: seg_w,
+                    h: self.ruler_px,
                     color: [bg_color.0, bg_color.1, bg_color.2, 255],
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    wave_offset: 0,
+                    wave_count: 0,
+                    clip_w: 0.0,
+                    clip_h: 0.0,
+                    radius: 0.0,
                 });
             }
         }
@@ -316,7 +401,9 @@ impl App {
         let total_bars = ((width + self.scroll_x) / px_per_bar).ceil() as usize + 1;
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
-            if bx > width + px_per_bar || bx < -px_per_bar { continue; }
+            if bx > width + px_per_bar || bx < -px_per_bar {
+                continue;
+            }
             let is_odd_col = i % 2 == 1;
             let bg = if is_odd_col {
                 palette::SURFACE_HIGH[t]
@@ -327,9 +414,16 @@ impl App {
             let bh = (timeline_bottom - self.ruler_px + self.scroll_y).max(0.0);
             if bw > 0.0 && bh > 0.0 {
                 instances.push(RectInstance {
-                    x: bx, y: self.ruler_px - self.scroll_y, w: bw, h: bh,
+                    x: bx,
+                    y: self.ruler_px - self.scroll_y,
+                    w: bw,
+                    h: bh,
                     color: [bg.0, bg.1, bg.2, 255],
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    wave_offset: 0,
+                    wave_count: 0,
+                    clip_w: 0.0,
+                    clip_h: 0.0,
+                    radius: 0.0,
                 });
             }
         }
@@ -340,12 +434,26 @@ impl App {
         let body_h = (height - self.ruler_px + self.scroll_y).max(0.0);
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
-            if bx > width || bx < -px_per_bar { continue; }
+            if bx > width || bx < -px_per_bar {
+                continue;
+            }
             let bar_a = if i % 2 == 1 { 255 } else { 140 };
             instances.push(RectInstance {
-                x: bx, y: body_top, w: 1.0, h: body_h,
-                color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, bar_a],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                x: bx,
+                y: body_top,
+                w: 1.0,
+                h: body_h,
+                color: [
+                    palette::BASE[t].0,
+                    palette::BASE[t].1,
+                    palette::BASE[t].2,
+                    bar_a,
+                ],
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
             });
 
             // Subdivisões como frações uniformes do compasso (px_per_bar), da
@@ -356,11 +464,25 @@ impl App {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs <= 0.0 || xs > width {
+                        continue;
+                    }
                     instances.push(RectInstance {
-                        x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 70],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: xs,
+                        y: body_top,
+                        w: 1.0,
+                        h: body_h,
+                        color: [
+                            palette::BASE[t].0,
+                            palette::BASE[t].1,
+                            palette::BASE[t].2,
+                            70,
+                        ],
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
@@ -370,11 +492,25 @@ impl App {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs <= 0.0 || xs > width {
+                        continue;
+                    }
                     instances.push(RectInstance {
-                        x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 90],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: xs,
+                        y: body_top,
+                        w: 1.0,
+                        h: body_h,
+                        color: [
+                            palette::BASE[t].0,
+                            palette::BASE[t].1,
+                            palette::BASE[t].2,
+                            90,
+                        ],
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
@@ -384,11 +520,25 @@ impl App {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs <= 0.0 || xs > width {
+                        continue;
+                    }
                     instances.push(RectInstance {
-                        x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 110],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: xs,
+                        y: body_top,
+                        w: 1.0,
+                        h: body_h,
+                        color: [
+                            palette::BASE[t].0,
+                            palette::BASE[t].1,
+                            palette::BASE[t].2,
+                            110,
+                        ],
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
@@ -398,11 +548,25 @@ impl App {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs <= 0.0 || xs > width {
+                        continue;
+                    }
                     instances.push(RectInstance {
-                        x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 130],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: xs,
+                        y: body_top,
+                        w: 1.0,
+                        h: body_h,
+                        color: [
+                            palette::BASE[t].0,
+                            palette::BASE[t].1,
+                            palette::BASE[t].2,
+                            130,
+                        ],
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
@@ -412,11 +576,25 @@ impl App {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let xs = bx + m as f32 * step;
-                    if xs <= 0.0 || xs > width { continue; }
+                    if xs <= 0.0 || xs > width {
+                        continue;
+                    }
                     instances.push(RectInstance {
-                        x: xs, y: body_top, w: 1.0, h: body_h,
-                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 150],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: xs,
+                        y: body_top,
+                        w: 1.0,
+                        h: body_h,
+                        color: [
+                            palette::BASE[t].0,
+                            palette::BASE[t].1,
+                            palette::BASE[t].2,
+                            150,
+                        ],
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
@@ -425,16 +603,30 @@ impl App {
         // Separadores horizontais entre as tracks (row separators). Francem a
         // largura toda do corpo e rolam verticalmente junto com scroll_y.
         let view_bottom = timeline_bottom;
-        let max_track = self.clips.iter().map(|c| c.track_index as i32).max().unwrap_or(-1);
+        let max_track = self
+            .clips
+            .iter()
+            .map(|c| c.track_index as i32)
+            .max()
+            .unwrap_or(-1);
         // FICA: sempre ao menos 1 track visível (uma track padrão).
         let track_count = ((max_track + 1).max(1)) as usize;
         for tr in 0..track_count {
             let y = self.ruler_px + (tr as f32 + 1.0) * row_height - self.scroll_y;
-            if y < self.ruler_px || y > view_bottom { continue; }
+            if y < self.ruler_px || y > view_bottom {
+                continue;
+            }
             instances.push(RectInstance {
-                x: 0.0, y, w: width, h: 1.0,
+                x: 0.0,
+                y,
+                w: width,
+                h: 1.0,
                 color: rgba(palette::BASE[t], 150),
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
             });
         }
 
@@ -464,7 +656,11 @@ impl App {
             let row_height = 64.0 * self.zoom_y;
             let x = preview.beat * self.px_per_beat - self.scroll_x;
             let y = self.ruler_px + preview.track as f32 * row_height - self.scroll_y;
-            let w = if preview.len_beats > 0.0 { preview.len_beats * self.px_per_beat } else { 4.0 * self.px_per_beat };
+            let w = if preview.len_beats > 0.0 {
+                preview.len_beats * self.px_per_beat
+            } else {
+                4.0 * self.px_per_beat
+            };
             let h = row_height;
             let col = rgba(palette::ACCENT[t], 80);
             instances.push(RectInstance {
@@ -516,9 +712,16 @@ impl App {
                         // Cor da waveform (#262626)
                         let col = (0x26, 0x26, 0x26);
                         instances.push(RectInstance {
-                            x: edge_x - 2.0, y: cy, w: 4.0, h: ch,
+                            x: edge_x - 2.0,
+                            y: cy,
+                            w: 4.0,
+                            h: ch,
                             color: [col.0, col.1, col.2, 200],
-                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                            wave_offset: 0,
+                            wave_count: 0,
+                            clip_w: 0.0,
+                            clip_h: 0.0,
+                            radius: 0.0,
                         });
                     }
                 }
@@ -530,7 +733,9 @@ impl App {
         // Fundos alternados dos compassos (par/ímpar), igual ao corpo.
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
-            if bx > width + px_per_bar || bx < -px_per_bar { continue; }
+            if bx > width + px_per_bar || bx < -px_per_bar {
+                continue;
+            }
             let bg = if i % 2 == 1 {
                 palette::SURFACE_HIGH[t]
             } else {
@@ -542,37 +747,78 @@ impl App {
                 let draw_w = (bx + bw).min(width) - draw_x;
                 if draw_w > 0.0 {
                     instances.push(RectInstance {
-                        x: draw_x, y: 0.0, w: draw_w, h: ruler_h,
+                        x: draw_x,
+                        y: 0.0,
+                        w: draw_w,
+                        h: ruler_h,
                         color: [bg.0, bg.1, bg.2, 255],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
         }
         for i in 0..total_bars {
             let bx = i as f32 * px_per_bar - self.scroll_x;
-            if bx > width || bx < -px_per_bar { continue; }
+            if bx > width || bx < -px_per_bar {
+                continue;
+            }
             // Número do compasso
             let ruler_text_color = rgba(palette::TEXT_PRIMARY[t], 220);
             if bx > -px_per_bar * 0.5 && bx < width {
-                instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, 3.0, ruler_text_color, 1.0));
+                instances.extend(build_text_instances(
+                    &format!("{}", i + 1),
+                    bx + 4.0,
+                    3.0,
+                    ruler_text_color,
+                    1.0,
+                ));
             }
             // Linha vertical do compasso (1px, altura cheia da régua)
             instances.push(RectInstance {
-                x: bx, y: 0.0, w: 1.0, h: ruler_h,
-                color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                x: bx,
+                y: 0.0,
+                w: 1.0,
+                h: ruler_h,
+                color: [
+                    palette::BASE[t].0,
+                    palette::BASE[t].1,
+                    palette::BASE[t].2,
+                    255,
+                ],
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
             });
             let beat_px = px_per_bar / 4.0;
             for k in 0..4 {
                 let x = bx + k as f32 * beat_px;
-                if x <= 0.0 || x > width { continue; }
+                if x <= 0.0 || x > width {
+                    continue;
+                }
                 // Linhas de batida (quando px_per_bar >= 40)
                 if px_per_bar >= 40.0 {
                     instances.push(RectInstance {
-                        x, y: 2.0, w: 1.0, h: ruler_h - 2.0,
-                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 150],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x,
+                        y: 2.0,
+                        w: 1.0,
+                        h: ruler_h - 2.0,
+                        color: [
+                            palette::BASE[t].0,
+                            palette::BASE[t].1,
+                            palette::BASE[t].2,
+                            150,
+                        ],
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
@@ -583,11 +829,25 @@ impl App {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let x8 = bx + m as f32 * step;
-                    if x8 <= 0.0 || x8 > width { continue; }
+                    if x8 <= 0.0 || x8 > width {
+                        continue;
+                    }
                     instances.push(RectInstance {
-                        x: x8, y: ruler_h - 8.0, w: 1.0, h: 8.0,
-                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 130],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: x8,
+                        y: ruler_h - 8.0,
+                        w: 1.0,
+                        h: 8.0,
+                        color: [
+                            palette::BASE[t].0,
+                            palette::BASE[t].1,
+                            palette::BASE[t].2,
+                            130,
+                        ],
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
@@ -597,47 +857,99 @@ impl App {
                 let step = px_per_bar / n as f32;
                 for m in 1..n {
                     let x16 = bx + m as f32 * step;
-                    if x16 <= 0.0 || x16 > width { continue; }
+                    if x16 <= 0.0 || x16 > width {
+                        continue;
+                    }
                     instances.push(RectInstance {
-                        x: x16, y: ruler_h - 6.0, w: 1.0, h: 6.0,
-                        color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 110],
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: x16,
+                        y: ruler_h - 6.0,
+                        w: 1.0,
+                        h: 6.0,
+                        color: [
+                            palette::BASE[t].0,
+                            palette::BASE[t].1,
+                            palette::BASE[t].2,
+                            110,
+                        ],
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
         }
         // Linha inferior da régua (borda entre a régua e a timeline)
         instances.push(RectInstance {
-            x: 0.0, y: ruler_h - 1.0, w: width, h: 1.0,
-            color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            x: 0.0,
+            y: ruler_h - 1.0,
+            w: width,
+            h: 1.0,
+            color: [
+                palette::BASE[t].0,
+                palette::BASE[t].1,
+                palette::BASE[t].2,
+                255,
+            ],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
         });
 
         // Indicador de follow playhead (canto superior direito)
         if self.follow_playhead {
             let px = width - 120.0;
             let py = 2.0;
-            instances.extend(build_text_instances("FOLLOW", px, py, rgba(palette::ACCENT[t], 255), 1.0));
+            instances.extend(build_text_instances(
+                "FOLLOW",
+                px,
+                py,
+                rgba(palette::ACCENT[t], 255),
+                1.0,
+            ));
         }
 
         // Playhead — sempre visível; para de avançar quando pausado.
         let bpm = self.bpm;
         let pixels_per_second = self.px_per_beat * bpm / 60.0;
         let head_x = self.transport_seconds * pixels_per_second - self.scroll_x;
-            instances.push(RectInstance {
-                x: head_x - 1.0, y: 1.0,
-                w: 2.0, h: timeline_bottom - 1.0,
-                color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 255],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
-                radius: 0.0,
-            });
-            instances.push(RectInstance {
-                x: head_x - 6.0, y: 1.0,
-                w: 12.0, h: 12.0,
-                color: [palette::PLAYHEAD_COLOR.0, palette::PLAYHEAD_COLOR.1, palette::PLAYHEAD_COLOR.2, 255],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0,
-                radius: 6.0,
-            });
+        instances.push(RectInstance {
+            x: head_x - 1.0,
+            y: 1.0,
+            w: 2.0,
+            h: timeline_bottom - 1.0,
+            color: [
+                palette::PLAYHEAD_COLOR.0,
+                palette::PLAYHEAD_COLOR.1,
+                palette::PLAYHEAD_COLOR.2,
+                255,
+            ],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+        instances.push(RectInstance {
+            x: head_x - 6.0,
+            y: 1.0,
+            w: 12.0,
+            h: 12.0,
+            color: [
+                palette::PLAYHEAD_COLOR.0,
+                palette::PLAYHEAD_COLOR.1,
+                palette::PLAYHEAD_COLOR.2,
+                255,
+            ],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 6.0,
+        });
 
         // Seletor de loop — bordas laterais grossas na régua (alças de arrasto)
         // + centro translúcido descendo por toda a timeline.
@@ -652,36 +964,66 @@ impl App {
             let lw = (ex - sx).max(0.0);
             let bw = 6.0; // grossura das bordas laterais (alças)
             let body_top = self.ruler_px;
-        let body_h = (timeline_bottom - self.ruler_px).max(0.0);
+            let body_h = (timeline_bottom - self.ruler_px).max(0.0);
 
             if lw > 0.0 {
                 // Centro que desce toda a timeline — mais translúcido ainda.
                 instances.push(RectInstance {
-                    x: sx, y: body_top, w: lw, h: body_h,
+                    x: sx,
+                    y: body_top,
+                    w: lw,
+                    h: body_h,
                     color: fill_body,
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    wave_offset: 0,
+                    wave_count: 0,
+                    clip_w: 0.0,
+                    clip_h: 0.0,
+                    radius: 0.0,
                 });
 
                 // Centro na régua — pouco translúcido.
                 if sx + lw > 0.0 && sx < width {
                     instances.push(RectInstance {
-                        x: sx, y: 0.0, w: lw.min(width - sx).max(0.0), h: self.ruler_px,
+                        x: sx,
+                        y: 0.0,
+                        w: lw.min(width - sx).max(0.0),
+                        h: self.ruler_px,
                         color: fill_ruler,
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
 
                 // Bordas laterais grossas NA RÉGUA (alças de arrasto) — opacas.
                 if sx + lw >= -bw && sx <= width {
                     instances.push(RectInstance {
-                        x: sx, y: 0.0, w: bw, h: self.ruler_px, color: border,
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: sx,
+                        y: 0.0,
+                        w: bw,
+                        h: self.ruler_px,
+                        color: border,
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
                 if ex >= 0.0 && ex - bw <= width {
                     instances.push(RectInstance {
-                        x: ex - bw, y: 0.0, w: bw, h: self.ruler_px, color: border,
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: ex - bw,
+                        y: 0.0,
+                        w: bw,
+                        h: self.ruler_px,
+                        color: border,
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
 
@@ -689,14 +1031,30 @@ impl App {
                 // translúcidas que o fill (só a borda).
                 if sx + lw >= -bw && sx <= width {
                     instances.push(RectInstance {
-                        x: sx, y: body_top, w: 2.0, h: body_h, color: border_body,
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: sx,
+                        y: body_top,
+                        w: 2.0,
+                        h: body_h,
+                        color: border_body,
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
                 if ex >= 0.0 && ex - bw <= width {
                     instances.push(RectInstance {
-                        x: ex - 2.0, y: body_top, w: 2.0, h: body_h, color: border_body,
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        x: ex - 2.0,
+                        y: body_top,
+                        w: 2.0,
+                        h: body_h,
+                        color: border_body,
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                 }
             }
@@ -709,10 +1067,16 @@ impl App {
             if cx >= 0.0 && cx <= width {
                 let col = (0x26, 0x26, 0x26);
                 instances.push(RectInstance {
-                    x: cx - 1.0, y: self.ruler_px,
-                    w: 2.0, h: (timeline_bottom - self.ruler_px).max(0.0),
+                    x: cx - 1.0,
+                    y: self.ruler_px,
+                    w: 2.0,
+                    h: (timeline_bottom - self.ruler_px).max(0.0),
                     color: [col.0, col.1, col.2, 180],
-                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                    wave_offset: 0,
+                    wave_count: 0,
+                    clip_w: 0.0,
+                    clip_h: 0.0,
+                    radius: 0.0,
                 });
             }
         }
@@ -727,16 +1091,30 @@ impl App {
 
         // Fundo da time ruler
         instances.push(RectInstance {
-            x: 0.0, y: tr_y, w: width, h: tr_h,
+            x: 0.0,
+            y: tr_y,
+            w: width,
+            h: tr_h,
             color: [tr_bg.0, tr_bg.1, tr_bg.2, 255],
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
         });
 
         // Linha separadora superior da time ruler
         instances.push(RectInstance {
-            x: 0.0, y: tr_y, w: width, h: 1.0,
+            x: 0.0,
+            y: tr_y,
+            w: width,
+            h: 1.0,
             color: [tr_border.0, tr_border.1, tr_border.2, 255],
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
         });
 
         // Time ruler: grid de tempo fixo com marcas major + minor
@@ -744,10 +1122,15 @@ impl App {
         let pixels_per_second = self.px_per_beat * bpm / 60.0;
         if pixels_per_second > 0.0 {
             let px_per_sec = pixels_per_second;
-            let step_seconds: f32 = if px_per_sec < 30.0 { 1.0 }
-                else if px_per_sec < 50.0 { 5.0 }
-                else if px_per_sec < 80.0 { 10.0 }
-                else { 30.0 };
+            let step_seconds: f32 = if px_per_sec < 30.0 {
+                1.0
+            } else if px_per_sec < 50.0 {
+                5.0
+            } else if px_per_sec < 80.0 {
+                10.0
+            } else {
+                30.0
+            };
 
             // Começa do primeiro segundo visível
             let start_sec = (self.scroll_x / pixels_per_second).floor();
@@ -763,11 +1146,21 @@ impl App {
                 while sec <= end_sec {
                     let x = sec * pixels_per_second - self.scroll_x;
                     if x >= -5.0 && x <= width + 5.0 {
-                        if (sec % step_seconds).abs() < 0.01 { sec += minor_step; continue; }
+                        if (sec % step_seconds).abs() < 0.01 {
+                            sec += minor_step;
+                            continue;
+                        }
                         instances.push(RectInstance {
-                            x, y: tr_y + tr_h / 4.0, w: 1.0, h: tr_h / 2.0,
+                            x,
+                            y: tr_y + tr_h / 4.0,
+                            w: 1.0,
+                            h: tr_h / 2.0,
                             color: minor_col,
-                            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                            wave_offset: 0,
+                            wave_count: 0,
+                            clip_w: 0.0,
+                            clip_h: 0.0,
+                            radius: 0.0,
                         });
                     }
                     sec += minor_step;
@@ -781,16 +1174,29 @@ impl App {
                 let x = sec * pixels_per_second - self.scroll_x;
                 if x >= -20.0 && x <= width + 20.0 {
                     instances.push(RectInstance {
-                        x, y: tr_y + 2.0, w: 1.0, h: tr_h - 6.0,
+                        x,
+                        y: tr_y + 2.0,
+                        w: 1.0,
+                        h: tr_h - 6.0,
                         color: major_col,
-                        wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                        wave_offset: 0,
+                        wave_count: 0,
+                        clip_w: 0.0,
+                        clip_h: 0.0,
+                        radius: 0.0,
                     });
                     let total_s = sec as i64;
                     let m = total_s / 60;
                     let s = total_s % 60;
                     let time_str = format!("{}:{:02}", m, s);
                     let text_col = rgba(palette::TEXT_PRIMARY[t], 200);
-                    instances.extend(build_text_instances(&time_str, x + 2.0, tr_y + 8.0, text_col, 1.0));
+                    instances.extend(build_text_instances(
+                        &time_str,
+                        x + 2.0,
+                        tr_y + 8.0,
+                        text_col,
+                        1.0,
+                    ));
                 }
                 sec += step_seconds;
             }
@@ -802,10 +1208,16 @@ impl App {
             let col = palette::PLAYHEAD_COLOR;
             // Linha vertical fina na time ruler
             instances.push(RectInstance {
-                x: head_x - 0.5, y: tr_y,
-                w: 1.0, h: tr_h,
+                x: head_x - 0.5,
+                y: tr_y,
+                w: 1.0,
+                h: tr_h,
                 color: [col.0, col.1, col.2, 120],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
             });
             // Texto do tempo atual (min:sec)
             let total_s = self.transport_seconds as i64;
@@ -813,14 +1225,27 @@ impl App {
             let cur_s = total_s % 60;
             let cur_str = format!("{}:{:02}", cur_m, cur_s);
             let cur_col = rgba(palette::TEXT_PRIMARY[t], 220);
-            instances.extend(build_text_instances(&cur_str, head_x, tr_y + 8.0, cur_col, 1.0));
+            instances.extend(build_text_instances(
+                &cur_str,
+                head_x,
+                tr_y + 8.0,
+                cur_col,
+                1.0,
+            ));
         }
 
         // Borda inferior da time ruler
         instances.push(RectInstance {
-            x: 0.0, y: tr_y + tr_h - 1.0, w: width, h: 1.0,
+            x: 0.0,
+            y: tr_y + tr_h - 1.0,
+            w: width,
+            h: 1.0,
             color: [tr_border.0, tr_border.1, tr_border.2, 255],
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
         });
 
         // ===== Edit toolbar (ferramentas) — entre time_ruler e splitter =====
@@ -832,7 +1257,7 @@ impl App {
         instances
     }
 
-/// Registra todos os passes da cena num command encoder novo (não submetido).
+    /// Registra todos os passes da cena num command encoder novo (não submetido).
     /// Desenha em `view` nas dimensões `width x height`.
     fn record_scene(
         &mut self,
@@ -849,33 +1274,42 @@ impl App {
         let instances = self.build_instances(width, height);
 
         let data: Vec<f32> = instances.iter().flat_map(|i| i.to_f32()).collect();
-        let instance_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("instances"),
-            contents: bytemuck::cast_slice(&data),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let instance_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("instances"),
+                contents: bytemuck::cast_slice(&data),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
-        let uniform_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("uniforms"),
-            contents: bytemuck::cast_slice(&OrthoCamera {
-                scroll_x: 0.0,
-                scroll_y: 0.0,
-                viewport_w: width.max(1.0),
-                viewport_h: height.max(1.0),
-            }.proj()),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let uniform_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("uniforms"),
+                contents: bytemuck::cast_slice(
+                    &OrthoCamera {
+                        scroll_x: 0.0,
+                        scroll_y: 0.0,
+                        viewport_w: width.max(1.0),
+                        viewport_h: height.max(1.0),
+                    }
+                    .proj(),
+                ),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
 
         let wave_bars_data = if self.wave_bars.is_empty() {
             vec![0.0f32, 0.0f32]
         } else {
             self.wave_bars.clone()
         };
-        let wave_bars_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("wave-bars"),
-            contents: bytemuck::cast_slice(&wave_bars_data),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+        let wave_bars_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("wave-bars"),
+                contents: bytemuck::cast_slice(&wave_bars_data),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("bg"),
@@ -901,7 +1335,10 @@ impl App {
                     depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1, g: 0.1, b: 0.12, a: 1.0,
+                            r: 0.1,
+                            g: 0.1,
+                            b: 0.12,
+                            a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -922,11 +1359,13 @@ impl App {
         let icon_instances = self.edit_toolbar_icon_instances(width, height);
         if !icon_instances.is_empty() {
             let icon_data: Vec<f32> = icon_instances.iter().flat_map(|i| i.to_f32()).collect();
-            let icon_instance_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("icon-instances"),
-                contents: bytemuck::cast_slice(&icon_data),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+            let icon_instance_buf =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("icon-instances"),
+                        contents: bytemuck::cast_slice(&icon_data),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
 
             let icon_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("icon-bg"),
@@ -982,7 +1421,8 @@ impl App {
         }
         let Some(surface) = &self.surface else { return };
         let surface_texture = match surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            wgpu::CurrentSurfaceTexture::Success(t)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 if let Some(config) = self.config.as_ref() {
                     surface.configure(&self.device, config);
@@ -1016,9 +1456,10 @@ impl App {
         let bytes_per_row = ((width * 4 + 255) / 256) * 256;
 
         // (Re)cria textura/readback apenas quando o tamanho muda.
-        let recreate = self.offscreen_texture.as_ref().map_or(true, |t| {
-            t.width() != width || t.height() != height
-        });
+        let recreate = self
+            .offscreen_texture
+            .as_ref()
+            .map_or(true, |t| t.width() != width || t.height() != height);
         if recreate {
             let texture = self.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("timeline-offscreen"),
@@ -1079,11 +1520,14 @@ impl App {
         );
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        self.readback_done.store(false, std::sync::atomic::Ordering::Release);
+        self.readback_done
+            .store(false, std::sync::atomic::Ordering::Release);
         let done = self.readback_done.clone();
-        buffer.slice(..).map_async(wgpu::MapMode::Read, move |_res| {
-            done.store(true, std::sync::atomic::Ordering::Release);
-        });
+        buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |_res| {
+                done.store(true, std::sync::atomic::Ordering::Release);
+            });
         self.readback_pending = true;
         true
     }
@@ -1098,7 +1542,10 @@ impl App {
         // Polling não-bloqueante: dispara o callback do map_async (se pronto)
         // e mantém a UI thread livre.
         let _ = self.device.poll(wgpu::PollType::Poll).ok();
-        if !self.readback_done.load(std::sync::atomic::Ordering::Acquire) {
+        if !self
+            .readback_done
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
             return None;
         }
 

@@ -4,7 +4,7 @@
 use daw_core::{Clip as CoreClip, ClipKind, Project};
 use std::path::Path;
 
-use crate::app::{WAVE_PPB, App};
+use crate::app::{App, WAVE_PPB};
 use crate::clips;
 use crate::fades;
 use crate::waveform;
@@ -14,7 +14,9 @@ impl App {
     pub fn build_project(&self) -> Project {
         use daw_core::{MixerChannel, Track, TrackKind};
 
-        let track_count = self.clips.iter()
+        let track_count = self
+            .clips
+            .iter()
             .map(|c| c.track_index)
             .max()
             .map(|m| m + 1)
@@ -37,8 +39,15 @@ impl App {
             let core_clip = CoreClip {
                 id: idx as u64,
                 track_id: clip.track_index as u64,
-                name: clip.name.clone().unwrap_or_else(|| format!("Clip {}", idx + 1)),
-                kind: if clip.is_midi { ClipKind::Midi } else { ClipKind::Audio },
+                name: clip
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Clip {}", idx + 1)),
+                kind: if clip.is_midi {
+                    ClipKind::Midi
+                } else {
+                    ClipKind::Audio
+                },
                 start_beat: clip.beat,
                 length_beats: clip.len,
                 source_start_beats: clip.source_start_beats,
@@ -108,11 +117,13 @@ impl App {
                 len: source_length_beats,
                 is_midi: false,
                 color: 1 + (i % 10),
-                name: Some(Path::new(path)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("Audio")
-                    .to_string()),
+                name: Some(
+                    Path::new(path)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Audio")
+                        .to_string(),
+                ),
                 seam_beat: None,
                 pre_glue_len: None,
                 pre_glue_color: None,
@@ -127,7 +138,9 @@ impl App {
             let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
             clip.wave = match waveform::decode_real_wave(path, n_cols) {
                 Ok(w) => w,
-                Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
+                Err(_) => {
+                    waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64)
+                }
             };
 
             self.clips.push(clip);
@@ -183,11 +196,13 @@ impl App {
                     len: source_length_beats,
                     is_midi: false,
                     color: 0,
-                    name: Some(Path::new(path)
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("Audio")
-                        .to_string()),
+                    name: Some(
+                        Path::new(path)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("Audio")
+                            .to_string(),
+                    ),
                     seam_beat: None,
                     pre_glue_len: None,
                     pre_glue_color: None,
@@ -201,7 +216,9 @@ impl App {
                 let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
                 clip.wave = match waveform::decode_real_wave(path, n_cols) {
                     Ok(w) => w,
-                    Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
+                    Err(_) => {
+                        waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64)
+                    }
                 };
                 // Insere o clip
                 self.clips.push(clip);
@@ -210,7 +227,7 @@ impl App {
                 // Atualiza buffers de waveform
                 self.rebuild_wave_data();
                 self.request_redraw();
-            },
+            }
             Err(e) => {
                 eprintln!("falha ao decodificar {}: {}", path, e);
             }

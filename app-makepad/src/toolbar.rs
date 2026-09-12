@@ -29,22 +29,23 @@ live_design! {
     pub TbHit = <Button> {
         width: Fill, height: Fill,
         text: "",
-        draw_bg+: {
-            color: uniform(#0000),
-            color_hover: uniform(#FFFFFF14),
-            color_down: uniform(#FFFFFF24),
-            color_focus: uniform(#0000),
-            color_disabled: uniform(#0000),
+        draw_bg: {
+            color: #0000,
+            color_hover: #FFFFFF14,
+            color_down: #FFFFFF24,
+            color_focus: #0000,
+            color_disabled: #0000,
+            border_size: 0.0,
             border_radius: 0.0,
         }
         draw_text: { color: #0000 }
     }
 
     // Tile onde o ícone fica assentado (18×18 na maioria).
-    pub TbTile = <RoundedView> {
+    pub TbTile = <View> {
         width: Fill, height: Fill,
         show_bg: true,
-        draw_bg+: { color: uniform(#555555), border_radius: 3.0 }
+        draw_bg: { color: #555555, border_radius: 3.0, border_size: 0.0 }
     }
 
     // Image com tint multiplicativo (para ícones coloridos, ex.: play).
@@ -61,12 +62,13 @@ live_design! {
     // Botão de texto do menubar (File/Edit/New/…).
     TbTextBtn = <Button> {
         height: 20,
-        draw_bg+: {
-            color: uniform(#555555),
-            color_hover: uniform(#666666),
-            color_down: uniform(#474747),
-            color_focus: uniform(#555555),
-            color_disabled: uniform(#555555),
+        draw_bg: {
+            color: #555555,
+            color_hover: #666666,
+            color_down: #474747,
+            color_focus: #555555,
+            color_disabled: #555555,
+            border_size: 0.0,
             border_radius: 3.0,
         }
         draw_text: { color: #E8E8E8, text_style: { font_size: 11.0 } }
@@ -80,7 +82,7 @@ live_design! {
         width: Fill,
         height: 34,
         show_bg: true,
-        draw_bg+: { color: uniform(#313131) }
+        draw_bg: { color: #313131 }
         flow: Right,
         spacing: 10,
         align: { x: 0.0, y: 0.5 },
@@ -118,12 +120,8 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_undo_tile = <TbTile> {}
-                tb_undo_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#00C853), border_radius: 3.0 } }
-                tb_undo_icon = <Icon> {
-                    draw_icon: { svg_file: dep("crate://self/resources/icons/undo.svg") },
-                    icon_walk: { width: 15, height: 15 },
-                    color: #E8E8E8,
-                }
+                tb_undo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
+                tb_undo_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/undo.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
                 tb_undo_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/undo.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
                 tb_undo_hit = <TbHit> {}
             }
@@ -132,9 +130,9 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_redo_tile = <TbTile> {}
-                tb_redo_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#00C853), border_radius: 3.0 } }
+                tb_redo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_redo_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/redo.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
-                tb_redo_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/redo.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
+                tb_redo_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resource/icons/redo.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
                 tb_redo_hit = <TbHit> {}
             }
         }
@@ -148,7 +146,7 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_follow_tile = <TbTile> {}
-                tb_follow_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#00C853), border_radius: 3.0 } }
+                tb_follow_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_follow_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/follow.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
                 tb_follow_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/follow.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
                 tb_follow_hit = <TbHit> {}
@@ -158,7 +156,7 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_snap_tile = <TbTile> {}
-                tb_snap_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#00C853), border_radius: 3.0 } }
+                tb_snap_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_snap_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/snap.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
                 tb_snap_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/snap.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
                 tb_snap_hit = <TbHit> {}
@@ -183,17 +181,28 @@ live_design! {
         tb_transport = <View> {
             flow: Right,
             spacing: 5,
-            tb_pos = <Label> { width: 96, height: 18, text: "01.01.000", draw_text: { color: #00C853, text_style: { font_size: 12.0 }, horizontal_align: Center, vertical_align: Center } }
+            tb_pos = <Label> {
+                width: 96, height: 18,
+                text: "01.01.000",
+                draw_text: {
+                    color: #00C853,
+                    text_style: { font_size: 12.0 },
+                    horizontal_align: Center,
+                    vertical_align: Center,
+                }
+            }
+
             tb_play = <View> {
                 width: 18, height: 18,
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_play_tile = <TbTile> {}
-                tb_play_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#00C853), border_radius: 3.0 } }
+                tb_play_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_play_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/play.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
                 tb_pause_icon = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/pause.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
                 tb_play_hit = <TbHit> {}
             }
+
             tb_stop = <View> {
                 width: 18, height: 18,
                 flow: Overlay,
@@ -207,7 +216,7 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_rec_tile = <TbTile> {}
-                tb_rec_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#DC143C), border_radius: 3.0 } }
+                tb_rec_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
                 tb_rec_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/rec.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
                 tb_rec_hit = <TbHit> {}
             }
@@ -216,7 +225,7 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_loop_tile = <TbTile> {}
-                tb_loop_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#00C853), border_radius: 3.0 } }
+                tb_loop_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_loop_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/loop.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
                 tb_loop_hit = <TbHit> {}
             }
@@ -225,7 +234,7 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_metro_tile = <TbTile> {}
-                tb_metro_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#00C853), border_radius: 3.0 } }
+                tb_metro_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_metro_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/metronome.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
                 tb_metro_hit = <TbHit> {}
             }
@@ -242,24 +251,24 @@ live_design! {
         tb_tools = <View> {
             flow: Right,
             spacing: 2,
-            tb_t0 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t0_tile = <TbTile> {}, tb_t0_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#DC143C), border_radius: 3.0 } }, tb_t0_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/select.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t0_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/select_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t0_hit = <TbHit> {} }
-            tb_t1 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t1_tile = <TbTile> {}, tb_t1_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#DC143C), border_radius: 3.0 } }, tb_t1_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/slice.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t1_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/slice_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t1_hit = <TbHit> {} }
-            tb_t2 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t2_tile = <TbTile> {}, tb_t2_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#DC143C), border_radius: 3.0 } }, tb_t2_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/glue.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t2_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/glue_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t2_hit = <TbHit> {} }
-            tb_t3 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t3_tile = <TbTile> {}, tb_t3_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#DC143C), border_radius: 3.0 } }, tb_t3_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/stretch.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t3_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/stretch_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t3_hit = <TbHit> {} }
-            tb_t4 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t4_tile = <TbTile> {}, tb_t4_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#DC143C), border_radius: 3.0 } }, tb_t4_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/draw.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t4_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/draw_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t4_hit = <TbHit> {} }
-            tb_t5 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t5_tile = <TbTile> {}, tb_t5_tile_on = <TbTile> { visible: false, draw_bg+: { color: uniform(#DC143C), border_radius: 3.0 } }, tb_t5_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/erase.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t5_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/erase_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t5_hit = <TbHit> {} }
+            tb_t0 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t0_tile = <TbTile> {}, tb_t0_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t0_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/select.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t0_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/select_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t0_hit = <TbHit> {} }
+            tb_t1 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t1_tile = <TbTile> {}, tb_t1_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t1_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/slice.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t1_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/slice_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t1_hit = <TbHit> {} }
+            tb_t2 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t2_tile = <TbTile> {}, tb_t2_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t2_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/glue.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t2_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/glue_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t2_hit = <TbHit> {} }
+            tb_t3 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t3_tile = <TbTile> {}, tb_t3_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t3_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/stretch.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t3_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/stretch_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t3_hit = <TbHit> {} }
+            tb_t4 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t4_tile = <TbTile> {}, tb_t4_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t4_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/draw.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t4_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/draw_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t4_hit = <TbHit> {} }
+            tb_t5 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t5_tile = <TbTile> {}, tb_t5_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t5_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/erase.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t5_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/erase_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t5_hit = <TbHit> {} }
         }
 
         // Controles da janela (dots) --------------------------------------
         tb_dots = <View> {
             flow: Right,
             spacing: 4,
-            tb_dot_min = <Button> { width: 14, height: 14, text: "", draw_bg+: { color: uniform(#FEBC2E), color_hover: uniform(#FFD25E), color_down: uniform(#E0A51E), color_focus: uniform(#FEBC2E), color_disabled: uniform(#FEBC2E), border_radius: 7.0 } }
-            tb_dot_max = <Button> { width: 14, height: 14, text: "", draw_bg+: { color: uniform(#28C840), color_hover: uniform(#48DC5E), color_down: uniform(#1FA830), color_focus: uniform(#28C840), color_disabled: uniform(#28C840), border_radius: 7.0 } }
-            tb_dot_close = <Button> { width: 14, height: 14, text: "", draw_bg+: { color: uniform(#FF5F57), color_hover: uniform(#FF7F78), color_down: uniform(#E03F38), color_focus: uniform(#FF5F57), color_disabled: uniform(#FF5F57), border_radius: 7.0 } }
+            tb_dot_min = <Button> { width: 14, height: 14, text: "", draw_bg: { color: #FEBC2E, color_hover: #FFD25E, color_down: #E0A51E, color_focus: #FEBC2E, color_disabled: #FEBC2E, border_size: 0.0, border_radius: 7.0 } }
+            tb_dot_max = <Button> { width: 14, height: 14, text: "", draw_bg: { color: #28C840, color_hover: #48DC5E, color_down: #1FA830, color_focus: #28C840, color_disabled: #28C840, border_size: 0.0, border_radius: 7.0 } }
+            tb_dot_close = <Button> { width: 14, height: 14, text: "", draw_bg: { color: #FF5F57, color_hover: #FF7F78, color_down: #E03F38, color_focus: #FF5F57, color_disabled: #FF5F57, border_size: 0.0, border_radius: 7.0 } }
         }
     }
-|}
+}
 
 /// Ações emitidas pelo toolbar para o shell tratar.
 #[derive(Clone, Debug)]
@@ -445,12 +454,10 @@ impl ToolbarCtl {
         ui.view(id!(tb_metro_tile_on)).set_visible(cx, on);
     }
     pub fn set_position(cx: &mut Cx, ui: &WidgetRef, ticks: i64, ppq: i32, beats_per_bar: i32) {
-        ui.label(id!(tb_pos))
-            .set_text(cx, &fmt_position(ticks, ppq, beats_per_bar));
+        ui.label(id!(tb_pos)).set_text(cx, &fmt_position(ticks, ppq, beats_per_bar));
     }
     pub fn set_bpm(cx: &mut Cx, ui: &WidgetRef, bpm: f32) {
-        ui.text_input(id!(tb_bpm))
-            .set_text(cx, &format!("{bpm:.0}"));
+        ui.text_input(id!(tb_bpm)).set_text(cx, &format!("{bpm:.0}"));
     }
     pub fn set_tool(cx: &mut Cx, ui: &WidgetRef, active: usize) {
         let tiles = [

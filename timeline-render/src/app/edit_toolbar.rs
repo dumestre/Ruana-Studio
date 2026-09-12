@@ -9,19 +9,17 @@
 //! (`$OUT_DIR/icons_atlas.rs`); a ordem do atlas é a ordem do EditToolbar:
 //! Select, Slice, Glue, Stretch, Draw, Erase (normal + filled).
 
+use crate::RectInstance;
 use crate::app::layout::Rect;
 use crate::app::render::{palette, rgba, srgb_to_linear};
-use crate::tools::{current_tool, Tool};
-use crate::RectInstance;
+use crate::tools::{Tool, current_tool};
 
 /// Atlas de ícones gerado em build-time pelo `build.rs`.
 mod atlas {
     include!(concat!(env!("OUT_DIR"), "/icons_atlas.rs"));
 }
 
-pub use atlas::{
-    ICON_ATLAS_H, ICON_ATLAS_RGBA, ICON_ATLAS_W, ICON_CELL, ICON_COLS,
-};
+pub use atlas::{ICON_ATLAS_H, ICON_ATLAS_RGBA, ICON_ATLAS_W, ICON_CELL, ICON_COLS};
 
 /// Altura (px) da faixa da edit toolbar no layout.
 pub const TOOLBAR_H: f32 = 24.0;
@@ -103,9 +101,18 @@ pub struct IconInstance {
 impl IconInstance {
     pub fn to_f32(self) -> [f32; 12] {
         [
-            self.x, self.y, self.w, self.h,
-            self.u, self.v, self.du, self.dv,
-            self.tint[0], self.tint[1], self.tint[2], self.tint[3],
+            self.x,
+            self.y,
+            self.w,
+            self.h,
+            self.u,
+            self.v,
+            self.du,
+            self.dv,
+            self.tint[0],
+            self.tint[1],
+            self.tint[2],
+            self.tint[3],
         ]
     }
 }
@@ -151,11 +158,7 @@ impl crate::App {
         }
         let rects = button_rects(strip);
         for (i, (bx, by, bw, bh)) in rects.iter().enumerate() {
-            if cursor.0 >= *bx
-                && cursor.0 <= bx + bw
-                && cursor.1 >= *by
-                && cursor.1 <= by + bh
-            {
+            if cursor.0 >= *bx && cursor.0 <= bx + bw && cursor.1 >= *by && cursor.1 <= by + bh {
                 return Some(i);
             }
         }
@@ -167,9 +170,12 @@ impl crate::App {
         if !self.show_piano_roll {
             return Vec::new();
         }
-        let strip = self.layout(width, height)
-            .edit_toolbar
-            .unwrap_or(Rect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 });
+        let strip = self.layout(width, height).edit_toolbar.unwrap_or(Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        });
         if strip.height <= 0.0 {
             return Vec::new();
         }
@@ -180,28 +186,51 @@ impl crate::App {
         // Fundo da faixa — mais escuro que a time_ruler para os botões
         // (surface-high) se destacarem.
         out.push(RectInstance {
-            x: strip.x, y: strip.y,
-            w: strip.width, h: strip.height,
+            x: strip.x,
+            y: strip.y,
+            w: strip.width,
+            h: strip.height,
             color: rgba(palette::SURFACE_STEP[t], 255),
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
         });
 
         // Borda superior (separa a toolbar da splitter acima).
         out.push(RectInstance {
-            x: strip.x, y: strip.y,
-            w: strip.width, h: 1.0,
+            x: strip.x,
+            y: strip.y,
+            w: strip.width,
+            h: 1.0,
             color: rgba(palette::BASE[t], 255),
-            wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
         });
 
         let rects = button_rects(strip);
         for (i, (bx, by, bw, bh)) in rects.iter().enumerate() {
             let toggled = cur == TOOL_INDEX[i];
-            let bg = if toggled { CRIMSON } else { palette::SURFACE_HIGH[t] };
+            let bg = if toggled {
+                CRIMSON
+            } else {
+                palette::SURFACE_HIGH[t]
+            };
             out.push(RectInstance {
-                x: *bx, y: *by, w: *bw, h: *bh,
+                x: *bx,
+                y: *by,
+                w: *bw,
+                h: *bh,
                 color: [bg.0, bg.1, bg.2, 255],
-                wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 2.0,
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 2.0,
             });
         }
 
@@ -213,9 +242,12 @@ impl crate::App {
         if !self.show_piano_roll || ICON_ATLAS_RGBA.is_empty() {
             return Vec::new();
         }
-        let strip = self.layout(width, height)
-            .edit_toolbar
-            .unwrap_or(Rect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 });
+        let strip = self.layout(width, height).edit_toolbar.unwrap_or(Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        });
         if strip.height <= 0.0 {
             return Vec::new();
         }
@@ -249,7 +281,10 @@ impl crate::App {
                 y: by + (bh - ICON_SIZE) / 2.0,
                 w: ICON_SIZE,
                 h: ICON_SIZE,
-                u, v, du, dv,
+                u,
+                v,
+                du,
+                dv,
                 tint,
             });
         }

@@ -1,11 +1,13 @@
 //! Interação: mouse, scroll, ferramentas, clipboard, loop, foco e edge-scroll.
 
-use crate::app::{ButtonState, LoopDrag, App};
+use crate::app::{App, ButtonState, LoopDrag};
 use crate::clips;
 use crate::fades;
-use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, set_vresize_override, Tool};
+use crate::tools::{
+    Tool, current_tool, set_cursor_override, set_gain_override, set_hand_override,
+    set_vresize_override,
+};
 use std::time::Instant;
-
 
 impl App {
     pub fn handle_scroll(&mut self, dx: f32, dy: f32, with_ctrl: bool, with_alt: bool) {
@@ -17,7 +19,12 @@ impl App {
             let layout = self.layout(self.size.0 as f32, self.size.1 as f32);
             if let Some(pr) = &layout.piano_roll {
                 if my >= pr.y && my <= pr.y + pr.height {
-                    (self.piano_roll_px_per_beat, self.piano_roll_scroll_x, self.piano_roll_scroll_y, true)
+                    (
+                        self.piano_roll_px_per_beat,
+                        self.piano_roll_scroll_x,
+                        self.piano_roll_scroll_y,
+                        true,
+                    )
                 } else {
                     (self.px_per_beat, self.scroll_x, self.scroll_y, false)
                 }
@@ -47,7 +54,8 @@ impl App {
             } else {
                 let old_zy = self.zoom_y;
                 let new_zy = (old_zy + dy * 0.01).clamp(0.25, 6.0);
-                let row_under = (my - self.ruler_px + scroll_y) / (64.0 * old_zy.max(0.01)).max(0.01);
+                let row_under =
+                    (my - self.ruler_px + scroll_y) / (64.0 * old_zy.max(0.01)).max(0.01);
                 self.zoom_y = new_zy;
                 self.scroll_y = (row_under * 64.0 * new_zy - (my - self.ruler_px)).max(0.0);
             }
@@ -67,17 +75,19 @@ impl App {
         match state {
             ButtonState::Pressed => {
                 self.panning = true;
-                if let Some(p) = pos { self.last_cursor = p; }
+                if let Some(p) = pos {
+                    self.last_cursor = p;
+                }
             }
             ButtonState::Released => {
                 // Se houver preview de áudio pendente, insere ao liberar o botão.
-                    if let Some(preview) = self.drop_preview.take() {
-                        if let Some(path) = self.drop_path.take() {
-                            self.load_audio_file(&path, preview.beat, preview.track);
-                            // Inicia playback a partir do ponto onde o áudio foi solto.
-                            self.start_playback_at(preview.beat);
-                        }
+                if let Some(preview) = self.drop_preview.take() {
+                    if let Some(path) = self.drop_path.take() {
+                        self.load_audio_file(&path, preview.beat, preview.track);
+                        // Inicia playback a partir do ponto onde o áudio foi solto.
+                        self.start_playback_at(preview.beat);
                     }
+                }
                 self.panning = false;
             }
         }
@@ -120,8 +130,7 @@ impl App {
                 self.loop_start_beat = new.max(0.0);
             }
             LoopDrag::End => {
-                let new = (self.loop_drag_orig_end + delta_beats)
-                    .max(self.loop_start_beat + 1.0);
+                let new = (self.loop_drag_orig_end + delta_beats).max(self.loop_start_beat + 1.0);
                 self.loop_end_beat = new;
             }
             LoopDrag::Move => {
@@ -169,14 +178,11 @@ impl App {
             .or(self.clip_interaction.hover_idx);
 
         let Some(idx) = idx else { return };
-        let Some(clip) = self.clips.get(idx) else { return };
+        let Some(clip) = self.clips.get(idx) else {
+            return;
+        };
 
-        self.focus_saved = Some((
-            self.scroll_x,
-            self.px_per_beat,
-            self.scroll_y,
-            self.zoom_y,
-        ));
+        self.focus_saved = Some((self.scroll_x, self.px_per_beat, self.scroll_y, self.zoom_y));
 
         // Centraliza horizontal e verticalmente no clip selecionado.
         let clip_x = clip.beat * self.px_per_beat;
@@ -194,7 +200,9 @@ impl App {
             .clips
             .iter()
             .enumerate()
-            .filter(|(i, _)| i < &self.clip_interaction.selected.len() && self.clip_interaction.selected[*i])
+            .filter(|(i, _)| {
+                i < &self.clip_interaction.selected.len() && self.clip_interaction.selected[*i]
+            })
             .map(|(_, c)| c.clone())
             .collect();
         if !selected_clips.is_empty() {
@@ -259,18 +267,28 @@ impl App {
         }
         self.record_undo();
         // Encontra o beat mínimo dos clips copiados para manter offsets relativos
-        let min_beat = self.clipboard.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
+        let min_beat = self
+            .clipboard
+            .iter()
+            .map(|c| c.beat)
+            .fold(f32::INFINITY, f32::min);
         let snap_beat = target_beat.round().max(0.0);
         let beat_offset = snap_beat - min_beat.round();
         // Track offset: usa a track do primeiro clip copiado como referência
-        let min_track = self.clipboard.iter().map(|c| c.track_index).min().unwrap_or(0);
+        let min_track = self
+            .clipboard
+            .iter()
+            .map(|c| c.track_index)
+            .min()
+            .unwrap_or(0);
         let track_offset = target_track as i32 - min_track as i32;
         let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
         for clip in &self.clipboard {
             let mut new_clip = clip.clone();
             new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
             new_clip.track_index = (clip.track_index as i32 + track_offset)
-                .clamp(0, (max_track + 1).max(1) as i32 - 1) as usize;
+                .clamp(0, (max_track + 1).max(1) as i32 - 1)
+                as usize;
             self.clips.push(new_clip);
         }
         // Seleciona os clips colados
@@ -302,12 +320,19 @@ impl App {
         }
         self.record_undo();
         // Encontra o clip que termina mais tarde (maior beat + len)
-        let max_end = selected_indices.iter()
+        let max_end = selected_indices
+            .iter()
             .map(|&i| self.clips[i].beat + self.clips[i].len)
             .fold(0.0_f32, f32::max);
         let snap_beat = max_end.round().max(0.0);
-        let clips_to_dup: Vec<clips::ClipDemo> = selected_indices.iter().map(|&i| self.clips[i].clone()).collect();
-        let min_beat = clips_to_dup.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
+        let clips_to_dup: Vec<clips::ClipDemo> = selected_indices
+            .iter()
+            .map(|&i| self.clips[i].clone())
+            .collect();
+        let min_beat = clips_to_dup
+            .iter()
+            .map(|c| c.beat)
+            .fold(f32::INFINITY, f32::min);
         let beat_offset = snap_beat - min_beat.round();
         for clip in &clips_to_dup {
             let mut new_clip = clip.clone();
@@ -485,8 +510,13 @@ impl App {
             let end_clip = self.clips[chain_end_idx].clone();
             let current_end = end_clip.beat + end_clip.len;
 
-            let next_idx = self.clips.iter().enumerate()
-                .filter(|(i, c)| c.track_index == track && !chain.contains(i) && c.beat >= current_end - 0.01)
+            let next_idx = self
+                .clips
+                .iter()
+                .enumerate()
+                .filter(|(i, c)| {
+                    c.track_index == track && !chain.contains(i) && c.beat >= current_end - 0.01
+                })
                 .min_by_key(|(_, c)| (c.beat * 1000.0) as i32)
                 .map(|(i, _)| i);
 
@@ -511,7 +541,7 @@ impl App {
     /// Inicia a reprodução a partir de um beat especificado.
     fn start_playback_at(&mut self, beat: f32) {
         // Converte beat para segundos.
-self.transport_seconds = beat * 60.0 / self.bpm;
+        self.transport_seconds = beat * 60.0 / self.bpm;
         // Sincroniza o motor de áudio.
         #[cfg(feature = "audio")]
         self.sync_audio_engine();
@@ -527,12 +557,11 @@ self.transport_seconds = beat * 60.0 / self.bpm;
             t.position_ticks = (beats * t.ppq as f32) as u64;
             t.playing = true;
         }
-self.play_start_seconds = self.transport_seconds;
+        self.play_start_seconds = self.transport_seconds;
         self.playing = true;
         self.last_play_head_update = Instant::now();
         self.request_redraw();
     }
-
 
     pub fn handle_primary_button(&mut self, state: ButtonState, pos: (f32, f32)) {
         // ====== Piano roll: Released sempre finaliza drags de loop/scrub ======
@@ -647,7 +676,10 @@ self.play_start_seconds = self.transport_seconds;
                                     pos,
                                     &self.fades,
                                     self.px_per_beat,
-                                    body_x, body_y, body_w, body_h,
+                                    body_x,
+                                    body_y,
+                                    body_w,
+                                    body_h,
                                 ) {
                                     return;
                                 }
@@ -665,37 +697,40 @@ self.play_start_seconds = self.transport_seconds;
                     }
                     match tool {
                         Tool::Select => {
-                // Insere áudio arrastado se houver preview pendente.
-                    if let Some(preview) = self.drop_preview.take() {
-                        if let Some(path) = self.drop_path.take() {
-                            self.load_audio_file(&path, preview.beat, preview.track);
-                            // Inicia playback a partir do ponto onde o áudio foi solto.
-                            self.start_playback_at(preview.beat);
-                        }
-                    } else {
-                    // comportamento padrão já existente
-                    if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-                        // Se o clip clicado já está selecionado, mantém a
-                        // multiseleção (arrasta todos selecionados). Senão,
-                        // colapsa para o grupo de glue.
-                        let already_selected = self
-                            .clip_interaction
-                            .selected
-                            .get(idx)
-                            .copied()
-                            .unwrap_or(false);
-                        self.clip_interaction.begin_drag(&self.clips, pos, &cm);
-                        if !already_selected {
-                            let chain = clips::ClipInteraction::find_group(&self.clips, idx);
-                            self.clip_interaction.select_chain(&self.clips, &chain);
-                        }
-                        self.edge_scroll_x = 0.0;
-                        self.edge_scroll_y = 0.0;
-                        self.edge_scroll_dir = 0;
-                    } else {
-                        self.clip_interaction.begin_marquee(pos);
-                    }
-                }
+                            // Insere áudio arrastado se houver preview pendente.
+                            if let Some(preview) = self.drop_preview.take() {
+                                if let Some(path) = self.drop_path.take() {
+                                    self.load_audio_file(&path, preview.beat, preview.track);
+                                    // Inicia playback a partir do ponto onde o áudio foi solto.
+                                    self.start_playback_at(preview.beat);
+                                }
+                            } else {
+                                // comportamento padrão já existente
+                                if let Some(idx) =
+                                    self.clip_interaction.hit_test(&self.clips, pos, &cm)
+                                {
+                                    // Se o clip clicado já está selecionado, mantém a
+                                    // multiseleção (arrasta todos selecionados). Senão,
+                                    // colapsa para o grupo de glue.
+                                    let already_selected = self
+                                        .clip_interaction
+                                        .selected
+                                        .get(idx)
+                                        .copied()
+                                        .unwrap_or(false);
+                                    self.clip_interaction.begin_drag(&self.clips, pos, &cm);
+                                    if !already_selected {
+                                        let chain =
+                                            clips::ClipInteraction::find_group(&self.clips, idx);
+                                        self.clip_interaction.select_chain(&self.clips, &chain);
+                                    }
+                                    self.edge_scroll_x = 0.0;
+                                    self.edge_scroll_y = 0.0;
+                                    self.edge_scroll_dir = 0;
+                                } else {
+                                    self.clip_interaction.begin_marquee(pos);
+                                }
+                            }
                         }
                         Tool::Draw => {
                             if pos.1 >= self.ruler_px {
@@ -706,7 +741,9 @@ self.play_start_seconds = self.transport_seconds;
                         Tool::Stretch => {
                             // Tenta iniciar stretch na borda direita; senão, seleciona
                             if !self.tool_stretch_start(pos) {
-                                if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
+                                if let Some(idx) =
+                                    self.clip_interaction.hit_test(&self.clips, pos, &cm)
+                                {
                                     self.clip_interaction.select_only(idx);
                                 } else {
                                     self.clip_interaction.begin_marquee(pos);
@@ -808,7 +845,7 @@ self.play_start_seconds = self.transport_seconds;
                         body_w,
                         body_h,
                     );
-self.rebuild_wave_data();
+                    self.rebuild_wave_data();
                     // Se já está tocando, sincroniza ganho em tempo real.
                     #[cfg(feature = "audio")]
                     if self.playing {
@@ -867,9 +904,7 @@ self.rebuild_wave_data();
             && !self.fade_interaction.is_dragging()
         {
             if let Some((clip_idx, kind)) = self.fade_interaction.hovered {
-                if let Some((clip, fade)) =
-                    self.clips.get(clip_idx).zip(self.fades.get(clip_idx))
-                {
+                if let Some((clip, fade)) = self.clips.get(clip_idx).zip(self.fades.get(clip_idx)) {
                     let (cx, cy, cw, ch) = clips::clip_rect(clip, &cm);
                     let header_h = 16.0;
                     let body_x = cx;
@@ -885,10 +920,9 @@ self.rebuild_wave_data();
                         body_h,
                         self.px_per_beat,
                     ) {
-                        let dist_sq =
-                            (pos.0 - hx) * (pos.0 - hx) + (pos.1 - hy) * (pos.1 - hy);
+                        let dist_sq = (pos.0 - hx) * (pos.0 - hx) + (pos.1 - hy) * (pos.1 - hy);
                         let snap_threshold = 14.0;
-// Snap apenas se ainda não foi disparado nesta sessão de hover
+                        // Snap apenas se ainda não foi disparado nesta sessão de hover
                         if !self.fade_interaction.snap_active
                             && dist_sq <= snap_threshold * snap_threshold
                         {
@@ -908,39 +942,42 @@ self.rebuild_wave_data();
             self.fade_interaction.snap_active = false;
         }
 
-
-
-// - Enquanto arrasta um handle, força o cursor apropriado (hand ou gain).
-// - Quando não está arrastando, usa hover para escolher o cursor.
-// - Caso contrário, limpa quaisquer sobrescrições de cursor.
-// Primeiro limpa ambos para garantir estado consistente.
-set_gain_override(false);
-set_hand_override(false);
-if self.fade_interaction.is_dragging() {
-    if let Some(ref drag) = self.fade_interaction.active_drag {
-        match drag.kind {
-            fades::FadeHandleKind::GainLevel => set_gain_override(true),
-            _ => set_hand_override(true),
-        }
-    }
-} else if let Some((_, kind)) = self.fade_interaction.hovered {
-    if kind == fades::FadeHandleKind::GainLevel {
-        set_gain_override(true);
-    } else {
-        set_hand_override(true);
-    }
+        // - Enquanto arrasta um handle, força o cursor apropriado (hand ou gain).
+        // - Quando não está arrastando, usa hover para escolher o cursor.
+        // - Caso contrário, limpa quaisquer sobrescrições de cursor.
+        // Primeiro limpa ambos para garantir estado consistente.
+        set_gain_override(false);
+        set_hand_override(false);
+        if self.fade_interaction.is_dragging() {
+            if let Some(ref drag) = self.fade_interaction.active_drag {
+                match drag.kind {
+                    fades::FadeHandleKind::GainLevel => set_gain_override(true),
+                    _ => set_hand_override(true),
+                }
+            }
+        } else if let Some((_, kind)) = self.fade_interaction.hovered {
+            if kind == fades::FadeHandleKind::GainLevel {
+                set_gain_override(true);
+            } else {
+                set_hand_override(true);
+            }
         } else if self.clip_interaction.is_seam_hovered() {
-    set_cursor_override(Tool::Slice);
-}
+            set_cursor_override(Tool::Slice);
+        }
 
-    // Cursor de resize vertical sobre a splitter do piano roll
-    if self.splitter_drag || self.splitter_hit_test(self.last_cursor.1, self.size.1 as f32) {
-        set_vresize_override(true);
-    } else {
-        set_vresize_override(false);
-    }
+        // Cursor de resize vertical sobre a splitter do piano roll
+        if self.splitter_drag || self.splitter_hit_test(self.last_cursor.1, self.size.1 as f32) {
+            set_vresize_override(true);
+        } else {
+            set_vresize_override(false);
+        }
 
-    if self.panning && !self.scrubbing && !self.clip_interaction.is_dragging() && !self.clip_interaction.is_drawing() && !self.clip_interaction.is_stretching() {
+        if self.panning
+            && !self.scrubbing
+            && !self.clip_interaction.is_dragging()
+            && !self.clip_interaction.is_drawing()
+            && !self.clip_interaction.is_stretching()
+        {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
@@ -969,7 +1006,6 @@ if self.fade_interaction.is_dragging() {
                     }
                     None => {}
                 }
-
             }
         }
         self.last_cursor = constrained;
@@ -1094,13 +1130,17 @@ impl App {
                     return;
                 }
 
-                self.piano_roll_inter.sync_selection(self.piano_roll_notes.len());
+                self.piano_roll_inter
+                    .sync_selection(self.piano_roll_notes.len());
 
                 match tool {
                     Tool::Select => {
                         if self.piano_roll_inter.is_dragging() {
                             self.piano_roll_inter.drag_move(pos, &m);
-                        } else if !self.piano_roll_inter.begin_drag(&self.piano_roll_notes, pos, &m) {
+                        } else if !self
+                            .piano_roll_inter
+                            .begin_drag(&self.piano_roll_notes, pos, &m)
+                        {
                             self.piano_roll_inter.begin_marquee(pos);
                         }
                     }
@@ -1119,18 +1159,27 @@ impl App {
                 match tool {
                     Tool::Select => {
                         if self.piano_roll_inter.is_dragging() {
-                            self.piano_roll_inter.end_drag(&mut self.piano_roll_notes, &m);
+                            self.piano_roll_inter
+                                .end_drag(&mut self.piano_roll_notes, &m);
                             self.sync_piano_roll_to_core();
                         } else if self.piano_roll_inter.is_marqueeing() {
-                            self.piano_roll_inter.end_marquee(&self.piano_roll_notes, &m);
+                            self.piano_roll_inter
+                                .end_marquee(&self.piano_roll_notes, &m);
                         }
                     }
                     Tool::Draw => {
                         if self.piano_roll_inter.is_drawing() {
-                            let created = self.piano_roll_inter.end_draw(&mut self.piano_roll_notes, &m);
+                            let created = self
+                                .piano_roll_inter
+                                .end_draw(&mut self.piano_roll_notes, &m);
                             for &idx in &created {
                                 if let Some(note) = self.piano_roll_notes.get(idx) {
-                                    self.note_editor.add(note.pitch, note.start, note.length, note.velocity);
+                                    self.note_editor.add(
+                                        note.pitch,
+                                        note.start,
+                                        note.length,
+                                        note.velocity,
+                                    );
                                 }
                             }
                             self.sync_piano_roll_from_core();
@@ -1142,4 +1191,3 @@ impl App {
         }
     }
 }
-

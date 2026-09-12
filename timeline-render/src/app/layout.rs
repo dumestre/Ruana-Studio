@@ -8,8 +8,8 @@
 //! Layout com piano roll (de cima para baixo):
 //!   ruler → timeline → time_ruler → SPLITTER → toolbar → piano_ruler → piano_roll
 
-use crate::app::edit_toolbar::TOOLBAR_H;
 use crate::App;
+use crate::app::edit_toolbar::TOOLBAR_H;
 use crate::app::piano_roll::PIANO_RULER_H;
 
 #[derive(Clone, Debug)]
@@ -53,17 +53,34 @@ impl App {
             // Sem piano roll: timeline ocupa tudo entre ruler e time_ruler.
             let tr_y = height - tr_h;
             let timeline = Rect {
-                x: 0.0, y: ruler_h, width,
+                x: 0.0,
+                y: ruler_h,
+                width,
                 height: (tr_y - ruler_h).max(0.0),
             };
             return Layout {
-                ruler: Rect { x: 0.0, y: 0.0, width, height: ruler_h },
+                ruler: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width,
+                    height: ruler_h,
+                },
                 timeline,
-                splitter: Rect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+                splitter: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.0,
+                    height: 0.0,
+                },
                 edit_toolbar: None,
                 piano_ruler: None,
                 piano_roll: None,
-                time_ruler: Rect { x: 0.0, y: tr_y, width, height: tr_h },
+                time_ruler: Rect {
+                    x: 0.0,
+                    y: tr_y,
+                    width,
+                    height: tr_h,
+                },
             };
         }
 
@@ -74,39 +91,69 @@ impl App {
         let toolbar_h = TOOLBAR_H;
 
         // Altura total do bloco do piano roll (régua + conteúdo)
-        let pr_total = (self.piano_roll_height + PIANO_RULER_H)
-            .clamp(
-                self.piano_roll_min_h + PIANO_RULER_H,
-                (height - ruler_h - toolbar_h - 4.0)
-                    .max(self.piano_roll_min_h + PIANO_RULER_H),
-            );
+        let pr_total = (self.piano_roll_height + PIANO_RULER_H).clamp(
+            self.piano_roll_min_h + PIANO_RULER_H,
+            (height - ruler_h - toolbar_h - 4.0).max(self.piano_roll_min_h + PIANO_RULER_H),
+        );
 
         // A splitter fica ACIMA da toolbar (que por sua vez fica acima da
         // régua do piano roll). time_ruler é empurrada para cima pelo bloco.
         let tr_y = height - tr_h - toolbar_h - pr_total - 4.0;
 
         let timeline = Rect {
-            x: 0.0, y: ruler_h, width,
+            x: 0.0,
+            y: ruler_h,
+            width,
             height: (tr_y - ruler_h).max(0.0),
         };
 
-        let time_ruler = Rect { x: 0.0, y: tr_y, width, height: tr_h };
+        let time_ruler = Rect {
+            x: 0.0,
+            y: tr_y,
+            width,
+            height: tr_h,
+        };
 
-        let splitter = Rect { x: 0.0, y: tr_y + tr_h, width, height: 4.0 };
+        let splitter = Rect {
+            x: 0.0,
+            y: tr_y + tr_h,
+            width,
+            height: 4.0,
+        };
 
-        let edit_toolbar = Rect { x: 0.0, y: tr_y + tr_h + 4.0, width, height: toolbar_h };
+        let edit_toolbar = Rect {
+            x: 0.0,
+            y: tr_y + tr_h + 4.0,
+            width,
+            height: toolbar_h,
+        };
 
         let pr_ruler_y = tr_y + tr_h + 4.0 + toolbar_h;
         let pr_roll_y = pr_ruler_y + pr_ruler_h;
 
         Layout {
-            ruler: Rect { x: 0.0, y: 0.0, width, height: ruler_h },
+            ruler: Rect {
+                x: 0.0,
+                y: 0.0,
+                width,
+                height: ruler_h,
+            },
             timeline,
             time_ruler,
             edit_toolbar: Some(edit_toolbar),
             splitter,
-            piano_ruler: Some(Rect { x: 0.0, y: pr_ruler_y, width, height: pr_ruler_h }),
-            piano_roll: Some(Rect { x: 0.0, y: pr_roll_y, width, height: (height - pr_roll_y).max(0.0) }),
+            piano_ruler: Some(Rect {
+                x: 0.0,
+                y: pr_ruler_y,
+                width,
+                height: pr_ruler_h,
+            }),
+            piano_roll: Some(Rect {
+                x: 0.0,
+                y: pr_roll_y,
+                width,
+                height: (height - pr_roll_y).max(0.0),
+            }),
         }
     }
 
@@ -115,4 +162,3 @@ impl App {
         layout.splitter.contains_y(cursor_y)
     }
 }
-

@@ -1,7 +1,7 @@
 //! Estado e lógica de interação do piano roll: hover, arrasto de notas,
 //! marquee, desenho contínuo e seleção.
 
-use super::{PianoRollMetrics, PianoRollNote, NOTE_HEIGHT};
+use super::{NOTE_HEIGHT, PianoRollMetrics, PianoRollNote};
 
 /// Estado de interação do piano roll (hover + arrasto + seleção).
 #[derive(Clone, Debug)]
@@ -155,8 +155,8 @@ impl PianoRollInteraction {
         let delta_pitch = (-dy / m.key_height).round() as i32;
 
         self.drag_live_start = (self.drag_orig_start + delta_beats).max(0.0);
-        self.drag_live_pitch = (self.drag_orig_pitch + delta_pitch)
-            .clamp(m.bottom_pitch, m.top_pitch);
+        self.drag_live_pitch =
+            (self.drag_orig_pitch + delta_pitch).clamp(m.bottom_pitch, m.top_pitch);
     }
 
     /// Finaliza o arrasto e aplica a nova posição (com clamp nos bounds).
@@ -189,11 +189,7 @@ impl PianoRollInteraction {
     }
 
     /// Finaliza marquee e seleciona notas dentro da área.
-    pub fn end_marquee(
-        &mut self,
-        notes: &[PianoRollNote],
-        m: &PianoRollMetrics,
-    ) {
+    pub fn end_marquee(&mut self, notes: &[PianoRollNote], m: &PianoRollMetrics) {
         if !self.marquee_active {
             return;
         }
@@ -225,12 +221,7 @@ impl PianoRollInteraction {
     pub fn marquee_rect(&self) -> (f32, f32, f32, f32) {
         let (sx, sy) = self.marquee_start;
         let (cx, cy) = self.marquee_cur;
-        (
-            sx.min(cx),
-            sy.min(cy),
-            (sx - cx).abs(),
-            (sy - cy).abs(),
-        )
+        (sx.min(cx), sy.min(cy), (sx - cx).abs(), (sy - cy).abs())
     }
 
     /// Inicia desenho contínuo (criar notas ao arrastar).
@@ -254,18 +245,18 @@ impl PianoRollInteraction {
     }
 
     /// Finaliza desenho e retorna IDs das notas criadas.
-    pub fn end_draw(
-        &mut self,
-        notes: &mut Vec<PianoRollNote>,
-        m: &PianoRollMetrics,
-    ) -> Vec<usize> {
+    pub fn end_draw(&mut self, notes: &mut Vec<PianoRollNote>, m: &PianoRollMetrics) -> Vec<usize> {
         let mut created = Vec::new();
         if self.draw_active {
             let start_beat = self.draw_start.0.min(self.draw_current.0).max(0.0);
             let end_beat = self.draw_start.0.max(self.draw_current.0);
             let len = (end_beat - start_beat).max(0.25);
 
-            let min_pitch = self.draw_start.1.min(self.draw_current.1).max(m.bottom_pitch);
+            let min_pitch = self
+                .draw_start
+                .1
+                .min(self.draw_current.1)
+                .max(m.bottom_pitch);
             let max_pitch = self.draw_start.1.max(self.draw_current.1).min(m.top_pitch);
 
             for pitch in min_pitch..=max_pitch {

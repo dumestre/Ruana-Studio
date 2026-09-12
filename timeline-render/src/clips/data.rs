@@ -83,20 +83,14 @@ impl ClipMetrics {
 }
 
 /// Retângulo de um clip em coordenadas de janela (já descontando scroll).
-pub fn clip_rect(
-    clip: &ClipDemo,
-    m: &ClipMetrics,
-) -> (f32, f32, f32, f32) {
+pub fn clip_rect(clip: &ClipDemo, m: &ClipMetrics) -> (f32, f32, f32, f32) {
     let x = clip.beat * m.px_per_beat - m.scroll_x;
 
     // SEM largura mínima artificial.
     // A borda direita deve espelhar exatamente `len * px_per_beat`.
     let w = clip.len * m.px_per_beat;
 
-    let y =
-        m.ruler_px
-        + clip.track_index as f32 * m.row_height
-        - m.scroll_y;
+    let y = m.ruler_px + clip.track_index as f32 * m.row_height - m.scroll_y;
 
     (x, y, w, m.row_height)
 }
