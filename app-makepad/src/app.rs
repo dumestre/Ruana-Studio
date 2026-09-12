@@ -11,8 +11,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{mpsc, Arc, Mutex};
 
+use makepad_widgets::makepad_platform::{CxOsOp, WindowId};
 use makepad_widgets::*;
 
+use crate::toolbar::{ToolbarAction, ToolbarCtl};
 use daw_core::transport::Transport;
 use daw_core::Project;
 use timeline_render::clips::ClipDemo;
@@ -34,51 +36,7 @@ live_design! {
                     flow: Down,
                     spacing: 0,
 
-                    transport_bar = <View> {
-                        // Altura do cabeçalho: 46 px lógicos — a timeline
-                        // encaixada começa exatamente abaixo desta barra.
-                        width: Fill, height: 46,
-                        flow: Right,
-                        spacing: 10,
-                        align: { y: 0.5 },
-                        padding: { left: 12, right: 12 },
-
-                        title_label = <Label> {
-                            text: "RuanaStudio",
-                            draw_text: {
-                                color: #8fc7ff,
-                                text_style: { font_size: 18 },
-                            },
-                        }
-
-                        <View> { width: Fill, height: Fill }
-
-                        bpm_label = <Label> {
-                            text: "120 BPM",
-                            draw_text: {
-                                color: #ccc,
-                                text_style: { font_size: 14 },
-                            },
-                        }
-
-                        time_label = <Label> {
-                            text: "0:00.000",
-                            draw_text: {
-                                color: #fff,
-                                text_style: { font_size: 18 },
-                            },
-                        }
-
-                        play_btn = <Button> {
-                            text: "Play",
-                            width: 88,
-                        }
-
-                        stop_btn = <Button> {
-                            text: "Stop",
-                            width: 88,
-                        }
-                    }
+                    toolbar = <Toolbar> {}
 
                     timeline_area = <View> {
                         // A janela nativa da timeline cobre esta área com
@@ -114,6 +72,10 @@ struct ShellState {
     project: Rc<RefCell<Project>>,
     _audio_engine: Option<daw_audio::AudioEngine>,
     timeline_tx: Option<mpsc::Sender<WindowCommand>>,
+    follow_on: bool,
+    snap_on: bool,
+    rec_armed: bool,
+    active_tool: usize,
 }
 
 impl Default for ShellState {
@@ -123,6 +85,10 @@ impl Default for ShellState {
             project: Rc::new(RefCell::new(Project::startup())),
             _audio_engine: None,
             timeline_tx: None,
+            follow_on: true,
+            snap_on: true,
+            rec_armed: false,
+            active_tool: 0,
         }
     }
 }
@@ -155,14 +121,14 @@ impl ShellState {
 
         // Timeline encaixada na janela Makepad: janela winit/wgpu borderless
         // que rastreia a janela "RuanaStudio" e fica como painel com margens
-        // abaixo da barra de transport (46) e acima do rodapé (22+12=34).
+        // abaixo da barra de toolbar (34) e acima do rodapé (22+12=34).
         // Render direto na surface; o Transport compartilhado faz o playhead
         // seguir o play.
         let (tx, rx) = mpsc::channel::<WindowCommand>();
         let transport_thread = transport.clone();
         let spec = DockSpec {
             parent_title: "RuanaStudio".to_string(),
-            top: 46,
+            top: 34,
             left: 10,
             right: 10,
             bottom: 34,
@@ -187,20 +153,36 @@ impl ShellState {
             project,
             _audio_engine,
             timeline_tx: Some(tx),
+            follow_on: true,
+            snap_on: true,
+            rec_armed: false,
+            active_tool: 0,
         }
     }
 
-    /// Espelha o estado do transport no painel (relógio, play/pause).
+    /// Espelha o estado autoritativo no toolbar (ícones, posição, BPM).
     fn refresh_status(&mut self, ui: &WidgetRef, cx: &mut Cx) {
-        let (playing, pos, bpm) = {
+        let (playing, pos_ticks, bpm, beats_per_bar, ppq, loop_on, metro_on) = {
             let t = self.transport.lock().unwrap();
-            (t.playing, t.position_seconds() as f32, t.bpm)
+            (
+                t.playing,
+                t.position_ticks,
+                t.bpm,
+                t.beats_per_bar,
+                t.ppq,
+                t.loop_enabled,
+                t.metronome_enabled,
+            )
         };
-        ui.label(id!(time_label))
-            .set_text(cx, &format!("{}  {}", if playing { "▶" } else { "" }, fmt_time(pos)));
-        ui.label(id!(bpm_label)).set_text(cx, &format!("{bpm} BPM"));
-        ui.button(id!(play_btn))
-            .set_text(cx, if playing { "Pause" } else { "Play" });
+        ToolbarCtl::set_playing(cx, ui, playing);
+        ToolbarCtl::set_position(cx, ui, pos_ticks as i64, ppq as i32, beats_per_bar as i32);
+        ToolbarCtl::set_bpm(cx, ui, bpm as f32);
+        ToolbarCtl::set_loop(cx, ui, loop_on);
+        ToolbarCtl::set_metronome(cx, ui, metro_on);
+        ToolbarCtl::set_tool(cx, ui, self.active_tool);
+        ToolbarCtl::set_follow(cx, ui, self.follow_on);
+        ToolbarCtl::set_snap(cx, ui, self.snap_on);
+        ToolbarCtl::set_rec(cx, ui, self.rec_armed);
         ui.redraw(cx);
     }
 
@@ -218,15 +200,56 @@ impl ShellState {
         drop(t);
         self.refresh_status(ui, cx);
     }
-}
 
-/// Converte segundos → "m:ss.mmm" (estilo DAW).
-fn fmt_time(secs: f32) -> String {
-    let secs = secs.max(0.0);
-    let m = (secs / 60.0) as u32;
-    let s = (secs as u32) % 60;
-    let ms = (secs.fract() * 1000.0) as u32;
-    format!("{m}:{s:02}.{ms:03}")
+    fn set_bpm(&mut self, bpm: f32, ui: &WidgetRef, cx: &mut Cx) {
+        {
+            let mut t = self.transport.lock().unwrap();
+            t.bpm = bpm.round() as u32;
+        }
+        if let Some(tx) = &self.timeline_tx {
+            let _ = tx.send(WindowCommand::SetBpm(bpm));
+        }
+        self.refresh_status(ui, cx);
+    }
+
+    fn toggle_follow(&mut self, ui: &WidgetRef, cx: &mut Cx) {
+        self.follow_on = !self.follow_on;
+        self.refresh_status(ui, cx);
+    }
+
+    fn toggle_snap(&mut self, ui: &WidgetRef, cx: &mut Cx) {
+        self.snap_on = !self.snap_on;
+        self.refresh_status(ui, cx);
+    }
+
+    fn toggle_rec(&mut self, ui: &WidgetRef, cx: &mut Cx) {
+        self.rec_armed = !self.rec_armed;
+        self.refresh_status(ui, cx);
+    }
+
+    fn toggle_loop(&mut self, ui: &WidgetRef, cx: &mut Cx) {
+        {
+            let mut t = self.transport.lock().unwrap();
+            t.loop_enabled = !t.loop_enabled;
+        }
+        self.refresh_status(ui, cx);
+    }
+
+    fn toggle_metronome(&mut self, ui: &WidgetRef, cx: &mut Cx) {
+        {
+            let mut t = self.transport.lock().unwrap();
+            t.metronome_enabled = !t.metronome_enabled;
+        }
+        self.refresh_status(ui, cx);
+    }
+
+    fn set_tool(&mut self, tool: usize, ui: &WidgetRef, cx: &mut Cx) {
+        if tool >= 6 {
+            return;
+        }
+        self.active_tool = tool;
+        self.refresh_status(ui, cx);
+    }
 }
 
 /// Clips demo read-only para a fase 1 (sem arquivo de áudio real; a engine
@@ -274,6 +297,7 @@ pub struct App {
 impl LiveRegister for App {
     fn live_register(cx: &mut Cx) {
         makepad_widgets::live_design(cx);
+        crate::toolbar::live_design(cx);
         cx.link(live_id!(theme), live_id!(theme_desktop_dark));
     }
 }
@@ -287,11 +311,34 @@ impl MatchEvent for App {
     }
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
-        if self.ui.button(id!(play_btn)).clicked(&actions) {
-            self.shell.toggle_play(&self.ui, cx);
-        }
-        if self.ui.button(id!(stop_btn)).clicked(&actions) {
-            self.shell.stop(&self.ui, cx);
+        let mut acts = Vec::new();
+        ToolbarCtl::handle_actions(&self.ui, actions, &mut acts);
+        for act in acts {
+            match act {
+                ToolbarAction::TogglePlay => self.shell.toggle_play(&self.ui, cx),
+                ToolbarAction::Stop => self.shell.stop(&self.ui, cx),
+                ToolbarAction::SetBpm(bpm) => self.shell.set_bpm(bpm, &self.ui, cx),
+                ToolbarAction::ToggleFollow => self.shell.toggle_follow(&self.ui, cx),
+                ToolbarAction::ToggleSnap => self.shell.toggle_snap(&self.ui, cx),
+                ToolbarAction::ToggleRec => self.shell.toggle_rec(&self.ui, cx),
+                ToolbarAction::ToggleLoop => self.shell.toggle_loop(&self.ui, cx),
+                ToolbarAction::ToggleMetronome => self.shell.toggle_metronome(&self.ui, cx),
+                ToolbarAction::ToolSelected(i) => self.shell.set_tool(i, &self.ui, cx),
+                ToolbarAction::Menu(_)
+                | ToolbarAction::Undo
+                | ToolbarAction::Redo
+                | ToolbarAction::ProjectKey(_)
+                | ToolbarAction::ThemeSelected(_) => {}
+                ToolbarAction::Minimize => {
+                    cx.push_unique_platform_op(CxOsOp::MinimizeWindow(WindowId(0, 0)));
+                }
+                ToolbarAction::Maximize => {
+                    cx.push_unique_platform_op(CxOsOp::MaximizeWindow(WindowId(0, 0)));
+                }
+                ToolbarAction::Close => {
+                    cx.push_unique_platform_op(CxOsOp::CloseWindow(WindowId(0, 0)));
+                }
+            }
         }
     }
 

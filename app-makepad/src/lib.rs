@@ -5,3 +5,4 @@
 //! O estado autoritativo (Project, Transport, AudioEngine) vive fora da UI.
 
 pub mod app;
+pub mod toolbar;

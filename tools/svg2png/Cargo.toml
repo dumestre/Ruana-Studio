@@ -1,0 +1,11 @@
+[package]
+name = "svg2png"
+version = "0.1.0"
+edition = "2021"
+description = "Rasteriza os ícones SVG (ui/icons) em PNG (2x) para o app Makepad"
+
+# Ferramenta de build independente do workspace do app
+[workspace]
+
+[dependencies]
+resvg = "0.48"
