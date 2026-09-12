@@ -106,8 +106,7 @@ live_design! {
         draw_bg: { color: (TW_BASE) }
         flow: Right,
         spacing: 10,
-        align: { x: 0.0, y: 0.5 },
-        padding: { left: 8, right: 8 }
+        padding: { left: 8, right: 4 }
 
         // Logo + título -------------------------------------------------
         tb_logo = <Image> {
@@ -280,10 +279,10 @@ live_design! {
             tb_t5 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t5_tile = <TbTile> {}, tb_t5_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_CRIMSON) } }, tb_t5_icon = <TbIcon> { source: dep("crate://self/resources/icons/erase_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 16, height: 16 } }, tb_t5_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/erase_filled_2x.png"), draw_bg: { tint: (TW_ON_CRIM) }, icon_walk: { width: 16, height: 16 } }, tb_t5_hit = <TbHit> {} }
         }
 
-        // Controles da janela (dots) --------------------------------------
+        // Controles da janela (dots) — canto direito ----------------------
         tb_dots = <View> {
             flow: Right,
-            spacing: 4,
+            spacing: 6,
             tb_dot_min = <Button> { width: 18, height: 18, text: "", draw_bg: { color: (TW_WARN), color_hover: (TW_WARN_H), color_down: #E0A51E, color_focus: (TW_WARN), color_disabled: (TW_WARN), border_size: 0.0, border_radius: 9.0 } }
             tb_dot_max = <Button> { width: 18, height: 18, text: "", draw_bg: { color: (TW_OK), color_hover: (TW_OK_H), color_down: #1FA830, color_focus: (TW_OK), color_disabled: (TW_OK), border_size: 0.0, border_radius: 9.0 } }
             tb_dot_close = <Button> { width: 18, height: 18, text: "", draw_bg: { color: (TW_DANGER), color_hover: (TW_DANGER_H), color_down: (TW_DANGER_D), color_focus: (TW_DANGER), color_disabled: (TW_DANGER), border_size: 0.0, border_radius: 9.0 } }
