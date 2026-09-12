@@ -38,12 +38,45 @@ live_design! {
 
                     toolbar = <Toolbar> {}
 
-                    timeline_area = <View> {
-                        // A janela nativa da timeline cobre esta área com
-                        // margens (10px laterais) e reserva o rodapé abaixo.
+                    // Linha principal: explorer (futuro) à esquerda + timeline no
+                    // centro. A janela nativa da timeline cobre apenas a região
+                    // `timeline_area`, com margem de 10px nas laterais — o resto
+                    // da janela fica reservado para os outros painéis (estilo DAW).
+                    main_row = <View> {
                         width: Fill, height: Fill,
+                        flow: Right,
+                        spacing: 0,
+
+                        explorer_area = <View> {
+                            width: 190, height: Fill,
+                            show_bg: true,
+                            draw_bg: { color: #1E1E21 },
+                            padding: { left: 8, right: 8, top: 8 },
+                            flow: Down,
+                            explorer_label = <Label> {
+                                text: "EXPLORER (próxima fase)",
+                                draw_text: { color: #666, text_style: { font_size: 10 } },
+                            }
+                        }
+
+                        timeline_area = <View> {
+                            width: Fill, height: Fill,
+                            show_bg: true,
+                            draw_bg: { color: #101014 },
+                        }
+                    }
+
+                    // Reserva de espaço para o mixer (próxima fase). A timeline
+                    // encaixada termina exatamente acima desta barra.
+                    mixer_area = <View> {
+                        width: Fill, height: 200,
                         show_bg: true,
-                        draw_bg: { color: #101014 },
+                        draw_bg: { color: #18181B },
+                        align: { x: 0.5, y: 0.5 },
+                        mixer_label = <Label> {
+                            text: "MIXER (próxima fase)",
+                            draw_text: { color: #666, text_style: { font_size: 11 } },
+                        }
                     }
 
                     status_bar = <View> {
@@ -119,19 +152,21 @@ impl ShellState {
             }
         };
 
-        // Timeline encaixada na janela Makepad: janela winit/wgpu borderless
-        // que rastreia a janela "RuanaStudio" e fica como painel com margens
-        // abaixo da barra de toolbar (34) e acima do rodapé (22+12=34).
-        // Render direto na surface; o Transport compartilhado faz o playhead
-        // seguir o play.
+        // Timeline encaixada na janela Makepad (layout estilo DAW): a janela
+        // winit/wgpu borderless rastreia a janela "RuanaStudio" e cobre APENAS
+        // o painel central da timeline — abaixo da toolbar (34), à direita do
+        // explorer (190) com margem de 10px, e acima do mixer (200) + status
+        // (22). Como toolbars/painéis vizinhos têm tamanho fixo, o encaixe
+        // continua correto em qualquer tamanho de janela (as margens do
+        // DockSpec são relativas ao client area).
         let (tx, rx) = mpsc::channel::<WindowCommand>();
         let transport_thread = transport.clone();
         let spec = DockSpec {
             parent_title: "RuanaStudio".to_string(),
             top: 34,
-            left: 10,
+            left: 190 + 10,
             right: 10,
-            bottom: 34,
+            bottom: 200 + 22,
         };
         std::thread::Builder::new()
             .name("timeline-window".into())
