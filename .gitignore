@@ -1,3 +1,4 @@
 /target
 /target-check
 /target-check2
+/tools/*/target
