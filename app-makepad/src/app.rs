@@ -6,6 +6,10 @@
 //!   timeline), com o `Transport` compartilhado (Arc<Mutex>) e clips
 //!   espelhados via `WindowCommand::SetClips/SetBpm` (read-only nesta fase).
 //! - Estado autoritativo fora da UI: `Project` + `Transport` + `AudioEngine`.
+//!
+//! A caption bar padrão do Makepad/winit fica OCULTA: a toolbar (`toolbar.rs`,
+//! port de `ui/toolbar.slint`) ocupa o topo e o espaço vazio dela arrasta a
+//! janela frameless (mesmo comando `window-drag-*` do Slint, com threshold).
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -36,7 +40,9 @@ live_design! {
                     flow: Down,
                     spacing: 0,
 
-                    toolbar = <Toolbar> {}
+                    toolbar = <Toolbar> {
+                        width: Fill, height: 34,
+                    }
 
                     // Linha principal: explorer (futuro) à esquerda + timeline no
                     // centro. A janela nativa da timeline cobre apenas a região
@@ -98,6 +104,14 @@ live_design! {
 
 app_main!(App);
 
+/// Estado de um arrasto de janela iniciado na toolbar (equivalente ao
+/// `window-drag-*` do `toolbar.slint`, com dead-zone de 4 px antes de mover).
+struct WindowDrag {
+    armed: bool,
+    abs_start: DVec2,
+    win_start: DVec2,
+}
+
 /// Estado do shell (fora do `#[live]`, vive no App e sobrevive à UI).
 /// `Default` é inerte; o wiring real acontece em `ShellState::build` (Startup).
 struct ShellState {
@@ -107,8 +121,10 @@ struct ShellState {
     timeline_tx: Option<mpsc::Sender<WindowCommand>>,
     follow_on: bool,
     snap_on: bool,
-    rec_armed: bool,
+rec_armed: bool,
     active_tool: usize,
+    window_drag: Option<WindowDrag>,
+    dbg_logged: bool,
 }
 
 impl Default for ShellState {
@@ -120,8 +136,10 @@ impl Default for ShellState {
             timeline_tx: None,
             follow_on: true,
             snap_on: true,
-            rec_armed: false,
+rec_armed: false,
             active_tool: 0,
+            window_drag: None,
+            dbg_logged: false,
         }
     }
 }
@@ -190,8 +208,10 @@ impl ShellState {
             timeline_tx: Some(tx),
             follow_on: true,
             snap_on: true,
-            rec_armed: false,
+rec_armed: false,
             active_tool: 0,
+            window_drag: None,
+            dbg_logged: false,
         }
     }
 
@@ -340,6 +360,15 @@ impl LiveRegister for App {
 impl MatchEvent for App {
     fn handle_startup(&mut self, cx: &mut Cx) {
         self.shell = ShellState::build();
+
+        // Oculta a caption bar padrão do Makepad/winit (o `after_apply` do
+        // widget `Window` força `visible: true` no Windows para a barra e os
+        // botões min/max/close — aplicamos o contrário aqui, no runtime). A
+        // toolbar ocupa o topo e o espaço vazio dela arrasta a janela.
+        let win = self.ui.window(id!(main_window));
+        win.view(id!(caption_bar)).set_visible(cx, false);
+        win.view(id!(windows_buttons)).set_visible(cx, false);
+
         // Atualiza o relógio do transport a cada 100 ms.
         let _ = cx.start_interval(0.1);
         self.shell.refresh_status(&self.ui, cx);
@@ -377,7 +406,32 @@ impl MatchEvent for App {
         }
     }
 
-    fn handle_timer(&mut self, cx: &mut Cx, _event: &TimerEvent) {
+fn handle_timer(&mut self, cx: &mut Cx, _event: &TimerEvent) {
+        if !self.shell.dbg_logged {
+            self.shell.dbg_logged = true;
+            eprintln!("[dbg] main window rect = {:?}", self.ui.window(id!(main_window)).area().rect(cx));
+            eprintln!("[dbg] caption_bar valid = {}", self.ui.view(id!(caption_bar)).area().is_valid(cx));
+            let tb = self.ui.view(id!(toolbar)).area();
+            eprintln!("[dbg] toolbar valid = {}, rect = {:?}", tb.is_valid(cx), tb.rect(cx));
+            for (name, widget) in [
+                ("body", id!(body)),
+                ("main_row", id!(main_row)),
+                ("explorer_area", id!(explorer_area)),
+                ("tb_logo", id!(tb_logo)),
+                ("tb_title", id!(tb_title)),
+                ("tb_menus", id!(tb_menus)),
+                ("tb_key", id!(tb_key)),
+                ("tb_theme", id!(tb_theme)),
+                ("tb_transport", id!(tb_transport)),
+                ("tb_tools", id!(tb_tools)),
+                ("tb_dots", id!(tb_dots)),
+                ("mixer_area", id!(mixer_area)),
+            ] {
+                let a = self.ui.view(widget).area();
+                eprintln!("[dbg] {name} valid={} rect={:?}", a.is_valid(cx), a.rect(cx));
+            }
+            eprintln!("[dbg] body-style rect do toolbar_area = {:?}", self.ui.view(id!(timeline_area)).area().rect(cx));
+        }
         self.shell.refresh_status(&self.ui, cx);
     }
 
@@ -388,9 +442,56 @@ impl MatchEvent for App {
     }
 }
 
+impl App {
+    /// Arrasto da janela frameless a partir do ESPAÇO VAZIO da toolbar.
+    ///
+    /// Roda depois de `ui.handle_event`: o roteamento do Makepad entrega o
+    /// `MouseDown` ao primeiro widget atingido (botões/tiles/dropdowns), então
+    /// só chega aqui quem não bateu em nenhum controle; aí `e.hits` captura a
+    /// área da toolbar como dona do gesto. Com threshold de 4 px (mesmo do
+    /// `toolbar.slint`) a janela segue o mouse via `RepositionWindow`.
+    fn handle_toolbar_drag(&mut self, cx: &mut Cx, event: &Event) {
+        let toolbar_area = self.ui.view(id!(toolbar)).area();
+        match event {
+            Event::MouseDown(e) if e.button == MouseButton::PRIMARY => {
+                if matches!(event.hits(cx, toolbar_area), Hit::FingerDown(_)) {
+                    let Event::MouseDown(e) = event else { return };
+                    self.shell.window_drag = Some(WindowDrag {
+                        armed: false,
+                        abs_start: e.abs,
+                        win_start: self.ui.window(id!(main_window)).get_position(cx),
+                    });
+                }
+            }
+            Event::MouseMove(_) => {
+                if let Some(drag) = &mut self.shell.window_drag {
+                    if matches!(event.hits(cx, toolbar_area), Hit::FingerMove(_)) {
+                        let Event::MouseMove(e) = event else { return };
+                        let delta = e.abs - drag.abs_start;
+                        if !drag.armed && (delta.x.abs() >= 4.0 || delta.y.abs() >= 4.0) {
+                            drag.armed = true;
+                        }
+                        if drag.armed {
+                            cx.push_unique_platform_op(CxOsOp::RepositionWindow(
+                                WindowId(0, 0),
+                                drag.win_start + delta,
+                            ));
+                        }
+                    }
+                }
+            }
+            Event::MouseUp(_) => {
+                self.shell.window_drag = None;
+            }
+            _ => {}
+        }
+    }
+}
+
 impl AppMain for App {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event) {
         self.match_event(cx, event);
         self.ui.handle_event(cx, event, &mut Scope::empty());
+        self.handle_toolbar_drag(cx, event);
     }
 }
