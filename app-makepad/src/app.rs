@@ -32,7 +32,7 @@ live_design! {
     App = {{App}} {
         ui: <Root> {
             main_window = <Window> {
-                window: { inner_size: vec2(1100, 640), title: "RuanaStudio" }
+                window: { inner_size: vec2(1100, 580), title: "RuanaStudio" }
                 pass: { clear_color: #191919 }
 
                 body = <View> {
