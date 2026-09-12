@@ -5,6 +5,9 @@
 //! `<Toolbar>` (uma `View` pura) registrado via `live_design!`, e a lógica de
 //! interação vive em `ToolbarCtl`, que manipula os widgets por `id!()` e
 //! devolve `ToolbarAction`s (mesmo padrão do shell em `app.rs`).
+//!
+//! Ícones: PNGs 2× (48 px) rasterizados offline (Skia) + shader tint para
+//! aplicar a cor do tema em runtime — garante nitidez de antialiasing nativo.
 
 use makepad_widgets::*;
 
@@ -15,17 +18,28 @@ live_design! {
     use link::widgets::*;
 
     // -----------------------------------------------------------------
-    // Paleta (Studio Dark — índice 0 do `ui/theme.slint`)
+    // Tokens de cor — espelham `ui/theme.slint` (índice 0: Studio Dark).
     // -----------------------------------------------------------------
-    // base        #313131 (fundo do toolbar)
-    // surface     #242424
-    // surface-high#555555 (tiles/botões)
-    // text        #E8E8E8
-    // accent      #00C853 (toggles/play ligados)
-    // crimson     #DC143C (ferramenta ativa / rec armado)
-    // dots        #FEBC2E minimize, #28C840 maximize, #FF5F57 close
+    pub TW_BASE       = #313131
+    pub TW_SURFACE    = #242424
+    pub TW_SURF_HI    = #555555
+    pub TW_TEXT       = #E8E8E8
+    pub TW_TEXT_DIM   = #9A9A9A
+    pub TW_ACCENT     = #00C853
+    pub TW_CRIMSON    = #DC143C
+    pub TW_ON_ACCENT  = #333333
+    pub TW_ON_CRIM    = #FFFFFF
+    pub TW_DANGER     = #FF5F57
+    pub TW_DANGER_H   = #FF7F78
+    pub TW_DANGER_D   = #E03F38
+    pub TW_WARN       = #FEBC2E
+    pub TW_WARN_H     = #FFD25E
+    pub TW_OK         = #28C840
+    pub TW_OK_H       = #48DC5E
 
-    // Button de ícone: fundo autônomo (água) que captura o clique.
+    // -----------------------------------------------------------------
+    // Botão de ícone: fundo transparente que captura o clique.
+    // -----------------------------------------------------------------
     pub TbHit = <Button> {
         width: Fill, height: Fill,
         text: "",
@@ -41,20 +55,27 @@ live_design! {
         draw_text: { color: #0000 }
     }
 
+    // -----------------------------------------------------------------
     // Tile onde o ícone fica assentado (18×18 na maioria).
+    // -----------------------------------------------------------------
     pub TbTile = <View> {
         width: Fill, height: Fill,
         show_bg: true,
-        draw_bg: { color: #555555, border_radius: 3.0, border_size: 0.0 }
+        draw_bg: { color: (TW_SURF_HI), border_radius: 3.0, border_size: 0.0 }
     }
 
-    // Image com tint multiplicativo (para ícones coloridos, ex.: play).
-    pub TintImage = <Image> {
+    // -----------------------------------------------------------------
+    // Imagem toolbar com tint — PNG 2× + shader de cor multiplicativa.
+    // Herda {{Image}} para reusar carregamento de textura / image_scale.
+    // -----------------------------------------------------------------
+    pub TbIcon = {{Image}} {
         draw_bg: {
             instance tint: vec4
-            fn get_color(self) -> vec4 {
+            fn pixel(self) -> vec4 {
                 let c = self.get_color_scale_pan(self.image_scale, self.image_pan)
-                return vec4(c.x * self.tint.x, c.y * self.tint.y, c.z * self.tint.z, c.w * self.tint.w)
+                let tinted = vec4(c.x * self.tint.x, c.y * self.tint.y, c.z * self.tint.z, c.w * self.tint.w)
+                let opacity = 1.0
+                return Pal::premul(vec4(tinted.xyz, tinted.w * opacity))
             }
         }
     }
@@ -63,15 +84,15 @@ live_design! {
     TbTextBtn = <Button> {
         height: 20,
         draw_bg: {
-            color: #555555,
+            color: (TW_SURF_HI),
             color_hover: #666666,
             color_down: #474747,
-            color_focus: #555555,
-            color_disabled: #555555,
+            color_focus: (TW_SURF_HI),
+            color_disabled: (TW_SURF_HI),
             border_size: 0.0,
             border_radius: 3.0,
         }
-        draw_text: { color: #E8E8E8, text_style: { font_size: 11.0 } }
+        draw_text: { color: (TW_TEXT), text_style: { font_size: 11.0 } }
     }
 
     // -----------------------------------------------------------------
@@ -82,7 +103,7 @@ live_design! {
         width: Fill,
         height: 34,
         show_bg: true,
-        draw_bg: { color: #313131 }
+        draw_bg: { color: (TW_BASE) }
         flow: Right,
         spacing: 10,
         align: { x: 0.0, y: 0.5 },
@@ -95,7 +116,7 @@ live_design! {
         }
         tb_title = <Label> {
             text: "RuanaStudio",
-            draw_text: { color: #E8E8E8, text_style: { font_size: 12.0 } }
+            draw_text: { color: (TW_TEXT), text_style: { font_size: 12.0 } }
         }
 
         // Menus ----------------------------------------------------------
@@ -120,9 +141,9 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_undo_tile = <TbTile> {}
-                tb_undo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_undo_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/undo.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
-                tb_undo_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/undo.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
+                tb_undo_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_ACCENT) } }
+                tb_undo_icon = <TbIcon> { source: dep("crate://self/resources/icons/undo_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
+                tb_undo_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/undo_2x.png"), draw_bg: { tint: (TW_ON_ACCENT) }, icon_walk: { width: 15, height: 15 } }
                 tb_undo_hit = <TbHit> {}
             }
             tb_redo = <View> {
@@ -130,9 +151,9 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_redo_tile = <TbTile> {}
-                tb_redo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_redo_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/redo.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
-                tb_redo_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resource/icons/redo.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
+                tb_redo_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_ACCENT) } }
+                tb_redo_icon = <TbIcon> { source: dep("crate://self/resources/icons/redo_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
+                tb_redo_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/redo_2x.png"), draw_bg: { tint: (TW_ON_ACCENT) }, icon_walk: { width: 15, height: 15 } }
                 tb_redo_hit = <TbHit> {}
             }
         }
@@ -146,9 +167,9 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_follow_tile = <TbTile> {}
-                tb_follow_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_follow_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/follow.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
-                tb_follow_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/follow.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
+                tb_follow_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_ACCENT) } }
+                tb_follow_icon = <TbIcon> { source: dep("crate://self/resources/icons/follow_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
+                tb_follow_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/follow_filled_2x.png"), draw_bg: { tint: (TW_ON_ACCENT) }, icon_walk: { width: 15, height: 15 } }
                 tb_follow_hit = <TbHit> {}
             }
             tb_snap = <View> {
@@ -156,9 +177,9 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_snap_tile = <TbTile> {}
-                tb_snap_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_snap_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/snap.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
-                tb_snap_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/snap.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
+                tb_snap_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_ACCENT) } }
+                tb_snap_icon = <TbIcon> { source: dep("crate://self/resources/icons/snap_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
+                tb_snap_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/snap_filled_2x.png"), draw_bg: { tint: (TW_ON_ACCENT) }, icon_walk: { width: 15, height: 15 } }
                 tb_snap_hit = <TbHit> {}
             }
         }
@@ -185,7 +206,7 @@ live_design! {
                 width: 96, height: 18,
                 text: "01.01.000",
                 draw_text: {
-                    color: #00C853,
+                    color: (TW_ACCENT),
                     text_style: { font_size: 12.0 },
                     horizontal_align: Center,
                     vertical_align: Center,
@@ -197,9 +218,9 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_play_tile = <TbTile> {}
-                tb_play_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_play_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/play.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
-                tb_pause_icon = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/pause.svg") }, icon_walk: { width: 15, height: 15 }, color: #00C853 }
+                tb_play_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_ACCENT) } }
+                tb_play_icon = <TbIcon> { source: dep("crate://self/resources/icons/play_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
+                tb_pause_icon = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/pause_2x.png"), draw_bg: { tint: (TW_ACCENT) }, icon_walk: { width: 15, height: 15 } }
                 tb_play_hit = <TbHit> {}
             }
 
@@ -208,7 +229,7 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_stop_tile = <TbTile> {}
-                tb_stop_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/stop.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
+                tb_stop_icon = <TbIcon> { source: dep("crate://self/resources/icons/stop_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
                 tb_stop_hit = <TbHit> {}
             }
             tb_rec = <View> {
@@ -216,8 +237,8 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_rec_tile = <TbTile> {}
-                tb_rec_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_rec_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/rec.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
+                tb_rec_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_CRIMSON) } }
+                tb_rec_icon = <TbIcon> { source: dep("crate://self/resources/icons/rec_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
                 tb_rec_hit = <TbHit> {}
             }
             tb_loop = <View> {
@@ -225,8 +246,8 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_loop_tile = <TbTile> {}
-                tb_loop_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_loop_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/loop.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
+                tb_loop_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_ACCENT) } }
+                tb_loop_icon = <TbIcon> { source: dep("crate://self/resources/icons/loop_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
                 tb_loop_hit = <TbHit> {}
             }
             tb_metro = <View> {
@@ -234,38 +255,38 @@ live_design! {
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
                 tb_metro_tile = <TbTile> {}
-                tb_metro_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_metro_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/metronome.svg") }, icon_walk: { width: 15, height: 15 }, color: #E8E8E8 }
+                tb_metro_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_ACCENT) } }
+                tb_metro_icon = <TbIcon> { source: dep("crate://self/resources/icons/metronome_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 15, height: 15 } }
                 tb_metro_hit = <TbHit> {}
             }
             tb_bpmbox = <View> {
                 flow: Right,
                 spacing: 2,
-                tb_bpm = <TextInput> { width: 30, height: 18, text: "120", draw_text: { color: #E8E8E8, text_style: { font_size: 12.0 }, horizontal_align: Center, vertical_align: Center } }
-                tb_bpm_label = <Label> { text: "BPM", draw_text: { color: #9A9A9A, text_style: { font_size: 11.0 } } }
+                tb_bpm = <TextInput> { width: 30, height: 18, text: "120", draw_text: { color: (TW_TEXT), text_style: { font_size: 12.0 }, horizontal_align: Center, vertical_align: Center } }
+                tb_bpm_label = <Label> { text: "BPM", draw_text: { color: (TW_TEXT_DIM), text_style: { font_size: 11.0 } } }
             }
-            tb_tsig = <Label> { width: 30, height: 18, text: "4/4", draw_text: { color: #9A9A9A, text_style: { font_size: 12.0 }, horizontal_align: Center, vertical_align: Center } }
+            tb_tsig = <Label> { width: 30, height: 18, text: "4/4", draw_text: { color: (TW_TEXT_DIM), text_style: { font_size: 12.0 }, horizontal_align: Center, vertical_align: Center } }
         }
 
         // Ferramentas ----------------------------------------------------
         tb_tools = <View> {
             flow: Right,
             spacing: 2,
-            tb_t0 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t0_tile = <TbTile> {}, tb_t0_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t0_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/select.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t0_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/select_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t0_hit = <TbHit> {} }
-            tb_t1 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t1_tile = <TbTile> {}, tb_t1_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t1_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/slice.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t1_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/slice_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t1_hit = <TbHit> {} }
-            tb_t2 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t2_tile = <TbTile> {}, tb_t2_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t2_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/glue.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t2_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/glue_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t2_hit = <TbHit> {} }
-            tb_t3 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t3_tile = <TbTile> {}, tb_t3_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t3_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/stretch.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t3_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/stretch_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t3_hit = <TbHit> {} }
-            tb_t4 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t4_tile = <TbTile> {}, tb_t4_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t4_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/draw.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t4_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/draw_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t4_hit = <TbHit> {} }
-            tb_t5 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t5_tile = <TbTile> {}, tb_t5_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }, tb_t5_icon = <Icon> { draw_icon: { svg_file: dep("crate://self/resources/icons/erase.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t5_icon_f = <Icon> { visible: false, draw_icon: { svg_file: dep("crate://self/resources/icons/erase_filled.svg") }, icon_walk: { width: 16, height: 16 }, color: #E8E8E8 }, tb_t5_hit = <TbHit> {} }
+            tb_t0 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t0_tile = <TbTile> {}, tb_t0_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_CRIMSON) } }, tb_t0_icon = <TbIcon> { source: dep("crate://self/resources/icons/select_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 16, height: 16 } }, tb_t0_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/select_filled_2x.png"), draw_bg: { tint: (TW_ON_CRIM) }, icon_walk: { width: 16, height: 16 } }, tb_t0_hit = <TbHit> {} }
+            tb_t1 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t1_tile = <TbTile> {}, tb_t1_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_CRIMSON) } }, tb_t1_icon = <TbIcon> { source: dep("crate://self/resources/icons/slice_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 16, height: 16 } }, tb_t1_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/slice_filled_2x.png"), draw_bg: { tint: (TW_ON_CRIM) }, icon_walk: { width: 16, height: 16 } }, tb_t1_hit = <TbHit> {} }
+            tb_t2 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t2_tile = <TbTile> {}, tb_t2_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_CRIMSON) } }, tb_t2_icon = <TbIcon> { source: dep("crate://self/resources/icons/glue_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 16, height: 16 } }, tb_t2_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/glue_filled_2x.png"), draw_bg: { tint: (TW_ON_CRIM) }, icon_walk: { width: 16, height: 16 } }, tb_t2_hit = <TbHit> {} }
+            tb_t3 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t3_tile = <TbTile> {}, tb_t3_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_CRIMSON) } }, tb_t3_icon = <TbIcon> { source: dep("crate://self/resources/icons/stretch_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 16, height: 16 } }, tb_t3_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/stretch_filled_2x.png"), draw_bg: { tint: (TW_ON_CRIM) }, icon_walk: { width: 16, height: 16 } }, tb_t3_hit = <TbHit> {} }
+            tb_t4 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t4_tile = <TbTile> {}, tb_t4_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_CRIMSON) } }, tb_t4_icon = <TbIcon> { source: dep("crate://self/resources/icons/draw_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 16, height: 16 } }, tb_t4_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/draw_filled_2x.png"), draw_bg: { tint: (TW_ON_CRIM) }, icon_walk: { width: 16, height: 16 } }, tb_t4_hit = <TbHit> {} }
+            tb_t5 = <View> { width: 19, height: 19, flow: Overlay, align: { x: 0.5, y: 0.5 }, tb_t5_tile = <TbTile> {}, tb_t5_tile_on = <TbTile> { visible: false, draw_bg: { color: (TW_CRIMSON) } }, tb_t5_icon = <TbIcon> { source: dep("crate://self/resources/icons/erase_2x.png"), draw_bg: { tint: (TW_TEXT) }, icon_walk: { width: 16, height: 16 } }, tb_t5_icon_f = <TbIcon> { visible: false, source: dep("crate://self/resources/icons/erase_filled_2x.png"), draw_bg: { tint: (TW_ON_CRIM) }, icon_walk: { width: 16, height: 16 } }, tb_t5_hit = <TbHit> {} }
         }
 
         // Controles da janela (dots) --------------------------------------
         tb_dots = <View> {
             flow: Right,
             spacing: 4,
-            tb_dot_min = <Button> { width: 14, height: 14, text: "", draw_bg: { color: #FEBC2E, color_hover: #FFD25E, color_down: #E0A51E, color_focus: #FEBC2E, color_disabled: #FEBC2E, border_size: 0.0, border_radius: 7.0 } }
-            tb_dot_max = <Button> { width: 14, height: 14, text: "", draw_bg: { color: #28C840, color_hover: #48DC5E, color_down: #1FA830, color_focus: #28C840, color_disabled: #28C840, border_size: 0.0, border_radius: 7.0 } }
-            tb_dot_close = <Button> { width: 14, height: 14, text: "", draw_bg: { color: #FF5F57, color_hover: #FF7F78, color_down: #E03F38, color_focus: #FF5F57, color_disabled: #FF5F57, border_size: 0.0, border_radius: 7.0 } }
+            tb_dot_min = <Button> { width: 18, height: 18, text: "", draw_bg: { color: (TW_WARN), color_hover: (TW_WARN_H), color_down: #E0A51E, color_focus: (TW_WARN), color_disabled: (TW_WARN), border_size: 0.0, border_radius: 9.0 } }
+            tb_dot_max = <Button> { width: 18, height: 18, text: "", draw_bg: { color: (TW_OK), color_hover: (TW_OK_H), color_down: #1FA830, color_focus: (TW_OK), color_disabled: (TW_OK), border_size: 0.0, border_radius: 9.0 } }
+            tb_dot_close = <Button> { width: 18, height: 18, text: "", draw_bg: { color: (TW_DANGER), color_hover: (TW_DANGER_H), color_down: (TW_DANGER_D), color_focus: (TW_DANGER), color_disabled: (TW_DANGER), border_size: 0.0, border_radius: 9.0 } }
         }
     }
 }
@@ -404,8 +425,8 @@ impl ToolbarCtl {
     ) {
         ui.view(tile).set_visible(cx, !on);
         ui.view(tile_on).set_visible(cx, on);
-        ui.icon(icon).set_visible(cx, !on);
-        ui.icon(icon_f).set_visible(cx, on);
+        ui.view(icon).set_visible(cx, !on);
+        ui.view(icon_f).set_visible(cx, on);
     }
 
     pub fn set_playing(cx: &mut Cx, ui: &WidgetRef, playing: bool) {
@@ -454,10 +475,12 @@ impl ToolbarCtl {
         ui.view(id!(tb_metro_tile_on)).set_visible(cx, on);
     }
     pub fn set_position(cx: &mut Cx, ui: &WidgetRef, ticks: i64, ppq: i32, beats_per_bar: i32) {
-        ui.label(id!(tb_pos)).set_text(cx, &fmt_position(ticks, ppq, beats_per_bar));
+        ui.label(id!(tb_pos))
+            .set_text(cx, &fmt_position(ticks, ppq, beats_per_bar));
     }
     pub fn set_bpm(cx: &mut Cx, ui: &WidgetRef, bpm: f32) {
-        ui.text_input(id!(tb_bpm)).set_text(cx, &format!("{bpm:.0}"));
+        ui.text_input(id!(tb_bpm))
+            .set_text(cx, &format!("{bpm:.0}"));
     }
     pub fn set_tool(cx: &mut Cx, ui: &WidgetRef, active: usize) {
         let tiles = [
@@ -503,8 +526,8 @@ impl ToolbarCtl {
             let on = i == active;
             ui.view(*tile).set_visible(cx, !on);
             ui.view(*tile_on).set_visible(cx, on);
-            ui.icon(*icon).set_visible(cx, !on);
-            ui.icon(*icon_f).set_visible(cx, on);
+            ui.view(*icon).set_visible(cx, !on);
+            ui.view(*icon_f).set_visible(cx, on);
         }
     }
 }
