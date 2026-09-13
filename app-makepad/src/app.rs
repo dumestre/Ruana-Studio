@@ -36,7 +36,7 @@ live_design! {
                 }
 
                 pass: {
-                    clear_color: #101014
+                    clear_color: #646464,
                 }
 
                 body = <View> {

@@ -63,12 +63,6 @@ live_design! {
         height: 20,
         align: { x: 0.5, y: 0.5 },
         draw_bg: {
-            color: #000000,
-            color_hover: #666666,
-            color_down: #474747,
-            color_focus: #555555,
-            color_disabled: #555555,
-            border_size: 0.0,
             border_radius: 3.0,
         }
         draw_text: { color: #E8E8E8, text_style: { font_size: 10.0 } }
@@ -82,11 +76,8 @@ live_design! {
         width: Fill,
         align: { x: 0.5, y: 0.5 },
         height: 34,
-        show_bg: true,
-        draw_bg: { color: #313131 }
         flow: Right,
-        spacing: 10,
-        align: { x: 0.0, y: 0.5 },
+        spacing: 6,
         padding: { left: 3, right: 3 }
 
         // Logo + título -------------------------------------------------
@@ -97,11 +88,12 @@ live_design! {
         }
         tb_title = <Label> {
             text: "RuanaStudio",
-            draw_text: { color: #E8E8E8, text_style: { font_size: 12.0 } }
+            draw_text: { color: #E8E8E5, text_style: { font_size: 11.0 } }
         }
 
         // Menus ----------------------------------------------------------
         tb_menus = <View> {
+            width: Fill,
             align: { x: 0.5, y: 0.5 },
             flow: Right,
             spacing: 2,
@@ -116,15 +108,16 @@ live_design! {
 
         // Undo/Redo -------------------------------------------------------
         tb_editrow = <View> {
-            align: { x: 0.5, y: 0.5 },
+            align: {  y: 0.5 },
+            width: Fill,
             flow: Right,
             spacing: 2,
             tb_undo = <View> {
+                align: { x: 0.5, y: 0.5 },
                 width: 18, height: 18,
                 flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
                 tb_undo_tile = <TbTile> {}
-                tb_undo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
+                tb_undo_tile_on = <TbTile> { visible: false, draw_bg: { color: #919191 } }
                 tb_undo_icon = <Image> {
                     source: dep("assets/icons/undo_2x.png"),
                     width: 15, height: 15,
@@ -141,7 +134,7 @@ live_design! {
                 width: 18, height: 18,
                 flow: Overlay,
                 tb_redo_tile = <TbTile> {}
-                tb_redo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
+                tb_redo_tile_on = <TbTile> { visible: false, draw_bg: { color: #919191 } }
                 tb_redo_icon = <Image> {
                     source: dep("assets/icons/redo_2x.png"),
                     width: 15, height: 15,
@@ -214,6 +207,7 @@ live_design! {
 
         // Transport -------------------------------------------------------
         tb_transport = <View> {
+            align: { x: 0.5, y: 0.5 },
             flow: Right,
             spacing: 5,
             tb_pos = <Label> {
@@ -230,7 +224,6 @@ live_design! {
             tb_play = <View> {
                 width: 18, height: 18,
                 flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
                 tb_play_tile = <TbTile> {}
                 tb_play_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_play_icon = <Image> {
