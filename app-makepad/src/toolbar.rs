@@ -42,9 +42,8 @@ live_design! {
     }
 
     // Tile onde o ícone fica assentado (18×18 na maioria).
-    pub TbTile = <View> {
+    pub TbTile = <RoundedView> {
         width: Fill, height: Fill,
-        show_bg: true,
         draw_bg: { color: #555555, border_radius: 3.0, border_size: 0.0 }
     }
 
@@ -90,8 +89,9 @@ live_design! {
 
         // Logo + título -------------------------------------------------
         tb_logo = <Image> {
-            source: image!("assets/ruana_studio_2x.png"),
+            source: dep("assets/ruana_studio_2x.png"),
             width: 26, height: 26,
+            
         }
         tb_title = <Label> {
             text: "RuanaStudio",
@@ -122,12 +122,12 @@ live_design! {
                 tb_undo_tile = <TbTile> {}
                 tb_undo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_undo_icon = <Image> {
-                    source: image!("assets/icons/undo_2x.png"),
+                    source: dep("assets/icons/undo_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_undo_icon_f = <Image> {
                     visible: false,
-                    source: image!("assets/icons/undo_2x.png"),
+                    source: dep("assets/icons/undo_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_undo_hit = <TbHit> {}
@@ -139,12 +139,12 @@ live_design! {
                 tb_redo_tile = <TbTile> {}
                 tb_redo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_redo_icon = <Image> {
-                    source: image!("assets/icons/redo_2x.png"),
+                    source: dep("assets/icons/redo_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_redo_icon_f = <Image> {
                     visible: false,
-                    source: image!("assets/icons/redo_2x.png"),
+                    source: dep("assets/icons/redo_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_redo_hit = <TbHit> {}
@@ -162,12 +162,12 @@ live_design! {
                 tb_follow_tile = <TbTile> {}
                 tb_follow_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_follow_icon = <Image> {
-                    source: image!("assets/icons/follow_2x.png"),
+                    source: dep("assets/icons/follow_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_follow_icon_f = <Image> {
                     visible: false,
-                    source: image!("assets/icons/follow_filled_2x.png"),
+                    source: dep("assets/icons/follow_filled_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_follow_hit = <TbHit> {}
@@ -179,12 +179,12 @@ live_design! {
                 tb_snap_tile = <TbTile> {}
                 tb_snap_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_snap_icon = <Image> {
-                    source: image!("assets/icons/snap_2x.png"),
+                    source: dep("assets/icons/snap_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_snap_icon_f = <Image> {
                     visible: false,
-                    source: image!("assets/icons/snap_filled_2x.png"),
+                    source: dep("assets/icons/snap_filled_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_snap_hit = <TbHit> {}
@@ -227,12 +227,12 @@ live_design! {
                 tb_play_tile = <TbTile> {}
                 tb_play_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_play_icon = <Image> {
-                    source: image!("assets/icons/play_2x.png"),
+                    source: dep("assets/icons/play_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_pause_icon = <Image> {
                     visible: false,
-                    source: image!("assets/icons/pause_2x.png"),
+                    source: dep("assets/icons/pause_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_play_hit = <TbHit> {}
@@ -244,7 +244,7 @@ live_design! {
                 align: { x: 0.5, y: 0.5 },
                 tb_stop_tile = <TbTile> {}
                 tb_stop_icon = <Image> {
-                    source: image!("assets/icons/stop_2x.png"),
+                    source: dep("assets/icons/stop_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_stop_hit = <TbHit> {}
@@ -257,7 +257,7 @@ live_design! {
                 tb_rec_tile = <TbTile> {}
                 tb_rec_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
                 tb_rec_icon = <Image> {
-                    source: image!("assets/icons/rec_2x.png"),
+                    source: dep("assets/icons/rec_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_rec_hit = <TbHit> {}
@@ -270,7 +270,7 @@ live_design! {
                 tb_loop_tile = <TbTile> {}
                 tb_loop_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_loop_icon = <Image> {
-                    source: image!("assets/icons/loop_2x.png"),
+                    source: dep("assets/icons/loop_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_loop_hit = <TbHit> {}
@@ -283,7 +283,7 @@ live_design! {
                 tb_metro_tile = <TbTile> {}
                 tb_metro_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_metro_icon = <Image> {
-                    source: image!("assets/icons/metronome_2x.png"),
+                    source: dep("assets/icons/metronome_2x.png"),
                     width: 15, height: 15,
                 }
                 tb_metro_hit = <TbHit> {}
@@ -331,8 +331,8 @@ live_design! {
                 align: { x: 0.5, y: 0.5 },
                 tb_t0_tile = <TbTile> {}
                 tb_t0_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t0_icon = <Image> { source: image!("assets/icons/select_2x.png"), width: 16, height: 16 }
-                tb_t0_icon_f = <Image> { visible: false, source: image!("assets/icons/select_filled_2x.png"), width: 16, height: 16 }
+                tb_t0_icon = <Image> { source: dep("assets/icons/select_2x.png"), width: 16, height: 16 }
+                tb_t0_icon_f = <Image> { visible: false, source: dep("assets/icons/select_filled_2x.png"), width: 16, height: 16 }
                 tb_t0_hit = <TbHit> {}
             }
             tb_t1 = <View> {
@@ -341,8 +341,8 @@ live_design! {
                 align: { x: 0.5, y: 0.5 },
                 tb_t1_tile = <TbTile> {}
                 tb_t1_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t1_icon = <Image> { source: image!("assets/icons/slice_2x.png"), width: 16, height: 16 }
-                tb_t1_icon_f = <Image> { visible: false, source: image!("assets/icons/slice_filled_2x.png"), width: 16, height: 16 }
+                tb_t1_icon = <Image> { source: dep("assets/icons/slice_2x.png"), width: 16, height: 16 }
+                tb_t1_icon_f = <Image> { visible: false, source: dep("assets/icons/slice_filled_2x.png"), width: 16, height: 16 }
                 tb_t1_hit = <TbHit> {}
             }
             tb_t2 = <View> {
@@ -351,8 +351,8 @@ live_design! {
                 align: { x: 0.5, y: 0.5 },
                 tb_t2_tile = <TbTile> {}
                 tb_t2_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t2_icon = <Image> { source: image!("assets/icons/glue_2x.png"), width: 16, height: 16 }
-                tb_t2_icon_f = <Image> { visible: false, source: image!("assets/icons/glue_filled_2x.png"), width: 16, height: 16 }
+                tb_t2_icon = <Image> { source: dep("assets/icons/glue_2x.png"), width: 16, height: 16 }
+                tb_t2_icon_f = <Image> { visible: false, source: dep("assets/icons/glue_filled_2x.png"), width: 16, height: 16 }
                 tb_t2_hit = <TbHit> {}
             }
             tb_t3 = <View> {
@@ -361,8 +361,8 @@ live_design! {
                 align: { x: 0.5, y: 0.5 },
                 tb_t3_tile = <TbTile> {}
                 tb_t3_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t3_icon = <Image> { source: image!("assets/icons/stretch_2x.png"), width: 16, height: 16 }
-                tb_t3_icon_f = <Image> { visible: false, source: image!("assets/icons/stretch_filled_2x.png"), width: 16, height: 16 }
+                tb_t3_icon = <Image> { source: dep("assets/icons/stretch_2x.png"), width: 16, height: 16 }
+                tb_t3_icon_f = <Image> { visible: false, source: dep("assets/icons/stretch_filled_2x.png"), width: 16, height: 16 }
                 tb_t3_hit = <TbHit> {}
             }
             tb_t4 = <View> {
@@ -371,8 +371,8 @@ live_design! {
                 align: { x: 0.5, y: 0.5 },
                 tb_t4_tile = <TbTile> {}
                 tb_t4_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t4_icon = <Image> { source: image!("assets/icons/draw_2x.png"), width: 16, height: 16 }
-                tb_t4_icon_f = <Image> { visible: false, source: image!("assets/icons/draw_filled_2x.png"), width: 16, height: 16 }
+                tb_t4_icon = <Image> { source: dep("assets/icons/draw_2x.png"), width: 16, height: 16 }
+                tb_t4_icon_f = <Image> { visible: false, source: dep("assets/icons/draw_filled_2x.png"), width: 16, height: 16 }
                 tb_t4_hit = <TbHit> {}
             }
             tb_t5 = <View> {
@@ -381,8 +381,8 @@ live_design! {
                 align: { x: 0.5, y: 0.5 },
                 tb_t5_tile = <TbTile> {}
                 tb_t5_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t5_icon = <Image> { source: image!("assets/icons/erase_2x.png"), width: 16, height: 16 }
-                tb_t5_icon_f = <Image> { visible: false, source: image!("assets/icons/erase_filled_2x.png"), width: 16, height: 16 }
+                tb_t5_icon = <Image> { source: dep("assets/icons/erase_2x.png"), width: 16, height: 16 }
+                tb_t5_icon_f = <Image> { visible: false, source: dep("assets/icons/erase_filled_2x.png"), width: 16, height: 16 }
                 tb_t5_hit = <TbHit> {}
             }
         }

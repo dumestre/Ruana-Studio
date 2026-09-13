@@ -1,0 +1,14 @@
+(
+    state:{
+        10358497690145691220:(
+            selected_file:"",
+            zoom_pan:(
+                zoom:1.5,
+                pan_x:-772.5,
+                pan_y:-772.5,
+            ),
+            component_positions:[
+            ],
+        ),
+    },
+)

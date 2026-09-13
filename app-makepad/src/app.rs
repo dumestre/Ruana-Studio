@@ -28,13 +28,14 @@ live_design! {
     App = {{App}} {
         ui: <Root> {
             main_window = <Window> {
-                window: { inner_size: vec2(1100, 640), title: "RuanaStudio" }
+                window: { inner_size: vec2(1366, 768), title: "Ruana Studio" }
                 pass: { clear_color: #191919 }
 
                 body = <View> {
                     width: Fill, height: Fill,
                     flow: Down,
                     spacing: 0,
+                    
 
                     toolbar = <Toolbar> {}
 
@@ -46,6 +47,7 @@ live_design! {
                         width: Fill, height: Fill,
                         flow: Right,
                         spacing: 0,
+                        
 
                         explorer_area = <View> {
                             width: 190, height: Fill,
@@ -339,11 +341,15 @@ impl LiveRegister for App {
 
 impl MatchEvent for App {
     fn handle_startup(&mut self, cx: &mut Cx) {
-        self.shell = ShellState::build();
-        // Atualiza o relógio do transport a cada 100 ms.
-        let _ = cx.start_interval(0.1);
-        self.shell.refresh_status(&self.ui, cx);
-    }
+    self.shell = ShellState::build();
+
+    cx.push_unique_platform_op(
+        CxOsOp::MaximizeWindow(WindowId(0, 0))
+    );
+
+    let _ = cx.start_interval(0.1);
+    self.shell.refresh_status(&self.ui, cx);
+}
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
         let mut acts = Vec::new();
