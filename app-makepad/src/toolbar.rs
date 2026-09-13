@@ -27,7 +27,6 @@ live_design! {
 
     // Button de ícone: fundo autônomo (água) que captura o clique.
     pub TbHit = <Button> {
-        width: Fill, height: Fill,
         text: "",
         draw_bg: {
             color: #0000,
@@ -60,9 +59,11 @@ live_design! {
 
     // Botão de texto do menubar (File/Edit/New/…).
     TbTextBtn = <Button> {
+        
         height: 20,
+        align: { x: 0.5, y: 0.5 },
         draw_bg: {
-            color: #555555,
+            color: #000000,
             color_hover: #666666,
             color_down: #474747,
             color_focus: #555555,
@@ -70,7 +71,7 @@ live_design! {
             border_size: 0.0,
             border_radius: 3.0,
         }
-        draw_text: { color: #E8E8E8, text_style: { font_size: 11.0 } }
+        draw_text: { color: #E8E8E8, text_style: { font_size: 10.0 } }
     }
 
     // -----------------------------------------------------------------
@@ -79,13 +80,14 @@ live_design! {
     // -----------------------------------------------------------------
     pub Toolbar = <View> {
         width: Fill,
+        align: { x: 0.5, y: 0.5 },
         height: 34,
         show_bg: true,
         draw_bg: { color: #313131 }
         flow: Right,
         spacing: 10,
         align: { x: 0.0, y: 0.5 },
-        padding: { left: 8, right: 8 }
+        padding: { left: 3, right: 3 }
 
         // Logo + título -------------------------------------------------
         tb_logo = <Image> {
@@ -100,6 +102,7 @@ live_design! {
 
         // Menus ----------------------------------------------------------
         tb_menus = <View> {
+            align: { x: 0.5, y: 0.5 },
             flow: Right,
             spacing: 2,
             tb_menu_file = <TbTextBtn> { text: "File" }
@@ -113,6 +116,7 @@ live_design! {
 
         // Undo/Redo -------------------------------------------------------
         tb_editrow = <View> {
+            align: { x: 0.5, y: 0.5 },
             flow: Right,
             spacing: 2,
             tb_undo = <View> {
@@ -133,9 +137,9 @@ live_design! {
                 tb_undo_hit = <TbHit> {}
             }
             tb_redo = <View> {
+                align: { x: 0.5, y: 0.5 },
                 width: 18, height: 18,
                 flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
                 tb_redo_tile = <TbTile> {}
                 tb_redo_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
                 tb_redo_icon = <Image> {
@@ -153,6 +157,7 @@ live_design! {
 
         // Follow / Snap (toggles) ---------------------------------------
         tb_toggles = <View> {
+            align: { x: 0.5, y: 0.5 },
             flow: Right,
             spacing: 2,
             tb_follow = <View> {
@@ -193,6 +198,7 @@ live_design! {
 
         // Project key ----------------------------------------------------
         tb_key = <DropDown> {
+            align: { x: 0.5, y: 0.5 },
             width: 68, height: 18,
             selected_item: 0,
             labels: ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
@@ -200,6 +206,7 @@ live_design! {
 
         // Theme picker ----------------------------------------------------
         tb_theme = <DropDown> {
+            align: { x: 0.5, y: 0.5 },
             width: 96, height: 18,
             selected_item: 0,
             labels: ["Studio Dark", "Studio Light", "Studio Blue", "Studio Green", "Metal", "Flat", "Paper"],
@@ -263,7 +270,7 @@ live_design! {
                 tb_rec_hit = <TbHit> {}
             }
 
-            tb_loop = <View> {
+            tb_loop = <View> {align: { x: 0.5, y: 0.5 },
                 width: 18, height: 18,
                 flow: Overlay,
                 align: { x: 0.5, y: 0.5 },
@@ -289,7 +296,7 @@ live_design! {
                 tb_metro_hit = <TbHit> {}
             }
 
-            tb_bpmbox = <View> {
+            tb_bpmbox = <View> {align: { x: 0.5, y: 0.5 },
                 flow: Right,
                 spacing: 2,
                 tb_bpm = <TextInput> {
@@ -303,12 +310,14 @@ live_design! {
                     }
                 }
                 tb_bpm_label = <Label> {
+                    align: { x: 0.5, y: 0.5 },
                     text: "BPM",
                     draw_text: { color: #9A9A9A, text_style: { font_size: 11.0 } }
                 }
             }
 
             tb_tsig = <Label> {
+                align: { x: 0.5, y: 0.5 },
                 width: 30, height: 18,
                 text: "4/4",
                 draw_text: {
@@ -322,6 +331,7 @@ live_design! {
 
         // Ferramentas (EditToolbar: select/slice/glue/stretch/draw/erase) --
         tb_tools = <View> {
+            align: { x: 0.5, y: 0.5 },
             flow: Right,
             spacing: 2,
 
@@ -377,7 +387,7 @@ live_design! {
             }
             tb_t5 = <View> {
                 width: 19, height: 19,
-                flow: Overlay,
+                flow: Right,
                 align: { x: 0.5, y: 0.5 },
                 tb_t5_tile = <TbTile> {}
                 tb_t5_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
@@ -389,10 +399,11 @@ live_design! {
 
         // Controles da janela (dots) --------------------------------------
         tb_dots = <View> {
-            flow: Right,
+            align: { x: 0.9, y: 0.5 },
+            flow: Left,
             spacing: 4,
             tb_dot_min = <Button> {
-                width: 14, height: 14,
+                width: 16, height: 16,
                 text: "",
                 draw_bg: {
                     color: #FEBC2E,
@@ -405,7 +416,7 @@ live_design! {
                 }
             }
             tb_dot_max = <Button> {
-                width: 14, height: 14,
+                width: 16, height: 16,
                 text: "",
                 draw_bg: {
                     color: #28C840,
@@ -418,7 +429,7 @@ live_design! {
                 }
             }
             tb_dot_close = <Button> {
-                width: 14, height: 14,
+                width: 16, height: 16,
                 text: "",
                 draw_bg: {
                     color: #FF5F57,
