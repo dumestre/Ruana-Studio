@@ -1,11 +1,9 @@
 //! RuanaStudio — entrypoint.
 //!
-//! Arquitetura do AGENTS.md: o app é dono do loop winit e do wgpu.
-//! O `main` apenas sobe o event loop do winit (`host::run`); o `setup`
-//! monta o estado compartilhado (core + áudio + modelos) e delega o
-//! wiring dos handlers para os módulos por domínio quando a janela sobe:
+//! O `main` fica deliberadamente enxuto: cria a janela, monta o
+//! estado compartilhado (core + áudio + modelos) e delega o
+//! wiring dos handlers para os módulos por domínio:
 //!
-//! - `host`       — janela winit + surface wgpu + overlay Slint offscreen
 //! - `waveform`   — cache, rasterização e re-render por zoom
 //! - `importer`   — importação de arquivos de áudio
 //! - `explorer`   — explorador de arquivos (navegação/filtro)
@@ -13,11 +11,8 @@
 //! - `mixer`      — mixer (estado, modelos compartilhados)
 //! - `models`     — projeção core → Slint e eventos do documento
 //! - `timeline`   — edição de clips na timeline
-//! - `floats`     — modo sem janelas flutuantes (UI única em overlay)
-//! - `os_drop`    — drag & drop de arquivos do SO (no nível winit)
-//!
-//! A timeline wgpu renderiza DIRETO na surface; a UI Slint é composta
-//! por cima como overlay RGBA (o componente Timeline vira um "buraco").
+//! - `floats`     — janelas flutuantes (mixer/sampler/piano roll)
+//! - `os_drop`    — drag & drop de arquivos do Sistema Operacional
 
 slint::include_modules!();
 
@@ -29,7 +24,6 @@ mod cursors;
 mod decode_worker;
 mod explorer;
 mod floats;
-mod host;
 mod icon;
 mod importer;
 mod interaction;
@@ -39,11 +33,10 @@ mod models;
 mod os_drop;
 mod piano_roll;
 mod playback;
-mod slint_host;
-mod theme;
-
 mod timeline;
 mod timeline_slint;
+mod docked;
+mod theme;
 
 mod waveform;
 mod waveform_gpu;
@@ -55,7 +48,8 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use crate::cursors::{
-    init_cursor_manager, set_cursor_for_tool, set_dark_cursors, set_timeline_bounds,
+    init_cursor_manager, reset_cursor_to_default, set_cursor_for_tool, set_dark_cursors,
+    set_timeline_bounds,
 };
 #[cfg(windows)]
 use crate::cursors::set_cursor_window_handle;
@@ -106,39 +100,49 @@ fn choose_audio_file() -> Option<String> {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
-    host::run()
-}
-
-/// Instala todo o wiring da DAW quando a janela winit sobe (`resumed` no
-/// host). Devolve o [`host::DropSink`] com o fluxo do OS drag & drop
-/// (o software window do Slint não recebe eventos nativos de drop).
-pub fn setup(
-    ui: &MainWindow,
-    window: Arc<winit::window::Window>,
-    bridge: Rc<RefCell<host::EngineBridge>>,
-    project: Rc<RefCell<Project>>,
-    transport: Arc<Mutex<Transport>>,
-    state: Rc<RefCell<host::SharedState>>,
-) -> host::DropSink {
-    // Modo nativo (AGENTS.md): a timeline do Slint vira o "buraco" por onde
-    // o wgpu é composto; a UI do Slint é o overlay que flutua por cima.
-    ui.set_native_overlay(true);
+    let ui = MainWindow::new()?;
 
     init_cursor_manager().expect("Failed to initialize cursor manager");
 
-    // Cursor customizado: HWND da janela winit (já existe sincronamente — sem
-    // depender de timer que esperava a janela nativa do Slint subir).
-    #[cfg(windows)]
+    let window = ui.window();
+    window.on_close_requested(move || {
+        let _ = reset_cursor_to_default();
+        slint::CloseRequestResponse::HideWindow
+    });
+
+    // Ícone da janela/barra de tarefas: aplica já na criação e de novo
+    // após o event loop subir (a janela winit pode ser criada tardiamente).
+    icon::apply(window);
     {
-        if let Ok(handle) = window.window_handle() {
-            if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                set_cursor_window_handle(h.hwnd.get() as *mut std::ffi::c_void);
+        let ui_weak = ui.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(200), move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                icon::apply(ui.window());
             }
-        }
+        });
     }
 
-    // Estado autoritativo da DAW: vive no core (`project`) e no Transport
-    // compartilhado — criados pelo host e passados para cá.
+    // Cursor customizado: precisa do HWND da janela já criada.
+    #[cfg(windows)]
+    {
+        let ui_weak = ui.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(100), move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let window = ui.window();
+                let handle = window.window_handle();
+                if let Ok(raw_handle) = handle.window_handle() {
+                    if let raw_window_handle::RawWindowHandle::Win32(h) = raw_handle.as_raw() {
+                        set_cursor_window_handle(h.hwnd.get() as *mut std::ffi::c_void);
+                        let _ = set_cursor_for_tool(0);
+                    }
+                }
+            }
+        });
+    }
+
+    // Estado autoritativo da DAW: vive no core, nunca na UI.
+    let project = Rc::new(RefCell::new(Project::startup()));
+    let transport = Arc::new(Mutex::new(Transport::default()));
 
     // Motor de áudio: abre UMA vez e fica aberto pela vida do app.
     //
@@ -202,7 +206,7 @@ pub fn setup(
     let sample_cache: Rc<RefCell<clip_cache::SampleCache>> = Rc::new(RefCell::new(HashMap::new()));
 
     let (tracks_model, clips_model, track_colors_model) =
-        initial_bind(ui, &project.borrow(), &waveforms.borrow());
+        initial_bind(&ui, &project.borrow(), &waveforms.borrow());
     bind_document_events(
         &project.borrow(),
         tracks_model,
@@ -231,10 +235,10 @@ pub fn setup(
     }
 
     // Mixer: modelos compartilhados — atualização por canal (set_row_data)
-    // propaga para a janela principal (sem flutuantes nesta arquitetura).
+    // propaga para a janela principal e todas as flutuantes de uma vez.
     let mixer_models: Rc<RefCell<MixerModels>> =
         Rc::new(RefCell::new(MixerModels::from_project(&project.borrow())));
-    apply_mixer_models!(ui, &mixer_models.borrow());
+    apply_mixer_models!(&ui, &mixer_models.borrow());
 
     // Meters: modelo compartilhado + estado de decay (smoothing no Rust).
     let meter_model: Rc<slint::VecModel<f32>> =
@@ -246,7 +250,7 @@ pub fn setup(
     let meter_state: Rc<RefCell<Vec<f32>>> =
         Rc::new(RefCell::new(vec![0.0; project.borrow().tracks.len() + 1]));
 
-    // Piano roll da janela principal (estado por janela).
+    // Piano roll da janela principal (estado por janela; cada float tem o seu).
     // O editor da janela principal é VINCULADO ao clip MIDI ativo: abrir um
     // clip carrega as notas dele e cada edição grava de volta (on_mutated).
     let piano_editor: Rc<RefCell<NoteEditor>> = Rc::new(RefCell::new(NoteEditor::new()));
@@ -262,7 +266,7 @@ pub fn setup(
             let notes = editor.borrow().notes().to_vec();
             project.borrow_mut().set_clip_notes(id, notes);
         });
-        piano_roll::wire_piano_roll(ui, piano_editor.clone(), &on_mutated);
+        piano_roll::wire_piano_roll(&ui, piano_editor.clone(), &on_mutated);
     }
 
     // Duplo clique em clip MIDI → abre o piano roll dockado e carrega as
@@ -297,7 +301,7 @@ pub fn setup(
     // Beat sequencer: projeção inicial + persistência no core.
     {
         let project = project.clone();
-        beat::wire_beat(ui, project, audio.clone());
+        beat::wire_beat(&ui, project, audio.clone());
     }
 
     {
@@ -381,10 +385,9 @@ pub fn setup(
         });
     }
 
-    // Modo single-window (AGENTS.md): sem janelas flutuantes — os handles
-    // continuam existindo para os módulos que os pedem.
-    let handles = floats::install_no_floats(
-        ui,
+    // Janelas flutuantes (mixer/sampler/piano roll): wiring dedicado.
+    let handles = floats::install(
+        &ui,
         project.clone(),
         mixer_models.clone(),
         meter_model.clone(),
@@ -394,7 +397,7 @@ pub fn setup(
     // Timeline: edição de clips (drop, slice, glue, move/resize,
     // delete/rename/cor, clipboard, duplicate, add-track, undo/redo).
     timeline::install(
-        ui,
+        &ui,
         project.clone(),
         waveforms.clone(),
         clips_model.clone(),
@@ -405,18 +408,16 @@ pub fn setup(
     );
 
     // Motor de zoom/scroll: captura o input cru e suaviza por frame.
-    interaction::install(ui);
+    interaction::install(&ui);
 
-    // Engine wgpu da timeline: callbacks do componente `Timeline` (régua,
-    // pointer, scroll) operando na engine da surface — composta a cada
-    // `RedrawRequested` pelo host.
-    host::install_engine_callbacks(ui, bridge.clone());
+    // Janela da timeline dockada (wgpu direto na surface, sem readback).
+    let dock_tx = docked::install(&ui, transport.clone(), project.clone());
 
     // Waveform: re-render na resolução exata quando o zoom muda.
-    waveform::wire_resolution_requests(ui, waveforms.clone(), wgpu_renderer.clone(), clips_model.clone());
+    waveform::wire_resolution_requests(&ui, waveforms.clone(), wgpu_renderer.clone(), clips_model.clone());
 
     // Explorador de arquivos: navegação, histórico e filtro.
-    explorer::wire_explorer(ui);
+    explorer::wire_explorer(&ui);
 
     // Parâmetros do mixer → core (atualização por canal, sem rebuild).
     {
@@ -567,41 +568,90 @@ pub fn setup(
         std::process::exit(0);
     });
 
-    // Minimizar → janela winit (sem janela nativa do Slint para mexer).
-    {
-        let window = window.clone();
-        ui.on_minimize(move || {
+    let ui_weak_min = ui.as_weak();
+    ui.on_minimize(move || {
+        if let Some(ui) = ui_weak_min.upgrade() {
+            let window = ui.window();
             window.set_minimized(true);
+        }
+    });
+
+    // Janela sempre abre maximizada (pedido usuário) - PROFISSIONAL.
+    // Tenta via Slint (set_maximized) e fallback Win32 ShowWindow.
+    {
+        // Slint: tenta maximizar via API (se exposta)
+        ui.window().set_maximized(true);
+        let ui_weak_max = ui.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(50), move || {
+            if let Some(ui) = ui_weak_max.upgrade() {
+                ui.window().set_maximized(true);
+                #[cfg(windows)]
+                {
+                    use raw_window_handle::HasWindowHandle;
+                    use windows_sys::Win32::Foundation::HWND;
+                    use windows_sys::Win32::UI::WindowsAndMessaging::{IsZoomed, ShowWindow, SW_MAXIMIZE};
+                    if let Ok(handle) = ui.window().window_handle().window_handle() {
+                        if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                            unsafe {
+                                let hwnd: HWND = h.hwnd.get() as *mut _;
+                                if IsZoomed(hwnd) != 0 {
+                                    let _ = ShowWindow(hwnd, SW_MAXIMIZE);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         });
     }
 
-    // Janela já abre maximizada no `host::resumed` (winit).
-
     // Arrasto da janela frameless - PROFISSIONAL sem tremor.
-    // Delega ao SO via WM_NCLBUTTONDOWN/HTCAPTION (drag nativo do
-    // Windows) - suave, com AeroSnap, sem cálculo manual.
+    // Antes: `set_position(origin + dx logical)` causava jitter em
+    // HiDPI (logical vs physical) e trava por flood de mensagens.
+    // Agora: delega ao SO via WM_NCLBUTTONDOWN/HTCAPTION (drag nativo
+    // do Windows) - suave, com AeroSnap, sem cálculo manual.
     #[cfg(windows)]
     {
-        use windows_sys::Win32::Foundation::{HWND, LPARAM, WPARAM};
-        use windows_sys::Win32::UI::WindowsAndMessaging::{
-            HTCAPTION, IsZoomed, SendMessageW, WM_NCLBUTTONDOWN,
-        };
-        let window = window.clone();
+        let ui_weak_drag_start = ui.as_weak();
         ui.on_window_drag_started(move || {
-            let Ok(handle) = window.window_handle() else {
-                return;
-            };
-            let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() else {
-                return;
-            };
-            let hwnd: HWND = h.hwnd.get() as *mut _;
-            // Se já está maximizada, ignora arrasto (usuário deve
-            // restaurar primeiro) - evita pulo.
-            if unsafe { IsZoomed(hwnd) != 0 } {
-                return;
-            }
-            unsafe {
-                SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION as WPARAM, 0 as LPARAM);
+            if let Some(ui) = ui_weak_drag_start.upgrade() {
+                // Se já está maximizada, ignora arrasto (usuário deve
+                // restaurar primeiro) - evita pulo
+                let is_max = {
+                    use raw_window_handle::HasWindowHandle;
+                    use windows_sys::Win32::Foundation::HWND;
+                    use windows_sys::Win32::UI::WindowsAndMessaging::IsZoomed;
+                    if let Ok(handle) = ui.window().window_handle().window_handle() {
+                        if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                            let hwnd: HWND = h.hwnd.get() as *mut _;
+                            unsafe { IsZoomed(hwnd) != 0 }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                };
+                if is_max {
+                    return;
+                }
+                if let Ok(handle) = ui.window().window_handle().window_handle() {
+                    if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                        unsafe {
+                            use windows_sys::Win32::Foundation::{HWND, LPARAM, WPARAM};
+                            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                                HTCAPTION, SendMessageW, WM_NCLBUTTONDOWN,
+                            };
+                            let hwnd: HWND = h.hwnd.get() as *mut _;
+                            SendMessageW(
+                                hwnd,
+                                WM_NCLBUTTONDOWN,
+                                HTCAPTION as WPARAM,
+                                0 as LPARAM,
+                            );
+                        }
+                    }
+                }
             }
         });
     }
@@ -611,75 +661,37 @@ pub fn setup(
 
     ui.on_window_drag_finished(|| {});
 
+    // Drag & drop de arquivos direto do Sistema Operacional.
+    os_drop::install(
+        &ui,
+        project.clone(),
+        waveforms.clone(),
+        clips_model.clone(),
+        track_colors_model.clone(),
+        sample_cache.clone(),
+    );
+
     // ---- TEMA ------------------------------------------------------
     // Restaura a paleta salva e aplica quando o usuário escolher
     // outra no seletor do toolbar (persiste o índice selecionado).
     {
         let idx = theme::load().unwrap_or(0);
-        theme::apply(ui, idx);
+        theme::apply(&ui, idx);
+        docked::push_theme(&dock_tx, idx);
         // Cursores escuros no tema Paper (claro), claros nos escuros.
         let _ = set_dark_cursors(idx == theme::THEME_PAPER);
 
         let ui_weak_theme = ui.as_weak();
+        let dock_tx_theme = dock_tx.clone();
         ui.on_theme_selected(move |index| {
             if let Some(ui) = ui_weak_theme.upgrade() {
                 let idx = theme::apply(&ui, index);
                 theme::save(idx);
+                docked::push_theme(&dock_tx_theme, idx);
                 let _ = set_dark_cursors(idx == theme::THEME_PAPER);
             }
         });
     }
 
-    // ---- OS DRAG & DROP (nível winit) --------------------------------
-    // O software window do Slint não recebe eventos nativos de drop; o host
-    // reencaminha via `window_event` para estes closures. O fluxo é idêntico
-    // ao do drag do ClipPool (ghost, snap, pré-decode, importação).
-    {
-        let ui_weak_hovered = ui.as_weak();
-        let sample_cache_h = sample_cache.clone();
-        let hovered = Rc::new(move |path: std::path::PathBuf| {
-            let Some(ui) = ui_weak_hovered.upgrade() else {
-                return;
-            };
-            os_drop::handle_hovered(&ui, &path, &sample_cache_h);
-        });
-
-        let ui_weak_cancelled = ui.as_weak();
-        let cancelled = Rc::new(move || {
-            if let Some(ui) = ui_weak_cancelled.upgrade() {
-                os_drop::handle_hovered_cancelled(&ui);
-            }
-        });
-
-        let ui_weak_dropped = ui.as_weak();
-        let project_d = project.clone();
-        let waveforms_d = waveforms.clone();
-        let clips_model_d = clips_model.clone();
-        let track_colors_model_d = track_colors_model.clone();
-        let sample_cache_d = sample_cache.clone();
-        let state_d = state.clone();
-        let dropped = Rc::new(move |path: std::path::PathBuf| {
-            let Some(ui) = ui_weak_dropped.upgrade() else {
-                return;
-            };
-            let st = state_d.borrow();
-            os_drop::handle_dropped(
-                &ui,
-                &path,
-                st.win_pos,
-                st.scale,
-                project_d.clone(),
-                waveforms_d.clone(),
-                clips_model_d.clone(),
-                track_colors_model_d.clone(),
-                sample_cache_d.clone(),
-            );
-        });
-
-        host::DropSink {
-            hovered,
-            cancelled,
-            dropped,
-        }
-    }
+    ui.run()
 }
