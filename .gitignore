@@ -1,7 +1,7 @@
 # Rust / Cargo
-/target
-/target-check
-/target-check2
+target/
+target-check/
+target-check2/
 **/*.rs.bk
 *.pdb
 
