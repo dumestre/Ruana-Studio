@@ -169,7 +169,7 @@ fn resumed(&mut self, event_loop: &ActiveEventLoop) {
             let inner = window.inner_size();
             let win: Arc<winit::window::Window> = Arc::new(window);
             self.app = Some(
-                App::new(Some(win), (inner.width, inner.height), self.transport.clone())
+                App::new(Some(win), (inner.width, inner.height), self.transport.clone(), None, None)
                     .expect("app init failed"),
             );
             // Initialize tools first (creates the ToolManager singleton),

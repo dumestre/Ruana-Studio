@@ -216,48 +216,64 @@ impl App {
     /// - `None`: engine pura; a renderização usa [`App::render_to_rgba`].
     /// `size` é o tamanho inicial (standalone: `window.inner_size()`).
     /// `transport` compartilhado opcional (senão cria um próprio).
+    /// `device`/`queue` externos opcionais (para embedding compartilhado).
     pub fn new(
         window: Option<std::sync::Arc<winit::window::Window>>,
         size: (u32, u32),
         transport: Option<Arc<Mutex<Transport>>>,
+        device: Option<Arc<wgpu::Device>>,
+        queue: Option<Arc<wgpu::Queue>>,
     ) -> Result<Self, String> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::DX12 | wgpu::Backends::GL,
-            flags: wgpu::InstanceFlags::empty(),
-            backend_options: wgpu::BackendOptions::default(),
-            memory_budget_thresholds: Default::default(),
-            display: None,
-        });
-        let surface = match &window {
-            Some(w) => instance
-                .create_surface(w.clone())
-                .map_err(|e| format!("wgpu: create_surface failed: {e}"))
-                .ok(),
-            None => None,
+        // Cria instance e surface SOMENTE no modo standalone.
+        // No modo embedded (device/queue externos), NÃO criar nova instance —
+        // o device/queue pertencem à instância do renderer (egui/winit).
+        let (_instance, surface, adapter): (Option<wgpu::Instance>, Option<wgpu::Surface<'static>>, Option<wgpu::Adapter>) =
+            if let (Some(_dev), Some(_q)) = (&device, &queue) {
+                (None, None, None)
+            } else {
+                let inst = wgpu::Instance::new(wgpu::InstanceDescriptor {
+                    backends: wgpu::Backends::DX12 | wgpu::Backends::GL,
+                    flags: wgpu::InstanceFlags::empty(),
+                    backend_options: wgpu::BackendOptions::default(),
+                    memory_budget_thresholds: Default::default(),
+                    display: None,
+                });
+                let surf = match &window {
+                    Some(w) => inst
+                        .create_surface(w.clone())
+                        .map_err(|e| format!("wgpu: create_surface failed: {e}"))
+                        .ok(),
+                    None => None,
+                };
+                let adapter = pollster::block_on(inst.request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    compatible_surface: surf.as_ref(),
+                    force_fallback_adapter: false,
+                    apply_limit_buckets: false,
+                }))
+                .map_err(|e| format!("wgpu: no adapter available: {e}"))?;
+                (Some(inst), surf, Some(adapter))
+            };
+        let surface = surface;
+
+        // Usa device/queue externos se fornecidos, senão cria novos
+        let (device, queue, adapter) = if let (Some(dev), Some(q)) = (device, queue) {
+            (dev, q, None)
+        } else {
+            let adapter = adapter.ok_or_else(|| "wgpu: no adapter".to_string())?;
+            let (dev, q) = pollster::block_on(adapter.request_device(
+                &wgpu::DeviceDescriptor {
+                    label: Some("ruana-timeline-device"),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
+                    memory_hints: wgpu::MemoryHints::default(),
+                    trace: Default::default(),
+                    experimental_features: Default::default(),
+                },
+            ))
+            .map_err(|e| format!("wgpu: request_device failed: {e}"))?;
+            (Arc::new(dev), Arc::new(q), Some(adapter))
         };
-
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: surface.as_ref(),
-            force_fallback_adapter: false,
-            apply_limit_buckets: false,
-        }))
-        .map_err(|e| format!("wgpu: no adapter available: {e}"))?;
-
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("ruana-timeline-device"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: Default::default(),
-                experimental_features: Default::default(),
-            },
-        ))
-        .map_err(|e| format!("wgpu: request_device failed: {e}"))?;
-
-        let device = Arc::new(device);
-        let queue = Arc::new(queue);
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("timeline-shader"),
@@ -305,7 +321,7 @@ impl App {
         });
 
         let (render_format, config) = if let Some(surf) = &surface {
-            let surface_caps = surf.get_capabilities(&adapter);
+            let surface_caps = surf.get_capabilities(&adapter.unwrap());
             let surface_format = surface_caps
                 .formats
                 .iter()
