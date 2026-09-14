@@ -35,7 +35,7 @@ impl From<winit::event::ElementState> for ButtonState {
 
 use crate::clips;
 use crate::fades;
-use crate::shctx::{ICON_SHADER_WGSL, SHADER_WGSL};
+use crate::shctx::{ICON_SHADER_WGSL, OVERLAY_SHADER_WGSL, SHADER_WGSL};
 use crate::tools::{init_tool_manager, set_dark_mode};
 use crate::waveform;
 
@@ -208,6 +208,17 @@ pub struct App {
     pub icon_atlas_view: wgpu::TextureView,
     /// Índice (0..5) do botão sob o cursor, ou None.
     pub toolbar_hover: Option<usize>,
+
+    /// ===== Overlay de UI (Slint etc.) =====
+    /// Textura RGBA renderizada por software (host) composta por cima da cena
+    /// no fim de cada frame. `None` quando não há overlay.
+    pub overlay_texture: Option<wgpu::Texture>,
+    pub overlay_view: Option<wgpu::TextureView>,
+    pub overlay_size: (u32, u32),
+    /// Pipeline que desenha a textura cobrindo o viewport inteiro.
+    pub overlay_pipeline: wgpu::RenderPipeline,
+    pub overlay_bind_group_layout: wgpu::BindGroupLayout,
+    pub overlay_sampler: wgpu::Sampler,
 }
 
 impl App {
@@ -549,6 +560,107 @@ impl App {
             ..Default::default()
         });
 
+        // === Pipeline de overlay (textura RGBA por cima da cena) ===
+        let overlay_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("timeline-overlay-shader"),
+            source: wgpu::ShaderSource::Wgsl(OVERLAY_SHADER_WGSL.into()),
+        });
+
+        let overlay_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("timeline-overlay-bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+        let overlay_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("timeline-overlay-pl"),
+            bind_group_layouts: &[Some(&overlay_bind_group_layout)],
+            immediate_size: 0,
+        });
+
+        let overlay_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("timeline-overlay-rp"),
+            layout: Some(&overlay_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &overlay_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: 16,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x2,
+                            offset: 0,
+                            shader_location: 0,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Float32x2,
+                            offset: 8,
+                            shader_location: 1,
+                        },
+                    ],
+                })],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &overlay_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: render_format,
+                    // O buffer do software renderer do Slint é premultiplicado.
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let overlay_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("overlay-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+
         // === Dados demo ===
         // Abre com apenas UMA track padrão, sem clips. O usuário importa o
         // áudio (por drag & drop ou menu) e a timeline cria as tracks.
@@ -679,6 +791,14 @@ transport,
             icon_sampler,
             icon_atlas_view,
             toolbar_hover: None,
+
+            // Overlay de UI (Slint etc.)
+            overlay_texture: None,
+            overlay_view: None,
+            overlay_size: (0, 0),
+            overlay_pipeline,
+            overlay_bind_group_layout,
+            overlay_sampler,
         })
     }
 
@@ -692,6 +812,65 @@ transport,
         if let Some(window) = &self.window {
             window.request_redraw();
         }
+    }
+
+    /// Envia uma textura RGBA (pixels straight, linha 0 = topo) para ser
+    /// composta por cima da cena no fim de cada frame. Se o tamanho mudar, a
+    /// textura GPU é (re)criada; senão, reutiliza e apenas escreve os pixels.
+    pub fn set_overlay(&mut self, rgba: &[u8], width: u32, height: u32) {
+        if width == 0 || height == 0 || rgba.len() < (width as usize) * (height as usize) * 4 {
+            return;
+        }
+        let recreate = self.overlay_texture.as_ref().map_or(true, |t| {
+            t.width() != width || t.height() != height
+        });
+        if recreate {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("slint-overlay"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            self.overlay_view = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
+            self.overlay_texture = Some(texture);
+            self.overlay_size = (width, height);
+        }
+        if let Some(texture) = &self.overlay_texture {
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                rgba,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(width * 4),
+                    rows_per_image: Some(height),
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+    }
+
+    /// Remove o overlay (a cena volta a cobrir a janela inteira).
+    pub fn clear_overlay(&mut self) {
+        self.overlay_texture = None;
+        self.overlay_view = None;
+        self.overlay_size = (0, 0);
     }
 
     /// Aplica um novo tamanho (modo standalone reconfigure a surface; modo

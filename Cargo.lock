@@ -5179,6 +5179,7 @@ dependencies = [
  "usvg 0.48.1",
  "wgpu",
  "windows-sys 0.61.2",
+ "winit",
  "winresource",
 ]
 

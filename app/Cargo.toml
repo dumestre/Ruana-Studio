@@ -11,6 +11,7 @@ daw-audio = { path = "../crates/daw-audio" }
 daw-midi = { path = "../crates/daw-midi" }
 timeline-render = { path = "../timeline-render", default-features = false }
 slint = { workspace = true, features = ["renderer-skia", "renderer-femtovg", "raw-window-handle-06"] }
+winit = "0.30"
 i-slint-backend-winit = "1.17.1"
 raw-window-handle = "0.6"
 png = "0.18.1"

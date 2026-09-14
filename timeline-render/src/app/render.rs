@@ -970,6 +970,82 @@ impl App {
             ipass.draw(0..4, 0..icon_instances.len() as u32);
         }
 
+        // === 3º pass: overlay de UI (Slint etc.) ===
+        // Uma textura RGBA (renderizada por software fora do wgpu) é desenhada
+        // cobrindo o viewport inteiro, por cima de tudo. O blend padrão compõe
+        // a UI sobre a timeline.
+        if let Some(overlay_view) = &self.overlay_view {
+            let (ow, oh) = self.overlay_size;
+            if ow > 0 && oh > 0 {
+                let w = width;
+                let h = height;
+                // Quad em coordenadas de pixels (x, y, u, v): y=0 → v=0 (topo
+                // do viewport mapeia para a linha 0 do buffer RGBA).
+                let verts: [f32; 16] = [
+                    0.0, 0.0, 0.0, 0.0,
+                    w,    0.0, 1.0, 0.0,
+                    0.0,  h,    0.0, 1.0,
+                    w,    h,    1.0, 1.0,
+                ];
+                let quad = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("overlay-quad"),
+                    contents: bytemuck::cast_slice(&verts),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+                let overlay_uniform = self.device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("overlay-uniforms"),
+                        contents: bytemuck::cast_slice(&OrthoCamera {
+                            scroll_x: 0.0,
+                            scroll_y: 0.0,
+                            viewport_w: width.max(1.0),
+                            viewport_h: height.max(1.0),
+                        }.proj()),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    },
+                );
+                let overlay_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("overlay-bg"),
+                    layout: &self.overlay_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: overlay_uniform.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.overlay_sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(overlay_view),
+                        },
+                    ],
+                });
+
+                let mut opass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("overlay-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                opass.set_pipeline(&self.overlay_pipeline);
+                opass.set_bind_group(0, &overlay_bind_group, &[]);
+                opass.set_vertex_buffer(0, quad.slice(..));
+                opass.draw(0..4, 0..1);
+            }
+        }
+
         encoder
     }
 
