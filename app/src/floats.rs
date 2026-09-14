@@ -366,3 +366,60 @@ pub fn install(
         fit_float_mixer_windows: Rc::new(fit_float_mixer_windows.clone()),
     }
 }
+
+/// Modo "sem janelas flutuantes" (arquitetura do AGENTS.md): a UI é composta
+/// como overlay offscreen numa única janela winit/wgpu. `install_no_floats`
+/// entrega os mesmos [`FloatHandles`] que os módulos esperam, mas sem criar
+/// janelas — `apply_mixer_state` espelha no painel principal e
+/// `fit_float_mixer_windows` é no-op.
+pub fn install_no_floats(
+    ui: &MainWindow,
+    project: Rc<RefCell<Project>>,
+    mixer_models: Rc<RefCell<MixerModels>>,
+    _meter_model: Rc<slint::VecModel<f32>>,
+    _audio: crate::audio_bridge::AudioBridge,
+) -> FloatHandles {
+    // Nenhum float: todos os slots fechados para sempre.
+    let sync_floated = {
+        let ui_weak = ui.as_weak();
+        move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_floated(Rc::new(slint::VecModel::from(vec![false, false, false])).into());
+            }
+        }
+    };
+    sync_floated();
+
+    // Reaplica o estado do mixer no painel principal a partir do core
+    // (mesma lógica do `install`, sem a projeção nos slots flutuantes).
+    let apply_mixer_state = {
+        let project = project.clone();
+        let ui_weak = ui.as_weak();
+        let holder = mixer_models.clone();
+        move || {
+            let proj = project.borrow();
+            *holder.borrow_mut() = MixerModels::from_project(&proj);
+            let models = holder.borrow();
+            let (insert_counts, insert_names, insert_enabled, max_inserts) =
+                mixer_inserts_state(&proj);
+            let insert_counts = Rc::new(slint::VecModel::from(insert_counts));
+            let insert_names = Rc::new(slint::VecModel::from(insert_names));
+            let insert_enabled = Rc::new(slint::VecModel::from(insert_enabled));
+            if let Some(ui) = ui_weak.upgrade() {
+                apply_mixer_models!(&ui, &models);
+                ui.set_mixer_insert_counts(insert_counts.clone().into());
+                ui.set_mixer_insert_names(insert_names.clone().into());
+                ui.set_mixer_insert_enabled(insert_enabled.clone().into());
+                ui.set_mixer_max_inserts(max_inserts);
+            }
+        }
+    };
+
+    // `fit_float_mixer_windows`: sem janelas para encaixar.
+    let fit_float_mixer_windows = { move || {} };
+
+    FloatHandles {
+        apply_mixer_state: Rc::new(apply_mixer_state.clone()),
+        fit_float_mixer_windows: Rc::new(fit_float_mixer_windows.clone()),
+    }
+}

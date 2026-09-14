@@ -241,6 +241,24 @@ export component MainWindow inherits Window {
     in property <length> timeline-canvas-area-height:
         workspace.timeline-canvas-area-height;
 
+    // Posição absoluta (px lógicos, dentro da janela) do retângulo onde o
+    // host compõe o frame wgpu da timeline (modo nativo/overlay).
+    in property <length> timeline-canvas-abs-x:
+        workspace.timeline-abs-x;
+
+    in property <length> timeline-canvas-abs-y:
+        workspace.timeline-abs-y;
+
+    in property <length> timeline-canvas-rect-width:
+        workspace.timeline-rect-width;
+
+    in property <length> timeline-canvas-rect-height:
+        workspace.timeline-rect-height;
+
+    // Modo nativo (AGENTS.md): timeline desenhada pelo wgpu na surface,
+    // UI do Slint composta por cima (timeline vira um "buraco").
+    in-out property <bool> native-overlay: false;
+
     callback focus-selected-clip-requested(int, float, length, length, length);
 
     // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
@@ -793,6 +811,7 @@ export component MainWindow inherits Window {
 
     workspace := Workspace {
         full-screen <=> root.full-screen;
+        native-overlay <=> root.native-overlay;
 
         // Clique na timeline devolve o foco de teclado aos atalhos.
         keyboard-focus-requested() => {

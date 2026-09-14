@@ -38,6 +38,16 @@ export component Timeline inherits Rectangle {
     in-out property <length> canvas-content-width: 0px;
     in-out property <length> canvas-content-height: 0px;
 
+    // ========================================================
+    // OVERLAY HOST (arquitetura do AGENTS.md)
+    //
+    // Quando true, a timeline do Slint vira um "buraco" transparente:
+    // o wgpu do host desenha o frame da timeline DIRETO na surface e o
+    // componente apenas captura input (o TouchArea continua ativo). O
+    // canvas-image fica vazio para não pintar por cima do frame do wgpu.
+    // ========================================================
+    in-out property <bool> overlay-hosted: false;
+
     in-out property <int> selected-track: 0;
 
     in property <float> current-time-seconds: 0;
@@ -108,7 +118,7 @@ export component Timeline inherits Rectangle {
     // APARÊNCIA
     // ========================================================
 
-    background: Theme.surface;
+    background: root.overlay-hosted ? transparent : Theme.surface;
 
     // ========================================================
     // CANVAS WGPU — o buffer rasterizado pela engine (`timeline-render`)
@@ -120,7 +130,7 @@ export component Timeline inherits Rectangle {
         y: 0px;
         width: max(0px, parent.width - root.timeline-left-padding);
         height: max(0px, parent.height);
-        source: root.canvas;
+        source: root.overlay-hosted ? @image-url("") : root.canvas;
         image-fit: fill;
     }
 

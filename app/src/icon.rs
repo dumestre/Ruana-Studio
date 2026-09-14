@@ -20,3 +20,10 @@ pub fn apply<W: WinitWindowAccessor>(window: &W) {
         let _ = window.with_winit_window(move |w| w.set_window_icon(Some(icon)));
     }
 }
+
+/// Aplica o ícone directamente numa janela winit (modo hosted/AGENTS.md).
+pub fn apply_to_window(window: &winit::window::Window) {
+    if let Some(icon) = app_icon() {
+        window.set_window_icon(Some(icon));
+    }
+}

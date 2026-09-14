@@ -267,6 +267,11 @@ export component Workspace inherits Rectangle {
 
     in-out property <bool> bottom-panel-visible: false;
 
+    // Timeline renderizada pelo wgpu do host (arquitetura do AGENTS.md):
+    // quando true, o componente Timeline fica transparente (buraco) e o
+    // frame do wgpu é composto direto na surface por baixo da UI.
+    in-out property <bool> native-overlay: false;
+
     in-out property <[bool]> floated:
         [false, false, false];
 
@@ -312,6 +317,14 @@ export component Workspace inherits Rectangle {
 
     out property <length> timeline-row-height:
         timeline.row-height;
+
+    // Tamanho físico do componente Timeline (o frame wgpu do host é
+    // composto cobrindo exatamente este retângulo no modo nativo).
+    out property <length> timeline-rect-width:
+        timeline.width;
+
+    out property <length> timeline-rect-height:
+        timeline.height;
 
     // Métricas do motor de zoom/scroll (Rust). O blur de âncora do
     // cursor e o clamp dos targets precisam desses valores ATUAIS.
@@ -1173,6 +1186,10 @@ export component Workspace inherits Rectangle {
                             loop-enabled: root.loop-enabled;
                             loop-start-beat: root.loop-start-beat;
                             loop-end-beat: root.loop-end-beat;
+
+                            // Modo nativo: timeline transparente (wgpu por baixo).
+                            overlay-hosted <=>
+                                root.native-overlay;
 
                             track-names:
                                 root.track-names;

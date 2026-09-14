@@ -219,6 +219,27 @@ pub struct App {
     pub overlay_pipeline: wgpu::RenderPipeline,
     pub overlay_bind_group_layout: wgpu::BindGroupLayout,
     pub overlay_sampler: wgpu::Sampler,
+
+    /// ===== Modo hostilhado (app é dono do winit) =====
+    /// Em `hosted`, a cena da timeline é rasterizada OFFSCREEN (via
+    /// `submit_frame`/`take_rgba`), enviada por `set_timeline_bg` e composta
+    /// na surface NA POSIÇÃO do retângulo da timeline (`timeline_rect`), com
+    /// a UI do Slint (overlay) por cima — o `render()` NÃO desenha a cena
+    /// diretamente na surface.
+    pub hosted: bool,
+    /// Tamanho da SURFACE (janela), distinto de `size` (cena da timeline).
+    pub surface_size: (u32, u32),
+    /// `true` enquanto `submit_frame` está rasterizando o frame offscreen:
+    /// nesse target a composição (timeline-bg/overlay) nunca é desenhada.
+    pub offscreen_target: bool,
+    /// Frame RGBA da timeline (readback da cena offscreen) para o quad da
+    /// área da timeline na composição.
+    pub timeline_bg_texture: Option<wgpu::Texture>,
+    pub timeline_bg_view: Option<wgpu::TextureView>,
+    pub timeline_bg_size: (u32, u32),
+    /// Retângulo (x, y, w, h EM PIXELS FÍSICOS) onde o frame da timeline é
+    /// apresentado na surface — a posição da área do canvas no layout do Slint.
+    pub timeline_rect: (f32, f32, f32, f32),
 }
 
 impl App {
@@ -799,6 +820,14 @@ transport,
             overlay_pipeline,
             overlay_bind_group_layout,
             overlay_sampler,
+
+            hosted: false,
+            surface_size: size,
+            offscreen_target: false,
+            timeline_bg_texture: None,
+            timeline_bg_view: None,
+            timeline_bg_size: (0, 0),
+            timeline_rect: (0.0, 0.0, 0.0, 0.0),
         })
     }
 
@@ -873,10 +902,75 @@ transport,
         self.overlay_size = (0, 0);
     }
 
+    /// Liga/desliga o modo hostilhado (app dono do winit). Em `hosted`, o
+    /// `render()` compõe o frame da timeline (`timeline_bg`) na posição do
+    /// retângulo da timeline + o overlay Slint, sem desenhar a cena na surface.
+    pub fn set_hosted(&mut self, hosted: bool) {
+        self.hosted = hosted;
+    }
+
+    /// Define onde o frame da timeline aparece na surface (px físicos).
+    pub fn set_timeline_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        self.timeline_rect = (x, y, w, h);
+    }
+
+    /// Envia o frame (readback) da cena da timeline (RGBA, linha 0 = topo)
+    /// para ser apresentado no retângulo da timeline (`timeline_rect`). Se o
+    /// tamanho mudar a textura GPU é (re)criada; senão apenas escreve os pixels.
+    pub fn set_timeline_bg(&mut self, rgba: &[u8], width: u32, height: u32) {
+        if width == 0 || height == 0 || rgba.len() < (width as usize) * (height as usize) * 4 {
+            return;
+        }
+        let recreate = self.timeline_bg_texture.as_ref().map_or(true, |t| {
+            t.width() != width || t.height() != height
+        });
+        if recreate {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("timeline-bg"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            self.timeline_bg_view = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
+            self.timeline_bg_texture = Some(texture);
+            self.timeline_bg_size = (width, height);
+        }
+        if let Some(texture) = &self.timeline_bg_texture {
+            self.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                rgba,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(width * 4),
+                    rows_per_image: Some(height),
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+    }
+
     /// Aplica um novo tamanho (modo standalone reconfigure a surface; modo
     /// engine pura apenas atualiza `size`).
     pub fn resize(&mut self, size: (u32, u32)) {
         self.size = size;
+        self.surface_size = size;
         if let (Some(surface), Some(config)) = (&self.surface, self.config.as_mut()) {
             if size.0 > 0 && size.1 > 0 {
                 config.width = size.0;

@@ -61,6 +61,10 @@ pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
 
 /// Instala a timeline. Tenta a janela nativa wgpu (render direto); se a
 /// abertura falhar, cai no bridge offscreen (canvas do `timeline.slint`).
+///
+/// Nota: o wiring atual do app usa `host::install_engine_callbacks` (janela
+/// winit própria do processo). Este caminho fica para fallback/legado.
+#[allow(dead_code)]
 pub fn install(ui: &MainWindow, transport: Arc<Mutex<Transport>>, project: Rc<RefCell<Project>>) {
     if spawn_native_window(transport.clone(), project.clone()) {
         return;
@@ -113,7 +117,7 @@ struct TimelineBridge {
 }
 
 /// Constrói os clips da engine a partir do projeto do core (read-only).
-fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project) {
+pub fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project) {
     engine.clips = build_clip_demos(proj);
 
     // Regenera o buffer de barras (min/max interleaved) por clip.
@@ -125,6 +129,7 @@ fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project) {
 
 /// Cria a engine offscreen e liga todos os canais com o componente Slint
 /// (canvas do `timeline.slint`). Usado quando a janela nativa não abre.
+#[allow(dead_code)]
 fn install_offscreen(
     ui: &MainWindow,
     transport: Arc<Mutex<Transport>>,

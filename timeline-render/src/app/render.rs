@@ -834,6 +834,11 @@ impl App {
 
 /// Registra todos os passes da cena num command encoder novo (não submetido).
     /// Desenha em `view` nas dimensões `width x height`.
+    /// Em modo hostilhado o alvo decide o que sai:
+    ///   - `offscreen_target = true` (frame offscreen da timeline): apenas a
+    ///     cena + ícones (sem composição — a composição acontece na surface);
+    ///   - `offscreen_target = false` (surface): o frame da timeline
+    ///     (`timeline_bg`) no retângulo `timeline_rect` + o overlay da UI.
     fn record_scene(
         &mut self,
         width: f32,
@@ -845,6 +850,15 @@ impl App {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("timeline-encoder"),
             });
+
+        // === Modo hostilhado: composição na surface ===
+        // Em vez de desenhar a cena aqui, o frame da timeline já foi
+        // rasterizado offscreen e chega via `set_timeline_bg`; a posição do
+        // retângulo vem de `set_timeline_rect`, espelhando o layout da UI.
+        if self.hosted && !self.offscreen_target {
+            self.record_composite_passes(&mut encoder, width, height, view);
+            return encoder;
+        }
 
         let instances = self.build_instances(width, height);
 
@@ -974,6 +988,9 @@ impl App {
         // Uma textura RGBA (renderizada por software fora do wgpu) é desenhada
         // cobrindo o viewport inteiro, por cima de tudo. O blend padrão compõe
         // a UI sobre a timeline.
+        // No frame offscreen da timeline em modo hostilhado o overlay da UI
+        // NÃO entra (a UI é composta só na surface, por cima do frame).
+        if !(self.hosted && self.offscreen_target) {
         if let Some(overlay_view) = &self.overlay_view {
             let (ow, oh) = self.overlay_size;
             if ow > 0 && oh > 0 {
@@ -1045,14 +1062,171 @@ impl App {
                 opass.draw(0..4, 0..1);
             }
         }
+        }
 
         encoder
+    }
+
+    /// Passes de composição do modo hostilhado (surface): o frame da timeline
+    /// (`timeline_bg`) no retângulo `timeline_rect` e, por cima, o overlay da
+    /// UI. Usado quando `hosted && !offscreen_target`.
+    fn record_composite_passes(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        width: f32,
+        height: f32,
+        view: &wgpu::TextureView,
+    ) {
+        // Pass de quad texturizado reutilizando o pipeline de overlay: mesmo
+        // layout de bind group (uniform + sampler + texture) e blend
+        // premultiplicado (o frame offscreen sai com alpha=1 em todo pixel).
+        let draw_textured_quad = |encoder: &mut wgpu::CommandEncoder,
+                                   device: &wgpu::Device,
+                                   _queue: &wgpu::Queue,
+                                   pipeline: &wgpu::RenderPipeline,
+                                   layout: &wgpu::BindGroupLayout,
+                                   sampler: &wgpu::Sampler,
+                                   view: &wgpu::TextureView,
+                                   texture_view: &wgpu::TextureView,
+                                   x: f32,
+                                   y: f32,
+                                   w: f32,
+                                   h: f32,
+                                   load: wgpu::LoadOp<wgpu::Color>| {
+            let verts: [f32; 16] = [
+                x,     y,     0.0, 0.0,
+                x + w, y,     1.0, 0.0,
+                x,     y + h, 0.0, 1.0,
+                x + w, y + h, 1.0, 1.0,
+            ];
+            let quad = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("composite-quad"),
+                contents: bytemuck::cast_slice(&verts),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("composite-uniforms"),
+                contents: bytemuck::cast_slice(&OrthoCamera {
+                    scroll_x: 0.0,
+                    scroll_y: 0.0,
+                    viewport_w: width.max(1.0),
+                    viewport_h: height.max(1.0),
+                }.proj()),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("composite-bg"),
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(texture_view),
+                    },
+                ],
+            });
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("composite-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+            pass.set_vertex_buffer(0, quad.slice(..));
+            pass.draw(0..4, 0..1);
+        };
+
+        let clear = wgpu::LoadOp::Clear(wgpu::Color { r: 0.1, g: 0.1, b: 0.12, a: 1.0 });
+
+        // 1. Limpa a janela inteira (fundo atrás da UI do Slint).
+        {
+            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("composite-clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations { load: clear, store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+        }
+
+        // 2. UI do Slint por cima de tudo (blend premultiplicado).
+        if let Some(overlay_view) = &self.overlay_view {
+            let (ow, oh) = self.overlay_size;
+            if ow > 0 && oh > 0 {
+                draw_textured_quad(
+                    encoder,
+                    &self.device,
+                    &self.queue,
+                    &self.overlay_pipeline,
+                    &self.overlay_bind_group_layout,
+                    &self.overlay_sampler,
+                    view,
+                    overlay_view,
+                    0.0,
+                    0.0,
+                    width,
+                    height,
+                    wgpu::LoadOp::Load,
+                );
+            }
+        }
+
+        // 3. Frame da timeline dentro do retângulo do componente `Timeline`,
+        // por cima da UI: o Slint deixou o canvas vazio nessa região, então o
+        // quad reaparece exatamente onde fica — em vez do fundo opaco da UI.
+        if let (Some(bg_view), Some(_bg_tex)) = (&self.timeline_bg_view, &self.timeline_bg_texture) {
+            let (bw, bh) = self.timeline_bg_size;
+            let (rx, ry, rw, rh) = self.timeline_rect;
+            if bw > 0 && bh > 0 && rw > 0.0 && rh > 0.0 {
+                draw_textured_quad(
+                    encoder,
+                    &self.device,
+                    &self.queue,
+                    &self.overlay_pipeline,
+                    &self.overlay_bind_group_layout,
+                    &self.overlay_sampler,
+                    view,
+                    bg_view,
+                    rx,
+                    ry,
+                    rw,
+                    rh,
+                    wgpu::LoadOp::Load,
+                );
+            }
+        }
     }
 
     /// Render do modo standalone (apresenta na surface da janela).
     /// No-op quando não há janela (engine pura — use [`App::render_to_rgba`]).
     pub fn render(&mut self) {
-        let (width, height) = self.size;
+        // Em modo hosted o alvo de composição é a SURFACE (janela); `size`
+        // segue sendo o tamanho da cena da timeline (usado pelo submit_frame).
+        let (width, height) = if self.hosted { self.surface_size } else { self.size };
         if width == 0 || height == 0 {
             return;
         }
@@ -1070,6 +1244,7 @@ impl App {
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        self.offscreen_target = false;
         let encoder = self.record_scene(width as f32, height as f32, &view);
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(surface_texture);
@@ -1131,7 +1306,11 @@ impl App {
         };
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
+        // O frame offscreen é a CENA (sem composição de timeline-bg/overlay):
+        // o app hostilhado compõe esses dois na surface.
+        self.offscreen_target = true;
         let mut encoder = self.record_scene(width as f32, height as f32, &view);
+        self.offscreen_target = false;
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture: &texture,
@@ -1182,20 +1361,32 @@ impl App {
         let bytes_per_row = ((width * 4 + 255) / 256) * 256;
         let buffer = self.readback_buffer.clone()?;
         let data = buffer.slice(..).get_mapped_range().ok()?;
-        let rgba: Vec<u8> = data.to_vec();
+        let mut rgba: Vec<u8> = data.to_vec();
         drop(data);
         buffer.unmap();
         self.readback_pending = false;
 
-        if bytes_per_row == width * 4 {
-            Some((width, height, rgba))
-        } else {
-            let mut out = Vec::with_capacity((width as usize) * (height as usize) * 4);
+        if bytes_per_row != width * 4 {
+            let mut despadded = Vec::with_capacity((width as usize) * (height as usize) * 4);
             for row in rgba.chunks(bytes_per_row as usize) {
-                out.extend_from_slice(&row[..(width as usize) * 4]);
+                despadded.extend_from_slice(&row[..(width as usize) * 4]);
             }
-            Some((width, height, out))
+            rgba = despadded;
         }
+
+        // A textura offscreen usa `render_format` (o formato da surface, em
+        // geral Bgra8 no Windows/DX12). Normaliza para RGBA8 — o `set_timeline_bg`
+        // espera RGBA (linha 0 = topo).
+        if matches!(
+            self.render_format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        ) {
+            for px in rgba.chunks_exact_mut(4) {
+                px.swap(0, 2);
+            }
+        }
+
+        Some((width, height, rgba))
     }
 
     /// Render offscreen (engine pura) + leitura de volta em RGBA já despadded.

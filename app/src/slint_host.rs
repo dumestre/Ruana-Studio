@@ -59,7 +59,16 @@ impl SlintOverlay {
 
     /// Despacha um evento (posições em pixels LÓGICOS) para a UI Slint.
     pub fn dispatch(&self, event: slint::platform::WindowEvent) {
-        self.window.window().dispatch_event(event);
+        Self::dispatch_to(&self.window, event);
+    }
+
+    /// Despacha sem segurar o overlay/borrow do host (para reentrância:
+    /// os callbacks da UI podem chamar de volta o bridge da engine).
+    pub fn dispatch_to(
+        window: &Rc<MinimalSoftwareWindow>,
+        event: slint::platform::WindowEvent,
+    ) {
+        window.window().dispatch_event(event);
     }
 
     pub fn request_redraw(&self) {
