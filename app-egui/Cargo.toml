@@ -1,21 +1,21 @@
 [package]
-name = "ruana-studio-makepad"
+name = "ruana-studio-egui"
 version.workspace = true
 edition.workspace = true
 
-# Fase 1 do port Slint → Makepad: shell nativo (janela + transport) com a
-# timeline real rodando em janela winit/wgpu dedicada (timeline-render).
-# A UI do app antigo (app/ com Slint) continua existindo até o port fechar.
+# Port do shell Makepad → egui (fase 1): shell nativo (janela + transport) com
+# a timeline real (timeline-render) em janela winit/wgpu dedicada.
+# O app antigo (app/ com Slint) permanece no workspace até o port fechar.
 [lib]
-name = "ruana_studio_makepad"
+name = "ruana_studio_egui"
 path = "src/lib.rs"
 
 [[bin]]
-name = "ruana-studio-makepad"
+name = "ruana-studio-egui"
 path = "src/main.rs"
 
 [dependencies]
-makepad-widgets = "1.0"
+egui = "0.36"
+eframe = { version = "0.36", features = ["glow"] }
 daw-core = { path = "../crates/daw-core" }
 daw-audio = { path = "../crates/daw-audio" }
-timeline-render = { path = "../timeline-render", default-features = false }

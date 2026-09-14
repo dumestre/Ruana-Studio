@@ -2,7 +2,7 @@
 resolver = "3"
 members = [
     "app",
-    "app-makepad",
+    "app-egui",
     "crates/daw-core",
     "crates/daw-audio",
     "crates/daw-media",

@@ -1,529 +1,231 @@
-//! RuanaStudio — Makepad
-//! Fase atual:
-//! - Janela maximizada
-//! - Somente Toolbar
-//! - Nenhum painel adicional
-//! - Nenhuma timeline
-//! - Nenhum mixer
-//! - Nenhum Explorer
-//! - Nenhuma janela wgpu externa
+//! RuanaStudio — App egui
+//!
+//! Ponto de entrada da UI egui + integração com timeline-render (janela winit
+//! nativa separada).
+//!
+//! Arquitetura:
+//! - `ShellState`: estado compartilhado (transport, project, clips, follow, snap, tool, etc.)
+//! - `run_app()`: cria aplicação egui/eframe, barra de ferramentas
 
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use makepad_widgets::makepad_platform::{CxOsOp, WindowId};
-use makepad_widgets::*;
-
-use crate::toolbar::{ToolbarAction, ToolbarCtl};
+use eframe::egui;
+use eframe::{CreationContext, NativeOptions};
 
 use daw_core::transport::Transport;
-use daw_core::Project;
+use daw_core::project::Project;
+use daw_core::clip::Clip;
 
-live_design! {
-    use link::theme::*;
-    use link::shaders::*;
-    use link::widgets::*;
+use crate::toolbar::{ToolbarAction, ToolbarState, toolbar_view, ToolbarCtl, ToolbarCallback};
 
-    App = {{App}} {
-        ui: <Root> {
+// ============================================================================
+// SHELL STATE
+// ============================================================================
 
-            main_window = <Window> {
-                window: {
-                    inner_size: vec2(1366, 768),
-                    title: "Ruana Studio"
-                }
-
-                pass: {
-                    clear_color: #646464,
-                }
-
-                body = <View> {
-                    width: Fill,
-                    height: Fill,
-
-                    flow: Down,
-                    spacing: 0,
-
-                    toolbar = <Toolbar> {}
-                }
-            }
-        }
-    }
-}
-
-app_main!(App);
-
-/// Estado principal do shell.
-///
-/// Nesta fase o estado da aplicação continua existindo fora da UI,
-/// mas não há timeline, mixer ou engine de áudio sendo inicializados.
-struct ShellState {
-    transport: Arc<Mutex<Transport>>,
-    project: Rc<RefCell<Project>>,
-
-    follow_on: bool,
-    snap_on: bool,
-    rec_armed: bool,
-    active_tool: usize,
-}
-
-impl Default for ShellState {
-    fn default() -> Self {
-        Self {
-            transport: Arc::new(Mutex::new(Transport::default())),
-            project: Rc::new(RefCell::new(Project::startup())),
-
-            follow_on: true,
-            snap_on: true,
-            rec_armed: false,
-            active_tool: 0,
-        }
-    }
+/// Estado global do shell (UI + timeline thread + transport compartilhado).
+pub struct ShellState {
+    pub transport: Arc<Mutex<Transport>>,
+    pub project: Arc<Mutex<Project>>,
+    pub clips: Arc<Mutex<Vec<Clip>>>,
+    pub toolbar: ToolbarState,
+    pub follow_on: bool,
+    pub snap_on: bool,
+    pub active_tool: usize,
+    // Channel para actions da toolbar
+    pub action_tx: std::sync::mpsc::Sender<ToolbarAction>,
+    pub action_rx: std::sync::mpsc::Receiver<ToolbarAction>,
 }
 
 impl ShellState {
-    /// Cria o estado inicial da aplicação.
-    fn build() -> Self {
+    pub fn new() -> Self {
         let transport = Arc::new(Mutex::new(Transport::default()));
-
-        {
-            let mut transport = transport.lock().unwrap();
-
-            transport.bpm = 120;
-            transport.ppq = 960;
-        }
-
-        let project = Rc::new(RefCell::new(Project::startup()));
+        let project = Arc::new(Mutex::new(Project::default()));
+        let (action_tx, action_rx) = std::sync::mpsc::channel::<ToolbarAction>();
 
         Self {
-            transport,
-            project,
-
+            transport: transport.clone(),
+            project: project.clone(),
+            clips: Arc::new(Mutex::new(Vec::new())),
+            toolbar: ToolbarState::new(),
             follow_on: true,
             snap_on: true,
-            rec_armed: false,
             active_tool: 0,
+            action_tx,
+            action_rx,
         }
     }
+}
 
-    /// Atualiza a Toolbar com o estado atual do Transport e do Shell.
-    fn refresh_status(&mut self, ui: &WidgetRef, cx: &mut Cx) {
-        let (
-            playing,
-            position_ticks,
-            bpm,
-            beats_per_bar,
-            ppq,
-            loop_enabled,
-            metronome_enabled,
-        ) = {
-            let transport = self.transport.lock().unwrap();
+// ============================================================================
+// EGUI APP
+// ============================================================================
 
-            (
-                transport.playing,
-                transport.position_ticks,
-                transport.bpm,
-                transport.beats_per_bar,
-                transport.ppq,
-                transport.loop_enabled,
-                transport.metronome_enabled,
-            )
-        };
+pub struct RuanaApp {
+    state: ShellState,
+}
 
-        ToolbarCtl::set_playing(
-            cx,
-            ui,
-            playing,
-        );
+impl RuanaApp {
+    pub fn new(cc: &CreationContext, state: ShellState) -> Self {
+        // Configure egui style
+        configure_style(&cc.egui_ctx);
 
-        ToolbarCtl::set_position(
-            cx,
-            ui,
-            position_ticks as i64,
-            ppq as i32,
-            beats_per_bar as i32,
-        );
-
-        ToolbarCtl::set_bpm(
-            cx,
-            ui,
-            bpm as f32,
-        );
-
-        ToolbarCtl::set_loop(
-            cx,
-            ui,
-            loop_enabled,
-        );
-
-        ToolbarCtl::set_metronome(
-            cx,
-            ui,
-            metronome_enabled,
-        );
-
-        ToolbarCtl::set_tool(
-            cx,
-            ui,
-            self.active_tool,
-        );
-
-        ToolbarCtl::set_follow(
-            cx,
-            ui,
-            self.follow_on,
-        );
-
-        ToolbarCtl::set_snap(
-            cx,
-            ui,
-            self.snap_on,
-        );
-
-        ToolbarCtl::set_rec(
-            cx,
-            ui,
-            self.rec_armed,
-        );
-
-        ui.redraw(cx);
+        Self { state }
     }
+}
 
-    /// Play / Pause.
-    fn toggle_play(
-        &mut self,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
+impl eframe::App for RuanaApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Process toolbar actions from channel
+        while let Ok(action) = self.state.action_rx.try_recv() {
+            handle_toolbar_action(&mut self.state, action);
+        }
+
+        // Sync toolbar with transport
         {
-            let mut transport = self.transport.lock().unwrap();
+            let transport = self.state.transport.lock().unwrap();
+            let rec_armed = self.state.toolbar.rec_armed;
+            let active_tool = self.state.active_tool;
+            let follow_on = self.state.follow_on;
+            let snap_on = self.state.snap_on;
+            
+            ToolbarCtl::sync(
+                &mut self.state.toolbar,
+                &transport,
+                follow_on,
+                snap_on,
+                rec_armed,
+                active_tool,
+            );
+        }
 
+        // Setup callback
+        let action_tx = self.state.action_tx.clone();
+        let on_action: ToolbarCallback = Arc::new(move |action: ToolbarAction| {
+            let _ = action_tx.send(action);
+        });
+
+        // ===== Toolbar (fixed height at top) =====
+        ui.horizontal(|ui| {
+            ui.set_min_height(34.0);
+            ui.set_max_height(34.0);
+            toolbar_view(ui, &mut self.state.toolbar, &on_action);
+        });
+
+        ui.add_space(4.0);
+
+        // ===== Central area =====
+        ui.vertical_centered(|ui| {
+            ui.add_space(100.0);
+            ui.label(egui::RichText::new("Ruana Studio - egui Shell")
+                .size(16.0)
+                .color(egui::Color32::from_rgb(0x9A, 0x9A, 0x9A)));
+        });
+    }
+}
+
+// ============================================================================
+// STYLE CONFIGURATION
+// ============================================================================
+
+fn configure_style(ctx: &egui::Context) {
+    let mut style = (*ctx.style_of(egui::Theme::Dark)).clone();
+
+    // Dark theme
+    style.visuals.dark_mode = true;
+    style.visuals.panel_fill = egui::Color32::from_rgb(0x1E, 0x1E, 0x1E);
+    style.visuals.window_fill = egui::Color32::from_rgb(0x1E, 0x1E, 0x1E);
+    style.visuals.extreme_bg_color = egui::Color32::from_rgb(0x1E, 0x1E, 0x1E);
+
+    // Button styling
+    style.visuals.button_frame = false;
+    style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(0x91, 0x91, 0x91);
+    style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
+    style.visuals.widgets.inactive.corner_radius = 3.0.into();
+    style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(0x77, 0x77, 0x77);
+    style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(0x55, 0x55, 0x55);
+
+    // Spacing
+    style.spacing.item_spacing = egui::Vec2::new(4.0, 4.0);
+    style.spacing.button_padding = egui::Vec2::new(8.0, 4.0);
+
+    ctx.set_style_of(egui::Theme::Dark, style);
+}
+
+// ============================================================================
+// TOOLBAR ACTION HANDLER
+// ============================================================================
+
+fn handle_toolbar_action(state: &mut ShellState, action: ToolbarAction) {
+    match action {
+        ToolbarAction::TogglePlay => {
+            let mut transport = state.transport.lock().unwrap();
             transport.playing = !transport.playing;
         }
-
-        self.refresh_status(ui, cx);
-    }
-
-    /// Stop e volta o playhead para zero.
-    fn stop(
-        &mut self,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
-        {
-            let mut transport = self.transport.lock().unwrap();
-
+        ToolbarAction::Stop => {
+            let mut transport = state.transport.lock().unwrap();
             transport.playing = false;
             transport.position_ticks = 0;
         }
-
-        self.refresh_status(ui, cx);
-    }
-
-    /// Altera o BPM.
-    fn set_bpm(
-        &mut self,
-        bpm: f32,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
-        {
-            let mut transport = self.transport.lock().unwrap();
-
-            transport.bpm = bpm.round() as u32;
+        ToolbarAction::ToggleRec => {
+            // Handled in toolbar_view directly
         }
-
-        self.refresh_status(ui, cx);
-    }
-
-    /// Liga/desliga Follow.
-    fn toggle_follow(
-        &mut self,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
-        self.follow_on = !self.follow_on;
-
-        self.refresh_status(ui, cx);
-    }
-
-    /// Liga/desliga Snap.
-    fn toggle_snap(
-        &mut self,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
-        self.snap_on = !self.snap_on;
-
-        self.refresh_status(ui, cx);
-    }
-
-    /// Liga/desliga Record Arm.
-    fn toggle_rec(
-        &mut self,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
-        self.rec_armed = !self.rec_armed;
-
-        self.refresh_status(ui, cx);
-    }
-
-    /// Liga/desliga Loop.
-    fn toggle_loop(
-        &mut self,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
-        {
-            let mut transport = self.transport.lock().unwrap();
-
+        ToolbarAction::ToggleLoop => {
+            let mut transport = state.transport.lock().unwrap();
             transport.loop_enabled = !transport.loop_enabled;
         }
-
-        self.refresh_status(ui, cx);
-    }
-
-    /// Liga/desliga metrônomo.
-    fn toggle_metronome(
-        &mut self,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
-        {
-            let mut transport = self.transport.lock().unwrap();
-
-            transport.metronome_enabled =
-                !transport.metronome_enabled;
+        ToolbarAction::ToggleMetronome => {
+            let mut transport = state.transport.lock().unwrap();
+            transport.metronome_enabled = !transport.metronome_enabled;
         }
-
-        self.refresh_status(ui, cx);
-    }
-
-    /// Seleciona uma ferramenta da Toolbar.
-    fn set_tool(
-        &mut self,
-        tool: usize,
-        ui: &WidgetRef,
-        cx: &mut Cx,
-    ) {
-        if tool >= 6 {
-            return;
+        ToolbarAction::ToggleFollow => {
+            state.follow_on = !state.follow_on;
         }
-
-        self.active_tool = tool;
-
-        self.refresh_status(ui, cx);
-    }
-}
-
-/// Componente raiz do aplicativo.
-#[derive(Live, LiveHook)]
-pub struct App {
-    #[live]
-    ui: WidgetRef,
-
-    #[rust]
-    shell: ShellState,
-}
-
-impl LiveRegister for App {
-    fn live_register(cx: &mut Cx) {
-        makepad_widgets::live_design(cx);
-
-        crate::toolbar::live_design(cx);
-
-        cx.link(
-            live_id!(theme),
-            live_id!(theme_desktop_dark),
-        );
-    }
-}
-
-impl MatchEvent for App {
-    fn handle_startup(
-        &mut self,
-        cx: &mut Cx,
-    ) {
-        // Inicializa somente o shell.
-        self.shell = ShellState::build();
-
-        // Maximiza a janela principal.
-        cx.push_unique_platform_op(
-            CxOsOp::MaximizeWindow(
-                WindowId(0, 0),
-            ),
-        );
-
-        // Atualização periódica da Toolbar.
-        let _ = cx.start_interval(0.1);
-
-        // Sincroniza a Toolbar imediatamente.
-        self.shell.refresh_status(
-            &self.ui,
-            cx,
-        );
-    }
-
-    fn handle_actions(
-        &mut self,
-        cx: &mut Cx,
-        actions: &Actions,
-    ) {
-        let mut acts = Vec::new();
-
-        ToolbarCtl::handle_actions(
-            &self.ui,
-            actions,
-            &mut acts,
-        );
-
-        for act in acts {
-            match act {
-                ToolbarAction::TogglePlay => {
-                    self.shell.toggle_play(
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::Stop => {
-                    self.shell.stop(
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::SetBpm(bpm) => {
-                    self.shell.set_bpm(
-                        bpm,
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::ToggleFollow => {
-                    self.shell.toggle_follow(
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::ToggleSnap => {
-                    self.shell.toggle_snap(
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::ToggleRec => {
-                    self.shell.toggle_rec(
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::ToggleLoop => {
-                    self.shell.toggle_loop(
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::ToggleMetronome => {
-                    self.shell.toggle_metronome(
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::ToolSelected(tool) => {
-                    self.shell.set_tool(
-                        tool,
-                        &self.ui,
-                        cx,
-                    );
-                }
-
-                ToolbarAction::Menu(_) => {}
-
-                ToolbarAction::Undo => {}
-
-                ToolbarAction::Redo => {}
-
-                ToolbarAction::ProjectKey(_) => {}
-
-                ToolbarAction::ThemeSelected(_) => {}
-
-                ToolbarAction::Minimize => {
-                    cx.push_unique_platform_op(
-                        CxOsOp::MinimizeWindow(
-                            WindowId(0, 0),
-                        ),
-                    );
-                }
-
-                ToolbarAction::Maximize => {
-                    cx.push_unique_platform_op(
-                        CxOsOp::MaximizeWindow(
-                            WindowId(0, 0),
-                        ),
-                    );
-                }
-
-                ToolbarAction::Close => {
-                    cx.push_unique_platform_op(
-                        CxOsOp::CloseWindow(
-                            WindowId(0, 0),
-                        ),
-                    );
-                }
-            }
+        ToolbarAction::ToggleSnap => {
+            state.snap_on = !state.snap_on;
         }
-    }
-
-    fn handle_timer(
-        &mut self,
-        cx: &mut Cx,
-        _event: &TimerEvent,
-    ) {
-        self.shell.refresh_status(
-            &self.ui,
-            cx,
-        );
-    }
-
-    fn handle_key_down(
-        &mut self,
-        cx: &mut Cx,
-        event: &KeyEvent,
-    ) {
-        if event.key_code == KeyCode::Space {
-            self.shell.toggle_play(
-                &self.ui,
-                cx,
-            );
+        ToolbarAction::ToolSelected(idx) => {
+            state.active_tool = idx;
+        }
+        ToolbarAction::ProjectKey(idx) => {
+            state.toolbar.project_key = idx;
+        }
+        ToolbarAction::ThemeSelected(idx) => {
+            state.toolbar.theme = idx;
+        }
+        ToolbarAction::Undo => {}
+        ToolbarAction::Redo => {}
+        ToolbarAction::Minimize => {}
+        ToolbarAction::Maximize => {}
+        ToolbarAction::Close => {
+            std::process::exit(0);
+        }
+        ToolbarAction::Menu(_) => {}
+        ToolbarAction::SetBpm(bpm) => {
+            let mut transport = state.transport.lock().unwrap();
+            transport.bpm = bpm as u32;
         }
     }
 }
 
-impl AppMain for App {
-    fn handle_event(
-        &mut self,
-        cx: &mut Cx,
-        event: &Event,
-    ) {
-        self.match_event(
-            cx,
-            event,
-        );
+// ============================================================================
+// ENTRY POINT
+// ============================================================================
 
-        self.ui.handle_event(
-            cx,
-            event,
-            &mut Scope::empty(),
-        );
-    }
+pub fn run_app() -> eframe::Result<()> {
+    let state = ShellState::new();
+    let options = NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("Ruana Studio")
+            .with_inner_size([1366.0, 768.0])
+            .with_resizable(true),
+        // Use glow (OpenGL) renderer instead of wgpu
+        renderer: eframe::Renderer::Glow,
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "Ruana Studio",
+        options,
+        Box::new(|cc| Ok(Box::new(RuanaApp::new(cc, state)))),
+    )
 }

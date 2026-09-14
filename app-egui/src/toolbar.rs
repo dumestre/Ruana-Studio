@@ -1,445 +1,32 @@
-//! Toolbar em Makepad — port de `ui/toolbar.slint` para um componente
-//! separado (`app-makepad/src/toolbar.rs`).
+
+//! RuanaStudio — Toolbar egui
 //!
-//! Não é um widget Rust custom: o toolbar é reproduzido como um protótipo
-//! `<Toolbar>` (uma `View` pura) registrado via `live_design!`, e a lógica de
-//! interação vive em `ToolbarCtl`, que manipula os widgets por `id!()` e
-//! devolve `ToolbarAction`s (mesmo padrão do shell em `app.rs`).
+//! Toolbar visual + controle de estado.
 
-use makepad_widgets::*;
+use std::sync::Arc;
 
-live_design! {
-    link widgets;
-    use link::theme::*;
-    use link::shaders::*;
-    use link::widgets::*;
+use daw_core::transport::Transport;
+use egui::{Color32, RichText, Vec2};
 
-    // -----------------------------------------------------------------
-    // Paleta (Studio Dark — índice 0 do `ui/theme.slint`)
-    // -----------------------------------------------------------------
-    // base        #313131 (fundo do toolbar)
-    // surface     #242424
-    // surface-high#555555 (tiles/botões)
-    // text        #E8E8E8
-    // accent      #00C853 (toggles/play ligados)
-    // crimson     #DC143C (ferramenta ativa / rec armado)
-    // dots        #FEBC2E minimize, #28C840 maximize, #FF5F57 close
+// ============================================================================
+// COLORS
+// ============================================================================
 
-    // Button de ícone: fundo autônomo (água) que captura o clique.
-    pub TbHit = <Button> {
-        text: "",
-        draw_bg: {
-            color: #0000,
-            color_hover: #FFFFFF14,
-            color_down: #FFFFFF24,
-            color_focus: #0000,
-            color_disabled: #0000,
-            border_size: 0.0,
-            border_radius: 0.0,
-        }
-        draw_text: { color: #0000 }
-    }
+const BG: Color32 = Color32::from_rgb(0x33, 0x33, 0x33);
+const TEXT: Color32 = Color32::from_rgb(0xE8, 0xE8, 0xE8);
+const TEXT_DIM: Color32 = Color32::from_rgb(0x9A, 0x9A, 0x9A);
+const BUTTON: Color32 = Color32::from_rgb(0x91, 0x91, 0x91);
+const GREEN: Color32 = Color32::from_rgb(0x00, 0xC8, 0x53);
+const RED: Color32 = Color32::from_rgb(0xDC, 0x14, 0x3C);
+const CLOSE: Color32 = Color32::from_rgb(0xFF, 0x5F, 0x57);
+const MINIMIZE: Color32 = Color32::from_rgb(0xFE, 0xBC, 0x2E);
+const MAXIMIZE: Color32 = Color32::from_rgb(0x28, 0xC8, 0x40);
 
-    // Tile onde o ícone fica assentado (18×18 na maioria).
-    pub TbTile = <RoundedView> {
-        width: Fill, height: Fill,
-        draw_bg: { color: #555555, border_radius: 3.0, border_size: 0.0 }
-    }
+// ============================================================================
+// ACTIONS
+// ============================================================================
 
-    // Image com tint multiplicativo (para ícones coloridos, ex.: play).
-    pub TintImage = <Image> {
-        draw_bg: {
-            instance tint: vec4
-            fn get_color(self) -> vec4 {
-                let c = self.get_color_scale_pan(self.image_scale, self.image_pan)
-                return vec4(c.x * self.tint.x, c.y * self.tint.y, c.z * self.tint.z, c.w * self.tint.w)
-            }
-        }
-    }
-
-    // Botão de texto do menubar (File/Edit/New/…).
-    TbTextBtn = <Button> {
-        
-        height: 20,
-        align: { x: 0.5, y: 0.5 },
-        draw_bg: {
-            border_radius: 3.0,
-        }
-        draw_text: { color: #E8E8E8, text_style: { font_size: 10.0 } }
-    }
-
-    // -----------------------------------------------------------------
-    // Toolbar completo (34 px de altura — a timeline encaixada começa
-    // exatamente abaixo desta barra).
-    // -----------------------------------------------------------------
-    pub Toolbar = <View> {
-        width: Fill,
-        align: { x: 0.5, y: 0.5 },
-        height: 34,
-        flow: Right,
-        spacing: 6,
-        padding: { left: 3, right: 3 }
-
-        // Logo + título -------------------------------------------------
-        tb_logo = <Image> {
-            source: dep("assets/ruana_studio_2x.png"),
-            width: 26, height: 26,
-            
-        }
-        tb_title = <Label> {
-            text: "RuanaStudio",
-            draw_text: { color: #E8E8E5, text_style: { font_size: 11.0 } }
-        }
-
-        // Menus ----------------------------------------------------------
-        tb_menus = <View> {
-            width: Fill,
-            align: { x: 0.5, y: 0.5 },
-            flow: Right,
-            spacing: 2,
-            tb_menu_file = <TbTextBtn> { text: "File" }
-            tb_menu_edit = <TbTextBtn> { text: "Edit" }
-            tb_menu_new = <TbTextBtn> { text: "New" }
-            tb_menu_save = <TbTextBtn> { text: "Save" }
-            tb_menu_saveas = <TbTextBtn> { text: "Save As" }
-            tb_menu_settings = <TbTextBtn> { text: "Settings" }
-            tb_menu_help = <TbTextBtn> { text: "Help" }
-        }
-
-        // Undo/Redo -------------------------------------------------------
-        tb_editrow = <View> {
-            align: {  y: 0.5 },
-            width: Fill,
-            flow: Right,
-            spacing: 2,
-            tb_undo = <View> {
-                align: { x: 0.5, y: 0.5 },
-                width: 18, height: 18,
-                flow: Overlay,
-                tb_undo_tile = <TbTile> {}
-                tb_undo_tile_on = <TbTile> { visible: false, draw_bg: { color: #919191 } }
-                tb_undo_icon = <Image> {
-                    source: dep("assets/icons/undo_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_undo_icon_f = <Image> {
-                    visible: false,
-                    source: dep("assets/icons/undo_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_undo_hit = <TbHit> {}
-            }
-            tb_redo = <View> {
-                align: { x: 0.5, y: 0.5 },
-                width: 18, height: 18,
-                flow: Overlay,
-                tb_redo_tile = <TbTile> {}
-                tb_redo_tile_on = <TbTile> { visible: false, draw_bg: { color: #919191 } }
-                tb_redo_icon = <Image> {
-                    source: dep("assets/icons/redo_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_redo_icon_f = <Image> {
-                    visible: false,
-                    source: dep("assets/icons/redo_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_redo_hit = <TbHit> {}
-            }
-        }
-
-        // Follow / Snap (toggles) ---------------------------------------
-        tb_toggles = <View> {
-            align: { x: 0.5, y: 0.5 },
-            flow: Right,
-            spacing: 2,
-            tb_follow = <View> {
-                width: 18, height: 18,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_follow_tile = <TbTile> {}
-                tb_follow_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_follow_icon = <Image> {
-                    source: dep("assets/icons/follow_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_follow_icon_f = <Image> {
-                    visible: false,
-                    source: dep("assets/icons/follow_filled_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_follow_hit = <TbHit> {}
-            }
-            tb_snap = <View> {
-                width: 18, height: 18,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_snap_tile = <TbTile> {}
-                tb_snap_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_snap_icon = <Image> {
-                    source: dep("assets/icons/snap_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_snap_icon_f = <Image> {
-                    visible: false,
-                    source: dep("assets/icons/snap_filled_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_snap_hit = <TbHit> {}
-            }
-        }
-
-        // Project key ----------------------------------------------------
-        tb_key = <DropDown> {
-            align: { x: 0.5, y: 0.5 },
-            width: 68, height: 18,
-            selected_item: 0,
-            labels: ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
-        }
-
-        // Theme picker ----------------------------------------------------
-        tb_theme = <DropDown> {
-            align: { x: 0.5, y: 0.5 },
-            width: 96, height: 18,
-            selected_item: 0,
-            labels: ["Studio Dark", "Studio Light", "Studio Blue", "Studio Green", "Metal", "Flat", "Paper"],
-        }
-
-        // Transport -------------------------------------------------------
-        tb_transport = <View> {
-            align: { x: 0.5, y: 0.5 },
-            flow: Right,
-            spacing: 5,
-            tb_pos = <Label> {
-                width: 96, height: 18,
-                text: "01.01.000",
-                draw_text: {
-                    color: #00C853,
-                    text_style: { font_size: 12.0 },
-                    horizontal_align: Center,
-                    vertical_align: Center,
-                }
-            }
-
-            tb_play = <View> {
-                width: 18, height: 18,
-                flow: Overlay,
-                tb_play_tile = <TbTile> {}
-                tb_play_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_play_icon = <Image> {
-                    source: dep("assets/icons/play_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_pause_icon = <Image> {
-                    visible: false,
-                    source: dep("assets/icons/pause_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_play_hit = <TbHit> {}
-            }
-
-            tb_stop = <View> {
-                width: 18, height: 18,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_stop_tile = <TbTile> {}
-                tb_stop_icon = <Image> {
-                    source: dep("assets/icons/stop_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_stop_hit = <TbHit> {}
-            }
-
-            tb_rec = <View> {
-                width: 18, height: 18,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_rec_tile = <TbTile> {}
-                tb_rec_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_rec_icon = <Image> {
-                    source: dep("assets/icons/rec_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_rec_hit = <TbHit> {}
-            }
-
-            tb_loop = <View> {align: { x: 0.5, y: 0.5 },
-                width: 18, height: 18,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_loop_tile = <TbTile> {}
-                tb_loop_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_loop_icon = <Image> {
-                    source: dep("assets/icons/loop_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_loop_hit = <TbHit> {}
-            }
-
-            tb_metro = <View> {
-                width: 18, height: 18,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_metro_tile = <TbTile> {}
-                tb_metro_tile_on = <TbTile> { visible: false, draw_bg: { color: #00C853 } }
-                tb_metro_icon = <Image> {
-                    source: dep("assets/icons/metronome_2x.png"),
-                    width: 15, height: 15,
-                }
-                tb_metro_hit = <TbHit> {}
-            }
-
-            tb_bpmbox = <View> {align: { x: 0.5, y: 0.5 },
-                flow: Right,
-                spacing: 2,
-                tb_bpm = <TextInput> {
-                    width: 30, height: 18,
-                    text: "120",
-                    draw_text: {
-                        color: #E8E8E8,
-                        text_style: { font_size: 12.0 },
-                        horizontal_align: Center,
-                        vertical_align: Center,
-                    }
-                }
-                tb_bpm_label = <Label> {
-                    align: { x: 0.5, y: 0.5 },
-                    text: "BPM",
-                    draw_text: { color: #9A9A9A, text_style: { font_size: 11.0 } }
-                }
-            }
-
-            tb_tsig = <Label> {
-                align: { x: 0.5, y: 0.5 },
-                width: 30, height: 18,
-                text: "4/4",
-                draw_text: {
-                    color: #9A9A9A,
-                    text_style: { font_size: 12.0 },
-                    horizontal_align: Center,
-                    vertical_align: Center,
-                }
-            }
-        }
-
-        // Ferramentas (EditToolbar: select/slice/glue/stretch/draw/erase) --
-        tb_tools = <View> {
-            align: { x: 0.5, y: 0.5 },
-            flow: Right,
-            spacing: 2,
-
-            tb_t0 = <View> {
-                width: 19, height: 19,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_t0_tile = <TbTile> {}
-                tb_t0_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t0_icon = <Image> { source: dep("assets/icons/select_2x.png"), width: 16, height: 16 }
-                tb_t0_icon_f = <Image> { visible: false, source: dep("assets/icons/select_filled_2x.png"), width: 16, height: 16 }
-                tb_t0_hit = <TbHit> {}
-            }
-            tb_t1 = <View> {
-                width: 19, height: 19,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_t1_tile = <TbTile> {}
-                tb_t1_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t1_icon = <Image> { source: dep("assets/icons/slice_2x.png"), width: 16, height: 16 }
-                tb_t1_icon_f = <Image> { visible: false, source: dep("assets/icons/slice_filled_2x.png"), width: 16, height: 16 }
-                tb_t1_hit = <TbHit> {}
-            }
-            tb_t2 = <View> {
-                width: 19, height: 19,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_t2_tile = <TbTile> {}
-                tb_t2_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t2_icon = <Image> { source: dep("assets/icons/glue_2x.png"), width: 16, height: 16 }
-                tb_t2_icon_f = <Image> { visible: false, source: dep("assets/icons/glue_filled_2x.png"), width: 16, height: 16 }
-                tb_t2_hit = <TbHit> {}
-            }
-            tb_t3 = <View> {
-                width: 19, height: 19,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_t3_tile = <TbTile> {}
-                tb_t3_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t3_icon = <Image> { source: dep("assets/icons/stretch_2x.png"), width: 16, height: 16 }
-                tb_t3_icon_f = <Image> { visible: false, source: dep("assets/icons/stretch_filled_2x.png"), width: 16, height: 16 }
-                tb_t3_hit = <TbHit> {}
-            }
-            tb_t4 = <View> {
-                width: 19, height: 19,
-                flow: Overlay,
-                align: { x: 0.5, y: 0.5 },
-                tb_t4_tile = <TbTile> {}
-                tb_t4_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t4_icon = <Image> { source: dep("assets/icons/draw_2x.png"), width: 16, height: 16 }
-                tb_t4_icon_f = <Image> { visible: false, source: dep("assets/icons/draw_filled_2x.png"), width: 16, height: 16 }
-                tb_t4_hit = <TbHit> {}
-            }
-            tb_t5 = <View> {
-                width: 19, height: 19,
-                flow: Right,
-                align: { x: 0.5, y: 0.5 },
-                tb_t5_tile = <TbTile> {}
-                tb_t5_tile_on = <TbTile> { visible: false, draw_bg: { color: #DC143C } }
-                tb_t5_icon = <Image> { source: dep("assets/icons/erase_2x.png"), width: 16, height: 16 }
-                tb_t5_icon_f = <Image> { visible: false, source: dep("assets/icons/erase_filled_2x.png"), width: 16, height: 16 }
-                tb_t5_hit = <TbHit> {}
-            }
-        }
-
-        // Controles da janela (dots) --------------------------------------
-        tb_dots = <View> {
-            align: { x: 0.9, y: 0.5 },
-            flow: Left,
-            spacing: 4,
-            tb_dot_min = <Button> {
-                width: 16, height: 16,
-                text: "",
-                draw_bg: {
-                    color: #FEBC2E,
-                    color_hover: #FFD25E,
-                    color_down: #E0A51E,
-                    color_focus: #FEBC2E,
-                    color_disabled: #FEBC2E,
-                    border_size: 0.0,
-                    border_radius: 7.0,
-                }
-            }
-            tb_dot_max = <Button> {
-                width: 16, height: 16,
-                text: "",
-                draw_bg: {
-                    color: #28C840,
-                    color_hover: #48DC5E,
-                    color_down: #1FA830,
-                    color_focus: #28C840,
-                    color_disabled: #28C840,
-                    border_size: 0.0,
-                    border_radius: 7.0,
-                }
-            }
-            tb_dot_close = <Button> {
-                width: 16, height: 16,
-                text: "",
-                draw_bg: {
-                    color: #FF5F57,
-                    color_hover: #FF7F78,
-                    color_down: #E03F38,
-                    color_focus: #FF5F57,
-                    color_disabled: #FF5F57,
-                    border_size: 0.0,
-                    border_radius: 7.0,
-                }
-            }
-        }
-    }
-}
-
-/// Ações emitidas pelo toolbar para o shell tratar.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ToolbarAction {
     Menu(usize),
     Undo,
@@ -460,203 +47,643 @@ pub enum ToolbarAction {
     Close,
 }
 
-/// Formata a posição em barras/compassos/ticks (mesmo estilo do toolbar.slint).
-pub fn fmt_position(ticks: i64, ppq: i32, beats_per_bar: i32) -> String {
-    let tpb = (ppq as i64) * (beats_per_bar as i64).max(1);
-    let bar = ticks / tpb + 1;
-    let rem = ticks % tpb;
-    let beat = rem / (ppq as i64) + 1;
-    let tick = rem % (ppq as i64);
+// ============================================================================
+// POSITION FORMAT
+// ============================================================================
+
+pub fn fmt_position(
+    ticks: i64,
+    ppq: i32,
+    beats_per_bar: i32,
+) -> String {
+    let ppq = ppq.max(1) as i64;
+    let beats_per_bar = beats_per_bar.max(1) as i64;
+
+    let ticks_per_bar = ppq * beats_per_bar;
+    let ticks = ticks.max(0);
+
+    let bar = ticks / ticks_per_bar + 1;
+    let remainder = ticks % ticks_per_bar;
+
+    let beat = remainder / ppq + 1;
+    let tick = remainder % ppq;
+
     format!("{bar:02}.{beat:02}.{tick:03}")
 }
 
-/// Lógica do toolbar: lê cliques/ações por `id!()` e sincroniza a aparência
-/// (ícones normal/filled, tiles idle/ativo) com o estado autoritativo do shell.
+// ============================================================================
+// TOOLBAR STATE
+// ============================================================================
+
+/// Estado reativo da toolbar.
+#[derive(Clone)]
+pub struct ToolbarState {
+    pub follow_on: bool,
+    pub snap_on: bool,
+    pub rec_armed: bool,
+    pub active_tool: usize,
+    pub playing: bool,
+    pub loop_enabled: bool,
+    pub metronome_enabled: bool,
+    pub project_key: usize,
+    pub theme: usize,
+    pub bpm_text: String,
+    pub position_text: String,
+}
+
+impl Default for ToolbarState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ToolbarState {
+    pub fn new() -> Self {
+        Self {
+            follow_on: true,
+            snap_on: true,
+            rec_armed: false,
+            active_tool: 0,
+            playing: false,
+            loop_enabled: false,
+            metronome_enabled: false,
+            project_key: 0,
+            theme: 0,
+            bpm_text: "120".to_string(),
+            position_text: "01.01.000".to_string(),
+        }
+    }
+}
+
+/// Callback chamado quando uma ação da toolbar ocorre.
+pub type ToolbarCallback = Arc<dyn Fn(ToolbarAction) + Send + Sync>;
+
+// ============================================================================
+// TOOLBAR VIEW
+// ============================================================================
+
+/// Constrói a toolbar no egui.
+pub fn toolbar_view(
+    ui: &mut egui::Ui,
+    state: &mut ToolbarState,
+    on_action: &ToolbarCallback,
+) {
+    // ------------------------------------------------------------------------
+    // BACKGROUND
+    //
+    // O fundo precisa ser desenhado ANTES dos widgets.
+    // ------------------------------------------------------------------------
+
+    ui.painter()
+        .rect_filled(ui.max_rect(), 0.0, BG);
+
+    // ------------------------------------------------------------------------
+    // SPACING
+    // ------------------------------------------------------------------------
+
+    {
+        let spacing = ui.spacing_mut();
+        spacing.item_spacing = Vec2::new(4.0, 2.0);
+        spacing.button_padding = Vec2::new(6.0, 2.0);
+    }
+
+    // ------------------------------------------------------------------------
+    // MAIN TOOLBAR
+    // ------------------------------------------------------------------------
+
+    ui.horizontal(|ui| {
+        ui.style_mut().visuals.button_frame = false;
+
+        // ====================================================================
+        // LOGO
+        // ====================================================================
+
+        ui.label(
+            RichText::new("RuanaStudio")
+                .size(14.0)
+                .color(TEXT)
+                .strong(),
+        );
+
+        ui.separator();
+
+        // ====================================================================
+        // MENUS
+        // ====================================================================
+
+        let menus = [
+            "File",
+            "Edit",
+            "New",
+            "Save",
+            "Save As",
+            "Settings",
+            "Help",
+        ];
+
+        for (idx, menu) in menus.iter().enumerate() {
+            ui.push_id(("menu", idx), |ui| {
+                let response = ui.button(
+                    RichText::new(*menu)
+                        .size(10.0)
+                        .color(TEXT),
+                );
+
+                if response.clicked() {
+                    on_action(ToolbarAction::Menu(idx));
+                }
+            });
+        }
+
+        // ====================================================================
+        // UNDO / REDO
+        // ====================================================================
+
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(4.0);
+
+        if ui
+            .button(RichText::new("↶").size(16.0))
+            .on_hover_text("Undo")
+            .clicked()
+        {
+            on_action(ToolbarAction::Undo);
+        }
+
+        if ui
+            .button(RichText::new("↷").size(16.0))
+            .on_hover_text("Redo")
+            .clicked()
+        {
+            on_action(ToolbarAction::Redo);
+        }
+
+        // ====================================================================
+        // FOLLOW / SNAP
+        // ====================================================================
+
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(4.0);
+
+        if ui
+            .selectable_label(state.follow_on, "Follow")
+            .on_hover_text("Follow playhead")
+            .clicked()
+        {
+            state.follow_on = !state.follow_on;
+            on_action(ToolbarAction::ToggleFollow);
+        }
+
+        if ui
+            .selectable_label(state.snap_on, "Snap")
+            .on_hover_text("Snap clips and edits to the grid")
+            .clicked()
+        {
+            state.snap_on = !state.snap_on;
+            on_action(ToolbarAction::ToggleSnap);
+        }
+
+        // ====================================================================
+        // PROJECT KEY
+        // ====================================================================
+
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(4.0);
+
+        let project_keys = [
+            "C", "C#", "D", "D#", "E", "F",
+            "F#", "G", "G#", "A", "A#", "B",
+        ];
+
+        // Segurança contra índice inválido.
+        if state.project_key >= project_keys.len() {
+            state.project_key = 0;
+        }
+
+        let previous_key = state.project_key;
+
+        egui::ComboBox::from_id_salt("project_key")
+            .selected_text(project_keys[state.project_key])
+            .width(50.0)
+            .show_ui(ui, |ui| {
+                for (idx, key) in project_keys.iter().enumerate() {
+                    ui.selectable_value(
+                        &mut state.project_key,
+                        idx,
+                        *key,
+                    );
+                }
+            });
+
+        if state.project_key != previous_key {
+            on_action(ToolbarAction::ProjectKey(state.project_key));
+        }
+
+        // ====================================================================
+        // THEME
+        // ====================================================================
+
+        ui.add_space(4.0);
+
+        let themes = [
+            "Studio Dark",
+            "Studio Light",
+            "Studio Blue",
+            "Studio Green",
+            "Metal",
+            "Flat",
+            "Paper",
+        ];
+
+        if state.theme >= themes.len() {
+            state.theme = 0;
+        }
+
+        let previous_theme = state.theme;
+
+        egui::ComboBox::from_id_salt("theme")
+            .selected_text(themes[state.theme])
+            .width(100.0)
+            .show_ui(ui, |ui| {
+                for (idx, theme) in themes.iter().enumerate() {
+                    ui.selectable_value(
+                        &mut state.theme,
+                        idx,
+                        *theme,
+                    );
+                }
+            });
+
+        if state.theme != previous_theme {
+            on_action(ToolbarAction::ThemeSelected(state.theme));
+        }
+
+        // ====================================================================
+        // TRANSPORT
+        // ====================================================================
+
+        ui.add_space(12.0);
+        ui.separator();
+        ui.add_space(6.0);
+
+        ui.horizontal(|ui| {
+            // ----------------------------------------------------------------
+            // POSITION
+            // ----------------------------------------------------------------
+
+            ui.label(
+                RichText::new(&state.position_text)
+                    .size(14.0)
+                    .color(GREEN)
+                    .monospace(),
+            );
+
+            ui.add_space(6.0);
+
+            // ----------------------------------------------------------------
+            // PLAY / PAUSE
+            // ----------------------------------------------------------------
+
+            let play_text = if state.playing {
+                "⏸"
+            } else {
+                "▶"
+            };
+
+            let play_color = if state.playing {
+                GREEN
+            } else {
+                TEXT
+            };
+
+            let play_fill = if state.playing {
+                Color32::from_rgb(0x00, 0x70, 0x32)
+            } else {
+                BUTTON
+            };
+
+            if ui
+                .add(
+                    egui::Button::new(
+                        RichText::new(play_text)
+                            .size(18.0)
+                            .color(play_color),
+                    )
+                    .fill(play_fill)
+                    .corner_radius(3.0),
+                )
+                .on_hover_text(if state.playing {
+                    "Pause"
+                } else {
+                    "Play"
+                })
+                .clicked()
+            {
+                state.playing = !state.playing;
+                on_action(ToolbarAction::TogglePlay);
+            }
+
+            // ----------------------------------------------------------------
+            // STOP
+            // ----------------------------------------------------------------
+
+            if ui
+                .add(
+                    egui::Button::new(
+                        RichText::new("■")
+                            .size(15.0)
+                            .color(TEXT),
+                    )
+                    .fill(BUTTON)
+                    .corner_radius(3.0),
+                )
+                .on_hover_text("Stop")
+                .clicked()
+            {
+                state.playing = false;
+                on_action(ToolbarAction::Stop);
+            }
+
+            // ----------------------------------------------------------------
+            // RECORD
+            // ----------------------------------------------------------------
+
+            let rec_color = if state.rec_armed {
+                RED
+            } else {
+                BUTTON
+            };
+
+            if ui
+                .add(
+                    egui::Button::new(
+                        RichText::new("●")
+                            .size(15.0)
+                            .color(if state.rec_armed {
+                                Color32::WHITE
+                            } else {
+                                TEXT
+                            }),
+                    )
+                    .fill(rec_color)
+                    .corner_radius(3.0),
+                )
+                .on_hover_text("Record")
+                .clicked()
+            {
+                state.rec_armed = !state.rec_armed;
+                on_action(ToolbarAction::ToggleRec);
+            }
+
+            // ----------------------------------------------------------------
+            // LOOP
+            // ----------------------------------------------------------------
+
+            let loop_color = if state.loop_enabled {
+                GREEN
+            } else {
+                BUTTON
+            };
+
+            if ui
+                .add(
+                    egui::Button::new(
+                        RichText::new("↻")
+                            .size(17.0)
+                            .color(TEXT),
+                    )
+                    .fill(loop_color)
+                    .corner_radius(3.0),
+                )
+                .on_hover_text("Loop")
+                .clicked()
+            {
+                state.loop_enabled = !state.loop_enabled;
+                on_action(ToolbarAction::ToggleLoop);
+            }
+
+            // ----------------------------------------------------------------
+            // METRONOME
+            // ----------------------------------------------------------------
+
+            let metro_color = if state.metronome_enabled {
+                GREEN
+            } else {
+                BUTTON
+            };
+
+            if ui
+                .add(
+                    egui::Button::new(
+                        RichText::new("♪")
+                            .size(16.0)
+                            .color(TEXT),
+                    )
+                    .fill(metro_color)
+                    .corner_radius(3.0),
+                )
+                .on_hover_text("Metronome")
+                .clicked()
+            {
+                state.metronome_enabled = !state.metronome_enabled;
+                on_action(ToolbarAction::ToggleMetronome);
+            }
+
+            ui.add_space(6.0);
+
+            // ----------------------------------------------------------------
+            // BPM
+            // ----------------------------------------------------------------
+
+            ui.label(
+                RichText::new("BPM")
+                    .size(11.0)
+                    .color(TEXT_DIM),
+            );
+
+            let bpm_response = ui.add(
+                egui::TextEdit::singleline(&mut state.bpm_text)
+                    .desired_width(48.0)
+                    .font(egui::FontId::monospace(12.0)),
+            );
+
+            if bpm_response.lost_focus()
+                && ui.input(|input| input.key_pressed(egui::Key::Enter))
+            {
+                if let Ok(bpm) = state.bpm_text.trim().parse::<f32>() {
+                    if bpm.is_finite() && bpm > 0.0 {
+                        on_action(ToolbarAction::SetBpm(bpm));
+                    }
+                }
+            }
+
+            // ----------------------------------------------------------------
+            // TIME SIGNATURE
+            // ----------------------------------------------------------------
+
+            ui.add_space(6.0);
+
+            ui.label(
+                RichText::new("4/4")
+                    .size(12.0)
+                    .color(TEXT_DIM),
+            );
+        });
+
+        // ====================================================================
+        // TOOLS
+        // ====================================================================
+
+        ui.add_space(12.0);
+        ui.separator();
+        ui.add_space(6.0);
+
+        let tools = [
+            ("Select", 0usize),
+            ("Slice", 1usize),
+            ("Glue", 2usize),
+            ("Stretch", 3usize),
+            ("Draw", 4usize),
+            ("Erase", 5usize),
+        ];
+
+        for (name, idx) in tools {
+            let is_active = state.active_tool == idx;
+
+            let fill = if is_active {
+                RED
+            } else {
+                BUTTON
+            };
+
+            let text_color = if is_active {
+                Color32::WHITE
+            } else {
+                TEXT
+            };
+
+            ui.push_id(("tool", idx), |ui| {
+                let response = ui.add(
+                    egui::Button::new(
+                        RichText::new(name)
+                            .size(10.0)
+                            .color(text_color),
+                    )
+                    .fill(fill)
+                    .corner_radius(3.0)
+                    .min_size(Vec2::new(50.0, 22.0)),
+                );
+
+                if response.clicked() {
+                    state.active_tool = idx;
+                    on_action(ToolbarAction::ToolSelected(idx));
+                }
+            });
+        }
+
+        // ====================================================================
+        // WINDOW CONTROLS
+        // ====================================================================
+
+        ui.add_space(12.0);
+        ui.separator();
+        ui.add_space(6.0);
+
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+
+            // ------------------------------------------------------------
+            // MINIMIZE
+            // ------------------------------------------------------------
+
+            ui.push_id("win_min", |ui| {
+                let response = ui.add(
+                    egui::Button::new("")
+                        .fill(MINIMIZE)
+                        .min_size(Vec2::new(12.0, 12.0))
+                        .corner_radius(6.0),
+                );
+
+                if response.clicked() {
+                    on_action(ToolbarAction::Minimize);
+                }
+            });
+
+            // ------------------------------------------------------------
+            // MAXIMIZE
+            // ------------------------------------------------------------
+
+            ui.push_id("win_max", |ui| {
+                let response = ui.add(
+                    egui::Button::new("")
+                        .fill(MAXIMIZE)
+                        .min_size(Vec2::new(12.0, 12.0))
+                        .corner_radius(6.0),
+                );
+
+                if response.clicked() {
+                    on_action(ToolbarAction::Maximize);
+                }
+            });
+
+            // ------------------------------------------------------------
+            // CLOSE
+            // ------------------------------------------------------------
+
+            ui.push_id("win_close", |ui| {
+                let response = ui.add(
+                    egui::Button::new("")
+                        .fill(CLOSE)
+                        .min_size(Vec2::new(12.0, 12.0))
+                        .corner_radius(6.0),
+                );
+
+                if response.clicked() {
+                    on_action(ToolbarAction::Close);
+                }
+            });
+        });
+    });
+}
+
+// ============================================================================
+// CONTROLLER
+// ============================================================================
+
 pub struct ToolbarCtl;
 
 impl ToolbarCtl {
-    /// Processa as ações da UI: preenche `out` com o que o shell deve tratar.
-    /// Toggles (follow/snap/rec/loop/metro) chegam sem payload — o shell mantém
-    /// o estado autoritativo e devolve via `set_*`.
-    pub fn handle_actions(ui: &WidgetRef, actions: &Actions, out: &mut Vec<ToolbarAction>) {
-        if ui.button(id!(tb_menu_file)).clicked(actions) {
-            out.push(ToolbarAction::Menu(0));
-        }
-        if ui.button(id!(tb_menu_edit)).clicked(actions) {
-            out.push(ToolbarAction::Menu(1));
-        }
-        if ui.button(id!(tb_menu_new)).clicked(actions) {
-            out.push(ToolbarAction::Menu(2));
-        }
-        if ui.button(id!(tb_menu_save)).clicked(actions) {
-            out.push(ToolbarAction::Menu(3));
-        }
-        if ui.button(id!(tb_menu_saveas)).clicked(actions) {
-            out.push(ToolbarAction::Menu(4));
-        }
-        if ui.button(id!(tb_menu_settings)).clicked(actions) {
-            out.push(ToolbarAction::Menu(5));
-        }
-        if ui.button(id!(tb_menu_help)).clicked(actions) {
-            out.push(ToolbarAction::Menu(6));
-        }
-        if ui.button(id!(tb_undo_hit)).clicked(actions) {
-            out.push(ToolbarAction::Undo);
-        }
-        if ui.button(id!(tb_redo_hit)).clicked(actions) {
-            out.push(ToolbarAction::Redo);
-        }
-        if ui.button(id!(tb_follow_hit)).clicked(actions) {
-            out.push(ToolbarAction::ToggleFollow);
-        }
-        if ui.button(id!(tb_snap_hit)).clicked(actions) {
-            out.push(ToolbarAction::ToggleSnap);
-        }
-        if let Some(i) = ui.drop_down(id!(tb_key)).selected(&actions) {
-            out.push(ToolbarAction::ProjectKey(i));
-        }
-        if let Some(i) = ui.drop_down(id!(tb_theme)).selected(&actions) {
-            out.push(ToolbarAction::ThemeSelected(i));
-        }
-        if ui.button(id!(tb_play_hit)).clicked(actions) {
-            out.push(ToolbarAction::TogglePlay);
-        }
-        if ui.button(id!(tb_stop_hit)).clicked(actions) {
-            out.push(ToolbarAction::Stop);
-        }
-        if ui.button(id!(tb_rec_hit)).clicked(actions) {
-            out.push(ToolbarAction::ToggleRec);
-        }
-        if ui.button(id!(tb_loop_hit)).clicked(actions) {
-            out.push(ToolbarAction::ToggleLoop);
-        }
-        if ui.button(id!(tb_metro_hit)).clicked(actions) {
-            out.push(ToolbarAction::ToggleMetronome);
-        }
-        if let Some((text, _)) = ui.text_input(id!(tb_bpm)).returned(&actions) {
-            if let Ok(bpm) = text.trim().parse::<f32>() {
-                if (40.0..=300.0).contains(&bpm) {
-                    out.push(ToolbarAction::SetBpm(bpm));
-                }
-            }
-        }
-        let tools = [
-            id!(tb_t0_hit),
-            id!(tb_t1_hit),
-            id!(tb_t2_hit),
-            id!(tb_t3_hit),
-            id!(tb_t4_hit),
-            id!(tb_t5_hit),
-        ];
-        for (i, path) in tools.iter().enumerate() {
-            if ui.button(*path).clicked(actions) {
-                out.push(ToolbarAction::ToolSelected(i));
-            }
-        }
-        if ui.button(id!(tb_dot_min)).clicked(actions) {
-            out.push(ToolbarAction::Minimize);
-        }
-        if ui.button(id!(tb_dot_max)).clicked(actions) {
-            out.push(ToolbarAction::Maximize);
-        }
-        if ui.button(id!(tb_dot_close)).clicked(actions) {
-            out.push(ToolbarAction::Close);
-        }
-    }
-
-    // ---- Sincronização de estado (chamado pelo shell) ------------------
-
-    pub fn set_toggle(
-        cx: &mut Cx,
-        ui: &WidgetRef,
-        tile: &[LiveId],
-        tile_on: &[LiveId],
-        icon: &[LiveId],
-        icon_f: &[LiveId],
-        on: bool,
+    /// Sincroniza o estado visual da toolbar com o estado da aplicação.
+    pub fn sync(
+        state: &mut ToolbarState,
+        transport: &Transport,
+        follow_on: bool,
+        snap_on: bool,
+        rec_armed: bool,
+        active_tool: usize,
     ) {
-        ui.view(tile).set_visible(cx, !on);
-        ui.view(tile_on).set_visible(cx, on);
-        ui.image(icon).set_visible(cx, !on);
-        ui.image(icon_f).set_visible(cx, on);
-    }
+        let ppq = transport.ppq as i32;
+        let beats_per_bar = transport.beats_per_bar as i32;
 
-    pub fn set_playing(cx: &mut Cx, ui: &WidgetRef, playing: bool) {
-        Self::set_toggle(
-            cx,
-            ui,
-            id!(tb_play_tile),
-            id!(tb_play_tile_on),
-            id!(tb_play_icon),
-            id!(tb_pause_icon),
-            playing,
+        let position_text = fmt_position(
+            transport.position_ticks as i64,
+            ppq,
+            beats_per_bar,
         );
-    }
 
-    pub fn set_follow(cx: &mut Cx, ui: &WidgetRef, on: bool) {
-        Self::set_toggle(
-            cx,
-            ui,
-            id!(tb_follow_tile),
-            id!(tb_follow_tile_on),
-            id!(tb_follow_icon),
-            id!(tb_follow_icon_f),
-            on,
-        );
-    }
+        state.playing = transport.playing;
+        state.loop_enabled = transport.loop_enabled;
+        state.metronome_enabled = transport.metronome_enabled;
 
-    pub fn set_snap(cx: &mut Cx, ui: &WidgetRef, on: bool) {
-        Self::set_toggle(
-            cx,
-            ui,
-            id!(tb_snap_tile),
-            id!(tb_snap_tile_on),
-            id!(tb_snap_icon),
-            id!(tb_snap_icon_f),
-            on,
-        );
-    }
+        state.position_text = position_text;
+        state.bpm_text = format!("{}", transport.bpm);
 
-    pub fn set_rec(cx: &mut Cx, ui: &WidgetRef, on: bool) {
-        ui.view(id!(tb_rec_tile)).set_visible(cx, !on);
-        ui.view(id!(tb_rec_tile_on)).set_visible(cx, on);
-    }
-
-    pub fn set_loop(cx: &mut Cx, ui: &WidgetRef, on: bool) {
-        ui.view(id!(tb_loop_tile)).set_visible(cx, !on);
-        ui.view(id!(tb_loop_tile_on)).set_visible(cx, on);
-    }
-
-    pub fn set_metronome(cx: &mut Cx, ui: &WidgetRef, on: bool) {
-        ui.view(id!(tb_metro_tile)).set_visible(cx, !on);
-        ui.view(id!(tb_metro_tile_on)).set_visible(cx, on);
-    }
-
-    /// Marca a ferramenta `active` (tile ativo + ícone filled branco).
-    pub fn set_tool(cx: &mut Cx, ui: &WidgetRef, active: usize) {
-        let tiles = [
-            (id!(tb_t0_tile), id!(tb_t0_tile_on), id!(tb_t0_icon), id!(tb_t0_icon_f)),
-            (id!(tb_t1_tile), id!(tb_t1_tile_on), id!(tb_t1_icon), id!(tb_t1_icon_f)),
-            (id!(tb_t2_tile), id!(tb_t2_tile_on), id!(tb_t2_icon), id!(tb_t2_icon_f)),
-            (id!(tb_t3_tile), id!(tb_t3_tile_on), id!(tb_t3_icon), id!(tb_t3_icon_f)),
-            (id!(tb_t4_tile), id!(tb_t4_tile_on), id!(tb_t4_icon), id!(tb_t4_icon_f)),
-            (id!(tb_t5_tile), id!(tb_t5_tile_on), id!(tb_t5_icon), id!(tb_t5_icon_f)),
-        ];
-        let active = active.min(5);
-        for (i, (tile, tile_on, icon, icon_f)) in tiles.iter().enumerate() {
-            let on = i == active;
-            ui.view(*tile).set_visible(cx, !on);
-            ui.view(*tile_on).set_visible(cx, on);
-            ui.image(*icon).set_visible(cx, !on);
-            ui.image(*icon_f).set_visible(cx, on);
-        }
-    }
-
-    pub fn set_bpm(cx: &mut Cx, ui: &WidgetRef, bpm: f32) {
-        ui.text_input(id!(tb_bpm)).set_text(cx, &format!("{bpm:.0}"));
-    }
-
-    pub fn set_position(cx: &mut Cx, ui: &WidgetRef, ticks: i64, ppq: i32, beats_per_bar: i32) {
-        ui.label(id!(tb_pos)).set_text(cx, &fmt_position(ticks, ppq, beats_per_bar));
+        state.follow_on = follow_on;
+        state.snap_on = snap_on;
+        state.rec_armed = rec_armed;
+        state.active_tool = active_tool;
     }
 }
