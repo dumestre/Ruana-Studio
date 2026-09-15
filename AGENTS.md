@@ -1,4 +1,5 @@
-Como funciona na prática
+## Ofunciona na prática
+
 1. O seu código gerencia o winit e o wgpu
 Você inicializa a janela com o winit, cria o dispositivo (Device), a fila (Queue) e a Surface do wgpu manualmente. O loop principal (event_loop.run(...)) pertence ao seu motor:
 
@@ -17,7 +18,7 @@ event_loop.run(move |event, elwt| {
             // 3. Apresenta o frame na swapchain
         }
         // Repassa eventos de mouse/teclado para o Slint processar os botões/knobs
-        _ => { slint_window.process_event(event); }
+        _=> { slint_window.process_event(event); }
     }
 }).unwrap();
 2. O Slint integrado via Renderizador Personalizado
