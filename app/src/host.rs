@@ -40,6 +40,10 @@ pub struct SharedState {
     pub scale: f32,
     pub win_pos: (f64, f64),
     pub last_cursor: (f32, f32),
+    /// Modificadores atuais (Ctrl/Alt/Shift), dos `ModifiersChanged` do winit.
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
 }
 
 /// Ponte da engine wgpu para o app hosted: transições de estado a cada frame.
@@ -279,6 +283,9 @@ impl Handler {
                 scale: 1.0,
                 win_pos: (0.0, 0.0),
                 last_cursor: (0.0, 0.0),
+                ctrl: false,
+                alt: false,
+                shift: false,
             })),
             drop_sink: None,
         }
@@ -426,6 +433,13 @@ impl ApplicationHandler for Handler {
                 bridge.borrow_mut().tick(ui);
                 bridge.borrow_mut().engine.render();
             }
+            WindowEvent::ModifiersChanged(state) => {
+                let sts = state.state();
+                let mut st = self.state.borrow_mut();
+                st.ctrl = sts.control_key();
+                st.alt = sts.alt_key();
+                st.shift = sts.shift_key();
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.state.borrow_mut().last_cursor = (position.x as f32, position.y as f32);
                 let logical = logical_pos(position.x, position.y, scale);
@@ -464,15 +478,29 @@ impl ApplicationHandler for Handler {
                     MouseScrollDelta::LineDelta(x, y) => (x * 40.0, y * 40.0),
                     MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
                 };
-                let (px, py) = self.state.borrow().last_cursor;
-                overlay_dispatch(
-                    bridge,
-                    slint::platform::WindowEvent::PointerScrolled {
-                        position: logical_pos(px as f64, py as f64, scale),
-                        delta_x: dx / scale,
-                        delta_y: dy / scale,
-                    },
-                );
+                // Ctrl+scroll = zoom horizontal, Alt+scroll = altura das faixas:
+                // rota DIRETA ao motor com os modificadores reais do winit (via
+                // `ModifiersChanged`). O Slint não vê esse wheel (evita a rota
+                // `engine-scroll`, que teria Ctrl/Alt sempre falso — não
+                // enviamos ModifiersChanged pra ele).
+                let st = self.state.borrow();
+                let (ctrl, alt) = (st.ctrl, st.alt);
+                drop(st);
+                if ctrl || alt {
+                    let mut b = bridge.borrow_mut();
+                    b.engine.handle_scroll(dx, dy, ctrl, alt);
+                    b.dirty = true;
+                } else {
+                    let (px, py) = self.state.borrow().last_cursor;
+                    overlay_dispatch(
+                        bridge,
+                        slint::platform::WindowEvent::PointerScrolled {
+                            position: logical_pos(px as f64, py as f64, scale),
+                            delta_x: dx / scale,
+                            delta_y: dy / scale,
+                        },
+                    );
+                }
             }
             WindowEvent::KeyboardInput { event: key, .. } => {
                 let adapter = bridge.borrow().overlay.window.clone();
