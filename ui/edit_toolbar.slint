@@ -84,6 +84,41 @@ export component EditToolbar inherits Rectangle {
                 }
             }
 
+            // =================================================
+            // DRAW - 4
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/draw.svg");
+                filled-icon: @image-url("icons/draw_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+
+                toggled: root.active-tool == 4;
+
+                toggled-fg: Theme.on-crimson;
+                toggled-bg: Theme.crimson;
+                toggled-icon-color: Theme.on-crimson;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 4;
+                    root.tool-changed(4);
+                }
+            }
+
 
             // =================================================
             // SLICE - 1
@@ -192,41 +227,6 @@ export component EditToolbar inherits Rectangle {
                 }
             }
 
-
-            // =================================================
-            // DRAW - 4
-            // =================================================
-
-            Button {
-                width: 18px;
-                height: 18px;
-
-                resting-bg: Theme.surface-high;
-
-                icon: @image-url("icons/draw.svg");
-                filled-icon: @image-url("icons/draw_filled.svg");
-
-                icon-size: 16px;
-                icon-color: Theme.text-primary;
-
-                text: "";
-
-                borderless: true;
-                corner-radius: 2px;
-
-                toggled: root.active-tool == 4;
-
-                toggled-fg: Theme.on-crimson;
-                toggled-bg: Theme.crimson;
-                toggled-icon-color: Theme.on-crimson;
-
-                subtle-toggled: false;
-
-                clicked => {
-                    root.active-tool = 4;
-                    root.tool-changed(4);
-                }
-            }
 
 
             // =================================================

@@ -16,7 +16,6 @@ export component MixerChannel inherits Rectangle {
     in property <bool> is-master: false;
     in property <int> channel-index: 0;
 
-    // Mantido porque o Mixer já fornece essa propriedade
     in property <length> available-height: 200px;
 
     // ==========================================
@@ -27,7 +26,9 @@ export component MixerChannel inherits Rectangle {
     in property <bool> soloed: false;
     in property <bool> arm: false;
 
-    in property <float> volume: 0.8;
+    // Mudado para 'in-out' para podermos alterar visualmente ao arrastar!
+    in-out property <float> volume: 0.8;
+    
     in property <float> pan: 0.5;
     in property <float> level: 0.0;
 
@@ -91,7 +92,7 @@ export component MixerChannel inherits Rectangle {
         padding: 5px;
         spacing: 4px;
 
-        alignment: LayoutAlignment.start;
+        alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.stretch;
 
         // ======================================
@@ -142,7 +143,8 @@ export component MixerChannel inherits Rectangle {
 
             // MUTE
             Button {
-                width: 27px;
+                width: 18px;
+                corner-radius: 2px;
                 height: 18px;
 
                 text: "M";
@@ -161,7 +163,8 @@ export component MixerChannel inherits Rectangle {
 
             // SOLO
             if !root.is-master: Button {
-                width: 27px;
+                width: 18px;
+                corner-radius: 2px;
                 height: 18px;
 
                 text: "S";
@@ -180,7 +183,8 @@ export component MixerChannel inherits Rectangle {
 
             // RECORD
             if !root.is-master: Button {
-                width: 27px;
+                width: 18px;
+                corner-radius: 2px;
                 height: 18px;
 
                 text: "R";
@@ -205,7 +209,7 @@ export component MixerChannel inherits Rectangle {
         VerticalLayout {
             spacing: 2px;
 
-            alignment: LayoutAlignment.start;
+            alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.stretch;
 
             vertical-stretch: 0;
@@ -256,118 +260,139 @@ export component MixerChannel inherits Rectangle {
         // ======================================
 
         VerticalLayout {
-            height: 40px;
+            HorizontalLayout {
+                height: 40px;
 
-            spacing: 0px;
+                spacing: 0px;
 
-            alignment: LayoutAlignment.center;
-            cross-axis-alignment: CrossAxisAlignment.center;
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.stretch;
 
-            vertical-stretch: 0;
+                vertical-stretch: 0;
 
-            PanKnob {
-                width: 32px;
-                height: 38px;
+                PanKnob {
+                    width: 40px;
+                    height: 45px;
 
-                caption: "";
+                    caption: "";
 
-                value: root.pan;
-                display-value: root.pan-display;
+                    value: root.pan;
+                    display-value: root.pan-display;
 
-                changed(v) => {
-                    root.param-changed(
-                        root.channel-index,
-                        "pan",
-                        v
-                    );
+                    changed(v) => {
+                        root.param-changed(
+                            root.channel-index,
+                            "pan",
+                            v
+                        );
+                    }
                 }
             }
         }
 
         // ======================================
-        // FADER + METER
+        // FADER + METER + DB DISPLAY
         // ======================================
 
-        HorizontalLayout {
+        VerticalLayout {
             spacing: 5px;
 
-            alignment: LayoutAlignment.center;
+            alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
-            horizontal-stretch: 1;
             vertical-stretch: 1;
 
-            // ==================================
-            // FADER
-            // ==================================
-
-            VerticalLayout {
-                spacing: 3px;
-
+            // Layout horizontal unindo apenas Play e Meter (garante o 1px de distância)
+            HorizontalLayout {
+                spacing: 1px; // Exatamente 1px de distância
+                
                 alignment: LayoutAlignment.center;
-                cross-axis-alignment: CrossAxisAlignment.center;
-
-                horizontal-stretch: 1;
                 vertical-stretch: 1;
 
-                Fader {
-                    value: root.volume;
-                    caption: "";
-
-                    horizontal-stretch: 1;
+                // ==================================
+                // DRAGGABLE FADER (PLAY ICON)
+                // ==================================
+                Rectangle {
+                    width: 15px; 
+                    horizontal-stretch: 0;
                     vertical-stretch: 1;
 
-                    changed(v) => {
-                        root.param-changed(
-                            root.channel-index,
-                            "volume",
-                            v
-                        );
+                    touch := TouchArea {
+                        width: 100%;
+                        height: 100%;
+
+                        moved => {
+                            let v = Math.max(0.0, Math.min(1.0, 1.0 - (self.mouse-y / self.height)));
+                            
+                            // Atualiza visualmente na mesma hora
+                            root.volume = v;
+                            
+                            // Emite o evento
+                            root.param-changed(
+                                root.channel-index,
+                                "volume",
+                                v
+                            );
+                        }
+                    }
+
+                    Image {
+                        source: @image-url("../icons/play.svg");
+                        
+                        width: 15px;
+                        height: 15px;
+                        
+                        // Fica aceso ao arrastar
+                        colorize: touch.pressed ? Theme.accent : Theme.text-dim;
+
+                        // Alinha totalmente à direita para encostar no Meter
+                        x: parent.width - self.width;
+                        
+                        // Calcula o Y mantendo o ícone dentro das bordas (sem cortar em cima ou embaixo)
+                        y: (parent.height - self.height) * (1.0 - root.volume);
                     }
                 }
 
                 // ==================================
-                // DB DISPLAY
+                // LEVEL METER
                 // ==================================
+                Meter {
+                    width: 8px;
 
-                Rectangle {
-                    width: 52px;
-                    height: 16px;
+                    level: root.level;
+                    active: root.level > 0.05;
 
-                    background: Theme.base;
-
-                    border-radius: 3px;
-                    border-width: 1px;
-                    border-color: Theme.border;
-
-                    Text {
-                        text: root.vol-display;
-
-                        width: 100%;
-                        height: 100%;
-
-                        color: Theme.text-primary;
-
-                        font-size: 8px;
-                        font-weight: 600;
-
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                    vertical-stretch: 1;
                 }
             }
 
             // ==================================
-            // LEVEL METER
+            // DB DISPLAY
             // ==================================
+            Rectangle {
+                width: 52px;
+                height: 16px;
 
-            Meter {
-                width: 8px;
+                background: Theme.base;
 
-                level: root.level;
-                active: root.level > 0.05;
+                border-radius: 3px;
+                border-width: 1px;
+                border-color: Theme.border;
 
-                vertical-stretch: 1;
+                Text {
+                    text: root.vol-display;
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-primary;
+
+                    font-size: 8px;
+                    font-weight: 600;
+
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
         }
     }
