@@ -240,6 +240,9 @@ pub struct App {
     /// Retângulo (x, y, w, h EM PIXELS FÍSICOS) onde o frame da timeline é
     /// apresentado na surface — a posição da área do canvas no layout do Slint.
     pub timeline_rect: (f32, f32, f32, f32),
+    /// Raio dos cantos (px físicos) da timeline na composição — casando com o
+    /// `border-radius: 6px` dos painéis do Slint (explorer/clip pool).
+    pub timeline_corner_radius: f32,
 }
 
 impl App {
@@ -593,7 +596,7 @@ impl App {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -828,6 +831,7 @@ transport,
             timeline_bg_view: None,
             timeline_bg_size: (0, 0),
             timeline_rect: (0.0, 0.0, 0.0, 0.0),
+            timeline_corner_radius: 6.0,
         })
     }
 
@@ -912,6 +916,13 @@ transport,
     /// Define onde o frame da timeline aparece na surface (px físicos).
     pub fn set_timeline_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
         self.timeline_rect = (x, y, w, h);
+    }
+
+    /// Define o raio dos cantos (logical) da timeline na composição. O host
+    /// converte para px físicos (raio * devicePixelRatio) para casar com o
+    /// `border-radius: 6px` dos painéis do Slint.
+    pub fn set_timeline_corner_radius(&mut self, radius: f32) {
+        self.timeline_corner_radius = radius;
     }
 
     /// Envia o frame (readback) da cena da timeline (RGBA, linha 0 = topo)

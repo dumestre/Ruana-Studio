@@ -1025,15 +1025,21 @@ impl App {
                     contents: bytemuck::cast_slice(&verts),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
+                let overlay_ubo: [f32; 20] = {
+                    let p = OrthoCamera {
+                        scroll_x: 0.0,
+                        scroll_y: 0.0,
+                        viewport_w: width.max(1.0),
+                        viewport_h: height.max(1.0),
+                    }.proj();
+                    let mut u = [0.0f32; 20];
+                    u[..16].copy_from_slice(&p);
+                    u
+                };
                 let overlay_uniform = self.device.create_buffer_init(
                     &wgpu::util::BufferInitDescriptor {
                         label: Some("overlay-uniforms"),
-                        contents: bytemuck::cast_slice(&OrthoCamera {
-                            scroll_x: 0.0,
-                            scroll_y: 0.0,
-                            viewport_w: width.max(1.0),
-                            viewport_h: height.max(1.0),
-                        }.proj()),
+                        contents: bytemuck::cast_slice(&overlay_ubo),
                         usage: wgpu::BufferUsages::UNIFORM,
                     },
                 );
@@ -1105,6 +1111,7 @@ impl App {
                                    y: f32,
                                    w: f32,
                                    h: f32,
+                                   mask: [f32; 4],
                                    load: wgpu::LoadOp<wgpu::Color>| {
             let verts: [f32; 16] = [
                 x,     y,     0.0, 0.0,
@@ -1117,14 +1124,21 @@ impl App {
                 contents: bytemuck::cast_slice(&verts),
                 usage: wgpu::BufferUsages::VERTEX,
             });
-            let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("composite-uniforms"),
-                contents: bytemuck::cast_slice(&OrthoCamera {
+            let ubo: [f32; 20] = {
+                let p = OrthoCamera {
                     scroll_x: 0.0,
                     scroll_y: 0.0,
                     viewport_w: width.max(1.0),
                     viewport_h: height.max(1.0),
-                }.proj()),
+                }.proj();
+                let mut u = [0.0f32; 20];
+                u[..16].copy_from_slice(&p);
+                u[16..20].copy_from_slice(&mask);
+                u
+            };
+            let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("composite-uniforms"),
+                contents: bytemuck::cast_slice(&ubo),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
             let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1203,6 +1217,7 @@ impl App {
                     0.0,
                     width,
                     height,
+                    [0.0, 0.0, 0.0, 0.0],
                     wgpu::LoadOp::Load,
                 );
             }
@@ -1228,6 +1243,12 @@ impl App {
                     ry,
                     rw,
                     rh,
+                    [
+                        bw as f32,
+                        bh as f32,
+                        self.timeline_corner_radius,
+                        1.0,
+                    ],
                     wgpu::LoadOp::Load,
                 );
             }

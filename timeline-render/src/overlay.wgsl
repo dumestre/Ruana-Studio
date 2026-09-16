@@ -5,12 +5,18 @@
 // (alpha blending) compõe por cima da timeline já desenhada.
 //
 // Bind group:
-//   binding 0: uniform proj (câmera ortográfica do viewport)
+//   binding 0: uniform proj (câmera ortográfica do viewport) + mask
 //   binding 1: sampler (linear, clamp)
 //   binding 2: texture_2d — RGBA sRGB (linha 0 do buffer = topo da imagem)
+//
+// `u.mask` = (largura do quad em px, altura do quad em px, raio dos cantos,
+// flag ligado). Quando ligado, aplica um canto arredondado (SDF) no quad —
+// os cantos ficam transparentes com anti-aliasing de ~1.5px, igual aos
+// painéis do Slint (explorer/clip pool usam raio 6).
 
 struct Uniforms {
     proj: mat4x4<f32>,
+    mask: vec4<f32>,
 };
 
 @group(0) @binding(0)
@@ -41,5 +47,15 @@ fn vs_main(
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let c = textureSample(tex, samp, in.uv);
-    return vec4<f32>(c.rgb, c.a);
+    if u.mask.w < 0.5 {
+        return vec4<f32>(c.rgb, c.a);
+    }
+    let size = max(u.mask.xy, vec2<f32>(1.0));
+    let radius = min(u.mask.z, min(size.x, size.y) * 0.5);
+    let p = in.uv * size;
+    let q = abs(p - size * 0.5) - (size * 0.5 - radius);
+    let d = length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - radius;
+    let corner = 1.0 - smoothstep(-0.75, 0.75, d);
+    // RGB já vem premultiplicado; multiplica RGB+A pelo fator do canto.
+    return vec4<f32>(c.rgb * corner, c.a * corner);
 }

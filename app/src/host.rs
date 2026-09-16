@@ -329,6 +329,10 @@ impl ApplicationHandler for Handler {
         .expect("host: timeline-render init failed");
         engine.set_hosted(true);
 
+        // Cantos da timeline: mesmo raio (6px lógicos) dos painéis do Slint
+        // (explorer/clip pool têm border-radius: 6px), escalado pelo DPR.
+        engine.set_timeline_corner_radius(6.0 * scale);
+
         // 2. Plataforma offscreen do Slint (FemtoVG-GL) + componente principal.
         let overlay = SlintOverlay::new(event_loop).expect("host: plataforma Slint (já setada?)");
         overlay.resize(inner.width, inner.height, scale);
