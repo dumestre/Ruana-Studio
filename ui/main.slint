@@ -46,10 +46,6 @@ export component MainWindow inherits Window {
     min-height:
         720px;
 
-    // Em modo hosted o fundo da janela é transparente: o wgpu compõe a
-    // timeline (e o quad) POR BAIXO, e a UI (dropdowns, clippool, painéis
-    // com fundo próprio) flutua por cima. Sem isso o `Theme.base` opaco
-    // cobriria o "buraco" do canvas e dropdowns/menus sumiriam atrás do quad.
     background:
         root.native-overlay
             ? transparent

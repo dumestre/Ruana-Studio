@@ -344,10 +344,13 @@ fn premultiply(rgba: &[u8]) -> Vec<u8> {
     out
 }
 
-/// true se o readback não parece um frame renderizado de verdade: mais da
-/// metade dos pixels alpha==0. A UI da Ruana tem fundo opaco, então um frame
-/// legítimo nunca chega perto disso. (Readback de backbuffer ainda em
-/// transição de tamanho costuma voltar zerado/transparente.)
+/// true se o readback não parece um frame renderizado de verdade: quase todo
+/// o quadro é alpha==0. Em modo hosted a janela tem fundo TRANSPARENTE (o
+/// "buraco" da timeline fica por conta do wgpu por baixo), então um frame
+/// legítimo tem uma fração bem grande de pixels transparentes (a base da
+/// janela + o buraco do canvas, ~50%). O limiar precisa aceitar isso e só
+/// descartar transição de tamanho/backbuffer não inicializado (essas voltam
+/// 100% transparentes).
 fn is_transparent_readback(rgba: &[u8]) -> bool {
     let mut transparent = 0usize;
     for px in rgba.chunks_exact(4) {
@@ -355,5 +358,5 @@ fn is_transparent_readback(rgba: &[u8]) -> bool {
             transparent += 1;
         }
     }
-    transparent > rgba.len() / 8
+    transparent * 10usize > rgba.len() * 9usize
 }

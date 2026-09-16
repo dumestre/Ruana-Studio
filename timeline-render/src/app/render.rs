@@ -1181,7 +1181,9 @@ impl App {
             pass.draw(0..4, 0..1);
         };
 
-        let clear = wgpu::LoadOp::Clear(wgpu::Color { r: 0.1, g: 0.1, b: 0.12, a: 1.0 });
+        // Equivale ao `Theme.base` da UI (#313131): com o fundo da janela do
+        // Slint transparente, este clear aparece nas áreas sem painel.
+        let clear = wgpu::LoadOp::Clear(wgpu::Color { r: 0.1921569, g: 0.1921569, b: 0.1921569, a: 1.0 });
 
         // 1. Limpa a janela inteira (fundo atrás da UI do Slint).
         {
@@ -1200,32 +1202,10 @@ impl App {
             });
         }
 
-        // 2. UI do Slint por cima de tudo (blend premultiplicado).
-        if let Some(overlay_view) = &self.overlay_view {
-            let (ow, oh) = self.overlay_size;
-            if ow > 0 && oh > 0 {
-                draw_textured_quad(
-                    encoder,
-                    &self.device,
-                    &self.queue,
-                    &self.overlay_pipeline,
-                    &self.overlay_bind_group_layout,
-                    &self.overlay_sampler,
-                    view,
-                    overlay_view,
-                    0.0,
-                    0.0,
-                    width,
-                    height,
-                    [0.0, 0.0, 0.0, 0.0],
-                    wgpu::LoadOp::Load,
-                );
-            }
-        }
-
-        // 3. Frame da timeline dentro do retângulo do componente `Timeline`,
-        // por cima da UI: o Slint deixou o canvas vazio nessa região, então o
-        // quad reaparece exatamente onde fica — em vez do fundo opaco da UI.
+        // 2. Frame da timeline dentro do retângulo do componente `Timeline`,
+        // desenhado ANTES da UI. O fundo da janela do Slint é transparente no
+        // modo hosted: o "buraco" do canvas não recebe tinta, então o quad da
+        // engine aparece aqui (fetched via blend do overlay com alpha 0).
         if let (Some(bg_view), Some(_bg_tex)) = (&self.timeline_bg_view, &self.timeline_bg_texture) {
             let (bw, bh) = self.timeline_bg_size;
             let (rx, ry, rw, rh) = self.timeline_rect;
@@ -1249,6 +1229,31 @@ impl App {
                         self.timeline_corner_radius,
                         1.0,
                     ],
+                    wgpu::LoadOp::Load,
+                );
+            }
+        }
+
+        // 3. UI do Slint POR CIMA (blend premultiplicado). O fundo é
+        // transparente, os painéis são opacos e widgets sobrepostos (dropdowns,
+        // clippool, menus) pintam alpha 255 → ficam acima do quad da timeline.
+        if let Some(overlay_view) = &self.overlay_view {
+            let (ow, oh) = self.overlay_size;
+            if ow > 0 && oh > 0 {
+                draw_textured_quad(
+                    encoder,
+                    &self.device,
+                    &self.queue,
+                    &self.overlay_pipeline,
+                    &self.overlay_bind_group_layout,
+                    &self.overlay_sampler,
+                    view,
+                    overlay_view,
+                    0.0,
+                    0.0,
+                    width,
+                    height,
+                    [0.0, 0.0, 0.0, 0.0],
                     wgpu::LoadOp::Load,
                 );
             }
