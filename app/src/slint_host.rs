@@ -18,7 +18,7 @@ use glutin::config::ConfigTemplateBuilder;
 use glutin::context::{ContextApi, ContextAttributesBuilder, Version};
 use glutin::display::{Display as GlutinDisplay, DisplayApiPreference};
 use glutin::prelude::*;
-use glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
+use glutin::surface::{SurfaceAttributesBuilder, SwapInterval, WindowSurface};
 use i_slint_renderer_femtovg::opengl::OpenGLInterface;
 use i_slint_renderer_femtovg::FemtoVGOpenGLRenderer;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -179,6 +179,13 @@ impl SlintOverlay {
         let context = not_current
             .make_current(&surface)
             .map_err(|e| format!("slint_host: make_current: {e}"))?;
+
+        // A janela é OCULTA (nunca exibida → o DWM não compõe a HWND). Com o
+        // swap interval default (vsync) o `SwapBuffers` pode travar por
+        // segundos por frame, deixando a UI com ~2-3s de atraso. Como esse
+        // buffer só existe para o `glReadPixels` da composição, swap NUNCA
+        // deve esperar vblank/vsync aqui.
+        let _ = surface.set_swap_interval(&context, SwapInterval::DontWait);
 
         if display
             .get_proc_address(&std::ffi::CString::new("glCreateShader").unwrap())
