@@ -476,7 +476,34 @@ impl ApplicationHandler for Handler {
             }
             WindowEvent::KeyboardInput { event: key, .. } => {
                 let adapter = bridge.borrow().overlay.window.clone();
-                forward_key(&adapter, &key);
+                // O motor processa os mesmos atalhos do renderer standalone
+                // (1-6, P, F/Ctrl+F, Ctrl+C/A/Z/Y/V/D, Delete, etc.). Espaço
+                // (§`TogglePlay`) é resolvido AQUI (play/pause no transporte,
+                // mesmo caminho do botão da UI) e NÃO vai pro Slint para não
+                // depender do foco do FocusScope nem acontecer double-toggle.
+                // Esc não fecha nada no hosted.
+                let forward_to_slint = {
+                    let mut b = bridge.borrow_mut();
+                    match b.engine.handle_key(&key) {
+                        timeline_render::app::KeyAction::TogglePlay => {
+                            let playing = b
+                                .transport
+                                .lock()
+                                .map(|t| t.playing)
+                                .unwrap_or(false);
+                            ui.invoke_play_state_changed(!playing);
+                            false
+                        }
+                        timeline_render::app::KeyAction::ExitWindow
+                        | timeline_render::app::KeyAction::None => true,
+                    }
+                };
+                // Qualquer tecla válida marca o frame: o próximo `tick`
+                // re-renderiza a cena refletindo o atalho aplicado.
+                bridge.borrow_mut().dirty = true;
+                if forward_to_slint {
+                    forward_key(&adapter, &key);
+                }
             }
             WindowEvent::HoveredFile(path) => {
                 if let Some(sink) = &self.drop_sink {

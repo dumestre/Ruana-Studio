@@ -29,11 +29,10 @@ pub struct DockSpec {
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 use winit::window::{WindowId};
 use winit::window;
 
-use crate::app::{DropPreview, App};
+use crate::app::{DropPreview, KeyAction, App};
 use crate::clips::ClipDemo;
 use crate::tools::{self, current_tool, set_tool, Tool};
 
@@ -280,148 +279,47 @@ if app.is_dragging_file {
                 event,
                 ..
             } => {
-                let pressed = event.state == ElementState::Pressed;
-                let vk = event.logical_key;
-                if pressed && vk == Key::Named(NamedKey::Space) {
-                    if app.playing {
-                        if let Ok(mut t) = app.transport.lock() {
-                            t.playing = false;
-                        }
-                        app.playing = false;
-                        // Guarda o ponto onde o play foi interrompido para,
-                        // ao retomar com espaço, pular de volta pro início do
-                        // último play (comportamento de DAW comum).
-                        app.last_play_start = app.play_start_seconds;
-                    } else {
-                        // Se houve um play anterior interrompido por espaço,
-                        // o próximo espaço volta ao início daquele play.
-app.transport_seconds = app.last_play_start;
-                        // Sincroniza o projeto com o motor de áudio antes de tocar.
-                        #[cfg(feature = "audio")]
-                        app.sync_audio_engine();
-                        // Sincroniza o estado do loop no transporte compartilhado.
-                        if let Ok(mut t) = app.transport.lock() {
-                            t.bpm = app.bpm as u32;
-                            t.loop_enabled = app.loop_enabled;
-                            if app.loop_enabled {
-                                t.loop_start_ticks = (app.loop_start_beat * t.ppq as f32) as u64;
-                                t.loop_end_ticks = (app.loop_end_beat * t.ppq as f32) as u64;
+                // Atalhos do motor (ferramentas, clipboard, piano roll, etc.).
+                // Espaço e Esc voltam como ações para o loop decidir.
+                match app.handle_key(&event) {
+                    KeyAction::TogglePlay => {
+                        if app.playing {
+                            if let Ok(mut t) = app.transport.lock() {
+                                t.playing = false;
                             }
-                            // Posiciona no playhead atual.
-                            let beats = app.transport_seconds * app.bpm / 60.0;
-                            t.position_ticks = (beats * t.ppq as f32) as u64;
-                            t.playing = true;
-                        }
-                        app.play_start_seconds = app.transport_seconds;
-                        app.playing = true;
-                    }
-                    app.last_play_head_update = Instant::now();
-                    app.request_redraw();
-                }
-                if pressed && vk == Key::Named(NamedKey::Escape) {
-                    event_loop.exit();
-                }
-                if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("p")) {
-                    app.toggle_piano_roll();
-                    app.toolbar_hover = None;
-                    if app.show_piano_roll && app.note_editor.notes().is_empty() {
-                        app.note_editor.add(60, 0.0, 1.0, 100);
-                        app.note_editor.add(64, 1.0, 0.5, 80);
-                        app.note_editor.add(67, 2.0, 1.5, 100);
-                        app.sync_piano_roll_from_core();
-                    }
-                    app.request_redraw();
-                }
-                // F: foca o clip sob o cursor; Ctrl+F: toggle follow playhead.
-                if pressed && matches!(vk, Key::Character(ref s) if s.eq_ignore_ascii_case("f")) {
-                    if app.ctrl_pressed {
-                        app.follow_playhead = !app.follow_playhead;
-                    } else {
-                        app.toggle_clip_focus(app.size.0 as f32);
-                    }
-                    app.request_redraw();
-                }
-                // Tool switching keys (1-6)
-                if pressed && !app.ctrl_pressed && !app.alt_pressed {
-                    match vk {
-                        Key::Character(ref s) if s == "1" => { set_tool(Tool::Select); app.request_redraw(); }
-                        Key::Character(ref s) if s == "2" => { set_tool(Tool::Draw); app.request_redraw(); }
-                        Key::Character(ref s) if s == "3" => { set_tool(Tool::Stretch); app.request_redraw(); }
-                        Key::Character(ref s) if s == "4" => { set_tool(Tool::Slice); app.request_redraw(); }
-                        Key::Character(ref s) if s == "5" => { set_tool(Tool::Erase); app.request_redraw(); }
-                        Key::Character(ref s) if s == "6" => { set_tool(Tool::Glue); app.request_redraw(); }
-                        _ => {}
-                    }
-                }
-                // Clipboard/editing shortcuts (Ctrl+C, Ctrl+V, Ctrl+D, Ctrl+A,
-                // Ctrl+Z, Ctrl+Y, Delete, Backspace)
-                if pressed && app.ctrl_pressed {
-                    match vk {
-                        Key::Character(ref s) if s.eq_ignore_ascii_case("c") => {
-                            app.copy_selected();
-                            app.request_redraw();
-                        }
-                        Key::Character(ref s) if s.eq_ignore_ascii_case("a") => {
-                            app.select_all();
-                            app.request_redraw();
-                        }
-                        Key::Character(ref s) if s.eq_ignore_ascii_case("z") => {
-                            if app.shift_pressed {
-                                app.redo();
-                            } else {
-                                app.undo();
+                            app.playing = false;
+                            // Guarda o ponto onde o play foi interrompido para,
+                            // ao retomar com espaço, pular de volta pro início do
+                            // último play (comportamento de DAW comum).
+                            app.last_play_start = app.play_start_seconds;
+                        } else {
+                            // Se houve um play anterior interrompido por espaço,
+                            // o próximo espaço volta ao início daquele play.
+                            app.transport_seconds = app.last_play_start;
+                            // Sincroniza o projeto com o motor de áudio antes de tocar.
+                            #[cfg(feature = "audio")]
+                            app.sync_audio_engine();
+                            // Sincroniza o estado do loop no transporte compartilhado.
+                            if let Ok(mut t) = app.transport.lock() {
+                                t.bpm = app.bpm as u32;
+                                t.loop_enabled = app.loop_enabled;
+                                if app.loop_enabled {
+                                    t.loop_start_ticks = (app.loop_start_beat * t.ppq as f32) as u64;
+                                    t.loop_end_ticks = (app.loop_end_beat * t.ppq as f32) as u64;
+                                }
+                                // Posiciona no playhead atual.
+                                let beats = app.transport_seconds * app.bpm / 60.0;
+                                t.position_ticks = (beats * t.ppq as f32) as u64;
+                                t.playing = true;
                             }
-                            app.request_redraw();
+                            app.play_start_seconds = app.transport_seconds;
+                            app.playing = true;
                         }
-                        Key::Character(ref s) if s.eq_ignore_ascii_case("y") => {
-                            app.redo();
-                            app.request_redraw();
-                        }
-                        Key::Character(ref s) if s.eq_ignore_ascii_case("v") => {
-                            // Cola na posição do playhead (com snap) na track do primeiro clip selecionado ou 0
-                            let bpm = app.bpm;
-                            let pps = app.px_per_beat * bpm / 60.0;
-                            let target_beat = if pps > 0.0 {
-                                app.transport_seconds * bpm / 60.0
-                            } else {
-                                0.0
-                            };
-                            // Tenta usar a track do primeiro clip selecionado
-                            let target_track = app.clip_interaction.selected.iter()
-                                .enumerate()
-                                .find(|&(_, &s)| s)
-                                .and_then(|(i, _)| app.clips.get(i))
-                                .map(|c| c.track_index)
-                                .unwrap_or(0);
-                            app.paste_at_beat(target_beat, target_track);
-                            app.request_redraw();
-                        }
-                        Key::Character(ref s) if s.eq_ignore_ascii_case("d") => {
-                            app.duplicate_selected();
-                            app.request_redraw();
-                        }
-                        _ => {}
+                        app.last_play_head_update = Instant::now();
+                        app.request_redraw();
                     }
-                }
-                if pressed && matches!(vk, Key::Named(NamedKey::Delete) | Key::Named(NamedKey::Backspace)) {
-                    app.delete_selected();
-                    app.request_redraw();
-                }
-                // Track ctrl/alt/shift para zoom e shortcuts — só atualiza quando a tecla É o modificador.
-                let is_ctrl_key = matches!(vk, Key::Named(NamedKey::Control))
-                    || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ControlLeft | KeyCode::ControlRight));
-                let is_alt_key = matches!(vk, Key::Named(NamedKey::Alt))
-                    || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::AltLeft | KeyCode::AltRight));
-                let is_shift_key = matches!(vk, Key::Named(NamedKey::Shift))
-                    || matches!(event.physical_key, PhysicalKey::Code(code) if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight));
-                if is_ctrl_key {
-                    app.ctrl_pressed = pressed;
-                }
-                if is_alt_key {
-                    app.alt_pressed = pressed;
-                }
-                if is_shift_key {
-                    app.shift_pressed = pressed;
+                    KeyAction::ExitWindow => event_loop.exit(),
+                    KeyAction::None => {}
                 }
             }
             WindowEvent::MouseInput {

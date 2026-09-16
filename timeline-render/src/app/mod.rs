@@ -33,6 +33,19 @@ impl From<winit::event::ElementState> for ButtonState {
     }
 }
 
+/// O que o HOST/loop deve fazer além do que o motor já processou numa tecla.
+/// Espaço e Esc NÃO mexem no estado do motor: o host decide (play/pause no
+/// transporte do app; standalone fecha na Esc).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum KeyAction {
+    /// O motor já tratou internamente (atalhos, ferramentas, *clipboard*…).
+    None,
+    /// Espaço: o host decide o play/pause do transporte.
+    TogglePlay,
+    /// Esc: o host decide (standalone fecha a janela; hosted ignora).
+    ExitWindow,
+}
+
 use crate::clips;
 use crate::fades;
 use crate::shctx::{ICON_SHADER_WGSL, OVERLAY_SHADER_WGSL, SHADER_WGSL};

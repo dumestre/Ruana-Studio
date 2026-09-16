@@ -1,17 +1,159 @@
-//! Interação: mouse, scroll, ferramentas, clipboard, loop, foco e edge-scroll.
+﻿//! InteraÃ§Ã£o: mouse, scroll, ferramentas, clipboard, loop, foco e edge-scroll.
 
-use crate::app::{ButtonState, LoopDrag, App};
+use crate::app::{ButtonState, KeyAction, LoopDrag, App};
 use crate::clips;
 use crate::fades;
-use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, set_vresize_override, Tool};
+use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, set_vresize_override, set_tool, Tool};
 use std::time::Instant;
 
 
 impl App {
+    /// Atalhos de teclado do motor (mesma tecla do renderer standalone):
+    /// `1..6` ferramentas, `P` piano roll, `F`/`Ctrl+F` foco/follow, `Ctrl+C/A/
+    /// Z/Y/V/D`, `Delete/Backspace`, e o rastreio de modificadores. EspaÃ§o e
+    /// Esc apenas sinalizam (`TogglePlay`/`ExitWindow`) â€” o motor NÃƒO toca no
+    /// transporte nem fecha nada.
+    pub fn handle_key(&mut self, event: &winit::event::KeyEvent) -> KeyAction {
+        use winit::event::ElementState;
+        use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
+
+        let pressed = event.state == ElementState::Pressed;
+        let vk = &event.logical_key;
+
+        if pressed {
+            if *vk == Key::Named(NamedKey::Space) {
+                return KeyAction::TogglePlay;
+            }
+            if *vk == Key::Named(NamedKey::Escape) {
+                return KeyAction::ExitWindow;
+            }
+
+            // P: alterna o piano roll.
+            if matches!(vk, Key::Character(s) if s.eq_ignore_ascii_case("p")) {
+                self.toggle_piano_roll();
+                self.toolbar_hover = None;
+                self.request_redraw();
+            }
+            // F: foca o clip sob o cursor; Ctrl+F: toggle follow playhead.
+            if matches!(vk, Key::Character(s) if s.eq_ignore_ascii_case("f")) {
+                if self.ctrl_pressed {
+                    self.follow_playhead = !self.follow_playhead;
+                } else {
+                    self.toggle_clip_focus(self.size.0 as f32);
+                }
+                self.request_redraw();
+            }
+            // Ferramentas (1-6).
+            if !self.ctrl_pressed && !self.alt_pressed {
+                let tool = match vk {
+                    Key::Character(s) if s == "1" => Some(Tool::Select),
+                    Key::Character(s) if s == "2" => Some(Tool::Draw),
+                    Key::Character(s) if s == "3" => Some(Tool::Stretch),
+                    Key::Character(s) if s == "4" => Some(Tool::Slice),
+                    Key::Character(s) if s == "5" => Some(Tool::Erase),
+                    Key::Character(s) if s == "6" => Some(Tool::Glue),
+                    _ => None,
+                };
+                if let Some(tool) = tool {
+                    set_tool(tool);
+                    self.request_redraw();
+                }
+            }
+            // Clipboard/editing (Ctrl+C, Ctrl+V, Ctrl+D, Ctrl+A, Ctrl+Z,
+            // Ctrl+Y, Delete, Backspace).
+            if self.ctrl_pressed {
+                match vk {
+                    Key::Character(s) if s.eq_ignore_ascii_case("c") => {
+                        self.copy_selected();
+                        self.request_redraw();
+                    }
+                    Key::Character(s) if s.eq_ignore_ascii_case("a") => {
+                        self.select_all();
+                        self.request_redraw();
+                    }
+                    Key::Character(s) if s.eq_ignore_ascii_case("z") => {
+                        if self.shift_pressed {
+                            self.redo();
+                        } else {
+                            self.undo();
+                        }
+                        self.request_redraw();
+                    }
+                    Key::Character(s) if s.eq_ignore_ascii_case("y") => {
+                        self.redo();
+                        self.request_redraw();
+                    }
+                    Key::Character(s) if s.eq_ignore_ascii_case("v") => {
+                        // Cola na posiÃ§Ã£o do playhead (com snap) na track do
+                        // primeiro clip selecionado ou 0.
+                        let bpm = self.bpm;
+                        let pps = self.px_per_beat * bpm / 60.0;
+                        let target_beat = if pps > 0.0 {
+                            self.transport_seconds * bpm / 60.0
+                        } else {
+                            0.0
+                        };
+                        let target_track = self.clip_interaction.selected.iter()
+                            .enumerate()
+                            .find(|&(_, &s)| s)
+                            .and_then(|(i, _)| self.clips.get(i))
+                            .map(|c| c.track_index)
+                            .unwrap_or(0);
+                        self.paste_at_beat(target_beat, target_track);
+                        self.request_redraw();
+                    }
+                    Key::Character(s) if s.eq_ignore_ascii_case("d") => {
+                        self.duplicate_selected();
+                        self.request_redraw();
+                    }
+                    _ => {}
+                }
+            }
+            if matches!(
+                vk,
+                Key::Named(NamedKey::Delete) | Key::Named(NamedKey::Backspace)
+            ) {
+                self.delete_selected();
+                self.request_redraw();
+            }
+        }
+
+        // Track ctrl/alt/shift p/ zoom e shortcuts â€” sÃ³ quando a tecla Ã‰ o
+        // modificador.
+        let is_ctrl_key = matches!(vk, Key::Named(NamedKey::Control))
+            || matches!(event.physical_key,
+                PhysicalKey::Code(code)
+                    if matches!(code, KeyCode::ControlLeft | KeyCode::ControlRight));
+        let is_alt_key = matches!(vk, Key::Named(NamedKey::Alt))
+            || matches!(event.physical_key,
+                PhysicalKey::Code(code)
+                    if matches!(code, KeyCode::AltLeft | KeyCode::AltRight));
+        let is_shift_key = matches!(vk, Key::Named(NamedKey::Shift))
+            || matches!(event.physical_key,
+                PhysicalKey::Code(code)
+                    if matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight));
+        if is_ctrl_key {
+            self.ctrl_pressed = pressed;
+        }
+        if is_alt_key {
+            self.alt_pressed = pressed;
+        }
+        if is_shift_key {
+            self.shift_pressed = pressed;
+        }
+
+        // Qualquer tecla pressionada marca o frame como sujo (a cena da
+        // timeline re-compÃµe â€” no hosted o prÃ³ximo `tick` re-renderiza).
+        if pressed {
+            self.request_redraw();
+        }
+
+        KeyAction::None
+    }
     pub fn handle_scroll(&mut self, dx: f32, dy: f32, with_ctrl: bool, with_alt: bool) {
         let (mx, my) = self.last_cursor;
 
-        // Determina qual área está sob o cursor (timeline ou piano roll)
+        // Determina qual Ã¡rea estÃ¡ sob o cursor (timeline ou piano roll)
         let pr_active = self.show_piano_roll;
         let (px_per_beat, scroll_x, scroll_y, in_pr_area) = if pr_active {
             let layout = self.layout(self.size.0 as f32, self.size.1 as f32);
@@ -70,11 +212,11 @@ impl App {
                 if let Some(p) = pos { self.last_cursor = p; }
             }
             ButtonState::Released => {
-                // Se houver preview de áudio pendente, insere ao liberar o botão.
+                // Se houver preview de Ã¡udio pendente, insere ao liberar o botÃ£o.
                     if let Some(preview) = self.drop_preview.take() {
                         if let Some(path) = self.drop_path.take() {
                             self.load_audio_file(&path, preview.beat, preview.track);
-                            // Inicia playback a partir do ponto onde o áudio foi solto.
+                            // Inicia playback a partir do ponto onde o Ã¡udio foi solto.
                             self.start_playback_at(preview.beat);
                         }
                     }
@@ -83,8 +225,8 @@ impl App {
         }
     }
 
-    /// Inicia o arrasto do loop na régua a partir da posição x do cursor.
-    /// Retorna true se iniciou um arrasto de loop; false para comportamento padrão.
+    /// Inicia o arrasto do loop na rÃ©gua a partir da posiÃ§Ã£o x do cursor.
+    /// Retorna true se iniciou um arrasto de loop; false para comportamento padrÃ£o.
     pub fn begin_loop_drag(&mut self, mx: f32) -> bool {
         if !self.loop_enabled {
             return false;
@@ -107,7 +249,7 @@ impl App {
         true
     }
 
-    /// Move a borda/seleção do loop com snap de 1 beat (arredonda o beat).
+    /// Move a borda/seleÃ§Ã£o do loop com snap de 1 beat (arredonda o beat).
     pub fn handle_loop_drag(&mut self, mx: f32) {
         let Some(kind) = self.loop_drag else { return };
         let dx = mx - self.loop_drag_start_x;
@@ -133,7 +275,7 @@ impl App {
         }
     }
 
-    /// Inicia (Pressed) ou finaliza (Released) o *scrub* do playhead na régua.
+    /// Inicia (Pressed) ou finaliza (Released) o *scrub* do playhead na rÃ©gua.
     /// Enquanto arrasta, `handle_cursor_moved` chama `set_playhead_from_x` em
     /// tempo real para seguir o cursor.
     pub fn handle_ruler_click(&mut self, state: ButtonState, pos: (f32, f32), _ruler_px: f32) {
@@ -150,7 +292,7 @@ impl App {
 
     /// Alterna o foco no clip SELECIONADO: F centraliza o clip na view e
     /// lembra o estado anterior; F de novo restaura o estado anterior ao foco.
-    /// Sem seleção, usa o clip sob o cursor.
+    /// Sem seleÃ§Ã£o, usa o clip sob o cursor.
     pub fn toggle_clip_focus(&mut self, width: f32) {
         if let Some((sx, ppb, sy, zoom_y)) = self.focus_saved.take() {
             self.scroll_x = sx;
@@ -160,7 +302,7 @@ impl App {
             return;
         }
 
-        // Prioriza o primeiro clip selecionado; senão usa o hover.
+        // Prioriza o primeiro clip selecionado; senÃ£o usa o hover.
         let idx = self
             .clip_interaction
             .selected
@@ -188,7 +330,7 @@ impl App {
         self.scroll_y = (clip_y - view_h * 0.5).max(0.0);
     }
 
-    /// Copia os clips selecionados para o clipboard, preservando posições relativas.
+    /// Copia os clips selecionados para o clipboard, preservando posiÃ§Ãµes relativas.
     pub fn copy_selected(&mut self) {
         let selected_clips: Vec<clips::ClipDemo> = self
             .clips
@@ -209,8 +351,8 @@ impl App {
     }
 
     /// Registra um snapshot do estado atual (clips + fades) na pilha de undo.
-    /// Limpa a pilha de redo (novo ramo de edição). Deve ser chamado ANTES de
-    /// qualquer mutação estrutural (import, paste, slice, erase, etc.).
+    /// Limpa a pilha de redo (novo ramo de ediÃ§Ã£o). Deve ser chamado ANTES de
+    /// qualquer mutaÃ§Ã£o estrutural (import, paste, slice, erase, etc.).
     pub fn record_undo(&mut self) {
         use crate::app::TimelineSnapshot;
         self.undo_stack.push(TimelineSnapshot {
@@ -220,7 +362,7 @@ impl App {
         self.redo_stack.clear();
     }
 
-    /// Desfaz a última edição estrutural (clips + fades).
+    /// Desfaz a Ãºltima ediÃ§Ã£o estrutural (clips + fades).
     pub fn undo(&mut self) {
         use crate::app::TimelineSnapshot;
         if let Some(snap) = self.undo_stack.pop() {
@@ -236,7 +378,7 @@ impl App {
         }
     }
 
-    /// Refaz a edição que foi desfeita.
+    /// Refaz a ediÃ§Ã£o que foi desfeita.
     pub fn redo(&mut self) {
         use crate::app::TimelineSnapshot;
         if let Some(snap) = self.redo_stack.pop() {
@@ -251,18 +393,18 @@ impl App {
         }
     }
 
-    /// Cola os clips do clipboard na posição alvo (beat, track), com snap ao grid (1 beat).
-    /// Mantém a estrutura relativa dos clips copiados.
+    /// Cola os clips do clipboard na posiÃ§Ã£o alvo (beat, track), com snap ao grid (1 beat).
+    /// MantÃ©m a estrutura relativa dos clips copiados.
     pub fn paste_at_beat(&mut self, target_beat: f32, target_track: usize) {
         if self.clipboard.is_empty() {
             return;
         }
         self.record_undo();
-        // Encontra o beat mínimo dos clips copiados para manter offsets relativos
+        // Encontra o beat mÃ­nimo dos clips copiados para manter offsets relativos
         let min_beat = self.clipboard.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
         let snap_beat = target_beat.round().max(0.0);
         let beat_offset = snap_beat - min_beat.round();
-        // Track offset: usa a track do primeiro clip copiado como referência
+        // Track offset: usa a track do primeiro clip copiado como referÃªncia
         let min_track = self.clipboard.iter().map(|c| c.track_index).min().unwrap_or(0);
         let track_offset = target_track as i32 - min_track as i32;
         let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
@@ -287,7 +429,7 @@ impl App {
         self.rebuild_wave_data();
     }
 
-    /// Duplica os clips selecionados APÓS o último clip selecionado (com snap ao grid).
+    /// Duplica os clips selecionados APÃ“S o Ãºltimo clip selecionado (com snap ao grid).
     pub fn duplicate_selected(&mut self) {
         let selected_indices: Vec<usize> = self
             .clip_interaction
@@ -342,7 +484,7 @@ impl App {
             return;
         }
         self.record_undo();
-        // Remove em ordem reversa para manter índices válidos
+        // Remove em ordem reversa para manter Ã­ndices vÃ¡lidos
         for &i in selected_indices.iter().rev() {
             self.clips.remove(i);
         }
@@ -350,7 +492,7 @@ impl App {
         self.rebuild_wave_data();
     }
 
-    /// Converte posição do cursor para beat e track com snap ao grid.
+    /// Converte posiÃ§Ã£o do cursor para beat e track com snap ao grid.
     pub fn cursor_to_snapped_beat_track(&self, pos: (f32, f32)) -> (f32, usize) {
         let beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
         let snapped_beat = beat.round().max(0.0);
@@ -365,7 +507,7 @@ impl App {
     #[allow(dead_code)]
     pub fn tool_draw(&mut self, pos: (f32, f32)) {
         let (beat, track) = self.cursor_to_snapped_beat_track(pos);
-        let len = 4.0; // comprimento padrão: 1 compasso
+        let len = 4.0; // comprimento padrÃ£o: 1 compasso
         self.clips.push(clips::ClipDemo {
             track_index: track,
             beat,
@@ -390,7 +532,7 @@ impl App {
     pub fn tool_stretch_start(&mut self, pos: (f32, f32)) -> bool {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-            // Verifica se clicou na borda direita do clip (últimos 12px)
+            // Verifica se clicou na borda direita do clip (Ãºltimos 12px)
             let (cx, _, cw, _) = clips::clip_rect(&self.clips[idx], &cm);
             if pos.0 >= cx + cw - 12.0 {
                 self.clip_interaction.begin_stretch(&self.clips, pos, &cm);
@@ -404,9 +546,9 @@ impl App {
         false
     }
 
-    /// Corta clip (ferramenta Slice — tecla 4).
-    /// Divide o clip no ponto do clique. O clip da esquerda (original) é selecionado,
-    /// então cortes consecutivos deixam o clip do meio selecionado automaticamente.
+    /// Corta clip (ferramenta Slice â€” tecla 4).
+    /// Divide o clip no ponto do clique. O clip da esquerda (original) Ã© selecionado,
+    /// entÃ£o cortes consecutivos deixam o clip do meio selecionado automaticamente.
     pub fn tool_slice(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
@@ -414,7 +556,7 @@ impl App {
             let click_beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
             let click_beat_snapped = click_beat.round().max(clip.beat).min(clip.beat + clip.len);
 
-            // Só divide se o clique não estiver na borda
+            // SÃ³ divide se o clique nÃ£o estiver na borda
             if click_beat_snapped > clip.beat && click_beat_snapped < clip.beat + clip.len {
                 self.record_undo();
                 let left_len = click_beat_snapped - clip.beat;
@@ -429,8 +571,8 @@ impl App {
                 right_clip.len = right_len;
 
                 // Corte VERDADEIRO da waveform: divide as amostras do clip
-                // pai, proporcional ao ponto de corte. As duas peças exibem
-                // exatamente o conteúdo original, apenas cortado — nunca uma
+                // pai, proporcional ao ponto de corte. As duas peÃ§as exibem
+                // exatamente o conteÃºdo original, apenas cortado â€” nunca uma
                 // onda regenerada.
                 let parent_len = left_len + right_len;
                 if left_len >= 0.25 && right_len >= 0.25 && self.clips[idx].wave.len() > 1 {
@@ -446,11 +588,11 @@ impl App {
                 self.clips.push(right_clip);
 
                 self.clip_interaction.sync_selection(self.clips.len());
-                // Seleciona o clip esquerdo (parte que foi cortada) —
-                // cortes consecutivos mantêm o clip do meio selecionado.
+                // Seleciona o clip esquerdo (parte que foi cortada) â€”
+                // cortes consecutivos mantÃªm o clip do meio selecionado.
                 self.clip_interaction.select_only(idx);
-                // A segmentação do buffer muda (um clip virou dois): regenera
-                // para o clip direito também ter waveform.
+                // A segmentaÃ§Ã£o do buffer muda (um clip virou dois): regenera
+                // para o clip direito tambÃ©m ter waveform.
                 self.rebuild_wave_data();
             }
         }
@@ -467,18 +609,18 @@ impl App {
         }
     }
 
-    /// Cola clips (ferramenta Glue — tecla 6).
-    /// Clicar num clip: estica a borda direita dele (ou do último da cadeia)
-    /// até o início do próximo clip na mesma track, preenchendo o gap.
+    /// Cola clips (ferramenta Glue â€” tecla 6).
+    /// Clicar num clip: estica a borda direita dele (ou do Ãºltimo da cadeia)
+    /// atÃ© o inÃ­cio do prÃ³ximo clip na mesma track, preenchendo o gap.
     /// Ambos permanecem como clips separados, mas adjacentes (sem gap),
     /// com a mesma cor. O seam marca o ponto de encontro para des-colagem.
-    /// Clicar de novo no mesmo clip continua a cadeia grudando no próximo.
+    /// Clicar de novo no mesmo clip continua a cadeia grudando no prÃ³ximo.
     pub fn tool_glue(&mut self, pos: (f32, f32)) {
         let cm = self.clip_metrics();
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
             let track = self.clips[idx].track_index;
 
-            // Encontra o final da cadeia de glue (último clip com seam)
+            // Encontra o final da cadeia de glue (Ãºltimo clip com seam)
             let chain = clips::ClipInteraction::find_group(&self.clips, idx);
             let chain_end_idx = *chain.last().unwrap();
 
@@ -508,14 +650,14 @@ impl App {
         }
     }
 
-    /// Inicia a reprodução a partir de um beat especificado.
+    /// Inicia a reproduÃ§Ã£o a partir de um beat especificado.
     fn start_playback_at(&mut self, beat: f32) {
         // Converte beat para segundos.
 self.transport_seconds = beat * 60.0 / self.bpm;
-        // Sincroniza o motor de áudio.
+        // Sincroniza o motor de Ã¡udio.
         #[cfg(feature = "audio")]
         self.sync_audio_engine();
-        // Configura o transporte e inicia a reprodução.
+        // Configura o transporte e inicia a reproduÃ§Ã£o.
         if let Ok(mut t) = self.transport.lock() {
             t.bpm = self.bpm as u32;
             t.loop_enabled = self.loop_enabled;
@@ -537,7 +679,7 @@ self.play_start_seconds = self.transport_seconds;
     pub fn handle_primary_button(&mut self, state: ButtonState, pos: (f32, f32)) {
         // ====== Piano roll: Released sempre finaliza drags de loop/scrub ======
         // (coloquei ANTES dos "early returns de arrasto ativo" porque, se um
-        //  drag estiver ativo, Released tem que encerrá-lo SEMPRE.)
+        //  drag estiver ativo, Released tem que encerrÃ¡-lo SEMPRE.)
         if self.show_piano_roll && state == ButtonState::Released {
             if self.pr_loop_drag.is_some() {
                 self.pr_loop_drag = None;
@@ -557,23 +699,23 @@ self.play_start_seconds = self.transport_seconds;
             return;
         }
 
-        // Piano roll: durante arrasto de loop ativo (Pressed) — nada a fazer,
-        // Released já foi tratado acima. Para garantir que não re-ativamos por
-        // engano, damos return quando há um loop drag ativo (só importa no
-        // Pressed, mas no Released o bloco acima já o zerou).
+        // Piano roll: durante arrasto de loop ativo (Pressed) â€” nada a fazer,
+        // Released jÃ¡ foi tratado acima. Para garantir que nÃ£o re-ativamos por
+        // engano, damos return quando hÃ¡ um loop drag ativo (sÃ³ importa no
+        // Pressed, mas no Released o bloco acima jÃ¡ o zerou).
         if self.show_piano_roll && self.pr_loop_drag.is_some() {
             return;
         }
 
-        // Intercepta clique no SCRUBBING do piano roll (só durante arrasto ativo / Pressed)
+        // Intercepta clique no SCRUBBING do piano roll (sÃ³ durante arrasto ativo / Pressed)
         if self.show_piano_roll && self.pr_scrubbing && state == ButtonState::Pressed {
             // Durante scrubbing + Pressed: realinha a playhead (redundante com
-            // cursor_moved, mas garante boa UX em clicks rápidos).
+            // cursor_moved, mas garante boa UX em clicks rÃ¡pidos).
             self.pr_handle_ruler_click(state, pos);
             return;
         }
 
-        // Intercepta clique dentro da área do piano roll ou splitter (quando visível)
+        // Intercepta clique dentro da Ã¡rea do piano roll ou splitter (quando visÃ­vel)
         if self.show_piano_roll {
             let height = self.size.1 as f32;
             let width = self.size.0 as f32;
@@ -583,13 +725,13 @@ self.play_start_seconds = self.transport_seconds;
                 self.splitter_drag = true;
                 return;
             }
-            // Clique na RÉGUA do piano roll (loop drag + scrub) — SEPARADO do conteúdo
+            // Clique na RÃ‰GUA do piano roll (loop drag + scrub) â€” SEPARADO do conteÃºdo
             if let Some(pr_ruler) = &layout.piano_ruler {
                 let ruler_top = pr_ruler.y;
                 let ruler_bottom = pr_ruler.y + pr_ruler.height;
                 if pos.1 >= ruler_top && pos.1 < ruler_bottom {
-                    // Na régua: PRIMEIRO tenta loop drag (apenas alças 6px,
-                    // não o centro). Se falhar → scrub/playhead.
+                    // Na rÃ©gua: PRIMEIRO tenta loop drag (apenas alÃ§as 6px,
+                    // nÃ£o o centro). Se falhar â†’ scrub/playhead.
                     match state {
                         ButtonState::Pressed => {
                             if !self.pr_begin_loop_drag(pos.0) {
@@ -597,14 +739,14 @@ self.play_start_seconds = self.transport_seconds;
                             }
                         }
                         ButtonState::Released => {
-                            // Released já foi tratado no topo da função (fecha
+                            // Released jÃ¡ foi tratado no topo da funÃ§Ã£o (fecha
                             // scrub/loop), mas garantimos aqui que, caso o
-                            // usuário tenha feito um clique rápido (Pressed +
+                            // usuÃ¡rio tenha feito um clique rÃ¡pido (Pressed +
                             // Released sem mover), o pr_handle_ruler_click seja
-                            // chamado no Released caso o scrub ainda não existia
+                            // chamado no Released caso o scrub ainda nÃ£o existia
                             // (Pressed caiu aqui via begin_loop_drag=false e
                             // setou pr_scrubbing = true).
-                            // Esse bloco é safety-net — o bloco do topo já
+                            // Esse bloco Ã© safety-net â€” o bloco do topo jÃ¡
                             // cobre o caso geral.
                             self.pr_handle_ruler_click(state, pos);
                         }
@@ -612,7 +754,7 @@ self.play_start_seconds = self.transport_seconds;
                     return;
                 }
             }
-            // Clique no CONTEÚDO do piano roll (abaixo da régua)
+            // Clique no CONTEÃšDO do piano roll (abaixo da rÃ©gua)
             if let Some(pr_ruler) = &layout.piano_ruler {
                 if pos.1 >= pr_ruler.y + pr_ruler.height {
                     self.handle_piano_roll_click(state, pos);
@@ -628,12 +770,12 @@ self.play_start_seconds = self.transport_seconds;
         match state {
             ButtonState::Pressed => {
                 if pos.1 < self.ruler_px {
-                    // Régua → loop drag ou scrub (funciona em qualquer ferramenta)
+                    // RÃ©gua â†’ loop drag ou scrub (funciona em qualquer ferramenta)
                     if !self.begin_loop_drag(pos.0) {
                         self.handle_ruler_click(state, pos, self.ruler_px);
                     }
                 } else {
-                    // Interação com bolinhas de fade (in/out) e volume/ganho
+                    // InteraÃ§Ã£o com bolinhas de fade (in/out) e volume/ganho
                     if let Some((clip_idx, _kind)) = self.fade_interaction.hovered {
                         if let Some(clip) = self.clips.get(clip_idx) {
                             let (cx, cy, cw, ch) = clips::clip_rect(clip, &cm);
@@ -654,7 +796,7 @@ self.play_start_seconds = self.transport_seconds;
                             }
                         }
                     }
-                    // Seam hover → un-glue (split) — funciona em qualquer ferramenta
+                    // Seam hover â†’ un-glue (split) â€” funciona em qualquer ferramenta
                     if let Some(seam_idx) = self.clip_interaction.seam_hover_idx {
                         if self.clip_interaction.is_seam_hovered() {
                             self.record_undo();
@@ -665,18 +807,18 @@ self.play_start_seconds = self.transport_seconds;
                     }
                     match tool {
                         Tool::Select => {
-                // Insere áudio arrastado se houver preview pendente.
+                // Insere Ã¡udio arrastado se houver preview pendente.
                     if let Some(preview) = self.drop_preview.take() {
                         if let Some(path) = self.drop_path.take() {
                             self.load_audio_file(&path, preview.beat, preview.track);
-                            // Inicia playback a partir do ponto onde o áudio foi solto.
+                            // Inicia playback a partir do ponto onde o Ã¡udio foi solto.
                             self.start_playback_at(preview.beat);
                         }
                     } else {
-                    // comportamento padrão já existente
+                    // comportamento padrÃ£o jÃ¡ existente
                     if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-                        // Se o clip clicado já está selecionado, mantém a
-                        // multiseleção (arrasta todos selecionados). Senão,
+                        // Se o clip clicado jÃ¡ estÃ¡ selecionado, mantÃ©m a
+                        // multiseleÃ§Ã£o (arrasta todos selecionados). SenÃ£o,
                         // colapsa para o grupo de glue.
                         let already_selected = self
                             .clip_interaction
@@ -704,7 +846,7 @@ self.play_start_seconds = self.transport_seconds;
                             }
                         }
                         Tool::Stretch => {
-                            // Tenta iniciar stretch na borda direita; senão, seleciona
+                            // Tenta iniciar stretch na borda direita; senÃ£o, seleciona
                             if !self.tool_stretch_start(pos) {
                                 if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
                                     self.clip_interaction.select_only(idx);
@@ -766,14 +908,14 @@ self.play_start_seconds = self.transport_seconds;
     }
 
     pub fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
-        // ====== CRÍTICO (winit 0.30): atualiza last_cursor ANTES de qualquer
-        // lógica. O evento MouseInput (clique) NÃO traz a posição — ele usa
+        // ====== CRÃTICO (winit 0.30): atualiza last_cursor ANTES de qualquer
+        // lÃ³gica. O evento MouseInput (clique) NÃƒO traz a posiÃ§Ã£o â€” ele usa
         // `app.last_cursor` para saber onde o clique foi. Sem isso, todos os
         // hit tests (splitter, ruler do piano roll, loop handles etc.) usam
-        // a posição ANTERIOR do mouse e a interação FICA COMPLETAMENTE FORA.
+        // a posiÃ§Ã£o ANTERIOR do mouse e a interaÃ§Ã£o FICA COMPLETAMENTE FORA.
         self.last_cursor = pos;
 
-        // Se a splitter está sendo arrastada, redimensiona o piano roll em tempo real
+        // Se a splitter estÃ¡ sendo arrastada, redimensiona o piano roll em tempo real
         if self.splitter_drag {
             self.splitter_drag_move(pos.1);
             return;
@@ -791,7 +933,7 @@ self.play_start_seconds = self.transport_seconds;
         let cm = self.clip_metrics();
         if self.fade_interaction.is_dragging() {
             if let Some(ref drag) = self.fade_interaction.active_drag {
-                // Mantém o cursor de override enquanto arrasta o handle.
+                // MantÃ©m o cursor de override enquanto arrasta o handle.
                 match drag.kind {
                     fades::FadeHandleKind::GainLevel => set_gain_override(true),
                     _ => set_hand_override(true),
@@ -809,7 +951,7 @@ self.play_start_seconds = self.transport_seconds;
                         body_h,
                     );
 self.rebuild_wave_data();
-                    // Se já está tocando, sincroniza ganho em tempo real.
+                    // Se jÃ¡ estÃ¡ tocando, sincroniza ganho em tempo real.
                     #[cfg(feature = "audio")]
                     if self.playing {
                         self.sync_audio_engine();
@@ -821,7 +963,7 @@ self.rebuild_wave_data();
         } else if self.clip_interaction.is_dragging() {
             let snap = true;
             self.clip_interaction.drag_move(pos, &cm, snap);
-            // Edge scroll é tratado no RedrawRequested (roda todo frame)
+            // Edge scroll Ã© tratado no RedrawRequested (roda todo frame)
         } else if self.clip_interaction.is_drawing() {
             self.clip_interaction.draw_move(pos, &cm);
         } else if self.clip_interaction.is_marqueeing() {
@@ -831,7 +973,7 @@ self.rebuild_wave_data();
         }
         self.clip_interaction.update_hover(&self.clips, pos, &cm);
 
-        // Atualiza detecção de hover sobre bolinhas de fade e ganho
+        // Atualiza detecÃ§Ã£o de hover sobre bolinhas de fade e ganho
         if !self.clip_interaction.is_dragging() && !self.fade_interaction.is_dragging() {
             self.fade_interaction.hovered = None;
             for (i, clip) in self.clips.iter().enumerate() {
@@ -859,9 +1001,9 @@ self.rebuild_wave_data();
             }
         }
 
-        // Snap magnético: quando o cursor chega perto de um handle, puxa-o
-        // para o centro exato da bolinha — uma vez só. Após o snap, o cursor
-        // pode sair livremente (sem resistência) até perder o hover.
+        // Snap magnÃ©tico: quando o cursor chega perto de um handle, puxa-o
+        // para o centro exato da bolinha â€” uma vez sÃ³. ApÃ³s o snap, o cursor
+        // pode sair livremente (sem resistÃªncia) atÃ© perder o hover.
         if !self.scrubbing
             && !self.clip_interaction.is_dragging()
             && !self.fade_interaction.is_dragging()
@@ -888,7 +1030,7 @@ self.rebuild_wave_data();
                         let dist_sq =
                             (pos.0 - hx) * (pos.0 - hx) + (pos.1 - hy) * (pos.1 - hy);
                         let snap_threshold = 14.0;
-// Snap apenas se ainda não foi disparado nesta sessão de hover
+// Snap apenas se ainda nÃ£o foi disparado nesta sessÃ£o de hover
                         if !self.fade_interaction.snap_active
                             && dist_sq <= snap_threshold * snap_threshold
                         {
@@ -904,15 +1046,15 @@ self.rebuild_wave_data();
                 }
             }
         } else {
-            // Cursor saiu do hover — reseta o flag para permitir snap novamente
+            // Cursor saiu do hover â€” reseta o flag para permitir snap novamente
             self.fade_interaction.snap_active = false;
         }
 
 
 
-// - Enquanto arrasta um handle, força o cursor apropriado (hand ou gain).
-// - Quando não está arrastando, usa hover para escolher o cursor.
-// - Caso contrário, limpa quaisquer sobrescrições de cursor.
+// - Enquanto arrasta um handle, forÃ§a o cursor apropriado (hand ou gain).
+// - Quando nÃ£o estÃ¡ arrastando, usa hover para escolher o cursor.
+// - Caso contrÃ¡rio, limpa quaisquer sobrescriÃ§Ãµes de cursor.
 // Primeiro limpa ambos para garantir estado consistente.
 set_gain_override(false);
 set_hand_override(false);
@@ -946,7 +1088,7 @@ if self.fade_interaction.is_dragging() {
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
             self.clamp_scroll_y(self.size.1 as f32);
         }
-        // Atualiza a posição do preview de áudio arrastado
+        // Atualiza a posiÃ§Ã£o do preview de Ã¡udio arrastado
         if self.drop_preview.is_some() {
             let (beat, track) = self.cursor_to_snapped_beat_track(pos);
             if let Some(preview) = self.drop_preview.as_mut() {
@@ -960,11 +1102,11 @@ if self.fade_interaction.is_dragging() {
             if let Some(ref drag) = self.fade_interaction.active_drag {
                 match drag.axis_lock {
                     Some(fades::DragAxisLock::Horizontal) => {
-                        // fixa a coordenada Y ao início do arrasto
+                        // fixa a coordenada Y ao inÃ­cio do arrasto
                         constrained.1 = drag.start_cursor.1;
                     }
                     Some(fades::DragAxisLock::Vertical) => {
-                        // fixa a coordenada X ao início do arrasto
+                        // fixa a coordenada X ao inÃ­cio do arrasto
                         constrained.0 = drag.start_cursor.0;
                     }
                     None => {}
@@ -974,16 +1116,16 @@ if self.fade_interaction.is_dragging() {
         }
         self.last_cursor = constrained;
 
-        // O cursor físico NÃO é repospicionado durante o arrasto (trava de eixo).
-        // O lock já é aplicado em `update_drag` (dx/dy = 0) e aqui via `constrained`
-        // para o cálculo de panning. Warpar o cursor a cada frame causa jitter
-        // por loop de feedback (warp → CursorMoved → warp → ...).
+        // O cursor fÃ­sico NÃƒO Ã© repospicionado durante o arrasto (trava de eixo).
+        // O lock jÃ¡ Ã© aplicado em `update_drag` (dx/dy = 0) e aqui via `constrained`
+        // para o cÃ¡lculo de panning. Warpar o cursor a cada frame causa jitter
+        // por loop de feedback (warp â†’ CursorMoved â†’ warp â†’ ...).
     }
 
-    /// Detecta quando o cursor está perto das bordas da janela durante um
-    /// arrasto de clip e ajusta a velocidade de auto-scroll proporcional à
-    /// proximidade (quanto mais perto da borda, mais rápido rola).
-    /// Zona de trigger: 40px de cada borda. Velocidade máxima: 24px/frame.
+    /// Detecta quando o cursor estÃ¡ perto das bordas da janela durante um
+    /// arrasto de clip e ajusta a velocidade de auto-scroll proporcional Ã 
+    /// proximidade (quanto mais perto da borda, mais rÃ¡pido rola).
+    /// Zona de trigger: 40px de cada borda. Velocidade mÃ¡xima: 24px/frame.
     pub fn update_edge_scroll(&mut self, pos: (f32, f32)) {
         let width = self.size.0 as f32;
         let height = self.size.1 as f32;
@@ -992,10 +1134,10 @@ if self.fade_interaction.is_dragging() {
 
         // Borda esquerda / direita (scroll horizontal)
         if pos.0 < edge_zone {
-            // Quanto mais próximo da borda, mais rápido (0..1)
+            // Quanto mais prÃ³ximo da borda, mais rÃ¡pido (0..1)
             let proximity = 1.0 - (pos.0 / edge_zone).clamp(0.0, 1.0);
             self.edge_scroll_x = proximity * max_speed;
-            self.edge_scroll_dir = -1; // rola para esquerda (conteúdo entra da direita)
+            self.edge_scroll_dir = -1; // rola para esquerda (conteÃºdo entra da direita)
         } else if pos.0 > width - edge_zone {
             let proximity = 1.0 - ((width - pos.0) / edge_zone).clamp(0.0, 1.0);
             self.edge_scroll_x = proximity * max_speed;
@@ -1005,12 +1147,12 @@ if self.fade_interaction.is_dragging() {
         }
 
         // Borda top / bottom (scroll vertical)
-        // Só rola verticalmente se o cursor estiver abaixo da régua
+        // SÃ³ rola verticalmente se o cursor estiver abaixo da rÃ©gua
         let body_top = self.ruler_px;
         if pos.1 < body_top + edge_zone {
             // Top edge: rola para cima
             let proximity_y = if pos.1 < body_top {
-                // Cursor na régua: proximidade máxima
+                // Cursor na rÃ©gua: proximidade mÃ¡xima
                 1.0
             } else {
                 1.0 - ((pos.1 - body_top) / edge_zone).clamp(0.0, 1.0)
@@ -1026,9 +1168,9 @@ if self.fade_interaction.is_dragging() {
     }
 
     /// Aplica o auto-scroll calculado no frame atual, atualizando os offsets
-    /// de scroll horizontal e vertical. Compensa a posição do clip em arrasto
+    /// de scroll horizontal e vertical. Compensa a posiÃ§Ã£o do clip em arrasto
     /// (drag_live_beat) para que o overlay continue colado ao cursor mesmo
-    /// após a viewport rolar.
+    /// apÃ³s a viewport rolar.
     pub fn apply_edge_scroll(&mut self) {
         if self.edge_scroll_x == 0.0 && self.edge_scroll_y == 0.0 {
             return;
@@ -1043,13 +1185,13 @@ if self.fade_interaction.is_dragging() {
         self.scroll_y = (self.scroll_y + dy).max(0.0);
         self.clamp_scroll_y(self.size.1 as f32);
 
-        // Compensa o beat virtual do clip em arrasto para que ele não "salte"
-        // na tela. O overlay é renderizado em:
+        // Compensa o beat virtual do clip em arrasto para que ele nÃ£o "salte"
+        // na tela. O overlay Ã© renderizado em:
         //   x = live_beat * px_per_beat - scroll_x
         // Se aumentamos scroll_x em `dx`, precisamos aumentar live_beat em
-        // `dx / px_per_beat` para manter a mesma posição na tela.
-        // Usa o delta efetivo (não o pretendido) — se scroll_x foi clampado,
-        // o clip não deve ser empurrado além do limite.
+        // `dx / px_per_beat` para manter a mesma posiÃ§Ã£o na tela.
+        // Usa o delta efetivo (nÃ£o o pretendido) â€” se scroll_x foi clampado,
+        // o clip nÃ£o deve ser empurrado alÃ©m do limite.
         if self.clip_interaction.is_dragging() && !self.clip_interaction.is_stretching() {
             let pps = self.px_per_beat.max(0.001);
             let actual_dx = self.scroll_x - prev_sx;
