@@ -273,7 +273,23 @@ impl SlintOverlay {
             let s = self.window.size.get();
             (s.width, s.height)
         };
-        if w == 0 || h == 0 || (!self.window.redraw.replace(false) && self.window.valid.get()) {
+        if w == 0 || h == 0 {
+            return None;
+        }
+
+        // A janela GL oculta começa em 1×1 e sobe de tamanho via
+        // `request_inner_size` de forma assíncrona. Enquanto o backbuffer real
+        // (`inner_size`) não bater com o alvo, renderizar só produz um readback
+        // de buffer não inicializado (lixo/zeros) — com DIMENSÕES iguais às
+        // alvo, então não dá para detectar pelo tamanho do snapshot. Por isso:
+        // se `inner_size` ≠ alvo, descarta e tenta de novo no próximo frame.
+        let actual = self.gl_window.inner_size();
+        if actual.width != w || actual.height != h || actual.width == 0 || actual.height == 0 {
+            self.window.valid.set(false);
+            return None;
+        }
+
+        if !self.window.redraw.replace(false) && self.window.valid.get() {
             return None;
         }
         self.window.renderer.render().ok()?;
@@ -282,6 +298,13 @@ impl SlintOverlay {
         let ph = pixels.height();
         if pw != w || ph != h {
             // Backbuffer ainda não acompanhou o alvo: descarta e tenta de novo.
+            self.window.valid.set(false);
+            return None;
+        }
+        // Guard de conteúdo: um readback de FB em transição (resize do SO)
+        // volta transparente. A UI real tem fundo opaco — se quase tudo estiver
+        // alpha=0, não é um frame legítimo: descarta e tenta de novo.
+        if is_transparent_readback(pixels.as_bytes()) {
             self.window.valid.set(false);
             return None;
         }
@@ -312,4 +335,18 @@ fn premultiply(rgba: &[u8]) -> Vec<u8> {
         }
     }
     out
+}
+
+/// true se o readback não parece um frame renderizado de verdade: mais da
+/// metade dos pixels alpha==0. A UI da Ruana tem fundo opaco, então um frame
+/// legítimo nunca chega perto disso. (Readback de backbuffer ainda em
+/// transição de tamanho costuma voltar zerado/transparente.)
+fn is_transparent_readback(rgba: &[u8]) -> bool {
+    let mut transparent = 0usize;
+    for px in rgba.chunks_exact(4) {
+        if px[3] == 0 {
+            transparent += 1;
+        }
+    }
+    transparent > rgba.len() / 8
 }
