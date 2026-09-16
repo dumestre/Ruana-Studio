@@ -283,40 +283,7 @@ if app.is_dragging_file {
                 // Espaço e Esc voltam como ações para o loop decidir.
                 match app.handle_key(&event) {
                     KeyAction::TogglePlay => {
-                        if app.playing {
-                            if let Ok(mut t) = app.transport.lock() {
-                                t.playing = false;
-                            }
-                            app.playing = false;
-                            // Guarda o ponto onde o play foi interrompido para,
-                            // ao retomar com espaço, pular de volta pro início do
-                            // último play (comportamento de DAW comum).
-                            app.last_play_start = app.play_start_seconds;
-                        } else {
-                            // Se houve um play anterior interrompido por espaço,
-                            // o próximo espaço volta ao início daquele play.
-                            app.transport_seconds = app.last_play_start;
-                            // Sincroniza o projeto com o motor de áudio antes de tocar.
-                            #[cfg(feature = "audio")]
-                            app.sync_audio_engine();
-                            // Sincroniza o estado do loop no transporte compartilhado.
-                            if let Ok(mut t) = app.transport.lock() {
-                                t.bpm = app.bpm as u32;
-                                t.loop_enabled = app.loop_enabled;
-                                if app.loop_enabled {
-                                    t.loop_start_ticks = (app.loop_start_beat * t.ppq as f32) as u64;
-                                    t.loop_end_ticks = (app.loop_end_beat * t.ppq as f32) as u64;
-                                }
-                                // Posiciona no playhead atual.
-                                let beats = app.transport_seconds * app.bpm / 60.0;
-                                t.position_ticks = (beats * t.ppq as f32) as u64;
-                                t.playing = true;
-                            }
-                            app.play_start_seconds = app.transport_seconds;
-                            app.playing = true;
-                        }
-                        app.last_play_head_update = Instant::now();
-                        app.request_redraw();
+                        app.handle_toggle_play();
                     }
                     KeyAction::ExitWindow => event_loop.exit(),
                     KeyAction::None => {}

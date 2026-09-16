@@ -536,12 +536,14 @@ impl ApplicationHandler for Handler {
                     let mut b = bridge.borrow_mut();
                     match b.engine.handle_key(&key) {
                         timeline_render::app::KeyAction::TogglePlay => {
-                            let playing = b
-                                .transport
-                                .lock()
-                                .map(|t| t.playing)
-                                .unwrap_or(false);
-                            ui.invoke_play_state_changed(!playing);
+                            // Espaço roda o motor de áudio da timeline-render
+                            // (mesma semântica do standalone: tocar → pausar a
+                            // agulha no lugar → voltar ao início do último play).
+                            b.engine.handle_toggle_play();
+                            // Espelha no estado da UI do Slint para o botão de
+                            // play/ícone continuar coerente.
+                            let playing = b.engine.playing;
+                            ui.set_playing(playing);
                             false
                         }
                         timeline_render::app::KeyAction::ExitWindow

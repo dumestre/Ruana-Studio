@@ -1026,6 +1026,49 @@ transport,
         self.last_play_start = self.transport_seconds;
     }
 
+    /// Espaço (play/pause/retomar) com a semântica de DAW do standalone:
+    ///  1. Tocar: começa do ponto atual;
+    ///  2. Parar (segunda vez): pausa a agulha NO LUGAR;
+    ///  3. Tocar de novo: volta ao início do último play e recomeça de lá.
+    /// Atua no transporte compartilhado — o motor de áudio (daw_audio) que
+    /// publica a posição é o MESMO, então o áudio e o feedback do playhead
+    /// ficam idênticos ao renderer standalone, sem passar pela UI do Slint.
+    pub fn handle_toggle_play(&mut self) {
+        if self.playing {
+            if let Ok(mut t) = self.transport.lock() {
+                t.playing = false;
+            }
+            self.playing = false;
+            // Guarda o ponto onde o play foi interrompido para, ao retomar
+            // com espaço, pular de volta pro início do último play.
+            self.last_play_start = self.play_start_seconds;
+        } else {
+            // Se houve um play anterior interrompido por espaço, o próximo
+            // espaço volta ao início daquele play.
+            self.transport_seconds = self.last_play_start;
+            // Sincroniza o projeto com o motor de áudio antes de tocar.
+            #[cfg(feature = "audio")]
+            self.sync_audio_engine();
+            // Sincroniza o estado do loop no transporte compartilhado.
+            if let Ok(mut t) = self.transport.lock() {
+                t.bpm = self.bpm as u32;
+                t.loop_enabled = self.loop_enabled;
+                if self.loop_enabled {
+                    t.loop_start_ticks = (self.loop_start_beat * t.ppq as f32) as u64;
+                    t.loop_end_ticks = (self.loop_end_beat * t.ppq as f32) as u64;
+                }
+                // Posiciona no playhead atual.
+                let beats = self.transport_seconds * self.bpm / 60.0;
+                t.position_ticks = (beats * t.ppq as f32) as u64;
+                t.playing = true;
+            }
+            self.play_start_seconds = self.transport_seconds;
+            self.playing = true;
+        }
+        self.last_play_head_update = Instant::now();
+        self.request_redraw();
+    }
+
     /// Converte um beat (tempo musical) para a coordenada x de janela.
     pub fn beat_to_x(&self, beat: f32) -> f32 {
         beat * self.px_per_beat - self.scroll_x
