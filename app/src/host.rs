@@ -86,22 +86,22 @@ impl EngineBridge {
     /// overlay Slint. `render_surface()` apresenta o resultado no próximo
     /// passo.
     pub fn tick(&mut self, ui: &MainWindow) {
-        let scale = self.scale;
+        let ls = self.scale;
 
-        // Posição/tamanho do retângulo da timeline (px físicos do quad).
-        let rx = ui.get_timeline_canvas_abs_x() * scale;
-        let ry = ui.get_timeline_canvas_abs_y() * scale;
-        let rw = ui.get_timeline_canvas_rect_width() * scale;
-        let rh = ui.get_timeline_canvas_rect_height() * scale;
+        // A textura `timeline_bg` tem que casar EXATAMENTE com o quad na
+        // surface (senão sobe de escala → borrado). O "buraco" do Slint é o
+        // `canvas-image`: começa em `+left-padding`, ocupa toda a altura do
+        // componente (a régua é desenhada pela propria engine no topo).
+        let lp = ui.get_timeline_left_padding() * ls;
+        let rx = (ui.get_timeline_canvas_abs_x() * ls + lp).max(0.0);
+        let ry = ui.get_timeline_canvas_abs_y() * ls;
+        let rw = (ui.get_timeline_canvas_rect_width() * ls - lp).max(0.0);
+        let rh = ui.get_timeline_canvas_rect_height() * ls;
         self.engine.set_timeline_rect(rx, ry, rw, rh);
 
-        // Tamanho da área da cena (o que a engine desenha).
-        let aw = (ui.get_timeline_canvas_area_width() * scale)
-            .round()
-            .clamp(0.0, 8192.0) as u32;
-        let ah = (ui.get_timeline_canvas_area_height() * scale)
-            .round()
-            .clamp(0.0, 8192.0) as u32;
+        // Tamanho físico (px) da cena: igual ao quad (1:1).
+        let aw = rw.round().clamp(0.0, 8192.0) as u32;
+        let ah = rh.round().clamp(0.0, 8192.0) as u32;
 
         // Espelha clips (projeto mudou).
         if self.clips_flag.replace(false) {
@@ -494,12 +494,13 @@ impl ApplicationHandler for Handler {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        // Loop contínuo: playhead, animations do Slint, meters, timers.
+        // Loop contínuo do motor: playhead, animations do Slint e timers.
+        // NÃO forçamos redraw do overlay aqui: o próprio Slint pede repaint
+        // quando a cena fica suja (animações, metros, hover, timers) via o
+        // adapter — com a UI estática nada é re-renderizado/readback (o custo
+        // de full-screen readback + premultiply só existe na hora da sujeira).
         if let Some(window) = &self.window {
             window.request_redraw();
-        }
-        if let Some(bridge) = &self.bridge {
-            bridge.borrow().overlay.request_redraw();
         }
     }
 }

@@ -75,6 +75,10 @@ pub struct OverlayWindowAdapter {
     size: Cell<PhysicalSize>,
     scale_factor: Cell<f32>,
     redraw: Cell<bool>,
+    /// true quando o último quadrado enviado bate com `size`. Força
+    /// re-render até que um snapshot case com o alvo (cobre a corrida de
+    /// tamanho do backbuffer GL no startup/resize).
+    valid: Cell<bool>,
 }
 
 impl WindowAdapter for OverlayWindowAdapter {
@@ -196,6 +200,7 @@ impl SlintOverlay {
             size: Cell::new(PhysicalSize::new(0, 0)),
             scale_factor: Cell::new(1.0),
             redraw: Cell::new(true),
+            valid: Cell::new(false),
         });
 
         match slint::platform::set_platform(Box::new(OverlayPlatform {
@@ -236,6 +241,7 @@ impl SlintOverlay {
         self.window.size.set(PhysicalSize::new(width, height));
         self.window.scale_factor.set(scale_factor);
         self.window.redraw.set(true);
+        self.window.valid.set(false);
         self.window.window.dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged {
             scale_factor,
         });
@@ -254,20 +260,33 @@ impl SlintOverlay {
         slint::platform::update_timers_and_animations();
     }
 
-    /// Renderiza a UI no GL apenas se houver redraw pendente e devolve os
-    /// pixels RGBA PREMULTIPLICADOS (linha 0 = topo) prontos para
-    /// `App::set_overlay`. `None` se nada mudou neste frame.
+    /// Renderiza a UI no GL e devolve os pixels RGBA PREMULTIPLICADOS
+    /// (linha 0 = topo) prontos para `App::set_overlay`.
+    ///
+    /// Só re-renderiza quando o Slint pede (redraw pendente). Exceção: se o
+    /// último frame validado não bate com `size` (startup/resize — o
+    /// backbuffer GL esvazia em 1×1 e o snapshot volta pequeno), re-renderiza
+    /// todo frame até bater; o snapshot miúdo é descartado, então nunca
+    /// sobe textura do tamanho errado. `None` = nada a fazer/ainda não pronto.
     pub fn draw(&mut self) -> Option<(Vec<u8>, u32, u32)> {
         let (w, h) = {
             let s = self.window.size.get();
             (s.width, s.height)
         };
-        if w == 0 || h == 0 || !self.window.redraw.replace(false) {
+        if w == 0 || h == 0 || (!self.window.redraw.replace(false) && self.window.valid.get()) {
             return None;
         }
         self.window.renderer.render().ok()?;
         let pixels: SharedPixelBuffer<slint::Rgba8Pixel> = self.window.window.take_snapshot().ok()?;
-        Some((premultiply(pixels.as_bytes()), w, h))
+        let pw = pixels.width();
+        let ph = pixels.height();
+        if pw != w || ph != h {
+            // Backbuffer ainda não acompanhou o alvo: descarta e tenta de novo.
+            self.window.valid.set(false);
+            return None;
+        }
+        self.window.valid.set(true);
+        Some((premultiply(pixels.as_bytes()), pw, ph))
     }
 }
 
