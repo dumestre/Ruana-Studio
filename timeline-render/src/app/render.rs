@@ -851,15 +851,29 @@ impl App {
                 label: Some("timeline-encoder"),
             });
 
-        // === Modo hostilhado: composição na surface ===
-        // Em vez de desenhar a cena aqui, o frame da timeline já foi
-        // rasterizado offscreen e chega via `set_timeline_bg`; a posição do
-        // retângulo vem de `set_timeline_rect`, espelhando o layout da UI.
         if self.hosted && !self.offscreen_target {
             self.record_composite_passes(&mut encoder, width, height, view);
             return encoder;
         }
 
+        self.record_scene_passes(&mut encoder, width, height, view);
+        if !(self.hosted && self.offscreen_target) {
+            self.record_overlay_pass(&mut encoder, width, height, view);
+        }
+
+        encoder
+    }
+
+    /// Passos da cena da timeline (instâncias, wave bars e ícones), direto
+    /// em `view`. Usado pelo modo standalone, pelo frame offscreen e pelo
+    /// `render_timeline_bg` (target = textura da timeline no modo hostilhado).
+    fn record_scene_passes(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        width: f32,
+        height: f32,
+        view: &wgpu::TextureView,
+    ) {
         let instances = self.build_instances(width, height);
 
         let data: Vec<f32> = instances.iter().flat_map(|i| i.to_f32()).collect();
@@ -983,14 +997,16 @@ impl App {
             ipass.set_vertex_buffer(1, icon_instance_buf.slice(..));
             ipass.draw(0..4, 0..icon_instances.len() as u32);
         }
+        }
 
-        // === 3º pass: overlay de UI (Slint etc.) ===
-        // Uma textura RGBA (renderizada por software fora do wgpu) é desenhada
-        // cobrindo o viewport inteiro, por cima de tudo. O blend padrão compõe
-        // a UI sobre a timeline.
-        // No frame offscreen da timeline em modo hostilhado o overlay da UI
-        // NÃO entra (a UI é composta só na surface, por cima do frame).
-        if !(self.hosted && self.offscreen_target) {
+    /// Pass de overlay de UI (textura RGBA cobrindo o viewport inteiro).
+    fn record_overlay_pass(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        width: f32,
+        height: f32,
+        view: &wgpu::TextureView,
+    ) {
         if let Some(overlay_view) = &self.overlay_view {
             let (ow, oh) = self.overlay_size;
             if ow > 0 && oh > 0 {
@@ -1062,9 +1078,6 @@ impl App {
                 opass.draw(0..4, 0..1);
             }
         }
-        }
-
-        encoder
     }
 
     /// Passes de composição do modo hostilhado (surface): o frame da timeline
@@ -1219,6 +1232,29 @@ impl App {
                 );
             }
         }
+    }
+
+    /// Renderiza a cena da timeline DIRETO na textura `timeline_bg`
+    /// (GPU→GPU, sem readback de CPU), para ser composta na surface no modo
+    /// hostilhado. `width`/`height` devem casar com o retângulo físico da
+    /// timeline na UI. Retorna `false` se o tamanho for inválido.
+    pub fn render_timeline_bg(&mut self, width: u32, height: u32) -> bool {
+        if width == 0 || height == 0 {
+            return false;
+        }
+        self.ensure_timeline_bg(width, height);
+        let Some(bg_view) = self.timeline_bg_view.clone() else {
+            return false;
+        };
+        self.size = (width, height);
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("timeline-bg-encoder"),
+            });
+        self.record_scene_passes(&mut encoder, width as f32, height as f32, &bg_view);
+        self.queue.submit(std::iter::once(encoder.finish()));
+        true
     }
 
     /// Render do modo standalone (apresenta na surface da janela).

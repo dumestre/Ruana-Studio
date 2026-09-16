@@ -13,6 +13,7 @@ timeline-render = { path = "../timeline-render", default-features = false }
 slint = { workspace = true, features = ["renderer-skia", "renderer-femtovg", "raw-window-handle-06", "unstable-wgpu-29"] }
 winit = "0.30"
 i-slint-backend-winit = "1.17.1"
+i-slint-renderer-femtovg = { version = "1.17.1", features = ["opengl"] }
 raw-window-handle = "0.6"
 png = "0.18.1"
 glow = "0.18"

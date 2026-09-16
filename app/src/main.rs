@@ -1,18 +1,25 @@
-﻿//! RuanaStudio ÔÇö entrypoint.
+﻿//! RuanaStudio — entrypoint.
 //!
-//! O `main` fica deliberadamente enxuto: cria a janela, monta o
-//! estado compartilhado (core + ├íudio + modelos) e delega o
-//! wiring dos handlers para os m├│dulos por dom├¡nio:
+//! Arquitetura do AGENTS.md: o app é dono do loop winit e do wgpu.
+//! O `main` apenas sobe o event loop do winit (`host::run`); o `setup`
+//! monta o estado compartilhado (core + áudio + modelos) e delega o
+//! wiring dos handlers para os módulos por domínio quando a janela sobe:
 //!
-//! - `waveform`   ÔÇö cache, rasteriza├º├úo e re-render por zoom
-//! - `importer`   ÔÇö importa├º├úo de arquivos de ├íudio
-//! - `explorer`   ÔÇö explorador de arquivos (navega├º├úo/filtro)
-//! - `piano_roll` ÔÇö piano roll (grid, a├º├Áes de notas)
-//! - `mixer`      ÔÇö mixer (estado, modelos compartilhados)
-//! - `models`     ÔÇö proje├º├úo core ÔåÆ Slint e eventos do documento
-//! - `timeline`   ÔÇö edi├º├úo de clips na timeline
-//! - `floats`     ÔÇö janelas flutuantes (mixer/sampler/piano roll)
-//! - `os_drop`    ÔÇö drag & drop de arquivos do Sistema Operacional
+//! - `host`       — janela winit + surface wgpu + overlay Slint offscreen
+//! - `waveform`   — cache, rasterização e re-render por zoom
+//! - `importer`   — importação de arquivos de áudio
+//! - `explorer`   — explorador de arquivos (navegação/filtro)
+//! - `piano_roll` — piano roll (grid, ações de notas)
+//! - `mixer`      — mixer (estado, modelos compartilhados)
+//! - `models`     — projeção core → Slint e eventos do documento
+//! - `timeline`   — edição de clips na timeline
+//! - `floats`     — modo sem janelas flutuantes (UI única em overlay)
+//! - `os_drop`    — drag & drop de arquivos do SO (no nível winit)
+//!
+//! A timeline wgpu renderiza DIRETO na surface (GPU→GPU, via
+//! `EngineBridge::tick` → `render_timeline_bg`); a UI Slint é desenhada
+//! pelo rendering backend FemtoVG-GL numa janela winit oculta e composta
+//! por cima como overlay RGBA (o componente Timeline vira um "buraco").
 
 slint::include_modules!();
 
@@ -24,6 +31,7 @@ mod cursors;
 mod decode_worker;
 mod explorer;
 mod floats;
+mod host;
 mod icon;
 mod importer;
 mod interaction;
@@ -33,9 +41,11 @@ mod models;
 mod os_drop;
 mod piano_roll;
 mod playback;
+mod slint_host;
+mod theme;
+
 mod timeline;
 mod timeline_slint;
-mod theme;
 
 mod waveform;
 mod waveform_gpu;
@@ -47,8 +57,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use crate::cursors::{
-    init_cursor_manager, reset_cursor_to_default, set_cursor_for_tool, set_dark_cursors,
-    set_timeline_bounds,
+    init_cursor_manager, set_cursor_for_tool, set_dark_cursors, set_timeline_bounds,
 };
 #[cfg(windows)]
 use crate::cursors::set_cursor_window_handle;
@@ -63,31 +72,31 @@ use raw_window_handle::HasWindowHandle;
 use slint::Model;
 
 #[cfg(windows)]
-    fn choose_audio_file() -> Option<String> {
-        use std::mem::size_of;
-        use windows_sys::Win32::Foundation::HWND;
-        use windows_sys::Win32::UI::Controls::Dialogs::{
-            GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST, OPENFILENAMEW,
-        };
-        use windows_sys::core::{PCWSTR, PWSTR};
-        let filter: Vec<u16> = "Audio Files\0*.wav;*.mp3;*.flac;*.ogg;*.oga\0All Files\0*.*\0\0"
-            .encode_utf16()
-            .collect();
-        let mut path = vec![0u16; 32768];
-        let mut dialog = OPENFILENAMEW::default();
-        dialog.lStructSize = size_of::<OPENFILENAMEW>() as u32;
-        dialog.hwndOwner = HWND::default();
-        dialog.lpstrFilter = PCWSTR::from(filter.as_ptr());
-        dialog.lpstrFile = PWSTR::from(path.as_mut_ptr());
-        dialog.nMaxFile = path.len() as u32;
-        dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-        if unsafe { GetOpenFileNameW(&mut dialog) } != 0 {
-            let len = path.iter().position(|c| *c == 0).unwrap_or(0);
-            Some(String::from_utf16_lossy(&path[..len]))
-        } else {
-            None
-        }
+fn choose_audio_file() -> Option<String> {
+    use std::mem::size_of;
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::Controls::Dialogs::{
+        GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_PATHMUSTEXIST, OPENFILENAMEW,
+    };
+    use windows_sys::core::{PCWSTR, PWSTR};
+    let filter: Vec<u16> = "Audio Files\0*.wav;*.mp3;*.flac;*.ogg;*.oga\0All Files\0*.*\0\0"
+        .encode_utf16()
+        .collect();
+    let mut path = vec![0u16; 32768];
+    let mut dialog = OPENFILENAMEW::default();
+    dialog.lStructSize = size_of::<OPENFILENAMEW>() as u32;
+    dialog.hwndOwner = HWND::default();
+    dialog.lpstrFilter = PCWSTR::from(filter.as_ptr());
+    dialog.lpstrFile = PWSTR::from(path.as_mut_ptr());
+    dialog.nMaxFile = path.len() as u32;
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    if unsafe { GetOpenFileNameW(&mut dialog) } != 0 {
+        let len = path.iter().position(|c| *c == 0).unwrap_or(0);
+        Some(String::from_utf16_lossy(&path[..len]))
+    } else {
+        None
     }
+}
 
 #[cfg(not(windows))]
 fn choose_audio_file() -> Option<String> {
@@ -99,58 +108,48 @@ fn choose_audio_file() -> Option<String> {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
-    let ui = MainWindow::new()?;
+    host::run()
+}
+
+/// Instala todo o wiring da DAW quando a janela winit sobe (`resumed` no
+/// host). Devolve o [`host::DropSink`] com o fluxo do OS drag & drop
+/// (o software window do Slint não recebe eventos nativos de drop).
+pub fn setup(
+    ui: &MainWindow,
+    window: Arc<winit::window::Window>,
+    bridge: Rc<RefCell<host::EngineBridge>>,
+    project: Rc<RefCell<Project>>,
+    transport: Arc<Mutex<Transport>>,
+    state: Rc<RefCell<host::SharedState>>,
+) -> host::DropSink {
+    // Modo nativo (AGENTS.md): a timeline do Slint vira o "buraco" por onde
+    // o wgpu é composto; a UI do Slint é o overlay que flutua por cima.
+    ui.set_native_overlay(true);
 
     init_cursor_manager().expect("Failed to initialize cursor manager");
 
-    let window = ui.window();
-    window.on_close_requested(move || {
-        let _ = reset_cursor_to_default();
-        slint::CloseRequestResponse::HideWindow
-    });
-
-    // ├ìcone da janela/barra de tarefas: aplica j├í na cria├º├úo e de novo
-    // ap├│s o event loop subir (a janela winit pode ser criada tardiamente).
-    icon::apply(window);
-    {
-        let ui_weak = ui.as_weak();
-        slint::Timer::single_shot(std::time::Duration::from_millis(200), move || {
-            if let Some(ui) = ui_weak.upgrade() {
-                icon::apply(ui.window());
-            }
-        });
-    }
-
-    // Cursor customizado: precisa do HWND da janela j├í criada.
+    // Cursor customizado: HWND da janela winit (já existe sincronamente — sem
+    // depender de timer que esperava a janela nativa do Slint subir).
     #[cfg(windows)]
     {
-        let ui_weak = ui.as_weak();
-        slint::Timer::single_shot(std::time::Duration::from_millis(100), move || {
-            if let Some(ui) = ui_weak.upgrade() {
-                let window = ui.window();
-                let handle = window.window_handle();
-                if let Ok(raw_handle) = handle.window_handle() {
-                    if let raw_window_handle::RawWindowHandle::Win32(h) = raw_handle.as_raw() {
-                        set_cursor_window_handle(h.hwnd.get() as *mut std::ffi::c_void);
-                        let _ = set_cursor_for_tool(0);
-                    }
-                }
+        if let Ok(handle) = window.window_handle() {
+            if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                set_cursor_window_handle(h.hwnd.get() as *mut std::ffi::c_void);
             }
-        });
+        }
     }
 
-    // Estado autoritativo da DAW: vive no core, nunca na UI.
-    let project = Rc::new(RefCell::new(Project::startup()));
-    let transport = Arc::new(Mutex::new(Transport::default()));
+    // Estado autoritativo da DAW: vive no core (`project`) e no Transport
+    // compartilhado — criados pelo host e passados para cá.
 
-    // Motor de ├íudio: abre UMA vez e fica aberto pela vida do app.
+    // Motor de áudio: abre UMA vez e fica aberto pela vida do app.
     //
     // Antes o stream nascia no play e morria no stop. Isso custava
-    // ~100ms de handshake com o driver no in├¡cio de cada play (o
-    // primeiro compasso sa├¡a picado) e tornava imposs├¡vel pr├®-escutar
-    // sample com o transporte parado ÔÇö que ├® justamente o que o
-    // channel rack do FL Studio faz. Se o dispositivo n├úo abrir, o
-    // app continua rodando em sil├¬ncio em vez de morrer.
+    // ~100ms de handshake com o driver no início de cada play (o
+    // primeiro compasso saía picado) e tornava impossível pré-escutar
+    // sample com o transporte parado — que é justamente o que o
+    // channel rack do FL Studio faz. Se o dispositivo não abrir, o
+    // app continua rodando em silêncio em vez de morrer.
     let audio_engine = match daw_audio::AudioEngine::start(transport.clone()) {
         Ok(engine) => {
             let cfg = engine.output_config();
@@ -158,7 +157,7 @@ fn main() -> Result<(), slint::PlatformError> {
             Some(engine)
         }
         Err(err) => {
-            eprintln!("[audio] dispositivo indispon├¡vel: {err} ÔÇö seguindo em sil├¬ncio");
+            eprintln!("[audio] dispositivo indisponível: {err} — seguindo em silêncio");
             None
         }
     };
@@ -166,8 +165,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Qualquer evento de documento (clip criado, movido, cortado,
     // apagado, undo/redo) muda o que a thread RT precisa ouvir.
-    // Assinar aqui ├® melhor que marcar sujo em cada call site: um
-    // caminho novo de edi├º├úo n├úo pode nascer mudo por esquecimento.
+    // Assinar aqui é melhor que marcar sujo em cada call site: um
+    // caminho novo de edição não pode nascer mudo por esquecimento.
     {
         let audio = audio.clone();
         project.borrow().subscribe(move |_event, _kind| {
@@ -178,13 +177,13 @@ fn main() -> Result<(), slint::PlatformError> {
     // Republica o projeto na thread RT quando algo muda (coalescido).
     let _audio_sync = audio_bridge::start_sync_timer(audio.clone(), project.clone());
 
-    // Cache de waveforms (LRU): clip_id ÔåÆ CachedWave (LODs min/max).
+    // Cache de waveforms (LRU): clip_id → CachedWave (LODs min/max).
     const WAVEFORM_CACHE_CAP: usize = 256;
     let waveforms: Rc<RefCell<WaveformCache>> = Rc::new(RefCell::new(crate::waveform::WaveformCache::new(WAVEFORM_CACHE_CAP)));
 
     // Renderer de waveform via wgpu (headless/offscreen + readback).
     // Criado UMA vez aqui na main thread e reutilizado por todos os clips.
-    // Se o adapter falhar, a waveform simplesmente n├úo ├® desenhada e o app
+    // Se o adapter falhar, a waveform simplesmente não é desenhada e o app
     // segue rodando (Option).
     let wgpu_renderer: Option<Rc<crate::waveform_gpu::WgpuRenderer>> = {
         match crate::waveform_gpu::WgpuRenderer::new() {
@@ -199,13 +198,13 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     };
 
-    // Cache de samples em RAM (path ÔåÆ decodificado + waveform):
-    // alimenta colagem instant├ónea (Ctrl+C / Shift+clique) e o
-    // pr├®-decode durante o drag do SO.
+    // Cache de samples em RAM (path → decodificado + waveform):
+    // alimenta colagem instantânea (Ctrl+C / Shift+clique) e o
+    // pré-decode durante o drag do SO.
     let sample_cache: Rc<RefCell<clip_cache::SampleCache>> = Rc::new(RefCell::new(HashMap::new()));
 
     let (tracks_model, clips_model, track_colors_model) =
-        initial_bind(&ui, &project.borrow(), &waveforms.borrow());
+        initial_bind(ui, &project.borrow(), &waveforms.borrow());
     bind_document_events(
         &project.borrow(),
         tracks_model,
@@ -214,7 +213,7 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.as_weak(),
     );
 
-    // M├®trica musical: espelha o core na UI (fonte ├║nica ÔÇö sem
+    // Métrica musical: espelha o core na UI (fonte única — sem
     // hardcodes nas telas) e dimensiona a timeline pelo projeto.
     {
         let proj = project.borrow();
@@ -233,11 +232,11 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.set_total_bars(bars_for_end_beat(end as f64, bpb));
     }
 
-    // Mixer: modelos compartilhados ÔÇö atualiza├º├úo por canal (set_row_data)
-    // propaga para a janela principal e todas as flutuantes de uma vez.
+    // Mixer: modelos compartilhados — atualização por canal (set_row_data)
+    // propaga para a janela principal (sem flutuantes nesta arquitetura).
     let mixer_models: Rc<RefCell<MixerModels>> =
         Rc::new(RefCell::new(MixerModels::from_project(&project.borrow())));
-    apply_mixer_models!(&ui, &mixer_models.borrow());
+    apply_mixer_models!(ui, &mixer_models.borrow());
 
     // Meters: modelo compartilhado + estado de decay (smoothing no Rust).
     let meter_model: Rc<slint::VecModel<f32>> =
@@ -249,9 +248,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let meter_state: Rc<RefCell<Vec<f32>>> =
         Rc::new(RefCell::new(vec![0.0; project.borrow().tracks.len() + 1]));
 
-    // Piano roll da janela principal (estado por janela; cada float tem o seu).
-    // O editor da janela principal ├® VINCULADO ao clip MIDI ativo: abrir um
-    // clip carrega as notas dele e cada edi├º├úo grava de volta (on_mutated).
+    // Piano roll da janela principal (estado por janela).
+    // O editor da janela principal é VINCULADO ao clip MIDI ativo: abrir um
+    // clip carrega as notas dele e cada edição grava de volta (on_mutated).
     let piano_editor: Rc<RefCell<NoteEditor>> = Rc::new(RefCell::new(NoteEditor::new()));
     let active_midi_clip: Rc<RefCell<Option<u64>>> = Rc::new(RefCell::new(None));
     {
@@ -265,11 +264,11 @@ fn main() -> Result<(), slint::PlatformError> {
             let notes = editor.borrow().notes().to_vec();
             project.borrow_mut().set_clip_notes(id, notes);
         });
-        piano_roll::wire_piano_roll(&ui, piano_editor.clone(), &on_mutated);
+        piano_roll::wire_piano_roll(ui, piano_editor.clone(), &on_mutated);
     }
 
-    // Duplo clique em clip MIDI ÔåÆ abre o piano roll dockado e carrega as
-    // notas do clip no editor (v├¡nculo clip Ôåö piano roll).
+    // Duplo clique em clip MIDI → abre o piano roll dockado e carrega as
+    // notas do clip no editor (vínculo clip ↔ piano roll).
     {
         let project = project.clone();
         let active = active_midi_clip.clone();
@@ -297,10 +296,10 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Beat sequencer: proje├º├úo inicial + persist├¬ncia no core.
+    // Beat sequencer: projeção inicial + persistência no core.
     {
         let project = project.clone();
-        beat::wire_beat(&ui, project, audio.clone());
+        beat::wire_beat(ui, project, audio.clone());
     }
 
     {
@@ -312,8 +311,8 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(path) = choose_audio_file() else {
                 return;
             };
-            // N├âO reescrever o mesmo sample: se a track alvo j├í tem
-            // este MESMO arquivo carregado, ignora o pedido. S├│ uma
+            // NÃO reescrever o mesmo sample: se a track alvo já tem
+            // este MESMO arquivo carregado, ignora o pedido. Só uma
             // carga com nome/arquivo diferente substitui.
             {
                 let proj = project.borrow();
@@ -331,8 +330,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 .and_then(|n| n.to_str())
                 .unwrap_or("Sample")
                 .to_string();
-            // Decode em thread de fundo: a UI n├úo congela em MP3/FLAC
-            // longos ÔÇö o apply (painel + pattern + preview) roda no
+            // Decode em thread de fundo: a UI não congela em MP3/FLAC
+            // longos — o apply (painel + pattern + preview) roda no
             // drainer quando o resultado chega.
             sampler_decode.schedule(
                 &ui_weak,
@@ -346,7 +345,7 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Drop de ├íudio no sampler (explorer ÔåÆ sampler ou SO ÔåÆ sampler).
+    // Drop de áudio no sampler (explorer → sampler ou SO → sampler).
     {
         let project = project.clone();
         let audio = audio.clone();
@@ -384,19 +383,20 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Janelas flutuantes (mixer/sampler/piano roll): wiring dedicado.
-    let handles = floats::install(
-        &ui,
+    // Modo single-window (AGENTS.md): sem janelas flutuantes — os handles
+    // continuam existindo para os módulos que os pedem.
+    let handles = floats::install_no_floats(
+        ui,
         project.clone(),
         mixer_models.clone(),
         meter_model.clone(),
         audio.clone(),
     );
 
-    // Timeline: edi├º├úo de clips (drop, slice, glue, move/resize,
+    // Timeline: edição de clips (drop, slice, glue, move/resize,
     // delete/rename/cor, clipboard, duplicate, add-track, undo/redo).
     timeline::install(
-        &ui,
+        ui,
         project.clone(),
         waveforms.clone(),
         clips_model.clone(),
@@ -407,19 +407,20 @@ fn main() -> Result<(), slint::PlatformError> {
     );
 
     // Motor de zoom/scroll: captura o input cru e suaviza por frame.
-    interaction::install(&ui);
+    interaction::install(ui);
 
-    // Ponte Slint Ôåö engine wgpu headless do timeline-render: preview dos
-    // clips do projeto (read-only) com playhead seguindo o Transport.
-    timeline_slint::install(&ui, transport.clone(), project.clone());
+    // Engine wgpu da timeline: callbacks do componente `Timeline` (régua,
+    // pointer, scroll) operando na engine da surface — composta a cada
+    // `RedrawRequested` pelo host.
+    host::install_engine_callbacks(ui, bridge.clone());
 
-    // Waveform: re-render na resolu├º├úo exata quando o zoom muda.
-    waveform::wire_resolution_requests(&ui, waveforms.clone(), wgpu_renderer.clone(), clips_model.clone());
+    // Waveform: re-render na resolução exata quando o zoom muda.
+    waveform::wire_resolution_requests(ui, waveforms.clone(), wgpu_renderer.clone(), clips_model.clone());
 
-    // Explorador de arquivos: navega├º├úo, hist├│rico e filtro.
-    explorer::wire_explorer(&ui);
+    // Explorador de arquivos: navegação, histórico e filtro.
+    explorer::wire_explorer(ui);
 
-    // Par├ómetros do mixer ÔåÆ core (atualiza├º├úo por canal, sem rebuild).
+    // Parâmetros do mixer → core (atualização por canal, sem rebuild).
     {
         let project = project.clone();
         let mixer_models = mixer_models.clone();
@@ -435,7 +436,7 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Inserts do mixer (janela principal) ÔåÆ core.
+    // Inserts do mixer (janela principal) → core.
     {
         let project_add = project.clone();
         let apply_mixer = handles.apply_mixer_state.clone();
@@ -486,7 +487,7 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Undo / redo (Ctrl+Z / Ctrl+Y) ÔåÆ hist├│rico do core.
+    // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.
     {
         let p = project.clone();
         ui.on_undo_requested(move || {
@@ -498,7 +499,7 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Playback/seek/meters: m├│dulo dedicado (app/src/playback.rs).
+    // Playback/seek/meters: módulo dedicado (app/src/playback.rs).
     playback::install(
         &ui.as_weak(),
         transport.clone(),
@@ -568,115 +569,56 @@ fn main() -> Result<(), slint::PlatformError> {
         std::process::exit(0);
     });
 
-    let ui_weak_min = ui.as_weak();
-    ui.on_minimize(move || {
-        if let Some(ui) = ui_weak_min.upgrade() {
-            let window = ui.window();
-            window.set_minimized(true);
-        }
-    });
-
-    // Janela sempre abre maximizada (pedido usu├írio) - PROFISSIONAL.
-    // Tenta via Slint (set_maximized) e fallback Win32 ShowWindow.
+    // Minimizar → janela winit (sem janela nativa do Slint para mexer).
     {
-        // Slint: tenta maximizar via API (se exposta)
-        ui.window().set_maximized(true);
-        let ui_weak_max = ui.as_weak();
-        slint::Timer::single_shot(std::time::Duration::from_millis(50), move || {
-            if let Some(ui) = ui_weak_max.upgrade() {
-                ui.window().set_maximized(true);
-                #[cfg(windows)]
-                {
-                    use raw_window_handle::HasWindowHandle;
-                    use windows_sys::Win32::Foundation::HWND;
-                    use windows_sys::Win32::UI::WindowsAndMessaging::{IsZoomed, ShowWindow, SW_MAXIMIZE};
-                    if let Ok(handle) = ui.window().window_handle().window_handle() {
-                        if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                            unsafe {
-                                let hwnd: HWND = h.hwnd.get() as *mut _;
-                                if IsZoomed(hwnd) != 0 {
-                                    let _ = ShowWindow(hwnd, SW_MAXIMIZE);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        let window = window.clone();
+        ui.on_minimize(move || {
+            window.set_minimized(true);
         });
     }
+
+    // Janela já abre maximizada no `host::resumed` (winit).
 
     // Arrasto da janela frameless - PROFISSIONAL sem tremor.
-    // Antes: `set_position(origin + dx logical)` causava jitter em
-    // HiDPI (logical vs physical) e trava por flood de mensagens.
-    // Agora: delega ao SO via WM_NCLBUTTONDOWN/HTCAPTION (drag nativo
-    // do Windows) - suave, com AeroSnap, sem c├ílculo manual.
+    // Delega ao SO via WM_NCLBUTTONDOWN/HTCAPTION (drag nativo do
+    // Windows) - suave, com AeroSnap, sem cálculo manual.
     #[cfg(windows)]
     {
-        let ui_weak_drag_start = ui.as_weak();
+        use windows_sys::Win32::Foundation::{HWND, LPARAM, WPARAM};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            HTCAPTION, IsZoomed, SendMessageW, WM_NCLBUTTONDOWN,
+        };
+        let window = window.clone();
         ui.on_window_drag_started(move || {
-            if let Some(ui) = ui_weak_drag_start.upgrade() {
-                // Se j├í est├í maximizada, ignora arrasto (usu├írio deve
-                // restaurar primeiro) - evita pulo
-                let is_max = {
-                    use raw_window_handle::HasWindowHandle;
-                    use windows_sys::Win32::Foundation::HWND;
-                    use windows_sys::Win32::UI::WindowsAndMessaging::IsZoomed;
-                    if let Ok(handle) = ui.window().window_handle().window_handle() {
-                        if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                            let hwnd: HWND = h.hwnd.get() as *mut _;
-                            unsafe { IsZoomed(hwnd) != 0 }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                };
-                if is_max {
-                    return;
-                }
-                if let Ok(handle) = ui.window().window_handle().window_handle() {
-                    if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                        unsafe {
-                            use windows_sys::Win32::Foundation::{HWND, LPARAM, WPARAM};
-                            use windows_sys::Win32::UI::WindowsAndMessaging::{
-                                HTCAPTION, SendMessageW, WM_NCLBUTTONDOWN,
-                            };
-                            let hwnd: HWND = h.hwnd.get() as *mut _;
-                            SendMessageW(
-                                hwnd,
-                                WM_NCLBUTTONDOWN,
-                                HTCAPTION as WPARAM,
-                                0 as LPARAM,
-                            );
-                        }
-                    }
-                }
+            let Ok(handle) = window.window_handle() else {
+                return;
+            };
+            let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() else {
+                return;
+            };
+            let hwnd: HWND = h.hwnd.get() as *mut _;
+            // Se já está maximizada, ignora arrasto (usuário deve
+            // restaurar primeiro) - evita pulo.
+            if unsafe { IsZoomed(hwnd) != 0 } {
+                return;
+            }
+            unsafe {
+                SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION as WPARAM, 0 as LPARAM);
             }
         });
     }
 
-    // Mantido por compatibilidade mas agora ├® no-op (nativo cuida)
+    // Mantido por compatibilidade mas agora é no-op (nativo cuida)
     ui.on_window_drag_moved(|_, _| {});
 
     ui.on_window_drag_finished(|| {});
 
-    // Drag & drop de arquivos direto do Sistema Operacional.
-    os_drop::install(
-        &ui,
-        project.clone(),
-        waveforms.clone(),
-        clips_model.clone(),
-        track_colors_model.clone(),
-        sample_cache.clone(),
-    );
-
     // ---- TEMA ------------------------------------------------------
-    // Restaura a paleta salva e aplica quando o usu├írio escolher
-    // outra no seletor do toolbar (persiste o ├¡ndice selecionado).
+    // Restaura a paleta salva e aplica quando o usuário escolher
+    // outra no seletor do toolbar (persiste o índice selecionado).
     {
         let idx = theme::load().unwrap_or(0);
-        theme::apply(&ui, idx);
+        theme::apply(ui, idx);
         // Cursores escuros no tema Paper (claro), claros nos escuros.
         let _ = set_dark_cursors(idx == theme::THEME_PAPER);
 
@@ -690,5 +632,56 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    ui.run()
+    // ---- OS DRAG & DROP (nível winit) --------------------------------
+    // O software window do Slint não recebe eventos nativos de drop; o host
+    // reencaminha via `window_event` para estes closures. O fluxo é idêntico
+    // ao do drag do ClipPool (ghost, snap, pré-decode, importação).
+    {
+        let ui_weak_hovered = ui.as_weak();
+        let sample_cache_h = sample_cache.clone();
+        let hovered = Rc::new(move |path: std::path::PathBuf| {
+            let Some(ui) = ui_weak_hovered.upgrade() else {
+                return;
+            };
+            os_drop::handle_hovered(&ui, &path, &sample_cache_h);
+        });
+
+        let ui_weak_cancelled = ui.as_weak();
+        let cancelled = Rc::new(move || {
+            if let Some(ui) = ui_weak_cancelled.upgrade() {
+                os_drop::handle_hovered_cancelled(&ui);
+            }
+        });
+
+        let ui_weak_dropped = ui.as_weak();
+        let project_d = project.clone();
+        let waveforms_d = waveforms.clone();
+        let clips_model_d = clips_model.clone();
+        let track_colors_model_d = track_colors_model.clone();
+        let sample_cache_d = sample_cache.clone();
+        let state_d = state.clone();
+        let dropped = Rc::new(move |path: std::path::PathBuf| {
+            let Some(ui) = ui_weak_dropped.upgrade() else {
+                return;
+            };
+            let st = state_d.borrow();
+            os_drop::handle_dropped(
+                &ui,
+                &path,
+                st.win_pos,
+                st.scale,
+                project_d.clone(),
+                waveforms_d.clone(),
+                clips_model_d.clone(),
+                track_colors_model_d.clone(),
+                sample_cache_d.clone(),
+            );
+        });
+
+        host::DropSink {
+            hovered,
+            cancelled,
+            dropped,
+        }
+    }
 }

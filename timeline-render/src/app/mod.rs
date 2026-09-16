@@ -917,32 +917,12 @@ transport,
     /// Envia o frame (readback) da cena da timeline (RGBA, linha 0 = topo)
     /// para ser apresentado no retângulo da timeline (`timeline_rect`). Se o
     /// tamanho mudar a textura GPU é (re)criada; senão apenas escreve os pixels.
+    /// A textura também é alvo de render para o [`App::render_timeline_bg`].
     pub fn set_timeline_bg(&mut self, rgba: &[u8], width: u32, height: u32) {
         if width == 0 || height == 0 || rgba.len() < (width as usize) * (height as usize) * 4 {
             return;
         }
-        let recreate = self.timeline_bg_texture.as_ref().map_or(true, |t| {
-            t.width() != width || t.height() != height
-        });
-        if recreate {
-            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("timeline-bg"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            self.timeline_bg_view = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
-            self.timeline_bg_texture = Some(texture);
-            self.timeline_bg_size = (width, height);
-        }
+        self.ensure_timeline_bg(width, height);
         if let Some(texture) = &self.timeline_bg_texture {
             self.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
@@ -963,6 +943,36 @@ transport,
                     depth_or_array_layers: 1,
                 },
             );
+        }
+    }
+
+    /// Garante que a textura `timeline_bg` existe em `width x height`. Além de
+    /// ser amostrada no `render()` hostilhado, ela é alvo de render da cena
+    /// (via `render_timeline_bg`) — por isso ganha `RENDER_ATTACHMENT`.
+    fn ensure_timeline_bg(&mut self, width: u32, height: u32) {
+        let recreate = self.timeline_bg_texture.as_ref().map_or(true, |t| {
+            t.width() != width || t.height() != height
+        });
+        if recreate {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("timeline-bg"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            self.timeline_bg_view = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
+            self.timeline_bg_texture = Some(texture);
+            self.timeline_bg_size = (width, height);
         }
     }
 
