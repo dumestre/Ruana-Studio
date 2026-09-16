@@ -117,9 +117,9 @@ export component Toolbar inherits Rectangle {
         // ========================================================
 
         HorizontalLayout {
-            spacing: 8px;
+            spacing: 1px;
 
-            alignment: LayoutAlignment.center;
+            alignment: LayoutAlignment.stretch;
             cross-axis-alignment: CrossAxisAlignment.center;
 
             Image {
@@ -130,10 +130,11 @@ export component Toolbar inherits Rectangle {
 
             Text {
                 font-family: "poppins";
-                font-size: 12px;
-                horizontal-alignment: TextHorizontalAlignment.center;
+                font-size: 14px;
+                font-weight: 0;
+                horizontal-alignment: TextHorizontalAlignment.left;
                 letter-spacing: 1px;
-                text: "Ruana Studio";
+                text: "RS";
             }
         }
 
