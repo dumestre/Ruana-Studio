@@ -492,10 +492,15 @@ impl App {
         self.rebuild_wave_data();
     }
 
-    /// Converte posiÃ§Ã£o do cursor para beat e track com snap ao grid.
+    /// Converte posiÃ§Ã£o do cursor para beat e track com snap ao grid
+    /// (respeitando `snap_enabled`: OFF mantém beat fracionário).
     pub fn cursor_to_snapped_beat_track(&self, pos: (f32, f32)) -> (f32, usize) {
         let beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
-        let snapped_beat = beat.round().max(0.0);
+        let snapped_beat = if self.snap_enabled {
+            beat.round().max(0.0)
+        } else {
+            beat.max(0.0)
+        };
         let row_height = 64.0 * self.zoom_y.max(0.001);
         let track = ((pos.1 - self.ruler_px + self.scroll_y) / row_height)
             .floor()
@@ -961,7 +966,7 @@ self.rebuild_wave_data();
         } else if self.loop_drag.is_some() {
             self.handle_loop_drag(pos.0);
         } else if self.clip_interaction.is_dragging() {
-            let snap = true;
+            let snap = self.snap_enabled;
             self.clip_interaction.drag_move(pos, &cm, snap);
             // Edge scroll Ã© tratado no RedrawRequested (roda todo frame)
         } else if self.clip_interaction.is_drawing() {

@@ -92,6 +92,11 @@ impl EngineBridge {
     pub fn tick(&mut self, ui: &MainWindow) {
         let ls = self.scale;
 
+        // Snap do grid vem da edit toolbar do Slint (mesmo estado que o
+        // paste/clippool lê). Alimenta o engine a cada frame para os arrastos
+        // de clips na timeline seguirem o botão.
+        self.engine.snap_enabled = ui.get_snap_enabled();
+
         // A textura `timeline_bg` tem que casar EXATAMENTE com o quad na
         // surface (senão sobe de escala → borrado). O "buraco" do Slint é o
         // `canvas-image`: começa em `+left-padding`, ocupa toda a altura do
@@ -211,11 +216,19 @@ pub fn install_engine_callbacks(
     // ---- PONTEIRO: MOVE ----------------------------------------------
     {
         let b = bridge.clone();
+        let ui_weak = ui.as_weak();
         ui.on_engine_pointer_move(move |x, y| {
             let mut b = b.borrow_mut();
             let scale = b.scale;
             let (px, py) = (x * scale, y * scale);
             let engine = &mut b.engine;
+            if engine.scrubbing {
+                let beat =
+                    ((px + engine.scroll_x) / engine.px_per_beat.max(0.001)).max(0.0);
+                if let Some(ui) = ui_weak.upgrade() {
+                    ui.invoke_seek_to(beat);
+                }
+            }
             engine.handle_cursor_moved((px, py));
             b.dirty = true;
         });

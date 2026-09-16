@@ -112,6 +112,9 @@ pub struct App {
     pub zoom_y: f32,
     pub ruler_px: f32,
     pub playing: bool,
+    /// Snap do grid (toolbar edit): true = deltas de arrasto em beats inteiros;
+    /// false = posição livre (beats fracionários — o core já persiste float).
+    pub snap_enabled: bool,
     pub transport_seconds: f32,
     pub play_start_seconds: f32,
     /// Início do último play, para o espaço retomar do começo (comportamento DAM).
@@ -745,6 +748,7 @@ offscreen_texture: None,
             zoom_y: 1.0,
             ruler_px: 28.0,
             playing: false,
+            snap_enabled: true,
             transport_seconds: 0.0,
             play_start_seconds: 0.0,
             last_play_start: 0.0,

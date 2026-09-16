@@ -46,8 +46,14 @@ export component MainWindow inherits Window {
     min-height:
         720px;
 
+    // Em modo hosted o fundo da janela é transparente: o wgpu compõe a
+    // timeline (e o quad) POR BAIXO, e a UI (dropdowns, clippool, painéis
+    // com fundo próprio) flutua por cima. Sem isso o `Theme.base` opaco
+    // cobriria o "buraco" do canvas e dropdowns/menus sumiriam atrás do quad.
     background:
-        Theme.base;
+        root.native-overlay
+            ? transparent
+            : Theme.base;
 
     no-frame:
         true;
@@ -590,8 +596,22 @@ export component MainWindow inherits Window {
         root.drag-snap-beat =
             Math.max(
                 0.0,
-                Math.round(
-                    (
+                root.snap-enabled
+                    ? Math.round(
+                        (
+                            (
+                                x
+                                - TimelineMetrics.timeline-abs-x
+                                + TimelineMetrics.scroll-x
+                            )
+                            / 1px
+                        )
+                            / (
+                                TimelineMetrics.px-per-beat / 1px
+                            )
+                        * 2.0
+                    ) / 2.0
+                    : (
                         (
                             x
                             - TimelineMetrics.timeline-abs-x
@@ -602,8 +622,6 @@ export component MainWindow inherits Window {
                         / (
                             TimelineMetrics.px-per-beat / 1px
                         )
-                    * 2.0
-                ) / 2.0
             );
 
         root.drag-drop-track =
