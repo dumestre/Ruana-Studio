@@ -133,6 +133,28 @@ impl EngineBridge {
             }
         }
 
+        // Feedback de importação/drag na timeline wgpu: o "buraco" do canvas é
+        // cobrido pelo quad da engine, então um ghost/preview desenhado pelo
+        // Slint naquela área ficaria invisível (no binário standalone a timeline
+        // ocupa a janela toda e o ghost aparece). Espelhamos o estado do drag do
+        // Slint (`drag-active` + snap no engine) no `drop_preview` do motor.
+        if ui.get_drag_active() {
+            let (beat, track) =
+                self.engine.cursor_to_snapped_beat_track(self.engine.last_cursor);
+            let changed = match &self.engine.drop_preview {
+                Some(p) => (p.beat - beat).abs() > 0.0005 || p.track != track,
+                None => true,
+            };
+            if changed {
+                self.engine.drop_preview =
+                    Some(timeline_render::app::DropPreview { beat, track, len_beats: 0.0 });
+                self.dirty = true;
+            }
+        } else if self.engine.drop_preview.is_some() {
+            self.engine.drop_preview = None;
+            self.dirty = true;
+        }
+
         // Renderiza a cena direto na textura do quad (sem readback).
         if self.dirty {
             self.dirty = false;
