@@ -964,7 +964,10 @@ transport,
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                // Mesmo formato do pipeline da cena (`timeline-rp`): quando
+                // hosted, a surface usa Bgra8UnormSrgb e a textura precisa
+                // casar para o `render_timeline_bg` renderizar nela.
+                format: self.render_format,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::COPY_DST
                     | wgpu::TextureUsages::RENDER_ATTACHMENT,
