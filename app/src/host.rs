@@ -53,6 +53,10 @@ pub struct EngineBridge {
     pub transport: Arc<Mutex<Transport>>,
     pub project: Rc<RefCell<Project>>,
     pub scale: f32,
+    /// Canto superior-esquerdo da janela (px físicos). Manter atualizado no
+    /// `Moved`; usado para converter a posição GLOBAL do cursor (GetCursorPos)
+    /// em coordenadas da janela durante drags do SO.
+    pub win_pos: (f64, f64),
     /// O projeto mudou → o espelho de clips precisa de rebuild.
     pub clips_flag: Rc<Cell<bool>>,
     /// A cena precisa de um novo frame (rendered direto para `timeline_bg`).
@@ -66,6 +70,7 @@ impl EngineBridge {
         transport: Arc<Mutex<Transport>>,
         project: Rc<RefCell<Project>>,
         scale: f32,
+        win_pos: (f64, f64),
     ) -> Self {
         let clips_flag = Rc::new(Cell::new(true));
         {
@@ -80,6 +85,7 @@ impl EngineBridge {
             transport,
             project,
             scale,
+            win_pos,
             clips_flag,
             dirty: true,
         }
@@ -143,7 +149,33 @@ impl EngineBridge {
         // Slint naquela área ficaria invisível (no binário standalone a timeline
         // ocupa a janela toda e o ghost aparece). Espelhamos o estado do drag do
         // Slint (`drag-active` + snap no engine) no `drop_preview` do motor.
+        //
+        // DURANTE o drag o preview precisa seguir o cursor REAL. No drag de
+        // arquivo do SO (Explorer) o Windows NÃO emite MouseMove/CursorMoved —
+        // o binário standalone resolve polando a posição global do cursor a
+        // cada frame (`current_cursor_pos`); aqui fazemos o mesmo: realimenta o
+        // ghost do Slint (`drag-move` → drag-x/drag-y + snap/track) e o motor
+        // (`last_cursor` → `drop_preview`). Cobre também o drag do ClipPool em
+        // qualquer track/região (que a TouchArea com captura não repassa para o
+        // engine-input da timeline).
         if ui.get_drag_active() {
+            #[cfg(windows)]
+            {
+                use windows_sys::Win32::Foundation::POINT;
+                use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+                let mut pt = POINT { x: 0, y: 0 };
+                if unsafe { GetCursorPos(&mut pt) } != 0 {
+                    let wpx = pt.x as f64 - self.win_pos.0;
+                    let wpy = pt.y as f64 - self.win_pos.1;
+                    let ls = self.scale as f64;
+                    // Ghost do Slint espera coordenadas lógicas da janela.
+                    ui.invoke_drag_move((wpx / ls) as f32, (wpy / ls) as f32);
+                    // Motor espera px físicos relativos ao quadrante da
+                    // timeline (mesma origem do engine-input TouchArea).
+                    let (qx, qy) = (self.engine.timeline_rect.0, self.engine.timeline_rect.1);
+                    self.engine.last_cursor = (wpx as f32 - qx, wpy as f32 - qy);
+                }
+            }
             let (beat, track) =
                 self.engine.cursor_to_snapped_beat_track(self.engine.last_cursor);
             let changed = match &self.engine.drop_preview {
@@ -387,6 +419,7 @@ impl ApplicationHandler for Handler {
             transport.clone(),
             project.clone(),
             scale,
+            win_pos,
         )));
 
         // 4. Janela: ícone e maximizada (abertura profissional pedida).
@@ -456,7 +489,9 @@ impl ApplicationHandler for Handler {
                 b.engine.resize((size.width, size.height));
             }
             WindowEvent::Moved(position) => {
-                self.state.borrow_mut().win_pos = (position.x as f64, position.y as f64);
+                let pos = (position.x as f64, position.y as f64);
+                self.state.borrow_mut().win_pos = pos;
+                bridge.borrow_mut().win_pos = pos;
             }
             WindowEvent::Focused(true) => {
                 // Devolve o foco de teclado ao FocusScope global (senão
