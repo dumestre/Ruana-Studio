@@ -11,140 +11,124 @@ export component BeatTrackHeader inherits Rectangle {
         width: parent.width - 16px;
         height: 33px;
 
+        // Mesmo espaçamento usado no BeatTrack
         spacing: 2px;
 
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
 
-        HorizontalLayout {
-            alignment: LayoutAlignment.space-between;
-            cross-axis-alignment: CrossAxisAlignment.center;
-
-        // PAN
-        Rectangle {
-            width: 28px;
-            height: 18px;
-
-            Text {
-                text: "PAN";
-
-                width: 100%;
-                height: 100%;
-
-                color: Theme.text-dim;
-                font-size: 9px;
-                font-weight: 700;
-
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-        }
-
-
-        // VOL
-        Rectangle {
-            width: 28px;
-            height: 18px;
-
-            Text {
-                text: "VOL";
-
-                width: 100%;
-                height: 100%;
-
-                color: Theme.text-dim;
-                font-size: 9px;
-                font-weight: 700;
-
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-        }
-
-
-        // CH
+        // ========================================================
+        // PAN (18px - Igual ao BeatTrack)
+        // ========================================================
         Rectangle {
             width: 18px;
             height: 18px;
 
             Text {
-                text: "CH";
-
+                text: "PAN";
                 width: 100%;
                 height: 100%;
-
                 color: Theme.text-dim;
                 font-size: 9px;
                 font-weight: 700;
-
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
         }
 
-
-        // M
+        // ========================================================
+        // VOL (18px - Igual ao BeatTrack)
+        // ========================================================
         Rectangle {
-            width: 100%;
+            width: 18px;
+            height: 18px;
+
+            Text {
+                text: "VOL";
+                width: 100%;
+                height: 100%;
+                color: Theme.text-dim;
+                font-size: 9px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // ========================================================
+        // CH (30px - Igual ao BeatTrack)
+        // ========================================================
+        Rectangle {
+            width: 30px;
+            height: 18px;
+
+            Text {
+                text: "CH";
+                width: 100%;
+                height: 100%;
+                color: Theme.text-dim;
+                font-size: 9px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // ========================================================
+        // MUTE (18px - Igual ao BeatTrack)
+        // ========================================================
+        Rectangle {
+            width: 18px;
             height: 18px;
 
             Text {
                 text: "M";
-
                 width: 100%;
                 height: 100%;
-
                 color: Theme.text-dim;
                 font-size: 9px;
                 font-weight: 700;
-
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
         }
 
-
-        // S
+        // ========================================================
+        // SOLO (18px - Igual ao BeatTrack)
+        // ========================================================
         Rectangle {
-            width: 100%;
+            width: 18px;
             height: 18px;
 
             Text {
-                text: "SAMPLE";
-
+                text: "S";
+                width: 100%;
                 height: 100%;
-
                 color: Theme.text-dim;
                 font-size: 9px;
                 font-weight: 700;
-
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
         }
-    }
 
-
-        HorizontalLayout {
-        // TRACK
+        // ========================================================
+        // TRACK (horizontal-stretch: 1 - Igual ao BeatTrack)
+        // ========================================================
         Rectangle {
             horizontal-stretch: 1;
             height: 18px;
 
             Text {
                 text: "TRACK";
-
                 width: 100%;
                 height: 100%;
-
                 color: Theme.text-dim;
                 font-size: 10px;
                 font-weight: 700;
-
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
         }
-    }
     }
 }
