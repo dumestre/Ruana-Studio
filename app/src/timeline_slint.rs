@@ -27,9 +27,11 @@ use timeline_render::WindowCommand;
 
 use crate::MainWindow;
 
-/// Espelha os clips do core em `ClipDemo` para a engine (read-only).
-/// Waveform sintetizada (procedural) por ora: evita decodificar áudio no
-/// thread da UI nesta primeira entrega.
+/// Espelha os clips do core em `ClipDemo` para a engine. Reduz o custo de
+/// decodificar áudio: o `build_wave_bars_and_segments` da engine decodifica
+/// a wave real quando o clip carrega o `file_path` do disco (mesmo caminho
+/// do binário standalone `timeline-render`); sem ele, cai para a wave
+/// procedural placeholder.
 pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
     let track_index = |track_id: u64| -> usize {
         proj.tracks
@@ -51,7 +53,7 @@ pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
             pre_glue_len: None,
             pre_glue_color: None,
             wave: Vec::new(),
-            file_path: None,
+            file_path: c.file_path.clone(),
             source_start_beats: c.source_start_beats,
             source_length_beats: c.length_beats,
             channels: if c.is_midi() { 1 } else { 2 },

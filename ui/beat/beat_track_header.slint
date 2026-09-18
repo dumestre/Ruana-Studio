@@ -16,6 +16,9 @@ export component BeatTrackHeader inherits Rectangle {
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
 
+        HorizontalLayout {
+            alignment: LayoutAlignment.space-between;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
         // PAN
         Rectangle {
@@ -82,7 +85,7 @@ export component BeatTrackHeader inherits Rectangle {
 
         // M
         Rectangle {
-            width: 18px;
+            width: 100%;
             height: 18px;
 
             Text {
@@ -103,13 +106,12 @@ export component BeatTrackHeader inherits Rectangle {
 
         // S
         Rectangle {
-            width: 18px;
+            width: 100%;
             height: 18px;
 
             Text {
-                text: "S";
+                text: "SAMPLE";
 
-                width: 100%;
                 height: 100%;
 
                 color: Theme.text-dim;
@@ -120,8 +122,10 @@ export component BeatTrackHeader inherits Rectangle {
                 vertical-alignment: center;
             }
         }
+    }
 
 
+        HorizontalLayout {
         // TRACK
         Rectangle {
             horizontal-stretch: 1;
@@ -141,5 +145,6 @@ export component BeatTrackHeader inherits Rectangle {
                 vertical-alignment: center;
             }
         }
+    }
     }
 }
