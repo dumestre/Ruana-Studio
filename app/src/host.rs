@@ -61,6 +61,11 @@ pub struct EngineBridge {
     pub clips_flag: Rc<Cell<bool>>,
     /// A cena precisa de um novo frame (rendered direto para `timeline_bg`).
     pub dirty: bool,
+
+    // Modelos da UI para sincronização reversa (clips importados pelo drag OS).
+    pub waveforms: Option<Rc<RefCell<crate::waveform::WaveformCache>>>,
+    pub clips_model: Option<Rc<slint::VecModel<crate::ClipData>>>,
+    pub track_colors_model: Option<Rc<slint::VecModel<i32>>>,
 }
 
 impl EngineBridge {
@@ -88,6 +93,9 @@ impl EngineBridge {
             win_pos,
             clips_flag,
             dirty: true,
+            waveforms: None,
+            clips_model: None,
+            track_colors_model: None,
         }
     }
 
@@ -158,7 +166,9 @@ impl EngineBridge {
         // (`last_cursor` → `drop_preview`). Cobre também o drag do ClipPool em
         // qualquer track/região (que a TouchArea com captura não repassa para o
         // engine-input da timeline).
-        if ui.get_drag_active() {
+        let file_drag = self.engine.is_dragging_file;
+        let clip_drag = ui.get_drag_active();
+        if clip_drag || file_drag {
             #[cfg(windows)]
             {
                 use windows_sys::Win32::Foundation::POINT;
@@ -169,7 +179,9 @@ impl EngineBridge {
                     let wpy = pt.y as f64 - self.win_pos.1;
                     let ls = self.scale as f64;
                     // Ghost do Slint espera coordenadas lógicas da janela.
-                    ui.invoke_drag_move((wpx / ls) as f32, (wpy / ls) as f32);
+                    if clip_drag {
+                        ui.invoke_drag_move((wpx / ls) as f32, (wpy / ls) as f32);
+                    }
                     // Motor espera px físicos relativos ao quadrante da
                     // timeline (mesma origem do engine-input TouchArea).
                     let (qx, qy) = (self.engine.timeline_rect.0, self.engine.timeline_rect.1);
@@ -190,6 +202,34 @@ impl EngineBridge {
         } else if self.engine.drop_preview.is_some() {
             self.engine.drop_preview = None;
             self.dirty = true;
+        }
+
+        // Drag & Drop nativo do SO: processa importações pendentes da engine
+        // e sincroniza de volta para o Project e o Slint (mesmo caminho do
+        // binário standalone `timeline-render`).
+        {
+            let clips_before = self.engine.clips.len();
+            self.engine.process_pending_drop_import();
+            if self.engine.clips.len() != clips_before {
+                let new_clips = self.engine.clips[clips_before..].to_vec();
+                let bpm = self.engine.bpm;
+                if let (Some(wf), Some(cm), Some(tc)) = (
+                    self.waveforms.as_ref(),
+                    self.clips_model.as_ref(),
+                    self.track_colors_model.as_ref(),
+                ) {
+                    crate::timeline_slint::sync_engine_clips_to_project(
+                        &new_clips,
+                        bpm,
+                        &self.project,
+                        wf,
+                        cm,
+                        tc,
+                        ui,
+                    );
+                }
+                self.dirty = true;
+            }
         }
 
         // Renderiza a cena direto na textura do quad (sem readback).
@@ -606,18 +646,55 @@ impl ApplicationHandler for Handler {
                 }
             }
             WindowEvent::HoveredFile(path) => {
-                if let Some(sink) = &self.drop_sink {
-                    (sink.hovered)(path);
+                if let Some(p) = path.to_str() {
+                    let ext = std::path::Path::new(p)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_lowercase())
+                        .unwrap_or_default();
+                    if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
+                        let mut b = bridge.borrow_mut();
+                        if !b.engine.drop_paths.contains(&p.to_string()) {
+                            b.engine.drop_paths.push(p.to_string());
+                        }
+                        let (beat, track) =
+                            b.engine.cursor_to_snapped_beat_track(b.engine.last_cursor);
+                        b.engine.drop_path = Some(p.to_string());
+                        b.engine.drop_preview =
+                            Some(timeline_render::app::DropPreview { beat, track, len_beats: 0.0 });
+                        b.engine.is_dragging_file = true;
+                        b.dirty = true;
+                    }
                 }
             }
             WindowEvent::HoveredFileCancelled => {
-                if let Some(sink) = &self.drop_sink {
-                    (sink.cancelled)();
-                }
+                let mut b = bridge.borrow_mut();
+                b.engine.drop_preview = None;
+                b.engine.drop_path = None;
+                b.engine.drop_paths.clear();
+                b.engine.pending_drop_import = false;
+                b.engine.is_dragging_file = false;
+                b.dirty = true;
             }
             WindowEvent::DroppedFile(path) => {
-                if let Some(sink) = &self.drop_sink {
-                    (sink.dropped)(path);
+                if let Some(p) = path.to_str() {
+                    let ext = std::path::Path::new(p)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| e.to_lowercase())
+                        .unwrap_or_default();
+                    if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
+                        let mut b = bridge.borrow_mut();
+                        if !b.engine.drop_paths.contains(&p.to_string()) {
+                            b.engine.drop_paths.push(p.to_string());
+                        }
+                        b.engine.pending_drop_import = true;
+                        b.engine.last_drop_instant = std::time::Instant::now();
+                        b.engine.drop_preview = None;
+                        b.engine.drop_path = None;
+                        b.engine.is_dragging_file = false;
+                        b.dirty = true;
+                    }
                 }
             }
             _ => {}

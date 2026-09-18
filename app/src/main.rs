@@ -414,6 +414,16 @@ pub fn setup(
     // `RedrawRequested` pelo host.
     host::install_engine_callbacks(ui, bridge.clone());
 
+    // Modelos para sincronização reversa no drag & drop do SO: a engine
+    // importa o clip (mesmo caminho do binário standalone) e estes modelos
+    // permitem persistir no Project e refletir no Slint.
+    {
+        let mut b = bridge.borrow_mut();
+        b.waveforms = Some(waveforms.clone());
+        b.clips_model = Some(clips_model.clone());
+        b.track_colors_model = Some(track_colors_model.clone());
+    }
+
     // Waveform: re-render na resolução exata quando o zoom muda.
     waveform::wire_resolution_requests(ui, waveforms.clone(), wgpu_renderer.clone(), clips_model.clone());
 

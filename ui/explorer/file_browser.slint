@@ -200,7 +200,7 @@ export component FileBrowser inherits Rectangle {
                 padding-left: 8px;
                 padding-right: 8px;
                 spacing: 8px;
-                alignment: LayoutAlignment.stretch;
+                alignment: LayoutAlignment.space-around;
                 cross-axis-alignment: CrossAxisAlignment.center;
 
                 Text {
@@ -267,8 +267,8 @@ export component FileBrowser inherits Rectangle {
                 height: 100%;
 
                 VerticalLayout {
-                    alignment: LayoutAlignment.start;
-                    cross-axis-alignment: CrossAxisAlignment.stretch;
+                    alignment: LayoutAlignment.stretch;
+                    cross-axis-alignment: CrossAxisAlignment.center;
                     spacing: 1px;
 
                     for entry[index] in root.entries : BrowserItem {

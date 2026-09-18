@@ -63,10 +63,10 @@ export component MediaBrowser inherits Rectangle {
         // Filtros
         Rectangle {
             height: 26px;
-            background: transparent;
+            background: Theme.base;
 
             HorizontalLayout {
-                alignment: LayoutAlignment.space-between;
+                alignment: LayoutAlignment.space-around;
                 cross-axis-alignment: CrossAxisAlignment.center;
                 spacing: 3px;
 
@@ -113,6 +113,7 @@ export component MediaBrowser inherits Rectangle {
                 Text {
                     text: "MEDIA";
                     height: 20px;
+                    horizontal-alignment: TextHorizontalAlignment.center;
                     color: Theme.text-dim;
                     font-size: 8px;
                     font-weight: 700;

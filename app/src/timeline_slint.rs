@@ -127,6 +127,56 @@ pub fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project) {
     engine.wave_segments = segments;
 }
 
+/// Sincroniza clips recém-importados pela engine (via drag OS) de volta para o
+/// `Project` do core e para os modelos do Slint.
+///
+/// Usado no modo hosted: a engine tem acesso direto ao sistema de arquivos e
+/// decodifica os áudios sozinha. Ao detectar novos clips em `engine.clips`,
+/// o host chama esta função para persistir no documento autoritativo.
+pub fn sync_engine_clips_to_project(
+    new_clips: &[timeline_render::clips::ClipDemo],
+    bpm: f32,
+    project: &Rc<RefCell<daw_core::Project>>,
+    waveforms: &Rc<RefCell<crate::waveform::WaveformCache>>,
+    clips_model: &Rc<slint::VecModel<crate::ClipData>>,
+    track_colors_model: &Rc<slint::VecModel<i32>>,
+    ui: &crate::MainWindow,
+) {
+    let bpm_f = if bpm > 0.0 { bpm } else { 120.0 };
+    // Cache vazio — esses clips vieram da engine que já decodificou,
+    // mas import_audio_file_with_cache vai decodificar de novo do disco
+    // (simples e correto; decode é rápido comparado com drag latency).
+    let empty_cache = RefCell::new(std::collections::HashMap::new());
+
+    for clip in new_clips {
+        let path_str = match &clip.file_path {
+            Some(p) => p.clone(),
+            None => continue,
+        };
+        let path = std::path::Path::new(&path_str);
+        let _ = crate::importer::import_audio_file_with_cache(
+            path,
+            clip.track_index as i32,
+            clip.beat,
+            bpm_f,
+            project.as_ref(),
+            waveforms.as_ref(),
+            clips_model,
+            track_colors_model,
+            &empty_cache,
+        );
+    }
+
+    // Atualiza total_bars na UI.
+    let end = {
+        let proj = project.borrow();
+        proj.clips.iter().map(|c| c.end_beat()).fold(0.0f32, f32::max)
+    };
+    let bpb = ui.get_beats_per_bar();
+    let bars = ((end / bpb as f32).ceil() as i32 + 4).max(32);
+    ui.set_total_bars(bars);
+}
+
 /// Cria a engine offscreen e liga todos os canais com o componente Slint
 /// (canvas do `timeline.slint`). Usado quando a janela nativa não abre.
 #[allow(dead_code)]

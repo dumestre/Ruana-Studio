@@ -97,7 +97,7 @@ export component PluginBrowser inherits Rectangle {
             background: transparent;
 
             HorizontalLayout {
-                alignment: LayoutAlignment.space-between;
+                alignment: LayoutAlignment.space-around;
                 cross-axis-alignment: CrossAxisAlignment.center;
                 spacing: 3px;
 
@@ -230,13 +230,19 @@ export component PluginBrowser inherits Rectangle {
 
             background: transparent;
 
+            HorizontalLayout {
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
             VerticalLayout {
+                alignment: LayoutAlignment.stretch;
                 spacing: 1px;
 
                 Text {
                     text: "PLUGINS";
 
                     height: 20px;
+                    horizontal-alignment: TextHorizontalAlignment.center;
 
                     color: Theme.text-dim;
                     font-size: 8px;
@@ -262,6 +268,7 @@ export component PluginBrowser inherits Rectangle {
                     }
                 }
             }
+        }
         }
     }
 }

@@ -22,34 +22,6 @@ export component ExplorerHeader inherits Rectangle {
             horizontal-stretch: 1;
         }
 
-        Rectangle {
-            width: 24px;
-            height: 24px;
-
-            background: transparent;
-            border-radius: 3px;
-
-            states [
-                hovered when touch.has-hover: {
-                    background: Theme.surface-high;
-                }
-            ]
-
-            Image {
-                source: @image-url("../icons/menu_dots.svg");
-
-                width: 14px;
-                height: 14px;
-
-                colorize: Theme.text-dim;
-            }
-
-            touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    root.menu-clicked();
-                }
-            }
-        }
+        
     }
 }
