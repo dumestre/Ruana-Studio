@@ -89,6 +89,10 @@ pub struct App {
     pub render_format: wgpu::TextureFormat,
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
+    /// Recursos originais para compartilhar com o renderer wgpu do Slint
+    /// (Skia) — a UI passa a ser desenhada na MESMA device/queue desta engine.
+    pub instance: wgpu::Instance,
+    pub adapter: wgpu::Adapter,
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub unit_quad: wgpu::Buffer,
@@ -730,6 +734,8 @@ impl App {
             render_format,
             device,
             queue,
+            instance,
+            adapter,
             pipeline,
             bind_group_layout,
             unit_quad,
@@ -864,6 +870,41 @@ transport,
         }
     }
 
+    /// Garante a textura do overlay no tamanho pedido e devolve uma referência
+    /// para ela. A textura serve como ALVO de render do Slint (Skia/wgpu) e
+    /// como fonte na composição, então precisa de `RENDER_ATTACHMENT`. Só
+    /// recria quando o tamanho muda.
+    pub fn ensure_overlay_texture(&mut self, width: u32, height: u32) -> Option<&wgpu::Texture> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let recreate = self.overlay_texture.as_ref().map_or(true, |t| {
+            t.width() != width || t.height() != height
+        });
+        if recreate {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("slint-overlay"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            self.overlay_view = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
+            self.overlay_texture = Some(texture);
+            self.overlay_size = (width, height);
+        }
+        self.overlay_texture.as_ref()
+    }
+
     /// Envia uma textura RGBA (pixels straight, linha 0 = topo) para ser
     /// composta por cima da cena no fim de cada frame. Se o tamanho mudar, a
     /// textura GPU é (re)criada; senão, reutiliza e apenas escreve os pixels.
@@ -886,7 +927,9 @@ transport,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
             });
             self.overlay_view = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));

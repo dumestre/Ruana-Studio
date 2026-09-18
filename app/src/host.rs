@@ -5,7 +5,7 @@
 //!   1. cria a janela winit (frameless, maximizada);
 //!   2. cria a engine wgpu com surface nesta janela;
 //!   3. instala a plataforma offscreen do Slint (`SlintOverlay`, renderer
-//!      FemtoVG-GL numa janela winit oculta neste MESMO event loop);
+//!      Skia/wgpu-30 sobre a MESMA device/queue da engine);
 //!   4. cria a `MainWindow` e o bridge `EngineBridge`;
 //!   5. chama `crate::setup(...)`, que instala todo o wiring da DAW.
 //!
@@ -13,7 +13,8 @@
 //!   - `update_timers_and_animations()` do Slint (animations, meters, timers);
 //!   - `EngineBridge::tick` — playhead, espelho de clips, `render_timeline_bg`
 //!     (a cena vai DIRETA do shader para a textura `timeline_bg`, sem
-//!     readback GPU→CPU→GPU), overlay da UI → `set_overlay`;
+//!     readback GPU→CPU→GPU), overlay da UI desenhado pelo Skia direto na
+//!     textura do overlay (GPU→GPU);
 //!   - `engine.render()` apresenta na surface (quad da timeline + UI por cima).
 
 use std::cell::{Cell, RefCell};
@@ -240,9 +241,11 @@ impl EngineBridge {
             }
         }
 
-        // Compõe a UI Slint por cima (só re-renderiza se o Slint pediu).
-        if let Some((rgba, w, h)) = self.overlay.draw() {
-            self.engine.set_overlay(&rgba, w, h);
+        // Compõe a UI Slint por cima: o Skia desenha direto na textura do
+        // overlay da engine (GPU→GPU, sem readback) e só quando há dirty.
+        let (ow, oh) = self.overlay.size();
+        if let Some(tex) = self.engine.ensure_overlay_texture(ow, oh) {
+            self.overlay.draw(tex);
         }
     }
 }
@@ -447,8 +450,15 @@ impl ApplicationHandler for Handler {
         // (explorer/clip pool têm border-radius: 6px), escalado pelo DPR.
         engine.set_timeline_corner_radius(6.0 * scale);
 
-        // 2. Plataforma offscreen do Slint (FemtoVG-GL) + componente principal.
-        let overlay = SlintOverlay::new(event_loop).expect("host: plataforma Slint (já setada?)");
+        // 2. Plataforma offscreen do Slint (Skia/wgpu-30) compartilhando a
+        //    device/queue da engine + componente principal.
+        let overlay = SlintOverlay::new(
+            engine.instance.clone(),
+            engine.adapter.clone(),
+            (*engine.device).clone(),
+            (*engine.queue).clone(),
+        )
+        .expect("host: plataforma Slint (já setada?)");
         overlay.resize(inner.width, inner.height, scale);
         let ui = crate::MainWindow::new().expect("host: MainWindow init failed");
 

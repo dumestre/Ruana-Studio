@@ -1137,7 +1137,10 @@ clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, s
 
         interval: 50ms;
 
-        running: true;
+        // Só publica geometria enquanto o beat está aberto (única hora em que
+        // BeatMetrics.visible pode ficar true e o handler de OS drop consulta).
+        // Antes rodava sempre → repaint de fundo a cada 50ms mesmo ocioso.
+        running: root.beat-open;
 
         triggered() => {
 

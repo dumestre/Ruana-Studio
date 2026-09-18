@@ -18,8 +18,8 @@
 //!
 //! A timeline wgpu renderiza DIRETO na surface (GPU→GPU, via
 //! `EngineBridge::tick` → `render_timeline_bg`); a UI Slint é desenhada
-//! pelo rendering backend FemtoVG-GL numa janela winit oculta e composta
-//! por cima como overlay RGBA (o componente Timeline vira um "buraco").
+//! pelo backend Skia sobre wgpu-30 na MESMA device e composta por cima como
+//! overlay (o componente Timeline vira um "buraco").
 
 slint::include_modules!();
 
