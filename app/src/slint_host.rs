@@ -111,6 +111,16 @@ impl SlintOverlay {
         (s.width, s.height)
     }
 
+    /// Valor atual do flag de repaint (TEMP DBG).
+    pub fn redraw_state(&self) -> bool {
+        self.window.redraw.get()
+    }
+
+    /// TEMP: obriga um novo desenho no próximo `draw()`.
+    pub fn force_redraw(&self) {
+        self.window.redraw.set(true);
+    }
+
     /// Ajusta o tamanho físico da janela de UI (px) e a escala de DPI. Chamar
     /// na criação e em todo resize/DPI change.
     pub fn resize(&self, width: u32, height: u32, scale_factor: f32) {
@@ -145,7 +155,23 @@ impl SlintOverlay {
         if !self.window.redraw.replace(false) {
             return true;
         }
-        match self.window.renderer.render_to_texture(texture) {
+        let r = self.window.renderer.render_to_texture(texture);
+        // TEMP DBG
+        {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("D:\\Dev\\Porjetos\\RuanaStudio\\target\\debug\\ruana_dbg.log")
+            {
+                let _ = writeln!(
+                    f,
+                    "[draw] render_to_texture -> {}",
+                    if r.is_ok() { "ok" } else { "ERRO" }
+                );
+            }
+        }
+        match r {
             Ok(()) => true,
             Err(e) => {
                 self.window.redraw.set(true);

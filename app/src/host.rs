@@ -241,11 +241,40 @@ impl EngineBridge {
             }
         }
 
-        // Compõe a UI Slint por cima: o Skia desenha direto na textura do
+// Compõe a UI Slint por cima: o Skia desenha direto na textura do
         // overlay da engine (GPU→GPU, sem readback) e só quando há dirty.
         let (ow, oh) = self.overlay.size();
+        let redraw_flag = self.overlay.redraw_state();
+        let mut drawn = false;
         if let Some(tex) = self.engine.ensure_overlay_texture(ow, oh) {
-            self.overlay.draw(tex);
+            drawn = self.overlay.draw(tex);
+            // TEMP TEST: o 1º render pode sair vazio; forçar um 2º render
+            // logo após a criação da textura para ver se a UI aparece.
+            self.overlay.force_redraw();
+            drawn = self.overlay.draw(tex) && drawn;
+        }
+        // TEMP DBG (não-bloqueante)
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static DBG_FRAMES: AtomicU32 = AtomicU32::new(0);
+        let n = DBG_FRAMES.fetch_add(1, Ordering::Relaxed);
+        let mut readback = String::new();
+        if n < 6 && ow > 0 && oh > 0 {
+            if let Some((alpha, opaque, completed)) = self.engine.debug_overlay_opaque(ow, oh) {
+                readback = format!(" readback=(a>{alpha} op={opaque} done={completed})");
+            }
+        }
+        {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("D:\\Dev\\Porjetos\\RuanaStudio\\target\\debug\\ruana_dbg.log")
+            {
+                let _ = writeln!(
+                    f,
+                    "[dbg] frame={n} size=({ow}x{oh}) redraw_before={redraw_flag} drawn={drawn}{readback}"
+                );
+            }
         }
     }
 }
@@ -725,10 +754,30 @@ impl ApplicationHandler for Handler {
 
 /// Entrada do app: dono do `EventLoop` (winit) — NUNCA o Slint.
 pub fn run() -> Result<(), slint::PlatformError> {
+    {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("D:\\Dev\\Porjetos\\RuanaStudio\\target\\debug\\ruana_dbg.log")
+        {
+            let _ = writeln!(f, "[main] run() entrada");
+        }
+    }
     let event_loop = EventLoop::new().map_err(|e| {
         slint::PlatformError::Other(format!("winit: falha ao criar event loop: {e}"))
     })?;
     let mut handler = Handler::new();
+    {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("D:\\Dev\\Porjetos\\RuanaStudio\\target\\debug\\ruana_dbg.log")
+        {
+            let _ = writeln!(f, "[main] Handler pronto, entrando no loop");
+        }
+    }
     event_loop.run_app(&mut handler).map_err(|e| {
         slint::PlatformError::Other(format!("winit: event loop terminou com erro: {e}"))
     })?;
