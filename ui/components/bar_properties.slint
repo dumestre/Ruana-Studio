@@ -1,5 +1,4 @@
 import { Button } from "./button.slint";
-import { KnobWithoutText } from "./knob.slint";
 import { Theme } from "../theme.slint";
 
 export component BarProperties inherits Rectangle {
@@ -225,19 +224,6 @@ export component BarProperties inherits Rectangle {
             spacing: 2px;
             alignment: LayoutAlignment.end;
             cross-axis-alignment: CrossAxisAlignment.center;
-
-        // ========================================================
-        // VOLUME GERAL (Master)
-        // ========================================================
-        KnobWithoutText {
-            width: 26px;
-            height: 26px;
-            value: root.master-volume;
-            changed(v) => {
-                root.master-volume = v;
-                root.master-volume-changed(v);
-            }
-        }
 
         // ========================================================
         // DIVISOR

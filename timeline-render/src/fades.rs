@@ -479,9 +479,9 @@ pub fn build_clip_fade_instances(
         // ========================================================================
         // 3. GAIN / VOLUME — Área no topo do corpo (abaixo do header)
     // ========================================================================
-    // Área de ganho: faixa de 14px no topo do corpo do clip.
-    // Sempre visível com alpha sutil; no hover fica mais opaca.
-    let gain_area_h = 14.0;
+    // Área de ganho: faixa de 6px no topo do corpo do clip (bate com o
+    // hit-test). Sempre visível com alpha sutil; no hover fica mais opaca.
+    let gain_area_h = 6.0;
     let gain_area_y = body_y;
     let gain_hovered = is_hovered(FadeHandleKind::GainLevel);
     let gradient_strips: i32 = 7;
@@ -567,26 +567,29 @@ pub fn hit_test_clip_handles(
     let hit_dist_sq = |hx: f32, hy: f32, r: f32| -> bool {
         let dx = cursor.0 - hx;
         let dy = cursor.1 - hy;
-        dx * dx + dy * dy <= (r + 5.0) * (r + 5.0) // margem de 5px para clique confortável
+        dx * dx + dy * dy <= (r + 3.0) * (r + 3.0) // margem de 3px para clique confortável
     };
 
-    for kind in [
-        FadeHandleKind::FadeInLen,
-        FadeHandleKind::FadeInCurve,
-        FadeHandleKind::FadeOutLen,
-        FadeHandleKind::FadeOutCurve,
-    ] {
-        if let Some((hx, hy)) =
-            handle_position(kind, fade, body_x, body_y, body_w, body_h, px_per_beat)
-        {
-            if hit_dist_sq(hx, hy, 5.0) {
-                return Some(kind);
+    // Bolinhas só respondem DENTRO do corpo: o header sempre arrasta o clip.
+    if cursor.1 >= body_y {
+        for kind in [
+            FadeHandleKind::FadeInLen,
+            FadeHandleKind::FadeInCurve,
+            FadeHandleKind::FadeOutLen,
+            FadeHandleKind::FadeOutCurve,
+        ] {
+            if let Some((hx, hy)) =
+                handle_position(kind, fade, body_x, body_y, body_w, body_h, px_per_beat)
+            {
+                if cursor.1 >= body_y && hit_dist_sq(hx, hy, 5.0) {
+                    return Some(kind);
+                }
             }
         }
     }
 
-    // Handle de ganho/volume — área retangular no topo do corpo
-    let gain_area_h = 14.0;
+    // Handle de ganho/volume — faixa fina no topo do corpo (resto arrasta o clip)
+    let gain_area_h = 6.0;
     let gain_area_y = body_y;
     if cursor.0 >= body_x && cursor.0 <= body_x + body_w
         && cursor.1 >= gain_area_y && cursor.1 <= gain_area_y + gain_area_h

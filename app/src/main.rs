@@ -626,18 +626,31 @@ pub fn setup(
     // ---- TEMA ------------------------------------------------------
     // Restaura a paleta salva e aplica quando o usuário escolher
     // outra no seletor do toolbar (persiste o índice selecionado).
+    // A timeline wgpu tem paleta própria (`engine.theme`) — espelha o
+    // índice aqui e força um novo frame para ela repintar na hora.
     {
         let idx = theme::load().unwrap_or(0);
         theme::apply(ui, idx);
+        {
+            let mut b = bridge.borrow_mut();
+            b.engine.theme = idx as usize;
+            b.dirty = true;
+            b.engine.request_redraw();
+        }
         // Cursores escuros no tema Paper (claro), claros nos escuros.
         let _ = set_dark_cursors(idx == theme::THEME_PAPER);
 
         let ui_weak_theme = ui.as_weak();
+        let bridge_theme = bridge.clone();
         ui.on_theme_selected(move |index| {
             if let Some(ui) = ui_weak_theme.upgrade() {
                 let idx = theme::apply(&ui, index);
                 theme::save(idx);
                 let _ = set_dark_cursors(idx == theme::THEME_PAPER);
+                let mut b = bridge_theme.borrow_mut();
+                b.engine.theme = idx as usize;
+                b.dirty = true;
+                b.engine.request_redraw();
             }
         });
     }

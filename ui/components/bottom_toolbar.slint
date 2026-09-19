@@ -20,25 +20,6 @@ export component BottomToolbar inherits Rectangle {
         height: 100%;
         padding: 5px;
 
-        // Tab: Mixer
-        Button {
-            text: "Mixer";
-            corner-radius: 2px;
-            height: 15px;
-            toggled: root.selected-tab == 0;
-            toggled-bg: Theme.accent;
-            clicked => {
-                if root.selected-tab == 0 && root.panel-visible {
-                    root.panel-visible = false;
-                    root.selected-tab = -1;
-                } else {
-                    root.selected-tab = 0;
-                    root.panel-visible = true;
-                }
-            }
-        }
-        
-
         // Tab: Sampler
         Button {
             text: "Sampler";
@@ -57,6 +38,24 @@ export component BottomToolbar inherits Rectangle {
             }
         }
 
+         // Tab: TimeWarp
+        Button {
+            text: "TimeWarp";
+            corner-radius: 2px;
+            height: 15px;
+            toggled: root.selected-tab == 0;
+            toggled-bg: Theme.accent;
+            clicked => {
+                if root.selected-tab == 0 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 0;
+                    root.panel-visible = true;
+                }
+            }
+        }
+
         // Tab: Piano Roll
         Button {
             text: "Piano Roll";
@@ -70,6 +69,24 @@ export component BottomToolbar inherits Rectangle {
                     root.selected-tab = -1;
                 } else {
                     root.selected-tab = 2;
+                    root.panel-visible = true;
+                }
+            }
+        }
+
+        // Tab: Mixer
+        Button {
+            text: "Mixer";
+            corner-radius: 2px;
+            height: 15px;
+            toggled: root.selected-tab == 0;
+            toggled-bg: Theme.accent;
+            clicked => {
+                if root.selected-tab == 0 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 0;
                     root.panel-visible = true;
                 }
             }

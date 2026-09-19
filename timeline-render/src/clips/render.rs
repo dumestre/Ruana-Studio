@@ -959,7 +959,7 @@ fn clip_color(
         if clip.is_midi {
             palette::CLIP_MIDI_DEFAULT[t]
         } else {
-            palette::CLIP_AUDIO_DEFAULT
+            palette::CLIP_AUDIO[t]
         }
     } else {
         palette::CLIP_PALETTE[

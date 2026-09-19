@@ -4,6 +4,7 @@ import { ProjectKey } from "components/project_key.slint";
 import { ThemePicker } from "components/theme_picker.slint";
 import { Transport } from "transport.slint";
 import { EditToolbar } from "edit_toolbar.slint";
+import { KnobWithoutText } from "components/knob.slint";
 
 export component Toolbar inherits Rectangle {
     in-out property <bool> snap-enabled: true;
@@ -42,6 +43,7 @@ export component Toolbar inherits Rectangle {
     in-out property <int> bpm: 120;
     in-out property <int> beats-per-bar: 4;
     in-out property <int> ppq: 960;
+    in-out property <float> master-volume: 0.7;
 
     callback play-state-changed(bool);
     callback loop-state-changed(bool);
@@ -49,6 +51,7 @@ export component Toolbar inherits Rectangle {
     callback metronome-sound-changed(int);
     callback metronome-volume-changed(float);
     callback set-bpm(float);
+    callback master-volume-changed(float);
 
     height: 34px;
     
@@ -127,15 +130,6 @@ export component Toolbar inherits Rectangle {
                 width: 26px;
                 height: 26px;
             }
-
-            Text {
-                font-family: "poppins";
-                font-size: 14px;
-                font-weight: 0;
-                horizontal-alignment: TextHorizontalAlignment.left;
-                letter-spacing: 1px;
-                text: "RS";
-            }
         }
 
 
@@ -157,7 +151,7 @@ export component Toolbar inherits Rectangle {
                 text-color: Theme.text-primary;
                 letter-spacing: 1px;
                 corner-radius: 2px;
-                resting-bg: Theme.surface-high;
+                resting-bg: Theme.Transparent;
 
                 clicked => {}
             }
@@ -170,7 +164,7 @@ export component Toolbar inherits Rectangle {
                 text-color: Theme.text-primary;
                 letter-spacing: 1px;
                 corner-radius: 2px;
-                resting-bg: Theme.surface-high;
+                resting-bg: Theme.Transparent;
 
                 clicked => {}
             }
@@ -183,7 +177,7 @@ export component Toolbar inherits Rectangle {
                 text-color: Theme.text-primary;
                 letter-spacing: 1px;
                 corner-radius: 2px;
-                resting-bg: Theme.surface-high;
+               resting-bg: Theme.Transparent;
 
                 clicked => {}
             }
@@ -196,7 +190,7 @@ export component Toolbar inherits Rectangle {
                 text-color: Theme.text-primary;
                 letter-spacing: 1px;
                 corner-radius: 2px;
-                resting-bg: Theme.surface-high;
+                resting-bg: Theme.Transparent;
 
                 clicked => {}
             }
@@ -209,7 +203,7 @@ export component Toolbar inherits Rectangle {
                 text-color: Theme.text-primary;
                 letter-spacing: 1px;
                 corner-radius: 2px;
-                resting-bg: Theme.surface-high;
+                resting-bg: Theme.Transparent;
 
                 clicked => {}
             }
@@ -222,7 +216,7 @@ export component Toolbar inherits Rectangle {
                 text-color: Theme.text-primary;
                 letter-spacing: 1px;
                 corner-radius: 2px;
-                resting-bg: Theme.surface-high;
+                resting-bg: Theme.Transparent;
 
                 clicked => {}
             }
@@ -235,7 +229,7 @@ export component Toolbar inherits Rectangle {
                 text-color: Theme.text-primary;
                 letter-spacing: 1px;
                 corner-radius: 2px;
-                resting-bg: Theme.surface-high;
+                resting-bg: Theme.Transparent;
 
                 clicked => {}
             }
@@ -389,6 +383,7 @@ export component Toolbar inherits Rectangle {
         // ========================================================
 
         EditToolbar { }
+
         Transport {
             playing <=> root.playing;
             loop-enabled <=> root.loop-enabled;
@@ -427,6 +422,19 @@ export component Toolbar inherits Rectangle {
             }
         }
 
+        // ========================================================
+        // VOLUME GERAL (Master)
+        // ========================================================
+        KnobWithoutText {
+            width: 26px;
+            height: 26px;
+            value: root.master-volume;
+            changed(v) => {
+                root.master-volume = v;
+                root.master-volume-changed(v);
+            }
+        }
+
 
         // ========================================================
         // 4. CONTROLES DA JANELA
@@ -444,15 +452,15 @@ export component Toolbar inherits Rectangle {
             // ----------------------------------------------------
 
             Button {
-                width: 14px;
-                height: 14px;
+                width: 12px;
+                height: 12px;
 
                 preferred-height: 0px;
                 preferred-width: 0px;
 
                 text: "";
 
-                corner-radius: 9px;
+                corner-radius: 4px;
 
                 resting-bg:
                     #FEBC2E;
@@ -470,12 +478,12 @@ export component Toolbar inherits Rectangle {
             // ----------------------------------------------------
 
             Button {
-                width: 14px;
-                height: 14px;
+                width: 12px;
+                height: 12px;
 
                 text: "";
 
-                corner-radius: 9px;
+                corner-radius: 4px;
 
                 resting-bg:
                     #28C840;
@@ -494,12 +502,12 @@ export component Toolbar inherits Rectangle {
             // ----------------------------------------------------
 
             Button {
-                width: 14px;
-                height: 14px;
+                width: 12px;
+                height: 12px;
 
                 text: "";
 
-                corner-radius: 9px;
+                corner-radius: 4px;
 
                 resting-bg:
                     #FF5F57;
