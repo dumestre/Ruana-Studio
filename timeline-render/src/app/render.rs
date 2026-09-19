@@ -1192,18 +1192,10 @@ impl App {
         // re-encoda o valor e a cor sai bem mais clara (ex.: #313131 vira
         // #797979).
         let base = palette::BASE[self.theme.clamp(0, 6) as usize];
-        let to_linear = |c: u8| -> f64 {
-            let c = c as f64 / 255.0;
-            if c <= 0.04045 {
-                c / 12.92
-            } else {
-                ((c + 0.055) / 1.055).powf(2.4)
-            }
-        };
         let clear = wgpu::LoadOp::Clear(wgpu::Color {
-            r: to_linear(base.0),
-            g: to_linear(base.1),
-            b: to_linear(base.2),
+            r: srgb_to_linear(base.0 as f32 / 255.0) as f64,
+            g: srgb_to_linear(base.1 as f32 / 255.0) as f64,
+            b: srgb_to_linear(base.2 as f32 / 255.0) as f64,
             a: 1.0,
         });
 

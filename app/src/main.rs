@@ -163,6 +163,10 @@ pub fn setup(
     };
     let audio = audio_bridge::AudioBridge::new(audio_engine.as_ref().map(|e| e.handle()));
 
+    // O `audio_engine` precisa sobreviver ao retorno desta função: se cair,
+    // a stream do CPAL fecha e o Transport nunca avança (playhead preso).
+    bridge.borrow_mut().audio_engine = audio_engine;
+
     // Qualquer evento de documento (clip criado, movido, cortado,
     // apagado, undo/redo) muda o que a thread RT precisa ouvir.
     // Assinar aqui é melhor que marcar sujo em cada call site: um

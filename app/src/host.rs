@@ -54,6 +54,10 @@ pub struct EngineBridge {
     pub transport: Arc<Mutex<Transport>>,
     pub project: Rc<RefCell<Project>>,
     pub scale: f32,
+    /// Motor de áudio DAW mantido vivo pelo ciclo de vida do app. Se cair
+    /// (drop), a stream fecha e o Transport nunca mais avança — o playhead
+    /// da timeline trava mesmo com `playing=true`.
+    pub audio_engine: Option<daw_audio::AudioEngine>,
     /// Canto superior-esquerdo da janela (px físicos). Manter atualizado no
     /// `Moved`; usado para converter a posição GLOBAL do cursor (GetCursorPos)
     /// em coordenadas da janela durante drags do SO.
@@ -91,6 +95,7 @@ impl EngineBridge {
             transport,
             project,
             scale,
+            audio_engine: None,
             win_pos,
             clips_flag,
             dirty: true,
