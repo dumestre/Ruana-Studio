@@ -810,4 +810,127 @@ mod tests {
         // 1 beat a 120 BPM = 0.5s = 24000 frames.
         assert_eq!(frames_per_beat, 24_000.0);
     }
+
+    /// Grava um WAV s16le mono com um TOM de 1 kHz no início (0.25s) e
+    /// silêncio depois. Ajuda a provar que o começo do arquivo ESCAPOU
+    /// do buffer (não é um pulso que só "parece de baixo nível").
+    fn write_marker_wav(path: &std::path::Path) {
+        let sample_rate = 48_000u32;
+        let marker = (sample_rate as usize / 4) as usize; // 0.25 s
+        let total = sample_rate as usize * 3; // 3 s
+        let mut samples = Vec::with_capacity(total);
+        for i in 0..total {
+            let v = if i < marker {
+                let s = (0.9 * ((i as f32) * std::f32::consts::TAU * 1000.0 / sample_rate as f32).sin())
+                    .clamp(-1.0, 1.0);
+                ((s * 32767.0).round() as i16).to_le_bytes()
+            } else {
+                0i16.to_le_bytes()
+            };
+            samples.extend_from_slice(&v);
+        }
+        let mut wav = Vec::with_capacity(44 + samples.len() * 2);
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + samples.len() as u32).to_le_bytes());
+        wav.extend_from_slice(b"WAVE");
+        wav.extend_from_slice(b"fmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+        wav.extend_from_slice(&sample_rate.to_le_bytes());
+        wav.extend_from_slice(&(sample_rate as u32 * 2).to_le_bytes());
+        wav.extend_from_slice(&2u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+        wav.extend_from_slice(&samples);
+        std::fs::write(path, wav).expect("grava wav de teste");
+    }
+
+    /// Clip COLADO NO ZERO da timeline: o começo do arquivo precisa sair
+    /// nos primeiros buffers. Foi o sintoma relatado — clip em `start_beat=0`
+    /// "não reproduz o começo".
+    #[test]
+    fn clip_em_zero_reproduz_o_inicio() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("ruana_clip_zero_marker.wav");
+        write_marker_wav(&path);
+        let path_str = path.to_string_lossy().into_owned();
+
+        let rate = 48_000u32;
+        let bpm = 120u32;
+        let frames_per_beat = rate as f64 * 60.0 / bpm as f64;
+
+        let mut project = daw_core::Project::startup();
+        // `add_clip_with_source`: clip de AUDIO no beat 0, comprimento 5
+        // beats (cobre os 3s do arquivo), origem do arquivo no frame 0.
+        project.add_clip_with_source(0, daw_core::ClipKind::Audio, "zero", 0.0, 5.0, 0.0, Some(path_str.clone()));
+
+        let mut cache = BufferCache::new(rate);
+        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+        let transport = Arc::new(Mutex::new(Transport::default()));
+        transport.lock().unwrap().playing = true; // play do zero
+
+        let mut rt = RtState::new();
+        let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+
+        let frames = 960usize;
+        let mut early_max = 0.0f32;
+        for _ in 0..4 {
+            let mut out = vec![0.0f32; frames * 2];
+            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, rate);
+            for i in 0..frames {
+                early_max = early_max.max(out[i * 2].abs()).max(out[i * 2 + 1].abs());
+            }
+        }
+        std::fs::remove_file(&path).ok();
+
+        assert!(
+            early_max > 0.5,
+            "clip no beat 0 deve tocar o TOM do arquivo já nos primeiros buffers (max={})",
+            early_max,
+        );
+    }
+
+    /// CONTROLE: o mesmo arquivo numa posição posterior não toca antes da hora.
+    #[test]
+    fn clip_posicionado_longe_fica_silencioso_no_inicio() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("ruana_clip_longe_marker.wav");
+        write_marker_wav(&path);
+        let path_str = path.to_string_lossy().into_owned();
+
+        let rate = 48_000u32;
+        let bpm = 120u32;
+        let frames_per_beat = rate as f64 * 60.0 / bpm as f64;
+
+        let mut project = daw_core::Project::startup();
+        // Clip a 2 beats (1s) do zero; 3s de arquivo = ~6 beats.
+        project.add_clip_with_source(0, daw_core::ClipKind::Audio, "zero", 2.0, 6.0, 0.0, Some(path_str.clone()));
+
+        let mut cache = BufferCache::new(rate);
+        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+        let transport = Arc::new(Mutex::new(Transport::default()));
+        transport.lock().unwrap().playing = true;
+
+        let mut rt = RtState::new();
+        let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+
+        let frames = 960usize;
+        let mut max = 0.0f32;
+        for _ in 0..4 {
+            let mut out = vec![0.0f32; frames * 2];
+            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, rate);
+            for i in 0..frames {
+                max = max.max(out[i * 2].abs()).max(out[i * 2 + 1].abs());
+            }
+        }
+        std::fs::remove_file(&path).ok();
+
+        assert!(
+            max < 0.5,
+            "clip a 1s do zero não pode soar nos primeiros 0.08s (max={})",
+            max,
+        );
+    }
 }
