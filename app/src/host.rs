@@ -626,21 +626,32 @@ impl ApplicationHandler for Handler {
                 let adapter = bridge.borrow().overlay.window.clone();
                 // O motor processa os mesmos atalhos do renderer standalone
                 // (1-6, P, F/Ctrl+F, Ctrl+C/A/Z/Y/V/D, Delete, etc.). Espaço
-                // (§`TogglePlay`) é resolvido AQUI (play/pause no transporte,
-                // mesmo caminho do botão da UI) e NÃO vai pro Slint para não
-                // depender do foco do FocusScope nem acontecer double-toggle.
-                // Esc não fecha nada no hosted.
+                // (§`TogglePlay`) é resolvido AQUI e vai pelo MESMO caminho do
+                // botão de play da UI (`play-state-changed` → playback.rs):
+                // mexe no `Transport` compartilhado, dispara o clock visual e o
+                // flush de áudio — o `tick` do host espelha tudo no engine.
+                // Antes o espaço togglava o `engine.playing` direto, mas o tick
+                // re-sincronizava o engine a partir do Transport (que ficava
+                // parado) e o play nunca engatava.
+                // Não vai pro Slint para não depender do foco do FocusScope
+                // nem acontecer double-toggle.
                 let forward_to_slint = {
                     let mut b = bridge.borrow_mut();
                     match b.engine.handle_key(&key) {
                         timeline_render::app::KeyAction::TogglePlay => {
-                            // Espaço roda o motor de áudio da timeline-render
-                            // (mesma semântica do standalone: tocar → pausar a
-                            // agulha no lugar → voltar ao início do último play).
-                            b.engine.handle_toggle_play();
-                            // Espelha no estado da UI do Slint para o botão de
-                            // play/ícone continuar coerente.
-                            let playing = b.engine.playing;
+                            let playing = b
+                                .transport
+                                .lock()
+                                .map(|t| t.playing)
+                                .unwrap_or(false);
+                            ui.invoke_play_state_changed(!playing);
+                            // O callback já mexeu no Transport; espelha no
+                            // ícone do Slint para o botão continuar coerente.
+                            let playing = b
+                                .transport
+                                .lock()
+                                .map(|t| t.playing)
+                                .unwrap_or(false);
                             ui.set_playing(playing);
                             false
                         }

@@ -1185,9 +1185,27 @@ impl App {
             pass.draw(0..4, 0..1);
         };
 
-        // Equivale ao `Theme.base` da UI (#313131): com o fundo da janela do
-        // Slint transparente, este clear aparece nas áreas sem painel.
-        let clear = wgpu::LoadOp::Clear(wgpu::Color { r: 0.1921569, g: 0.1921569, b: 0.1921569, a: 1.0 });
+        // Equivale ao `Theme.base` do tema ATIVO (palette::BASE[self.theme]):
+        // com o fundo da janela do Slint transparente, este clear aparece nas
+        // áreas sem painel e segue a troca de tema. A superfície é sRGB, então
+        // o clear (linear) precisa ser DECODIFICADO — senão o `LoadOp::Clear`
+        // re-encoda o valor e a cor sai bem mais clara (ex.: #313131 vira
+        // #797979).
+        let base = palette::BASE[self.theme.clamp(0, 6) as usize];
+        let to_linear = |c: u8| -> f64 {
+            let c = c as f64 / 255.0;
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let clear = wgpu::LoadOp::Clear(wgpu::Color {
+            r: to_linear(base.0),
+            g: to_linear(base.1),
+            b: to_linear(base.2),
+            a: 1.0,
+        });
 
         // 1. Limpa a janela inteira (fundo atrás da UI do Slint).
         {
