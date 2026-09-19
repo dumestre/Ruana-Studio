@@ -1286,10 +1286,6 @@ impl App {
     /// Render do modo standalone (apresenta na surface da janela).
     /// No-op quando não há janela (engine pura — use [`App::render_to_rgba`]).
     pub fn render(&mut self) {
-        // TEMP DBG: contador de presents.
-        static DBG_N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let dbg_n = DBG_N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dbg_start = std::time::Instant::now();
         // Em modo hosted o alvo de composição é a SURFACE (janela); `size`
         // segue sendo o tamanho da cena da timeline (usado pelo submit_frame).
         let (width, height) = if self.hosted { self.surface_size } else { self.size };
@@ -1303,34 +1299,10 @@ impl App {
                 if let Some(config) = self.config.as_ref() {
                     surface.configure(&self.device, config);
                 }
-                {
-                    use std::io::Write;
-                    if dbg_n < 60 {
-                        if let Ok(mut f) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open("D:\\Dev\\Porjetos\\RuanaStudio\\target\\debug\\ruana_dbg.log")
-                        {
-                            let _ = writeln!(f, "[render] frame={dbg_n} SURFACE_RETRY surface_size=({width}x{height})");
-                        }
-                    }
-                }
                 return;
             }
             _ => return,
         };
-        {
-            use std::io::Write;
-            if dbg_n < 60 {
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("D:\\Dev\\Porjetos\\RuanaStudio\\target\\debug\\ruana_dbg.log")
-                {
-                    let _ = writeln!(f, "[render] frame={dbg_n} OK surface_size=({width}x{height}) {}ms", dbg_start.elapsed().as_millis());
-                }
-            }
-        }
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
