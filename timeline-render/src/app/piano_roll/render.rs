@@ -347,9 +347,9 @@ pub fn build_bottom_ruler_instances(
     if with_loop && loop_enabled {
         let a = palette::ACCENT[t];
         let border = [a.0, a.1, a.2, 255];
-        let fill_ruler = [a.0, a.1, a.2, 45];
-        let fill_body = [a.0, a.1, a.2, 70];
-        let border_body = [a.0, a.1, a.2, 185];
+        let fill_ruler = [a.0, a.1, a.2, 30];
+        let fill_body = [a.0, a.1, a.2, 45];
+        let border_body = [a.0, a.1, a.2, 140];
         let sx = beat_to_x(loop_start_beat);
         let ex = beat_to_x(loop_end_beat);
         let lw = (ex - sx).max(0.0);

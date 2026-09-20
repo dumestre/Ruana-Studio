@@ -650,9 +650,9 @@ impl App {
             // Cor accent do tema — seletor de loop destacado (não cinza).
             let a = palette::ACCENT[t];
             let border = [a.0, a.1, a.2, 255]; // bordas de ajuste (palitos): opacas
-            let fill_ruler = [a.0, a.1, a.2, 45]; // régua: centro bem transparente
-            let fill_body = [a.0, a.1, a.2, 70]; // timeline: mais translúcido ainda
-            let border_body = [a.0, a.1, a.2, 185]; // borda que desce na timeline: menos translúcida
+            let fill_ruler = [a.0, a.1, a.2, 30]; // régua: mais translúcida
+            let fill_body = [a.0, a.1, a.2, 45]; // timeline: mais translúcido
+            let border_body = [a.0, a.1, a.2, 140]; // borda que desce: menos dominante
             let sx = self.beat_to_x(self.loop_start_beat);
             let ex = self.beat_to_x(self.loop_end_beat);
             let lw = (ex - sx).max(0.0);
