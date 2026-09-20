@@ -181,6 +181,10 @@ export component Workspace inherits Rectangle {
 
     in-out property <float> zoom-y-level: 1.0;
 
+    // Piano roll/timewarp abertos (tecla P/T): a timeline assume a largura
+    // total da janela, ocultando a track panel e o splitter.
+    in-out property <bool> timeline-area-expanded: false;
+
     in-out property <bool> drag-active: false;
 
     in-out property <bool> drag-inited: false;
@@ -368,6 +372,9 @@ export component Workspace inherits Rectangle {
     callback engine-pointer-up(float, float, int);
     callback engine-scroll(float, float, bool, bool, bool);
     callback engine-key-event(string, bool, bool, bool);
+
+    // Escrita do zoom vertical vinda do Slint (track panel) → engine.
+    callback timeline-zoom-y-changed(float);
 
 
     // ========================================================
@@ -1059,8 +1066,13 @@ export component Workspace inherits Rectangle {
 
                         TrackPanel {
 
+                            visible:
+                                !root.timeline-area-expanded;
+
                             width:
-                                root.tracks-header-width;
+                                root.timeline-area-expanded
+                                    ? 0px
+                                    : root.tracks-header-width;
 
                             selected-track <=>
                                 root.selected-track;
@@ -1116,6 +1128,10 @@ export component Workspace inherits Rectangle {
                             zoom-y-scrolled(new-zoom-y) => {
                                 root.zoom-y-level =
                                     new-zoom-y;
+
+                                root.timeline-zoom-y-changed(
+                                    new-zoom-y
+                                );
                             }
                         }
 
@@ -1125,9 +1141,13 @@ export component Workspace inherits Rectangle {
 
                 SplitterVerticalGrowLeft {
 
+                    visible:
+                        !root.timeline-area-expanded;
 
                     width:
-                        5px;
+                        root.timeline-area-expanded
+                            ? 0px
+                            : 5px;
 
                     height:
                         100%;

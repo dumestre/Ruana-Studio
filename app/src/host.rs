@@ -138,6 +138,16 @@ impl EngineBridge {
         let rh = ui.get_timeline_canvas_rect_height() * ls;
         self.engine.set_timeline_rect(rx, ry, rw, rh);
 
+        // A engine é a fonte da verdade da área de exibição: P/T abertos
+        // (show_piano_roll/timewarp) fazem a timeline ocupar a largura total
+        // (esconde a track panel); zoom vertical e scroll são espelhados no
+        // Slint para a track panel acompanhar as linhas do wgpu (mesma
+        // proporção e mesmo offset).
+        let expanded = self.engine.show_piano_roll || self.engine.show_timewarp;
+        ui.set_timeline_area_expanded(expanded);
+        ui.set_zoom_y_level(self.engine.zoom_y);
+        ui.set_timeline_scroll_y((self.engine.scroll_y / ls.max(1e-4)).max(0.0));
+
         // Tamanho físico (px) da cena: igual ao quad (1:1).
         let aw = rw.round().clamp(0.0, 8192.0) as u32;
         let ah = rh.round().clamp(0.0, 8192.0) as u32;
@@ -358,6 +368,18 @@ pub fn install_engine_callbacks(
             let py = dy * scale;
             let engine = &mut b.engine;
             engine.handle_scroll(px, py, ctrl, alt);
+            b.dirty = true;
+        });
+    }
+
+    // ---- ZOOM VERTICAL ESCRITO PELO SLINT ---------------------------------
+    // A engine é a fonte da verdade do zoom vertical: qualquer mudança vinda
+    // da UI (track panel) é gravada direto nela; o `tick` espelha de volta.
+    {
+        let b = bridge.clone();
+        ui.on_timeline_zoom_y_changed(move |zy| {
+            let mut b = b.borrow_mut();
+            b.engine.zoom_y = zy.clamp(0.25, 6.0);
             b.dirty = true;
         });
     }
