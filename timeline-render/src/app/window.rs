@@ -45,6 +45,8 @@ pub enum WindowCommand {
     SetClips(Vec<ClipDemo>),
     /// BPM do projeto (usado na conversão tempo→pixels).
     SetBpm(f32),
+    /// Mapa de tempo do projeto (espelho do timewarp).
+    SetTempoMap(Vec<daw_core::timeline::TempoChange>),
     /// Índice do tema (paleta).
     SetTheme(usize),
 }
@@ -100,6 +102,7 @@ impl AppHandler {
         }
     }
 
+    #[cfg(windows)]
     fn with_dock(
         transport: Arc<Mutex<Transport>>,
         rx: mpsc::Receiver<WindowCommand>,
@@ -128,6 +131,17 @@ impl AppHandler {
                 }
                 WindowCommand::SetBpm(bpm) => {
                     app.bpm = bpm;
+                }
+                WindowCommand::SetTempoMap(changes) => {
+                    // Substitui o espelho de tempo (preservando o BPM base do
+                    // change 0 quando vier vazio).
+                    if changes.is_empty() {
+                        app.tempo_map = daw_core::timeline::TempoMap::from_bpm(app.bpm);
+                    } else {
+                        app.tempo_map.changes = changes;
+                        app.tempo_map.changes.sort_by(|a, b| a.beat.partial_cmp(&b.beat).unwrap());
+                    }
+                    app.request_redraw();
                 }
                 WindowCommand::SetTheme(theme) => {
                     app.theme = theme;
@@ -188,6 +202,7 @@ fn resumed(&mut self, event_loop: &ActiveEventLoop) {
                 }
             }
             // Modo dock: thread que mantém a janela encaixada na janela mãe.
+            #[cfg(windows)]
             if let (Some(dock), Some(app)) = (self.dock.clone(), &self.app) {
                 if let Some(window) = &app.window {
                     if let Ok(handle) = window.window_handle() {
@@ -225,14 +240,17 @@ WindowEvent::Resized(size) => {
                     app.update_edge_scroll(app.last_cursor);
                     app.apply_edge_scroll();
                 }
-                // Redesenha continuamente enquanto a splitter do piano roll está sendo arrastada
-                if app.show_piano_roll && app.splitter_drag {
+                // Redesenha continuamente enquanto a splitter da área inferior está sendo arrastada
+                if (app.show_piano_roll || app.show_timewarp) && app.splitter_drag {
                     app.request_redraw();
                 }
                 // Redesenha continuamente enquanto houver scrub ou loop drag no
-                // piano roll (INDEPENDENTES). Evita que o arrasto pare de atualizar
-                // se o cursor parar de se mover (por exemplo, durante um snap).
+                // piano roll / scrub no timewarp (INDEPENDENTES). Evita que o
+                // arrasto pare de atualizar se o cursor parar de se mover.
                 if app.show_piano_roll && (app.pr_loop_drag.is_some() || app.pr_scrubbing) {
+                    app.request_redraw();
+                }
+                if app.show_timewarp && app.tw_scrubbing {
                     app.request_redraw();
                 }
                 // Se um arquivo estiver sendo arrastado, atualiza a posição do preview
@@ -298,8 +316,9 @@ if app.is_dragging_file {
                 if app.toolbar_hover.is_none() {
                     tools::update_cursor();
                 }
-                // Inicia/finaliza arrasto da splitter do piano roll
-                if state == ElementState::Pressed && app.show_piano_roll
+                // Inicia arrasto da splitter da área inferior (piano roll ou timewarp)
+                if state == ElementState::Pressed
+                    && (app.show_piano_roll || app.show_timewarp)
                     && app.splitter_hit_test(app.last_cursor.1, app.size.1 as f32)
                 {
                     app.splitter_drag = true;

@@ -34,6 +34,12 @@ impl App {
                 self.toolbar_hover = None;
                 self.request_redraw();
             }
+            // T: alterna o timewarp (exclusivo com o piano roll).
+            if matches!(vk, Key::Character(s) if s.eq_ignore_ascii_case("t")) {
+                self.toggle_timewarp();
+                self.toolbar_hover = None;
+                self.request_redraw();
+            }
             // F: foca o clip sob o cursor; Ctrl+F: toggle follow playhead.
             if matches!(vk, Key::Character(s) if s.eq_ignore_ascii_case("f")) {
                 if self.ctrl_pressed {
@@ -153,28 +159,43 @@ impl App {
     pub fn handle_scroll(&mut self, dx: f32, dy: f32, with_ctrl: bool, with_alt: bool) {
         let (mx, my) = self.last_cursor;
 
-        // Determina qual Ã¡rea estÃ¡ sob o cursor (timeline ou piano roll)
-        let pr_active = self.show_piano_roll;
-        let (px_per_beat, scroll_x, scroll_y, in_pr_area) = if pr_active {
-            let layout = self.layout(self.size.0 as f32, self.size.1 as f32);
-            if let Some(pr) = &layout.piano_roll {
-                if my >= pr.y && my <= pr.y + pr.height {
-                    (self.piano_roll_px_per_beat, self.piano_roll_scroll_x, self.piano_roll_scroll_y, true)
+        // Determina qual área está sob o cursor: timeline, piano roll ou
+        // timewarp (cada uma com zoom/scroll INDEPENDENTES).
+        let layout = self.layout(self.size.0 as f32, self.size.1 as f32);
+        let (px_per_beat, scroll_x, scroll_y, in_pr_area, in_tw_area) = if self.show_timewarp {
+            let tw = layout.timewarp.as_ref();
+            if let Some(tw) = tw {
+                if my >= tw.y && my <= tw.y + tw.height {
+                    (self.timewarp_px_per_beat, self.timewarp_scroll_x, 0.0, false, true)
                 } else {
-                    (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+                    (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
                 }
             } else {
-                (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+                (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
+            }
+        } else if self.show_piano_roll {
+            let pr = layout.piano_roll.as_ref();
+            if let Some(pr) = pr {
+                if my >= pr.y && my <= pr.y + pr.height {
+                    (self.piano_roll_px_per_beat, self.piano_roll_scroll_x, self.piano_roll_scroll_y, true, false)
+                } else {
+                    (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
+                }
+            } else {
+                (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
             }
         } else {
-            (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+            (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
         };
 
         if with_ctrl && dy.abs() >= 1.0 {
             let old_px = px_per_beat;
             let new_px = (old_px + dy * 0.05).clamp(8.0, 640.0);
             let beat_under = (mx + scroll_x) / old_px.max(0.01);
-            if in_pr_area {
+            if in_tw_area {
+                self.timewarp_px_per_beat = new_px;
+                self.timewarp_scroll_x = (beat_under * new_px - mx).max(0.0);
+            } else if in_pr_area {
                 self.piano_roll_px_per_beat = new_px;
                 self.piano_roll_scroll_x = (beat_under * new_px - mx).max(0.0);
             } else {
@@ -186,7 +207,7 @@ impl App {
                 let old_kh = self.piano_roll_key_height;
                 let new_kh = (old_kh + dy * 0.1).clamp(2.0, 24.0);
                 self.piano_roll_key_height = new_kh;
-            } else {
+            } else if !in_tw_area {
                 let old_zy = self.zoom_y;
                 let new_zy = (old_zy + dy * 0.01).clamp(0.25, 6.0);
                 let row_under = (my - self.ruler_px + scroll_y) / (64.0 * old_zy.max(0.01)).max(0.01);
@@ -197,6 +218,9 @@ impl App {
             if in_pr_area {
                 self.piano_roll_scroll_y = (self.piano_roll_scroll_y - dy).max(0.0);
                 self.piano_roll_scroll_x = (self.piano_roll_scroll_x - dx).max(0.0);
+            } else if in_tw_area {
+                // Timewarp não tem scroll vertical (faixa BPM fixa).
+                self.timewarp_scroll_x = (self.timewarp_scroll_x - dx).max(0.0);
             } else {
                 self.scroll_x = (self.scroll_x - dx).max(0.0);
                 self.scroll_y = (self.scroll_y - dy).max(0.0);
@@ -693,9 +717,14 @@ self.play_start_seconds = self.transport_seconds;
                 self.pr_handle_ruler_click(state, pos);
             }
         }
+        if self.show_timewarp && state == ButtonState::Released {
+            if self.tw_scrubbing {
+                self.tw_handle_ruler_click(state, pos);
+            }
+        }
 
-        // Intercepta arrasto da splitter do piano roll
-        if self.show_piano_roll && self.splitter_drag {
+        // Intercepta arrasto da splitter da área inferior (PR ou timewarp)
+        if (self.show_piano_roll || self.show_timewarp) && self.splitter_drag {
             if state == ButtonState::Released {
                 self.end_splitter_drag();
             } else {
@@ -763,6 +792,31 @@ self.play_start_seconds = self.transport_seconds;
             if let Some(pr_ruler) = &layout.piano_ruler {
                 if pos.1 >= pr_ruler.y + pr_ruler.height {
                     self.handle_piano_roll_click(state, pos);
+                    return;
+                }
+            }
+        }
+
+        // Intercepta clique dentro da área do TIMEWARP ou splitter (visível)
+        if self.show_timewarp {
+            let height = self.size.1 as f32;
+            let width = self.size.0 as f32;
+            let layout = self.layout(width, height);
+            if self.splitter_hit_test(pos.1, height) {
+                self.splitter_drag = true;
+                return;
+            }
+            // Clique na régua do timewarp (scrub da playhead própria)
+            if let Some(tw_ruler) = &layout.timewarp_ruler {
+                if pos.1 >= tw_ruler.y && pos.1 < tw_ruler.y + tw_ruler.height {
+                    self.tw_handle_ruler_click(state, pos);
+                    return;
+                }
+            }
+            // Clique no CONTEÚDO do timewarp (abaixo da régua)
+            if let Some(tw) = &layout.timewarp {
+                if pos.1 >= tw.y {
+                    self.handle_timewarp_click(state, pos);
                     return;
                 }
             }
@@ -932,6 +986,23 @@ self.play_start_seconds = self.transport_seconds;
                 self.pr_handle_loop_drag(pos.0);
             } else if self.pr_scrubbing {
                 self.pr_set_playhead_from_x(pos.0);
+            }
+        }
+
+        // ====== Timewarp: scrub na régua / arrasto/roving de pontos ======
+        if self.show_timewarp {
+            if self.tw_scrubbing {
+                self.tw_set_scrub_beat(pos.0);
+                self.request_redraw();
+            } else if self.timewarp_inter.is_dragging() {
+                let m = self.timewarp_metrics();
+                // Segurar Alt desliga o snap (beat/BPM livre).
+                self.timewarp_inter.drag_move(pos, &m, !self.alt_pressed);
+                self.request_redraw();
+            } else {
+                let m = self.timewarp_metrics();
+                let points = self.tw_points();
+                self.timewarp_inter.update_hover(&points, pos, &m);
             }
         }
 
@@ -1202,6 +1273,128 @@ if self.fade_interaction.is_dragging() {
             let actual_dx = self.scroll_x - prev_sx;
             self.clip_interaction.drag_live_beat += actual_dx / pps;
         }
+    }
+}
+
+// ===== Timewarp interaction helpers =====
+
+impl App {
+    fn timewarp_metrics(&self) -> super::timewarp::TimewarpMetrics {
+        let height = self.size.1 as f32;
+        let width = self.size.0 as f32;
+        let layout = self.layout(width, height);
+        let tw_ruler = layout.timewarp_ruler.unwrap();
+        let tw_rect = layout.timewarp.unwrap();
+        super::timewarp::TimewarpMetrics {
+            px_per_beat: self.timewarp_px_per_beat,
+            scroll_x: self.timewarp_scroll_x,
+            ruler_px: tw_ruler.y,
+            ruler_h: tw_ruler.height,
+            body_top: tw_rect.y,
+            body_h: tw_rect.height,
+            theme: self.theme.clamp(0, 6),
+        }
+    }
+
+    /// Pontos de tempo atuais (espelho das mudanças do `TempoMap`).
+    fn tw_points(&self) -> Vec<super::timewarp::TempoPoint> {
+        self.tempo_map
+            .changes
+            .iter()
+            .map(|c| super::timewarp::TempoPoint { beat: c.beat, bpm: c.bpm })
+            .collect()
+    }
+
+    /// Aplica uma lista de pontos editada de volta ao `TempoMap` e escreve no
+    /// projeto (via callback de write-back).
+    fn tw_apply_points(&mut self, points: &[super::timewarp::TempoPoint]) {
+        for p in points {
+            self.tempo_map.set_change(p.beat, p.bpm);
+        }
+        self.tw_write_back();
+    }
+
+    /// Dispara o callback de write-back (host grava no projeto) e re-renderiza.
+    fn tw_write_back(&mut self) {
+        if let Some(cb) = &self.tempo_write_back {
+            cb(&self.tempo_map);
+        }
+        self.request_redraw();
+    }
+
+    /// Clique na régua do TIMEWARP: inicia/finaliza o scrub da playhead.
+    pub fn tw_handle_ruler_click(&mut self, state: ButtonState, pos: (f32, f32)) {
+        match state {
+            ButtonState::Pressed => {
+                self.tw_scrubbing = true;
+                self.tw_set_scrub_beat(pos.0);
+                self.request_redraw();
+            }
+            ButtonState::Released => {
+                self.tw_scrubbing = false;
+                self.request_redraw();
+            }
+        }
+    }
+
+    /// Clique no corpo do timewarp: edição de pontos de tempo
+    /// (Select = mover, Draw = adicionar, Erase = remover).
+    pub fn handle_timewarp_click(&mut self, state: ButtonState, pos: (f32, f32)) {
+        let m = self.timewarp_metrics();
+        let tool = current_tool();
+
+        match state {
+            ButtonState::Pressed => {
+                if self.splitter_hit_test(pos.1, self.size.1 as f32) {
+                    self.splitter_drag = true;
+                    return;
+                }
+
+                match tool {
+                    Tool::Select => {
+                        let points = self.tw_points();
+                        let _ = self.timewarp_inter.begin_drag(&points, pos, &m);
+                    }
+                    Tool::Draw => {
+                        let (mut beat, bpm) = m.cursor_to_beat_bpm(pos);
+                        if !self.alt_pressed {
+                            beat = beat.round();
+                        }
+                        self.tempo_map.set_change(beat, bpm);
+                        self.tw_write_back();
+                        return;
+                    }
+                    Tool::Erase => {
+                        let points = self.tw_points();
+                        if let Some(idx) = self.timewarp_inter.hit_test(&points, pos, &m) {
+                            if let Some(p) = points.get(idx) {
+                                self.tempo_map.remove_change(p.beat);
+                                self.tw_write_back();
+                                return;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            ButtonState::Released => {
+                if self.splitter_drag {
+                    self.end_splitter_drag();
+                    return;
+                }
+                match tool {
+                    Tool::Select => {
+                        if self.timewarp_inter.is_dragging() {
+                            let mut points = self.tw_points();
+                            self.timewarp_inter.end_drag(&mut points);
+                            self.tw_apply_points(&points);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.request_redraw();
     }
 }
 

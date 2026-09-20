@@ -100,6 +100,7 @@ fn spawn_native_window(transport: Arc<Mutex<Transport>>, project: Rc<RefCell<Pro
     let push = |p: &Project, tx: &mpsc::Sender<WindowCommand>| {
         let _ = tx.send(WindowCommand::SetClips(build_clip_demos(p)));
         let _ = tx.send(WindowCommand::SetBpm(p.tempo_map.bpm_at(0.0)));
+        let _ = tx.send(WindowCommand::SetTempoMap(p.tempo_map.changes.clone()));
     };
     push(&project.borrow(), &tx);
     let project_rc = project.clone();

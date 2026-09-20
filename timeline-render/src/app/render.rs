@@ -269,10 +269,11 @@ impl App {
         let row_height = 64.0 * self.zoom_y;
 
         // Altura efetiva da timeline.
-        // Quando o piano roll está visível, a timeline termina na time_ruler
-        // (que é empurrada para cima). A splitter fica ENTRE a time_ruler e o piano roll.
+        // Quando o piano roll OU o timewarp está visível, a timeline termina
+        // na time_ruler (que é empurrada para cima). A splitter fica ENTRE a
+        // time_ruler e o bloco inferior.
         let layout = self.layout(width, height);
-        let timeline_bottom = if self.show_piano_roll {
+        let timeline_bottom = if self.show_piano_roll || self.show_timewarp {
             layout.time_ruler.y
         } else {
             height - self.time_ruler_h
@@ -830,8 +831,9 @@ impl App {
         // ===== Edit toolbar (ferramentas) — entre time_ruler e splitter =====
         instances.extend(self.edit_toolbar_rect_instances(width, height));
 
-        // ===== Piano roll (editor MIDI) + splitter (se visível) =====
+        // ===== Área inferior expandida (piano roll OU timewarp, exclusivos) =====
         instances.extend(self.piano_roll_instances(width, height));
+        instances.extend(self.timewarp_instances(width, height));
 
         instances
     }

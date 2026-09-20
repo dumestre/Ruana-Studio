@@ -7,6 +7,7 @@ pub(crate) mod interaction;
 pub(crate) mod layout;
 pub(crate) mod piano_roll;
 pub(crate) mod render;
+pub(crate) mod timewarp;
 pub mod window;
 
 use std::sync::{Arc, Mutex};
@@ -203,7 +204,7 @@ pub struct App {
     /// true quando a splitter está sendo arrastada.
     pub splitter_drag: bool,
 
-    /// ===== Piano roll: estado independente da ruler =====
+    /// ===== Piano roll ruler: estado INDEPENDENTE da ruler =====
     /// Posição INDEPENDENTE da playhead no piano roll (em beats).
     /// Não compartilha com `transport_seconds` da timeline.
     pub pr_playhead_beat: f32,
@@ -219,6 +220,27 @@ pub struct App {
     pub pr_scrubbing: bool,
     /// Follow playhead no piano roll (INDEPENDENTE).
     pub pr_follow_playhead: bool,
+
+    /// ===== Timewarp (editor de tempo estilo Cubase) =====
+    /// Espelho do mapa de tempo do projeto (`TempoMap` é a fonte da verdade
+    /// em `daw_core::project`; aqui é a cópia usada pela renderização).
+    pub tempo_map: daw_core::timeline::TempoMap,
+    /// Zoom (px/beat) e scroll horizontal INDEPENDENTES do timewarp.
+    pub timewarp_px_per_beat: f32,
+    pub timewarp_scroll_x: f32,
+    /// true quando o timewarp expande na área inferior (exclusivo com o PR).
+    pub show_timewarp: bool,
+    /// Estado de interação (arrasto de pontos, scrub).
+    pub timewarp_inter: timewarp::TimewarpInteraction,
+    /// Scrubbing na régua do timewarp (playhead próprio).
+    pub tw_scrubbing: bool,
+    /// Playhead INDEPENDENTE do timewarp (em beats). Durante playback sem
+    /// scrub, a posição vem do transporte via `tempo_map.seconds_to_beats`.
+    pub tw_playhead_beat: f32,
+    /// Callback de write-back: invocado com o mapa atualizado após qualquer
+    /// edição de tempo na engine. O host aplica no `Project::tempo_map`.
+    /// Roda sempre na thread da engine (não precisa ser `Send`/`Sync`).
+    pub tempo_write_back: Option<Box<dyn Fn(&daw_core::timeline::TempoMap)>>,
 
     /// ===== Edit toolbar (ferramentas do piano roll) =====
     /// Pipeline de quads texturizados (ícones da toolbar).
@@ -832,6 +854,23 @@ transport,
             pr_scrubbing: false,
             pr_follow_playhead: false,
 
+            // Timewarp (exclusivo com o piano roll, inicialmente oculto).
+            tempo_map: {
+                // Demo standalone: curva de tempo visível ao abrir com `T`.
+                let mut tm = daw_core::timeline::TempoMap::from_bpm(120.0);
+                tm.set_change(64.0, 140.0);
+                tm.set_change(128.0, 100.0);
+                tm.set_change(192.0, 128.0);
+                tm
+            },
+            timewarp_px_per_beat: 40.0,
+            timewarp_scroll_x: 0.0,
+            show_timewarp: false,
+            timewarp_inter: timewarp::TimewarpInteraction::new(),
+            tw_scrubbing: false,
+            tw_playhead_beat: 0.0,
+            tempo_write_back: None,
+
             // Edit toolbar
             icon_pipeline,
             icon_bind_group_layout,
@@ -1276,6 +1315,23 @@ transport,
         ((x - KEYBOARD_W) + self.piano_roll_scroll_x) / self.piano_roll_px_per_beat.max(0.001)
     }
 
+    /// Converte beat → x na ruler do TIMEWARP (considera o gutter de BPM).
+    pub fn tw_beat_to_x(&self, beat: f32) -> f32 {
+        use timewarp::BPM_LABEL_W;
+        BPM_LABEL_W + beat * self.timewarp_px_per_beat - self.timewarp_scroll_x
+    }
+
+    /// Converte x da janela → beat na ruler do TIMEWARP (considera o gutter).
+    pub fn tw_x_to_beat(&self, x: f32) -> f32 {
+        use timewarp::BPM_LABEL_W;
+        ((x - BPM_LABEL_W) + self.timewarp_scroll_x) / self.timewarp_px_per_beat.max(0.001)
+    }
+
+    /// Posiciona a playhead INDEPENDENTE do timewarp a partir do x na régua.
+    pub fn tw_set_scrub_beat(&mut self, mx: f32) {
+        self.tw_playhead_beat = self.tw_x_to_beat(mx).max(0.0);
+    }
+
     /// Posiciona a playhead INDEPENDENTE do piano roll a partir do x na ruler.
     /// **NÃO** toca em `transport_seconds` (tocaria a timeline).
     pub fn pr_set_playhead_from_x(&mut self, mx: f32) {
@@ -1352,14 +1408,22 @@ transport,
         }
     }
 
-    /// Alterna a visibilidade do piano roll (tecla P).
+    /// Alterna a visibilidade do piano roll (tecla P). Fecha o timewarp (os
+    /// dois são EXCLUSIVOS na área inferior expandida).
     pub fn toggle_piano_roll(&mut self) {
+        self.show_timewarp = false;
         self.show_piano_roll = !self.show_piano_roll;
     }
 
-    /// Começa o arrasto da splitter entre timeline e piano roll.
+    /// Alterna a visibilidade do timewarp (tecla T). Fecha o piano roll.
+    pub fn toggle_timewarp(&mut self) {
+        self.show_piano_roll = false;
+        self.show_timewarp = !self.show_timewarp;
+    }
+
+    /// Começa o arrasto da splitter entre timeline e área inferior.
     pub fn begin_splitter_drag(&mut self, cursor: (f32, f32)) {
-        if !self.show_piano_roll {
+        if !self.show_piano_roll && !self.show_timewarp {
             return;
         }
         let h = self.size.1 as f32;
@@ -1368,22 +1432,26 @@ transport,
         }
     }
 
-    /// Arrasta a splitter (entre time_ruler e piano_ruler) para redimensionar
-    /// a altura do piano roll em tempo real.
+    /// Arrasta a splitter (entre time_ruler e a régua da área inferior) para
+    /// redimensionar a altura do bloco (piano roll OU timewarp) em tempo real.
     pub fn splitter_drag_move(&mut self, cursor_y: f32) {
         if !self.splitter_drag {
             return;
         }
         let h = self.size.1 as f32;
         let tr_h = self.time_ruler_h;
-        let pr_ruler_h = piano_roll::PIANO_RULER_H;
+        let area_ruler_h = if self.show_timewarp {
+            timewarp::TIMEWARP_RULER_H
+        } else {
+            piano_roll::PIANO_RULER_H
+        };
         // A splitter está em tr_y + tr_h. O cursor está na splitter.
         // Nova posição da splitter = cursor_y (aproximadamente).
         // tr_y = splitter_y - tr_h = cursor_y - tr_h
         let new_tr_y = (cursor_y - tr_h).clamp(self.ruler_px + 4.0, h - tr_h - 4.0);
-        let pr_ruler_y = new_tr_y + tr_h + 4.0;
-        let new_total = (h - pr_ruler_y).max(0.0);
-        self.piano_roll_height = (new_total - pr_ruler_h).max(self.piano_roll_min_h);
+        let area_ruler_y = new_tr_y + tr_h + 4.0;
+        let new_total = (h - area_ruler_y).max(0.0);
+        self.piano_roll_height = (new_total - area_ruler_h).max(self.piano_roll_min_h);
     }
 
     /// Finaliza o arrasto da splitter.
@@ -1490,6 +1558,98 @@ transport,
                     wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
                 });
                 // Círculo (cabeça da playhead) no topo da régua.
+                instances.push(crate::RectInstance {
+                    x: head_x - 6.0, y: ruler_y + 1.0,
+                    w: 12.0, h: 12.0,
+                    color: [col.0, col.1, col.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 6.0,
+                });
+            }
+        }
+
+        instances
+    }
+
+    /// Gera as instâncias do timewarp (régua reutilizada + corpo + curva +
+    /// pontos + playhead). Espelho do `piano_roll_instances`.
+    pub fn timewarp_instances(&self, width: f32, height: f32) -> Vec<crate::RectInstance> {
+        if !self.show_timewarp {
+            return Vec::new();
+        }
+
+        let layout = self.layout(width, height);
+        let Some(tw_ruler) = layout.timewarp_ruler else { return Vec::new(); };
+        let Some(tw_rect) = layout.timewarp else { return Vec::new(); };
+
+        let ruler_y = tw_ruler.y;
+        let ruler_h = timewarp::TIMEWARP_RULER_H;
+        let body_top = tw_rect.y;
+        let body_h = tw_rect.height;
+
+        let m = timewarp::TimewarpMetrics {
+            px_per_beat: self.timewarp_px_per_beat,
+            scroll_x: self.timewarp_scroll_x,
+            ruler_px: ruler_y,
+            ruler_h,
+            body_top,
+            body_h,
+            theme: self.theme.clamp(0, 6),
+        };
+
+        let t = self.theme.clamp(0, 6);
+
+        let mut instances = timewarp::build_timewarp_ruler_instances(
+            width,
+            self.timewarp_px_per_beat,
+            self.timewarp_scroll_x,
+            t,
+            ruler_y,
+            ruler_h,
+            body_top,
+            body_h,
+            self.pr_follow_playhead,
+        );
+        instances.extend(timewarp::build_timewarp_instances(
+            &self.tempo_map,
+            &self.timewarp_inter,
+            &m,
+            width,
+            height,
+        ));
+
+        // Splitter (mesma do piano roll — a área expandida é exclusiva).
+        let splitter_hovered = self.splitter_hit_test(self.last_cursor.1, height);
+        instances.extend(piano_roll::build_splitter_instances(
+            width,
+            layout.splitter.y,
+            self.piano_roll_height,
+            height,
+            splitter_hovered,
+            self.theme.clamp(0, 6),
+        ));
+
+        // ====== Playhead do TIMEWARP — desenhada POR ÚLTIMO (z-order alto) ======
+        // Em playback usa o transporte convertido pelo mapa de tempo (o efeito
+        // do tempo na posição fica visível); sob scrub usa a posição local.
+        {
+            use timewarp::BPM_LABEL_W;
+            use crate::palette;
+            let head_beat = if self.tw_scrubbing {
+                self.tw_playhead_beat
+            } else {
+                self.tempo_map.seconds_to_beats(self.transport_seconds as f64) as f32
+            };
+            let head_x = BPM_LABEL_W + head_beat * self.timewarp_px_per_beat - self.timewarp_scroll_x;
+            if head_x >= -20.0 && head_x <= width + 20.0 {
+                let col = palette::PLAYHEAD_COLOR;
+                let line_top = ruler_y + 1.0;
+                let line_h = (body_top + body_h - line_top).max(0.0);
+                instances.push(crate::RectInstance {
+                    x: head_x - 1.0, y: line_top,
+                    w: 2.0, h: line_h,
+                    color: [col.0, col.1, col.2, 255],
+                    wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
+                });
                 instances.push(crate::RectInstance {
                     x: head_x - 6.0, y: ruler_y + 1.0,
                     w: 12.0, h: 12.0,

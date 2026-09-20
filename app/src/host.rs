@@ -34,6 +34,7 @@ use winit::window::{Window, WindowId};
 use crate::slint_host::SlintOverlay;
 use crate::MainWindow;
 use daw_core::project::Project;
+use daw_core::timeline::TempoMap;
 use daw_core::transport::Transport;
 
 /// Estado pequeno compartilhado entre o handler e as closures da DAW.
@@ -75,7 +76,7 @@ pub struct EngineBridge {
 
 impl EngineBridge {
     pub fn new(
-        engine: TimelineEngine,
+        mut engine: TimelineEngine,
         overlay: SlintOverlay,
         transport: Arc<Mutex<Transport>>,
         project: Rc<RefCell<Project>>,
@@ -88,6 +89,15 @@ impl EngineBridge {
             project.borrow().subscribe(move |_event, _kind| {
                 flag.set(true);
             });
+        }
+        // Timewarp → write-back: quando o usuário edita pontos de tempo na
+        // engine (timewarp), o mapa atualizado é gravado no projeto do core
+        // (fonte da verdade), preservando undo/redo do documento.
+        {
+            let project = project.clone();
+            engine.tempo_write_back = Some(Box::new(move |map: &TempoMap| {
+                project.borrow_mut().tempo_map = map.clone();
+            }));
         }
         Self {
             engine,
@@ -134,7 +144,10 @@ impl EngineBridge {
 
         // Espelha clips (projeto mudou).
         if self.clips_flag.replace(false) {
-            crate::timeline_slint::sync_clips_from_project(&mut self.engine, &self.project.borrow());
+            let proj = self.project.borrow();
+            crate::timeline_slint::sync_clips_from_project(&mut self.engine, &proj);
+            self.engine.tempo_map = proj.tempo_map.clone();
+            drop(proj);
             self.dirty = true;
         }
 
