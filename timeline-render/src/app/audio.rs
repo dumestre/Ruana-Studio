@@ -103,6 +103,7 @@ impl App {
             let source_length_beats = data.duration_seconds as f32 * beats_per_second;
 
             let mut clip = clips::ClipDemo {
+                id: 0,
                 track_index: track,
                 beat: start_beat,
                 len: source_length_beats,
@@ -184,6 +185,7 @@ impl App {
 
                 // Cria o clip de áudio
                 let mut clip = clips::ClipDemo {
+                    id: 0,
                     track_index: track,
                     beat,
                     len: source_length_beats,

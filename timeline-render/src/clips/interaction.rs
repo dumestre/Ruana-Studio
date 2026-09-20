@@ -688,6 +688,7 @@ impl ClipInteraction {
                     draw_state.start_track;
 
                 let clip = ClipDemo {
+                    id: 0,
                     track_index: track,
                     beat: start_beat,
                     len,

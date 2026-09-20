@@ -4,6 +4,10 @@
 /// Um clip posicionado numa faixa (track) da timeline.
 #[derive(Clone, Debug)]
 pub struct ClipDemo {
+    /// Id do clip no `Project` do core (0 = clip criado na engine, ainda
+    /// sem contraparte no documento). Usado pelo write-back hosted para
+    /// reconciliar edições (mover/redimensionar/apagar) → fonte da verdade.
+    pub id: u32,
     pub track_index: usize,
     pub beat: f32,
     pub len: f32,

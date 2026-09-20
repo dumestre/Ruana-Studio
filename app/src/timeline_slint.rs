@@ -43,6 +43,7 @@ pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
     proj.clips
         .iter()
         .map(|c| ClipDemo {
+            id: c.id as u32,
             track_index: track_index(c.track_id),
             beat: c.start_beat,
             len: c.length_beats.max(0.05),

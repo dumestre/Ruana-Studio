@@ -345,11 +345,11 @@ pub fn build_bottom_ruler_instances(
 
     // ===== Seletor de loop — handles + fill na ruler + fill + bordas no corpo =====
     if with_loop && loop_enabled {
-        let r: (u8, u8, u8) = (0x3A, 0x3A, 0x3A);
-        let border = [r.0, r.1, r.2, 255];
-        let fill_ruler = [r.0, r.1, r.2, 45];
-        let fill_body = [r.0, r.1, r.2, 70];
-        let border_body = [r.0, r.1, r.2, 185];
+        let a = palette::ACCENT[t];
+        let border = [a.0, a.1, a.2, 255];
+        let fill_ruler = [a.0, a.1, a.2, 45];
+        let fill_body = [a.0, a.1, a.2, 70];
+        let border_body = [a.0, a.1, a.2, 185];
         let sx = beat_to_x(loop_start_beat);
         let ex = beat_to_x(loop_end_beat);
         let lw = (ex - sx).max(0.0);

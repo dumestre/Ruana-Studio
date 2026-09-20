@@ -647,11 +647,12 @@ impl App {
         // Seletor de loop — bordas laterais grossas na régua (alças de arrasto)
         // + centro translúcido descendo por toda a timeline.
         if self.loop_enabled {
-            let r: (u8, u8, u8) = (0x3A, 0x3A, 0x3A); // cinza escuro do loop
-            let border = [r.0, r.1, r.2, 255]; // bordas de ajuste (palitos): opacas
-            let fill_ruler = [r.0, r.1, r.2, 45]; // régua: centro bem transparente
-            let fill_body = [r.0, r.1, r.2, 70]; // timeline: mais translúcido ainda
-            let border_body = [r.0, r.1, r.2, 185]; // borda que desce na timeline: menos translúcida
+            // Cor accent do tema — seletor de loop destacado (não cinza).
+            let a = palette::ACCENT[t];
+            let border = [a.0, a.1, a.2, 255]; // bordas de ajuste (palitos): opacas
+            let fill_ruler = [a.0, a.1, a.2, 45]; // régua: centro bem transparente
+            let fill_body = [a.0, a.1, a.2, 70]; // timeline: mais translúcido ainda
+            let border_body = [a.0, a.1, a.2, 185]; // borda que desce na timeline: menos translúcida
             let sx = self.beat_to_x(self.loop_start_beat);
             let ex = self.beat_to_x(self.loop_end_beat);
             let lw = (ex - sx).max(0.0);

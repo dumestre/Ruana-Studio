@@ -399,6 +399,7 @@ impl App {
             self.fades = snap.fades;
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
+            self.emit_clip_write_back();
         }
     }
 
@@ -414,6 +415,7 @@ impl App {
             self.fades = snap.fades;
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
+            self.emit_clip_write_back();
         }
     }
 
@@ -434,6 +436,7 @@ impl App {
         let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
         for clip in &self.clipboard {
             let mut new_clip = clip.clone();
+            new_clip.id = 0;
             new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
             new_clip.track_index = (clip.track_index as i32 + track_offset)
                 .clamp(0, (max_track + 1).max(1) as i32 - 1) as usize;
@@ -451,6 +454,7 @@ impl App {
             }
         }
         self.rebuild_wave_data();
+        self.emit_clip_write_back();
     }
 
     /// Duplica os clips selecionados APÃ“S o Ãºltimo clip selecionado (com snap ao grid).
@@ -477,6 +481,7 @@ impl App {
         let beat_offset = snap_beat - min_beat.round();
         for clip in &clips_to_dup {
             let mut new_clip = clip.clone();
+            new_clip.id = 0;
             new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
             self.clips.push(new_clip);
         }
@@ -492,6 +497,7 @@ impl App {
             }
         }
         self.rebuild_wave_data();
+        self.emit_clip_write_back();
     }
 
     /// Deleta os clips selecionados.
@@ -514,6 +520,14 @@ impl App {
         }
         self.clip_interaction.sync_selection(self.clips.len());
         self.rebuild_wave_data();
+        self.emit_clip_write_back();
+    }
+
+    /// Dispara o write-back estruturado de clips para o host (hosted).
+    fn emit_clip_write_back(&mut self) {
+        if let Some(cb) = &mut self.clip_write_back {
+            cb(&self.clips);
+        }
     }
 
     /// Converte posiÃ§Ã£o do cursor para beat e track com snap ao grid
@@ -538,6 +552,7 @@ impl App {
         let (beat, track) = self.cursor_to_snapped_beat_track(pos);
         let len = 4.0; // comprimento padrÃ£o: 1 compasso
         self.clips.push(clips::ClipDemo {
+            id: 0,
             track_index: track,
             beat,
             len,
@@ -555,6 +570,7 @@ impl App {
         });
         self.clip_interaction.sync_selection(self.clips.len());
         self.rebuild_wave_data();
+        self.emit_clip_write_back();
     }
 
     /// Estica clip (ferramenta Stretch) - arrasta borda direita.
@@ -596,6 +612,7 @@ impl App {
 
                 // Cria novo clip para a parte direita
                 let mut right_clip = clip;
+                right_clip.id = 0;
                 right_clip.beat = click_beat_snapped;
                 right_clip.len = right_len;
 
@@ -623,6 +640,7 @@ impl App {
                 // A segmentaÃ§Ã£o do buffer muda (um clip virou dois): regenera
                 // para o clip direito tambÃ©m ter waveform.
                 self.rebuild_wave_data();
+                self.emit_clip_write_back();
             }
         }
     }
@@ -635,6 +653,7 @@ impl App {
             self.clips.remove(idx);
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
+            self.emit_clip_write_back();
         }
     }
 
@@ -945,6 +964,8 @@ self.play_start_seconds = self.transport_seconds;
                         self.record_undo();
                     }
                     self.clip_interaction.end_drag(&mut self.clips, &cm, snap);
+                    // Enganche o write-back estruturado de clips (hosted).
+                    self.emit_clip_write_back();
                     // Reseta auto-scroll ao finalizar o arrasto.
                     self.edge_scroll_x = 0.0;
                     self.edge_scroll_y = 0.0;
@@ -955,6 +976,7 @@ self.play_start_seconds = self.transport_seconds;
                     self.clip_interaction.end_draw(&mut self.clips, &cm);
                     self.clip_interaction.sync_selection(self.clips.len());
                     self.rebuild_wave_data();
+                    self.emit_clip_write_back();
                 } else if self.clip_interaction.is_marqueeing() {
                     self.clip_interaction.marquee_move(pos);
                     let cm = self.clip_metrics();

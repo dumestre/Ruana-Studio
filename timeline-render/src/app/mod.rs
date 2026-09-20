@@ -241,6 +241,11 @@ pub struct App {
     /// edição de tempo na engine. O host aplica no `Project::tempo_map`.
     /// Roda sempre na thread da engine (não precisa ser `Send`/`Sync`).
     pub tempo_write_back: Option<Box<dyn Fn(&daw_core::timeline::TempoMap)>>,
+    /// Callback de write-back de CLIPS: invocado com a lista completa de clips
+    /// da engine após QUALQUER edição estrutural (mover, redimensionar,
+    /// desenhar, deletar, desfazer/refazer...). O host reconciliam com
+    /// `Project` (fonte da verdade do áudio). `None` = standalone.
+    pub clip_write_back: Option<Box<dyn FnMut(&[clips::ClipDemo])>>,
 
     /// ===== Edit toolbar (ferramentas do piano roll) =====
     /// Pipeline de quads texturizados (ícones da toolbar).
@@ -870,6 +875,7 @@ transport,
             tw_scrubbing: false,
             tw_playhead_beat: 0.0,
             tempo_write_back: None,
+            clip_write_back: None,
 
             // Edit toolbar
             icon_pipeline,
