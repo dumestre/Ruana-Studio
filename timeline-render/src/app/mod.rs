@@ -734,7 +734,7 @@ impl App {
 
         // Gera as ondas dos clips demo e armazena cada uma em `clip.wave`
         // (a fonte da verdade). Buffer e segmentação derivam disso.
-        let (wave_bars, wave_segments) = waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB);
+        let (wave_bars, wave_segments) = waveform::build_wave_bars_and_segments(&mut clips, WAVE_PPB, 120.0);
         // Cria um vetor de fades padrão para esses clips (não‑midi).
         let fades = clips.iter().map(|c| {
             if !c.is_midi {

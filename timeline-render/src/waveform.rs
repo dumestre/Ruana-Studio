@@ -228,6 +228,7 @@ fn sample_wave(
 pub fn build_wave_bars_and_segments(
     clips: &mut [ClipDemo],
     px_per_beat: f32,
+    bpm: f32,
 ) -> (
     Vec<f32>,
     Vec<(u32, u32)>
@@ -271,6 +272,9 @@ pub fn build_wave_bars_and_segments(
                 match decode_real_wave(
                     path,
                     n_cols,
+                    clip.source_start_beats,
+                    clip.source_length_beats,
+                    bpm,
                 ) {
                     Ok(w) => w,
 
@@ -372,6 +376,9 @@ pub fn build_wave_bars_and_segments(
 pub(crate) fn decode_real_wave(
     path: &str,
     n_cols: u32,
+    source_start_beats: f32,
+    source_length_beats: f32,
+    bpm: f32,
 ) -> Result<
     Vec<f32>,
     Box<dyn std::error::Error>,
@@ -415,14 +422,77 @@ pub(crate) fn decode_real_wave(
     let cols =
         n_cols as usize;
 
+    // ==================================================================
+    // REGIÃO AUDÍVEL do arquivo
+    //
+    // Clips importados passam por `trim_silence` (importer.rs): a wave do
+    // clip NÃO é o arquivo inteiro — começa em `source_start_beats` e dura
+    // `source_length_beats`. Se a décode usasse o arquivo inteiro, o silêncio
+    // do topo apareceria à esquerda do clip e o áudio (que pula esse silêncio)
+    // soaria à frente da waveform. Aqui mapeamos as colunas para a MESMA
+    // região temporal que o motor de áudio lê (`source_start*fpb + offset`).
+    //
+    // `source_start_beats == 0` e `source_length_beats == 0` (clips criados
+    // sem import, ex.: `add_clip_with_path`) = sem trim → arquivo inteiro.
+    // ==================================================================
+    let frames_per_beat =
+        data.sample_rate.max(1) as f64 *
+        60.0 /
+        bpm.max(1.0) as f64;
+
+    let (start_frame, region_len) =
+        if source_start_beats > 0.0
+           || source_length_beats > 0.0
+        {
+            let start = (
+                source_start_beats as f64 *
+                frames_per_beat
+            )
+            .round() as i64;
+
+            let len = (
+                source_length_beats
+                    .max(0.0) as f64 *
+                frames_per_beat
+            )
+            .round() as i64;
+
+            let start =
+                start.clamp(
+                    0,
+                    total_frames as i64 - 1,
+                );
+
+            let region =
+                len.max(1).min(
+                    total_frames as i64
+                    - start,
+                );
+
+            if region >= 1 {
+                (start as usize, region as usize)
+            } else {
+                (0, total_frames)
+            }
+        } else {
+            (0, total_frames)
+        };
+
+    let region_end =
+        start_frame +
+        region_len;
+
     for col in
         0..cols
     {
         let frame_start =
             (
-                col *
-                total_frames /
-                cols
+                start_frame +
+                (
+                    col *
+                    region_len /
+                    cols
+                )
             )
             .min(
                 total_frames
@@ -431,12 +501,15 @@ pub(crate) fn decode_real_wave(
 
         let frame_end =
             (
-                (col + 1) *
-                total_frames /
-                cols
+                start_frame +
+                (
+                    (col + 1) *
+                    region_len /
+                    cols
+                )
             )
             .min(
-                total_frames
+                region_end
             );
 
         if frame_start >=

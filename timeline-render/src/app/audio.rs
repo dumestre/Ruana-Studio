@@ -125,7 +125,13 @@ impl App {
 
             // Gera a waveform (real ou procedural)
             let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
-            clip.wave = match waveform::decode_real_wave(path, n_cols) {
+            clip.wave = match waveform::decode_real_wave(
+                path,
+                n_cols,
+                clip.source_start_beats,
+                clip.source_length_beats,
+                bpm,
+            ) {
                 Ok(w) => w,
                 Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
             };
@@ -199,7 +205,13 @@ impl App {
                 };
                 // Gera a waveform (real ou procedural)
                 let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
-                clip.wave = match waveform::decode_real_wave(path, n_cols) {
+                clip.wave = match waveform::decode_real_wave(
+                    path,
+                    n_cols,
+                    clip.source_start_beats,
+                    clip.source_length_beats,
+                    bpm,
+                ) {
                     Ok(w) => w,
                     Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
                 };

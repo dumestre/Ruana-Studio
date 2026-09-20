@@ -155,10 +155,30 @@ impl EngineBridge {
         // Espelha clips (projeto mudou).
         if self.clips_flag.replace(false) {
             let proj = self.project.borrow();
-            crate::timeline_slint::sync_clips_from_project(&mut self.engine, &proj);
+            let bpm = self
+                .transport
+                .lock()
+                .map(|t| t.bpm as f32)
+                .unwrap_or(120.0);
+            self.engine.bpm = bpm;
+            // `bpm` alinha a região audível da wave (source_start_beats) com
+            // o mesmo mapeamento beats→frames do motor de áudio.
+            crate::timeline_slint::sync_clips_from_project(&mut self.engine, &proj, bpm);
             self.engine.tempo_map = proj.tempo_map.clone();
             drop(proj);
             self.dirty = true;
+        }
+
+        // BPM mudou → re-decoda as waves (offsets de trim em beats) para
+        // manter a waveform alinhada com o que o motor de áudio vai tocar.
+        let tbpm = self
+            .transport
+            .lock()
+            .map(|t| t.bpm as f32)
+            .unwrap_or(120.0);
+        if (self.engine.bpm - tbpm).abs() > 0.01 {
+            self.engine.bpm = tbpm;
+            self.clips_flag.set(true);
         }
 
         // Playhead segue o Transport compartilhado.
