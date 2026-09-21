@@ -1145,7 +1145,14 @@ transport,
     pub fn set_playhead_from_x(&mut self, mx: f32) {
         let bpm = self.bpm;
         let pps = self.px_per_beat * bpm / 60.0;
-        self.transport_seconds = ((mx + self.scroll_x) / pps).max(0.0);
+        // Se o clique estiver dentro da primeira "coluna" de beat visível,
+        // zera o scroll para posicionar a playhead no início (beat 0).
+        if mx + self.scroll_x < pps {
+            self.scroll_x = 0.0;
+            self.transport_seconds = 0.0;
+        } else {
+            self.transport_seconds = ((mx + self.scroll_x) / pps).max(0.0);
+        }
         // Um clique/posicionamento manual zera o "retomar do último play".
         self.last_play_start = self.transport_seconds;
     }
