@@ -181,6 +181,33 @@ impl EngineBridge {
             self.clips_flag.set(true);
         }
 
+        // Loop (botão da toolbar ↔ engine wgpu): o botão LOOP da toolbar
+        // liga/desliga o loop no Transport compartilhado (consumido pelo
+        // motor de áudio). Espelhamos esse estado no engine para a régua
+        // wgpu mostrar/ocultar a região. A faixa editada na régua é escrita
+        // de volta no Transport pela engine (`emit_loop_write_back`) quando o
+        // arrasto acaba; durante o arrasto não repomos a região (senão o drag
+        // "volta sozinho" a cada frame).
+        {
+            let t = self.transport.lock().unwrap();
+            if self.engine.loop_enabled != t.loop_enabled {
+                self.engine.loop_enabled = t.loop_enabled;
+                self.dirty = true;
+            }
+            if self.engine.loop_drag.is_none() {
+                let start_beat = t.loop_start_ticks as f32 / t.ppq as f32;
+                let end_beat = (t.loop_end_ticks as f32 / t.ppq as f32).max(start_beat + 0.01);
+                if (self.engine.loop_start_beat - start_beat).abs() > 0.0001 {
+                    self.engine.loop_start_beat = start_beat;
+                    self.dirty = true;
+                }
+                if (self.engine.loop_end_beat - end_beat).abs() > 0.0001 {
+                    self.engine.loop_end_beat = end_beat;
+                    self.dirty = true;
+                }
+            }
+        }
+
         // Playhead segue o Transport compartilhado.
         let (playing, pos) = {
             let t = self.transport.lock().unwrap();

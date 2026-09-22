@@ -955,6 +955,9 @@ self.play_start_seconds = self.transport_seconds;
                 }
                 if self.loop_drag.is_some() {
                     self.loop_drag = None;
+                    // Região de loop editada na régua → Transport compartilhado
+                    // (motor de áudio + espelho do host usam a MESMA faixa).
+                    self.emit_loop_write_back();
                 } else if self.clip_interaction.is_dragging() {
                     let snap = true;
                     let cm = self.clip_metrics();

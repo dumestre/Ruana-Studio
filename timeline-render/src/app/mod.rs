@@ -1200,7 +1200,22 @@ transport,
         self.request_redraw();
     }
 
-    /// Converte um beat (tempo musical) para a coordenada x de janela.
+    /// Grava o estado do loop (ligado + faixa editada na régua) de volta no
+    /// transporte compartilhado, para o motor de áudio usar a MESMA região.
+    /// Chamado quando o arrasto da região de loop termina.
+    pub fn emit_loop_write_back(&mut self) {
+        if self.loop_drag.is_some() {
+            return;
+        }
+        let mut t = self.transport.lock().unwrap();
+        t.loop_enabled = self.loop_enabled;
+        if self.loop_enabled {
+            let ppq = t.ppq.max(1) as f32;
+            t.loop_start_ticks = (self.loop_start_beat.max(0.0) * ppq) as u64;
+            t.loop_end_ticks = (self.loop_end_beat.max(self.loop_start_beat + 0.01) * ppq) as u64;
+        }
+    }
+
     pub fn beat_to_x(&self, beat: f32) -> f32 {
         beat * self.px_per_beat - self.scroll_x
     }
