@@ -1292,6 +1292,7 @@ if self.fade_interaction.is_dragging() {
         let prev_sx = self.scroll_x;
         self.scroll_x = (self.scroll_x + dx).max(0.0);
         // Ajusta scroll vertical
+        let prev_sy = self.scroll_y;
         self.scroll_y = (self.scroll_y + dy).max(0.0);
         self.clamp_scroll_y(self.input_view_size().1);
 
@@ -1302,10 +1303,24 @@ if self.fade_interaction.is_dragging() {
         // `dx / px_per_beat` para manter a mesma posiÃ§Ã£o na tela.
         // Usa o delta efetivo (nÃ£o o pretendido) â€” se scroll_x foi clampado,
         // o clip nÃ£o deve ser empurrado alÃ©m do limite.
+        //
+        // CRÃTICO: `drag_move` recalcula live_beat/live_track a partir de
+        // `drag_start_cursor` (âncora) a cada evento de move. Compensar apenas
+        // `drag_live_beat` seria apagado no move seguinte (o clip "para" na
+        // timeline enquanto a view continua rolando). Por isso o âncora também
+        // é compensado em PX (na direção oposta ao scroll), fazendo o delta
+        // acumular o scroll e o clip permanecer colado ao cursor.
         if self.clip_interaction.is_dragging() && !self.clip_interaction.is_stretching() {
             let pps = self.px_per_beat.max(0.001);
             let actual_dx = self.scroll_x - prev_sx;
-            self.clip_interaction.drag_live_beat += actual_dx / pps;
+            let actual_dy = self.scroll_y - prev_sy;
+            if actual_dx != 0.0 {
+                self.clip_interaction.drag_start_cursor.0 -= actual_dx;
+                self.clip_interaction.drag_live_beat += actual_dx / pps;
+            }
+            if actual_dy != 0.0 {
+                self.clip_interaction.drag_start_cursor.1 -= actual_dy;
+            }
         }
     }
 }
