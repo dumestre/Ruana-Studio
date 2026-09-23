@@ -227,6 +227,10 @@ impl App {
             }
         }
         self.clamp_scroll_y(self.input_view_size().1);
+        eprintln!(
+            "[dbg-scroll] ctrl={with_ctrl} alt={with_alt} dx={dx} dy={dy} -> scroll_x={} scroll_y={} pps={}",
+            self.scroll_x, self.scroll_y, self.px_per_beat,
+        );
     }
 
     pub fn handle_mouse_button(&mut self, state: ButtonState, pos: Option<(f32, f32)>) {
@@ -1320,6 +1324,22 @@ if self.fade_interaction.is_dragging() {
             }
             if actual_dy != 0.0 {
                 self.clip_interaction.drag_start_cursor.1 -= actual_dy;
+            }
+        }
+        // Mesma compensação de âncora para os handles de fade/ganho: o
+        // `update_drag` recalcula o delta a partir de `start_cursor` a cada
+        // move, então o âncora precisa acompanhar o scroll para o knob
+        // permanecer colado ao cursor mesmo com auto-scroll nas bordas.
+        if self.fade_interaction.is_dragging() {
+            if let Some(ref mut drag) = self.fade_interaction.active_drag {
+                let actual_dx = self.scroll_x - prev_sx;
+                let actual_dy = self.scroll_y - prev_sy;
+                if actual_dx != 0.0 {
+                    drag.start_cursor.0 -= actual_dx;
+                }
+                if actual_dy != 0.0 {
+                    drag.start_cursor.1 -= actual_dy;
+                }
             }
         }
     }
