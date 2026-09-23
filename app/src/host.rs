@@ -308,6 +308,19 @@ impl EngineBridge {
             }
         }
 
+        // Auto-scroll contínuo nas bordas durante drag ativo (mesmo com cursor
+        // parado), igual ao binário standalone (window.rs RedrawRequested).
+        if self.engine.clip_interaction.is_dragging() {
+            let (sx0, sy0) = (self.engine.scroll_x, self.engine.scroll_y);
+            self.engine.update_edge_scroll(self.engine.last_cursor);
+            self.engine.apply_edge_scroll();
+            if (self.engine.scroll_x - sx0).abs() > 0.0001
+                || (self.engine.scroll_y - sy0).abs() > 0.0001
+            {
+                self.dirty = true;
+            }
+        }
+
         // Renderiza a cena direto na textura do quad (sem readback).
         if self.dirty {
             self.dirty = false;
@@ -340,6 +353,17 @@ pub fn install_engine_callbacks(
             let mut b = b.borrow_mut();
             let scale = b.scale;
             let (px, py) = (x * scale, y * scale);
+            eprintln!(
+                "[dbg-ptr-down] x={x} y={y} btn={button} scale={scale} -> px={px} py={py} rect=({},{},{},{}) ruler={} pps={} scroll=({},{})",
+                b.engine.timeline_rect.0,
+                b.engine.timeline_rect.1,
+                b.engine.timeline_rect.2,
+                b.engine.timeline_rect.3,
+                b.engine.ruler_px,
+                b.engine.px_per_beat,
+                b.engine.scroll_x,
+                b.engine.scroll_y,
+            );
             let engine = &mut b.engine;
             engine.ctrl_pressed = ctrl;
             engine.shift_pressed = shift;
@@ -380,6 +404,13 @@ pub fn install_engine_callbacks(
                 }
             }
             engine.handle_cursor_moved((px, py));
+            if engine.clip_interaction.is_dragging() {
+                eprintln!(
+                    "[dbg-drag] pos=({px},{py}) live_beat={:.3} track={}",
+                    engine.clip_interaction.drag_live_beat,
+                    engine.clip_interaction.drag_live_track,
+                );
+            }
             b.dirty = true;
         });
     }

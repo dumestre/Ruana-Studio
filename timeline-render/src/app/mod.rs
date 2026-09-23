@@ -1220,16 +1220,39 @@ transport,
         beat * self.px_per_beat - self.scroll_x
     }
 
+    /// Dimensões do viewport de INPUT (onde as coordenadas do mouse são válidas).
+    /// No app hostado o quad da timeline (timeline_rect) é menor que a janela:
+    /// `self.size` é a janela inteira, mas pos.0/pos.1 chegam relativos ao quad.
+    /// Standalone nunca chama `set_timeline_rect`, então cai em `self.size`
+    /// (que é a janela == quad).
+    fn input_view_size(&self) -> (f32, f32) {
+        if self.timeline_rect.2 > 1.0 && self.timeline_rect.3 > 1.0 {
+            (self.timeline_rect.2, self.timeline_rect.3)
+        } else {
+            (self.size.0 as f32, self.size.1 as f32)
+        }
+    }
+
     pub fn clip_metrics(&self) -> clips::ClipMetrics {
+        let view = self.input_view_size();
+        let row_height = 64.0 * self.zoom_y.max(0.001);
+        let max_visible =
+            ((view.1 - self.ruler_px) / row_height).floor().max(0.0) as usize;
         clips::ClipMetrics {
             px_per_beat: self.px_per_beat,
             wave_segments: self.wave_segments.clone(),
-            row_height: 64.0 * self.zoom_y.max(0.001),
+            row_height,
             scroll_x: self.scroll_x,
             scroll_y: self.scroll_y,
             ruler_px: self.ruler_px,
             theme: self.theme.clamp(0, 6) as usize,
-            max_track: self.clips.iter().map(|c| c.track_index).max().unwrap_or(0),
+            max_track: self
+                .clips
+                .iter()
+                .map(|c| c.track_index)
+                .max()
+                .unwrap_or(0)
+                .max(max_visible),
         }
     }
 

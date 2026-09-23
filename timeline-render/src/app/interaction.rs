@@ -226,7 +226,7 @@ impl App {
                 self.scroll_y = (self.scroll_y - dy).max(0.0);
             }
         }
-        self.clamp_scroll_y(self.size.1 as f32);
+        self.clamp_scroll_y(self.input_view_size().1);
     }
 
     pub fn handle_mouse_button(&mut self, state: ButtonState, pos: Option<(f32, f32)>) {
@@ -894,8 +894,18 @@ self.play_start_seconds = self.transport_seconds;
                         }
                     } else {
                     // comportamento padrÃ£o jÃ¡ existente
+                    {
+                        let pps = self.px_per_beat.max(0.001);
+                        let hb = (pos.0 + self.scroll_x) / pps;
+                        let ht = ((pos.1 - self.ruler_px + self.scroll_y) / cm.row_height).floor().max(0.0) as usize;
+                        let h = self.clip_interaction.hit_test(&self.clips, pos, &cm);
+                        eprintln!(
+                            "[dbg-hit] pos={pos:?} -> beat={hb:.2} track={ht} n={} ruler={} pps={pps:.1} hit={h:?}",
+                            self.clips.len(),
+                            self.ruler_px,
+                        );
+                    }
                     if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-                        // Se o clip clicado jÃ¡ estÃ¡ selecionado, mantÃ©m a
                         // multiseleÃ§Ã£o (arrasta todos selecionados). SenÃ£o,
                         // colapsa para o grupo de glue.
                         let already_selected = self
@@ -1187,7 +1197,7 @@ if self.fade_interaction.is_dragging() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
-            self.clamp_scroll_y(self.size.1 as f32);
+            self.clamp_scroll_y(self.input_view_size().1);
         }
         // Atualiza a posiÃ§Ã£o do preview de Ã¡udio arrastado
         if self.drop_preview.is_some() {
@@ -1228,8 +1238,7 @@ if self.fade_interaction.is_dragging() {
     /// proximidade (quanto mais perto da borda, mais rÃ¡pido rola).
     /// Zona de trigger: 40px de cada borda. Velocidade mÃ¡xima: 24px/frame.
     pub fn update_edge_scroll(&mut self, pos: (f32, f32)) {
-        let width = self.size.0 as f32;
-        let height = self.size.1 as f32;
+        let (width, height) = self.input_view_size();
         let edge_zone = 40.0;
         let max_speed = 24.0;
 
@@ -1284,7 +1293,7 @@ if self.fade_interaction.is_dragging() {
         self.scroll_x = (self.scroll_x + dx).max(0.0);
         // Ajusta scroll vertical
         self.scroll_y = (self.scroll_y + dy).max(0.0);
-        self.clamp_scroll_y(self.size.1 as f32);
+        self.clamp_scroll_y(self.input_view_size().1);
 
         // Compensa o beat virtual do clip em arrasto para que ele nÃ£o "salte"
         // na tela. O overlay Ã© renderizado em:
