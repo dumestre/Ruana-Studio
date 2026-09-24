@@ -243,6 +243,11 @@ impl FadeInteraction {
                     orig_out_curve_y: fade.out_curve_y,
                     orig_gain_db: fade.gain_db,
                 });
+                eprintln!(
+                    "[dbg-fade-begin] kind={:?} cursor=({:.2},{:.2}) start=({:.2},{:.2}) body=(x={:.2},y={:.2},w={:.2},h={:.2}) pps={} in_len={:.3}",
+                    kind, cursor.0, cursor.1, snapped_cursor.0, snapped_cursor.1,
+                    body_x, body_y, body_w, body_h, px_per_beat, fade.in_len,
+                );
                 return true;
             }
         }
@@ -267,6 +272,11 @@ impl FadeInteraction {
 
         let mut dx = cursor.0 - drag.start_cursor.0;
         let mut dy = cursor.1 - drag.start_cursor.1;
+        eprintln!(
+            "[dbg-fade-drag] kind={:?} cursor=({:.2},{:.2}) start=({:.2},{:.2}) dx={:.2} dy={:.2} in_len={:.3} out_len={:.3} gain={:.2}",
+            drag.kind, cursor.0, cursor.1, drag.start_cursor.0, drag.start_cursor.1, dx, dy,
+            fade.in_len, fade.out_len, fade.gain_db,
+        );
 
         // Travamento de eixo: handle de fade (in/out) responde apenas a X;
         // handle de ganho/volume responde apenas a Y. Ao soltar, destrava.
