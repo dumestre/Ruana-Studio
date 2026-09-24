@@ -129,6 +129,30 @@ pub fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project) {
     engine.wave_segments = segments;
 }
 
+pub fn sync_engine_clip_positions_to_project(clips: &[ClipDemo], project: &mut Project) {
+    if clips.len() != project.clips.len() {
+        return;
+    }
+
+    let moves = clips
+        .iter()
+        .zip(project.clips.iter())
+        .filter_map(|(clip, core_clip)| {
+            let track_id = project.tracks.get(clip.track_index)?.id;
+            if core_clip.track_id == track_id
+                && daw_core::clip::beats_eq(core_clip.start_beat, clip.beat)
+            {
+                return None;
+            }
+            Some((core_clip.id, track_id, clip.beat))
+        })
+        .collect::<Vec<_>>();
+
+    for (clip_id, track_id, beat) in moves {
+        project.move_clip(clip_id, track_id, beat);
+    }
+}
+
 /// Sincroniza clips recém-importados pela engine (via drag OS) de volta para o
 /// `Project` do core e para os modelos do Slint.
 ///
@@ -434,5 +458,36 @@ impl TimelineBridge {
         let Some((w, h, rgba)) = engine.take_rgba() else { return };
         let buf = SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&rgba, w, h);
         ui.set_timeline_canvas_background(slint::Image::from_rgba8(buf));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn moved_engine_clip_updates_project_without_changing_source_offset() {
+        let mut project = Project::startup();
+        let clip_id = project
+            .add_clip_with_source(
+                0,
+                daw_core::clip::ClipKind::Audio,
+                "Audio",
+                1.0,
+                4.0,
+                2.0,
+                Some("sample.wav".to_string()),
+            )
+            .unwrap();
+        let mut clips = build_clip_demos(&project);
+        clips[0].beat = 8.0;
+        clips[0].track_index = 1;
+
+        sync_engine_clip_positions_to_project(&clips, &mut project);
+
+        let clip = project.clip(clip_id).unwrap();
+        assert_eq!(clip.start_beat, 8.0);
+        assert_eq!(clip.track_id, 1);
+        assert_eq!(clip.source_start_beats, 2.0);
     }
 }

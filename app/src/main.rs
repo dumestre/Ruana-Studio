@@ -179,7 +179,10 @@ pub fn setup(
     }
 
     // Republica o projeto na thread RT quando algo muda (coalescido).
-    let _audio_sync = audio_bridge::start_sync_timer(audio.clone(), project.clone());
+    bridge.borrow_mut().audio_sync_timer = Some(audio_bridge::start_sync_timer(
+        audio.clone(),
+        project.clone(),
+    ));
 
     // Cache de waveforms (LRU): clip_id → CachedWave (LODs min/max).
     const WAVEFORM_CACHE_CAP: usize = 256;

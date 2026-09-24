@@ -27,6 +27,7 @@
 //! falha nunca vira silêncio — o callback reusa o último snapshot
 //! válido, que ele mantém consigo.
 
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -56,6 +57,13 @@ pub const STEPS_PER_BEAT: f64 = 4.0;
 
 /// Rampa anti-clique nas bordas de um clip da timeline, em frames.
 const CLIP_EDGE_FADE: f64 = 64.0;
+
+/// Comprimento do crossfade no retorno do loop, em frames (~2 ms a
+/// 48 kHz). No wrap, o transporte salta de fim-de-loop para o início
+/// na fronteira do buffer — o degrau de amplitude é o clique. A cauda
+/// pré-wrap fade-a-fora enquanto os primeiros frames pós-wrap
+/// fade-a-dentro (equal-power); o ponto musical do loop não muda.
+const LOOP_XFADE_FRAMES: usize = 96;
 
 // ============================================================
 // SNAPSHOT
@@ -337,6 +345,15 @@ struct RtState {
     metronome_beat: i64,
     metronome_remaining: u32,
     metronome_phase: f32,
+    /// Cauda dos últimos frames renderizados (estéreo), o material
+    /// que "continuaria" a tocar se não houvesse wrap. Usada como
+    /// rampa descendente do crossfade do retorno do loop.
+    loop_tail: VecDeque<(f32, f32)>,
+    /// Frames restantes do crossfade de loop ativo.
+    xfade_remaining: usize,
+    /// Comprimento do crossfade ativo (pode ser menor que
+    /// `LOOP_XFADE_FRAMES` se o loop for curto ou a cauda incompleta).
+    xfade_len: usize,
 }
 
 impl RtState {
@@ -352,6 +369,9 @@ impl RtState {
             metronome_beat: -1,
             metronome_remaining: 0,
             metronome_phase: 0.0,
+            loop_tail: VecDeque::with_capacity(LOOP_XFADE_FRAMES),
+            xfade_remaining: 0,
+            xfade_len: 0,
         }
     }
 
@@ -381,6 +401,37 @@ impl RtState {
         for v in self.voices.iter_mut() {
             v.buffer = None;
         }
+    }
+
+    /// Aplica o crossfade de loop a um frame estéreo e mantém a cauda.
+    ///
+    /// Fora do crossfade só empurra o frame na cauda (sem tocar no
+    /// sinal). Durante o crossfade, o frame da cauda pré-wrap é lido
+    /// da ponta e misturado com o frame atual em equal-power: a rampa
+    /// descendente vai de ~1 a 0, a ascendente de 0 a ~1 — a potência
+    /// percebida fica constante, sem degrau na fronteira do wrap.
+    #[inline]
+    fn xfade_loop_frame(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let out = if self.xfade_remaining > 0 {
+            let idx = self.xfade_len - self.xfade_remaining;
+            self.xfade_remaining -= 1;
+            match self.loop_tail.front() {
+                Some(&(hl, hr)) => {
+                    let t = (idx as f32 + 0.5) / self.xfade_len as f32;
+                    let g_out = (t * std::f32::consts::FRAC_PI_2).cos();
+                    let g_in = (t * std::f32::consts::FRAC_PI_2).sin();
+                    (hl * g_out + l * g_in, hr * g_out + r * g_in)
+                }
+                None => (l, r),
+            }
+        } else {
+            (l, r)
+        };
+        self.loop_tail.push_back(out);
+        if self.loop_tail.len() > LOOP_XFADE_FRAMES {
+            self.loop_tail.pop_front();
+        }
+        out
     }
 }
 
@@ -532,6 +583,10 @@ impl AudioEngine {
                 rt.pos_frames = t.position_ticks as f64 * frames_per_tick;
                 rt.next_step = i64::MIN; // recalculado abaixo
                 rt.kill_voices();
+                // Seek não é wrap de loop: nada de crossfade, e a
+                // cauda velha (pré-seek) não pode vazar pra ele.
+                rt.xfade_remaining = 0;
+                rt.loop_tail.clear();
             }
         }
 
@@ -721,7 +776,8 @@ impl AudioEngine {
                 rt.metronome_remaining -= 1;
             }
 
-            let (l, r) = limit_stereo(left, right);
+            let (raw_l, raw_r) = limit_stereo(left, right);
+            let (l, r) = rt.xfade_loop_frame(raw_l, raw_r);
             let base = frame * channels;
             match channels {
                 // Mono: soma o par JÁ limitado, então o dispositivo
@@ -752,6 +808,23 @@ impl AudioEngine {
                 rt.ticks_written = written_ticks;
                 if written_ticks != ticks {
                     rt.pos_frames = written_ticks as f64 / ticks_per_frame;
+                    // Wrap de loop: engatilha o crossfade para o fim da
+                    // cauda pré-wrap encontrar o início da pós-wrap sem
+                    // degrau. O comprimento é limitado a metade do loop
+                    // (um loop mais curto que o crossfade não pode ter
+                    // uma janela maior que o próprio span) e à cauda
+                    // disponível. Um crossfade em andamento não é
+                    // reiniciado: loops menores que 1 buffer voltam a
+                    // cruzar antes de ~2 ms e dispensam duas rampas.
+                    if rt.xfade_remaining == 0 {
+                        let span_frames = (t.loop_end_ticks - t.loop_start_ticks) as f64 / ticks_per_frame;
+                        let len = LOOP_XFADE_FRAMES
+                            .min((span_frames * 0.5).floor().max(1.0) as usize)
+                            .min(rt.loop_tail.len())
+                            .max(1);
+                        rt.xfade_len = len;
+                        rt.xfade_remaining = len;
+                    }
                 }
             }
             // Se o lock falhou, `ticks_written` continua o de antes e
@@ -858,8 +931,6 @@ mod tests {
         let path_str = path.to_string_lossy().into_owned();
 
         let rate = 48_000u32;
-        let bpm = 120u32;
-        let frames_per_beat = rate as f64 * 60.0 / bpm as f64;
 
         let mut project = daw_core::Project::startup();
         // `add_clip_with_source`: clip de AUDIO no beat 0, comprimento 5
@@ -892,6 +963,144 @@ mod tests {
         );
     }
 
+    /// Grava um WAV s16le mono contínuo (seno puro) para cravar a
+    /// não-descontinuidade do wrap de loop.
+    fn write_sine_wav(path: &std::path::Path, freq: f32, amp: f32) {
+        let sample_rate = 48_000u32;
+        let total = sample_rate as usize * 3; // 3 s
+        let mut samples = Vec::with_capacity(total);
+        for i in 0..total {
+            let v = (amp * (freq * std::f32::consts::TAU * i as f32 / sample_rate as f32).sin())
+                .clamp(-1.0, 1.0);
+            samples.extend_from_slice(&((v * 32767.0).round() as i16).to_le_bytes());
+        }
+        let mut wav = Vec::with_capacity(44 + samples.len() * 2);
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + samples.len() as u32).to_le_bytes());
+        wav.extend_from_slice(b"WAVE");
+        wav.extend_from_slice(b"fmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+        wav.extend_from_slice(&sample_rate.to_le_bytes());
+        wav.extend_from_slice(&(sample_rate as u32 * 2).to_le_bytes());
+        wav.extend_from_slice(&2u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+        wav.extend_from_slice(&samples);
+        std::fs::write(path, wav).expect("grava wav de teste");
+    }
+
+    /// O retorno do loop não pode degrau: no wrap, a cauda pré-loop é
+    /// cruzada com os primeiros frames pós-loop (crossfade), então a
+    /// maior derivada perto do loop point fica bem abaixo do degrau que
+    /// o sinal teria sem o fade.
+    #[test]
+    fn loop_wrap_nao_descontinuo() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("ruana_loop_tone.wav");
+        write_sine_wav(&path, 1_000.0, 0.5);
+        let path_str = path.to_string_lossy().into_owned();
+
+        let rate = 48_000u32;
+        let bpm = 120u32;
+        // 120 BPM / 960 PPQ → 1 tick = 25 frames a 48 kHz.
+        let frames_per_tick = rate as f64 * 60.0 / (bpm as f64 * 960.0);
+        let buf_frames = 960usize;
+        // Loop de 2000 ticks (50_000 frames); o play começa perto do fim
+        // para o primeiro wrap chegar rápido depois da cauda encher.
+        let loop_start_ticks = 1_000u64; // frame 25_000
+        let loop_end_ticks = 3_000u64; // frame 75_000
+        assert!(((loop_end_ticks - loop_start_ticks) as f64 * frames_per_tick) > buf_frames as f64 * 4.0,
+            "loop longo o bastante para o crossfade inteiro caber num buffer");
+
+        let mut project = daw_core::Project::startup();
+        project.add_clip_with_source(
+            0,
+            daw_core::ClipKind::Audio,
+            "tone",
+            0.0,
+            5.0,
+            0.0,
+            Some(path_str.clone()),
+        );
+
+        let mut cache = BufferCache::new(rate);
+        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+        let transport = Arc::new(Mutex::new(Transport::default()));
+        {
+            let mut t = transport.lock().unwrap();
+            t.playing = true;
+            t.loop_enabled = true;
+            t.loop_start_ticks = loop_start_ticks;
+            t.loop_end_ticks = loop_end_ticks;
+            t.position_ticks = 2_900; // dentro do loop, perto do fim
+        }
+
+        // Degrau que o wrap TERIA sem crossfade: o maior salto entre o
+        // fim do material pré-loop (em qualquer posição de fronteira de
+        // buffer depois do loop_end) e o início do loop, lido do buffer.
+        let buffer = cache.load(&path_str).expect("carrega o tom");
+        let start_f = loop_start_ticks as f64 * frames_per_tick;
+        let end_f = loop_end_ticks as f64 * frames_per_tick;
+        let raw_jump = (0..buf_frames)
+            .map(|k| (buffer.read(end_f + k as f64).0 - buffer.read(start_f).0).abs())
+            .fold(0.0f32, f32::max);
+        assert!(raw_jump > 0.5, "setup do teste: o loop tem que ter degrau real (raw_jump={})", raw_jump);
+
+        let mut rt = RtState::new();
+        let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+
+        let mut out_all: Vec<f32> = Vec::new();
+        let mut boundaries: Vec<usize> = Vec::new();
+        // ~100 kframes = 2 voltas completas do loop.
+        let nbuffers = (loop_end_ticks as usize * 2) * 25 / buf_frames + 8;
+        for _ in 0..nbuffers {
+            let pos_before = rt.pos_frames;
+            let mut out = vec![0.0f32; buf_frames * 2];
+            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, rate);
+            let wrapped = rt.pos_frames + 0.5 < pos_before + buf_frames as f64;
+            for f in 0..buf_frames {
+                out_all.push(out[f * 2]);
+            }
+            if wrapped {
+                // O wrap acontece no FIM deste buffer; o crossfade cobre
+                // o começo do PRÓXIMO — o próximo índice de `out_all`.
+                boundaries.push(out_all.len());
+            }
+        }
+        std::fs::remove_file(&path).ok();
+
+        assert!(boundaries.len() >= 3, "esperado várias voltas de loop (wraps={})", boundaries.len());
+
+        let max_dy_window = boundaries
+            .iter()
+            .filter(|&&b| b + LOOP_XFADE_FRAMES + 1 < out_all.len())
+            .map(|&b| {
+                (b..b + LOOP_XFADE_FRAMES)
+                    .map(|j| (out_all[j + 1] - out_all[j]).abs())
+                    .fold(0.0f32, f32::max)
+            })
+            .fold(0.0f32, f32::max);
+        let max_dy_global = out_all.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
+
+        // ~1 kHz / 48 kHz com amp 0.5: passo natural do seno ≈ 0.065.
+        // O crossfade empurra o degrau do wrap pra baixo de um quarto
+        // dele; sem o fade o salto seria ~raw_jump (>>0.5).
+        assert!(
+            max_dy_window < raw_jump * 0.4,
+            "crossfade do loop deixou degrau: max_dy janela={} raw_jump={}",
+            max_dy_window,
+            raw_jump,
+        );
+        assert!(
+            max_dy_global < 0.25,
+            "wrap introduziu descontinuidade no sinal: max_dy={}",
+            max_dy_global,
+        );
+    }
+
     /// CONTROLE: o mesmo arquivo numa posição posterior não toca antes da hora.
     #[test]
     fn clip_posicionado_longe_fica_silencioso_no_inicio() {
@@ -901,8 +1110,6 @@ mod tests {
         let path_str = path.to_string_lossy().into_owned();
 
         let rate = 48_000u32;
-        let bpm = 120u32;
-        let frames_per_beat = rate as f64 * 60.0 / bpm as f64;
 
         let mut project = daw_core::Project::startup();
         // Clip a 2 beats (1s) do zero; 3s de arquivo = ~6 beats.

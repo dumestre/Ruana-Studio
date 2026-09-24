@@ -58,6 +58,7 @@ pub struct EngineBridge {
     /// (drop), a stream fecha e o Transport nunca mais avança — o playhead
     /// da timeline trava mesmo com `playing=true`.
     pub audio_engine: Option<daw_audio::AudioEngine>,
+    pub audio_sync_timer: Option<slint::Timer>,
     /// Canto superior-esquerdo da janela (px físicos). Manter atualizado no
     /// `Moved`; usado para converter a posição GLOBAL do cursor (GetCursorPos)
     /// em coordenadas da janela durante drags do SO.
@@ -96,6 +97,7 @@ impl EngineBridge {
             project,
             scale,
             audio_engine: None,
+            audio_sync_timer: None,
             win_pos,
             clips_flag,
             dirty: true,
@@ -321,6 +323,7 @@ pub fn install_engine_callbacks(
             let mut b = b.borrow_mut();
             let scale = b.scale;
             let (px, py) = (x * scale, y * scale);
+            let sync_positions = button == 0 && b.engine.clip_interaction.is_dragging();
             let engine = &mut b.engine;
             match button {
                 0 => {
@@ -330,6 +333,12 @@ pub fn install_engine_callbacks(
                     engine.handle_mouse_button(ButtonState::Released, Some((px, py)));
                 }
                 _ => {}
+            }
+            if sync_positions {
+                crate::timeline_slint::sync_engine_clip_positions_to_project(
+                    &b.engine.clips,
+                    &mut b.project.borrow_mut(),
+                );
             }
             b.dirty = true;
         });
