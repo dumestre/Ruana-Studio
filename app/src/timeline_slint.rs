@@ -43,6 +43,7 @@ pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
     proj.clips
         .iter()
         .map(|c| ClipDemo {
+            id: c.id as u32,
             track_index: track_index(c.track_id),
             beat: c.start_beat,
             len: c.length_beats.max(0.05),
@@ -100,6 +101,7 @@ fn spawn_native_window(transport: Arc<Mutex<Transport>>, project: Rc<RefCell<Pro
     let push = |p: &Project, tx: &mpsc::Sender<WindowCommand>| {
         let _ = tx.send(WindowCommand::SetClips(build_clip_demos(p)));
         let _ = tx.send(WindowCommand::SetBpm(p.tempo_map.bpm_at(0.0)));
+        let _ = tx.send(WindowCommand::SetTempoMap(p.tempo_map.changes.clone()));
     };
     push(&project.borrow(), &tx);
     let project_rc = project.clone();
@@ -119,12 +121,15 @@ struct TimelineBridge {
 }
 
 /// Constrói os clips da engine a partir do projeto do core (read-only).
-pub fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project) {
+pub fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project, bpm: f32) {
     engine.clips = build_clip_demos(proj);
 
     // Regenera o buffer de barras (min/max interleaved) por clip.
+    // `bpm` converte os beats de origem (`source_start_beats`, trim do
+    // importer) para frames do arquivo — o mesmo mapeamento que o motor
+    // de áudio usa para tocar, mantendo a wave alinhada com o som.
     let (bars, segments) =
-        timeline_render::waveform::build_wave_bars_and_segments(&mut engine.clips, engine.px_per_beat);
+        timeline_render::waveform::build_wave_bars_and_segments(&mut engine.clips, engine.px_per_beat, bpm);
     engine.wave_bars = bars;
     engine.wave_segments = segments;
 }
@@ -223,7 +228,8 @@ fn install_offscreen(
         }
     };
     if let Some(e) = engine.as_mut() {
-        sync_clips_from_project(e, &project.borrow());
+        let bpm = transport.lock().map(|t| t.bpm as f32).unwrap_or(120.0);
+        sync_clips_from_project(e, &project.borrow(), bpm);
     }
 
     let bridge = Rc::new(RefCell::new(TimelineBridge {
@@ -401,7 +407,12 @@ impl TimelineBridge {
         if self.clips_dirty {
             self.clips_dirty = false;
             if let Some(engine) = self.engine.as_mut() {
-                sync_clips_from_project(engine, &project.borrow());
+                let bpm = self
+                    .transport
+                    .lock()
+                    .map(|t| t.bpm as f32)
+                    .unwrap_or(120.0);
+                sync_clips_from_project(engine, &project.borrow(), bpm);
             }
             self.dirty = true;
         }

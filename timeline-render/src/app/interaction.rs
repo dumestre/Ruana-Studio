@@ -34,6 +34,12 @@ impl App {
                 self.toolbar_hover = None;
                 self.request_redraw();
             }
+            // T: alterna o timewarp (exclusivo com o piano roll).
+            if matches!(vk, Key::Character(s) if s.eq_ignore_ascii_case("t")) {
+                self.toggle_timewarp();
+                self.toolbar_hover = None;
+                self.request_redraw();
+            }
             // F: foca o clip sob o cursor; Ctrl+F: toggle follow playhead.
             if matches!(vk, Key::Character(s) if s.eq_ignore_ascii_case("f")) {
                 if self.ctrl_pressed {
@@ -153,28 +159,43 @@ impl App {
     pub fn handle_scroll(&mut self, dx: f32, dy: f32, with_ctrl: bool, with_alt: bool) {
         let (mx, my) = self.last_cursor;
 
-        // Determina qual Ã¡rea estÃ¡ sob o cursor (timeline ou piano roll)
-        let pr_active = self.show_piano_roll;
-        let (px_per_beat, scroll_x, scroll_y, in_pr_area) = if pr_active {
-            let layout = self.layout(self.size.0 as f32, self.size.1 as f32);
-            if let Some(pr) = &layout.piano_roll {
-                if my >= pr.y && my <= pr.y + pr.height {
-                    (self.piano_roll_px_per_beat, self.piano_roll_scroll_x, self.piano_roll_scroll_y, true)
+        // Determina qual área está sob o cursor: timeline, piano roll ou
+        // timewarp (cada uma com zoom/scroll INDEPENDENTES).
+        let layout = self.layout(self.size.0 as f32, self.size.1 as f32);
+        let (px_per_beat, scroll_x, scroll_y, in_pr_area, in_tw_area) = if self.show_timewarp {
+            let tw = layout.timewarp.as_ref();
+            if let Some(tw) = tw {
+                if my >= tw.y && my <= tw.y + tw.height {
+                    (self.timewarp_px_per_beat, self.timewarp_scroll_x, 0.0, false, true)
                 } else {
-                    (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+                    (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
                 }
             } else {
-                (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+                (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
+            }
+        } else if self.show_piano_roll {
+            let pr = layout.piano_roll.as_ref();
+            if let Some(pr) = pr {
+                if my >= pr.y && my <= pr.y + pr.height {
+                    (self.piano_roll_px_per_beat, self.piano_roll_scroll_x, self.piano_roll_scroll_y, true, false)
+                } else {
+                    (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
+                }
+            } else {
+                (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
             }
         } else {
-            (self.px_per_beat, self.scroll_x, self.scroll_y, false)
+            (self.px_per_beat, self.scroll_x, self.scroll_y, false, false)
         };
 
         if with_ctrl && dy.abs() >= 1.0 {
             let old_px = px_per_beat;
             let new_px = (old_px + dy * 0.05).clamp(8.0, 640.0);
             let beat_under = (mx + scroll_x) / old_px.max(0.01);
-            if in_pr_area {
+            if in_tw_area {
+                self.timewarp_px_per_beat = new_px;
+                self.timewarp_scroll_x = (beat_under * new_px - mx).max(0.0);
+            } else if in_pr_area {
                 self.piano_roll_px_per_beat = new_px;
                 self.piano_roll_scroll_x = (beat_under * new_px - mx).max(0.0);
             } else {
@@ -186,7 +207,7 @@ impl App {
                 let old_kh = self.piano_roll_key_height;
                 let new_kh = (old_kh + dy * 0.1).clamp(2.0, 24.0);
                 self.piano_roll_key_height = new_kh;
-            } else {
+            } else if !in_tw_area {
                 let old_zy = self.zoom_y;
                 let new_zy = (old_zy + dy * 0.01).clamp(0.25, 6.0);
                 let row_under = (my - self.ruler_px + scroll_y) / (64.0 * old_zy.max(0.01)).max(0.01);
@@ -197,12 +218,19 @@ impl App {
             if in_pr_area {
                 self.piano_roll_scroll_y = (self.piano_roll_scroll_y - dy).max(0.0);
                 self.piano_roll_scroll_x = (self.piano_roll_scroll_x - dx).max(0.0);
+            } else if in_tw_area {
+                // Timewarp não tem scroll vertical (faixa BPM fixa).
+                self.timewarp_scroll_x = (self.timewarp_scroll_x - dx).max(0.0);
             } else {
                 self.scroll_x = (self.scroll_x - dx).max(0.0);
                 self.scroll_y = (self.scroll_y - dy).max(0.0);
             }
         }
-        self.clamp_scroll_y(self.size.1 as f32);
+        self.clamp_scroll_y(self.input_view_size().1);
+        eprintln!(
+            "[dbg-scroll] ctrl={with_ctrl} alt={with_alt} dx={dx} dy={dy} -> scroll_x={} scroll_y={} pps={}",
+            self.scroll_x, self.scroll_y, self.px_per_beat,
+        );
     }
 
     pub fn handle_mouse_button(&mut self, state: ButtonState, pos: Option<(f32, f32)>) {
@@ -375,6 +403,7 @@ impl App {
             self.fades = snap.fades;
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
+            self.emit_clip_write_back();
         }
     }
 
@@ -390,6 +419,7 @@ impl App {
             self.fades = snap.fades;
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
+            self.emit_clip_write_back();
         }
     }
 
@@ -410,6 +440,7 @@ impl App {
         let max_track = self.clips.iter().map(|c| c.track_index).max().unwrap_or(0);
         for clip in &self.clipboard {
             let mut new_clip = clip.clone();
+            new_clip.id = 0;
             new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
             new_clip.track_index = (clip.track_index as i32 + track_offset)
                 .clamp(0, (max_track + 1).max(1) as i32 - 1) as usize;
@@ -427,6 +458,7 @@ impl App {
             }
         }
         self.rebuild_wave_data();
+        self.emit_clip_write_back();
     }
 
     /// Duplica os clips selecionados APÃ“S o Ãºltimo clip selecionado (com snap ao grid).
@@ -453,6 +485,7 @@ impl App {
         let beat_offset = snap_beat - min_beat.round();
         for clip in &clips_to_dup {
             let mut new_clip = clip.clone();
+            new_clip.id = 0;
             new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
             self.clips.push(new_clip);
         }
@@ -468,6 +501,7 @@ impl App {
             }
         }
         self.rebuild_wave_data();
+        self.emit_clip_write_back();
     }
 
     /// Deleta os clips selecionados.
@@ -490,6 +524,14 @@ impl App {
         }
         self.clip_interaction.sync_selection(self.clips.len());
         self.rebuild_wave_data();
+        self.emit_clip_write_back();
+    }
+
+    /// Dispara o write-back estruturado de clips para o host (hosted).
+    fn emit_clip_write_back(&mut self) {
+        if let Some(cb) = &mut self.clip_write_back {
+            cb(&self.clips);
+        }
     }
 
     /// Converte posiÃ§Ã£o do cursor para beat e track com snap ao grid
@@ -514,6 +556,7 @@ impl App {
         let (beat, track) = self.cursor_to_snapped_beat_track(pos);
         let len = 4.0; // comprimento padrÃ£o: 1 compasso
         self.clips.push(clips::ClipDemo {
+            id: 0,
             track_index: track,
             beat,
             len,
@@ -531,6 +574,7 @@ impl App {
         });
         self.clip_interaction.sync_selection(self.clips.len());
         self.rebuild_wave_data();
+        self.emit_clip_write_back();
     }
 
     /// Estica clip (ferramenta Stretch) - arrasta borda direita.
@@ -572,6 +616,7 @@ impl App {
 
                 // Cria novo clip para a parte direita
                 let mut right_clip = clip;
+                right_clip.id = 0;
                 right_clip.beat = click_beat_snapped;
                 right_clip.len = right_len;
 
@@ -599,6 +644,7 @@ impl App {
                 // A segmentaÃ§Ã£o do buffer muda (um clip virou dois): regenera
                 // para o clip direito tambÃ©m ter waveform.
                 self.rebuild_wave_data();
+                self.emit_clip_write_back();
             }
         }
     }
@@ -611,6 +657,7 @@ impl App {
             self.clips.remove(idx);
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
+            self.emit_clip_write_back();
         }
     }
 
@@ -693,9 +740,14 @@ self.play_start_seconds = self.transport_seconds;
                 self.pr_handle_ruler_click(state, pos);
             }
         }
+        if self.show_timewarp && state == ButtonState::Released {
+            if self.tw_scrubbing {
+                self.tw_handle_ruler_click(state, pos);
+            }
+        }
 
-        // Intercepta arrasto da splitter do piano roll
-        if self.show_piano_roll && self.splitter_drag {
+        // Intercepta arrasto da splitter da área inferior (PR ou timewarp)
+        if (self.show_piano_roll || self.show_timewarp) && self.splitter_drag {
             if state == ButtonState::Released {
                 self.end_splitter_drag();
             } else {
@@ -768,6 +820,31 @@ self.play_start_seconds = self.transport_seconds;
             }
         }
 
+        // Intercepta clique dentro da área do TIMEWARP ou splitter (visível)
+        if self.show_timewarp {
+            let height = self.size.1 as f32;
+            let width = self.size.0 as f32;
+            let layout = self.layout(width, height);
+            if self.splitter_hit_test(pos.1, height) {
+                self.splitter_drag = true;
+                return;
+            }
+            // Clique na régua do timewarp (scrub da playhead própria)
+            if let Some(tw_ruler) = &layout.timewarp_ruler {
+                if pos.1 >= tw_ruler.y && pos.1 < tw_ruler.y + tw_ruler.height {
+                    self.tw_handle_ruler_click(state, pos);
+                    return;
+                }
+            }
+            // Clique no CONTEÚDO do timewarp (abaixo da régua)
+            if let Some(tw) = &layout.timewarp {
+                if pos.1 >= tw.y {
+                    self.handle_timewarp_click(state, pos);
+                    return;
+                }
+            }
+        }
+
         self.clip_interaction.sync_selection(self.clips.len());
         let cm = self.clip_metrics();
         let tool = current_tool();
@@ -821,8 +898,18 @@ self.play_start_seconds = self.transport_seconds;
                         }
                     } else {
                     // comportamento padrÃ£o jÃ¡ existente
+                    {
+                        let pps = self.px_per_beat.max(0.001);
+                        let hb = (pos.0 + self.scroll_x) / pps;
+                        let ht = ((pos.1 - self.ruler_px + self.scroll_y) / cm.row_height).floor().max(0.0) as usize;
+                        let h = self.clip_interaction.hit_test(&self.clips, pos, &cm);
+                        eprintln!(
+                            "[dbg-hit] pos={pos:?} -> beat={hb:.2} track={ht} n={} ruler={} pps={pps:.1} hit={h:?}",
+                            self.clips.len(),
+                            self.ruler_px,
+                        );
+                    }
                     if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
-                        // Se o clip clicado jÃ¡ estÃ¡ selecionado, mantÃ©m a
                         // multiseleÃ§Ã£o (arrasta todos selecionados). SenÃ£o,
                         // colapsa para o grupo de glue.
                         let already_selected = self
@@ -882,6 +969,9 @@ self.play_start_seconds = self.transport_seconds;
                 }
                 if self.loop_drag.is_some() {
                     self.loop_drag = None;
+                    // Região de loop editada na régua → Transport compartilhado
+                    // (motor de áudio + espelho do host usam a MESMA faixa).
+                    self.emit_loop_write_back();
                 } else if self.clip_interaction.is_dragging() {
                     let snap = true;
                     let cm = self.clip_metrics();
@@ -891,6 +981,8 @@ self.play_start_seconds = self.transport_seconds;
                         self.record_undo();
                     }
                     self.clip_interaction.end_drag(&mut self.clips, &cm, snap);
+                    // Enganche o write-back estruturado de clips (hosted).
+                    self.emit_clip_write_back();
                     // Reseta auto-scroll ao finalizar o arrasto.
                     self.edge_scroll_x = 0.0;
                     self.edge_scroll_y = 0.0;
@@ -901,6 +993,7 @@ self.play_start_seconds = self.transport_seconds;
                     self.clip_interaction.end_draw(&mut self.clips, &cm);
                     self.clip_interaction.sync_selection(self.clips.len());
                     self.rebuild_wave_data();
+                    self.emit_clip_write_back();
                 } else if self.clip_interaction.is_marqueeing() {
                     self.clip_interaction.marquee_move(pos);
                     let cm = self.clip_metrics();
@@ -932,6 +1025,23 @@ self.play_start_seconds = self.transport_seconds;
                 self.pr_handle_loop_drag(pos.0);
             } else if self.pr_scrubbing {
                 self.pr_set_playhead_from_x(pos.0);
+            }
+        }
+
+        // ====== Timewarp: scrub na régua / arrasto/roving de pontos ======
+        if self.show_timewarp {
+            if self.tw_scrubbing {
+                self.tw_set_scrub_beat(pos.0);
+                self.request_redraw();
+            } else if self.timewarp_inter.is_dragging() {
+                let m = self.timewarp_metrics();
+                // Segurar Alt desliga o snap (beat/BPM livre).
+                self.timewarp_inter.drag_move(pos, &m, !self.alt_pressed);
+                self.request_redraw();
+            } else {
+                let m = self.timewarp_metrics();
+                let points = self.tw_points();
+                self.timewarp_inter.update_hover(&points, pos, &m);
             }
         }
 
@@ -1091,7 +1201,7 @@ if self.fade_interaction.is_dragging() {
             let (lx, ly) = self.last_cursor;
             self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
             self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
-            self.clamp_scroll_y(self.size.1 as f32);
+            self.clamp_scroll_y(self.input_view_size().1);
         }
         // Atualiza a posiÃ§Ã£o do preview de Ã¡udio arrastado
         if self.drop_preview.is_some() {
@@ -1132,8 +1242,7 @@ if self.fade_interaction.is_dragging() {
     /// proximidade (quanto mais perto da borda, mais rÃ¡pido rola).
     /// Zona de trigger: 40px de cada borda. Velocidade mÃ¡xima: 24px/frame.
     pub fn update_edge_scroll(&mut self, pos: (f32, f32)) {
-        let width = self.size.0 as f32;
-        let height = self.size.1 as f32;
+        let (width, height) = self.input_view_size();
         let edge_zone = 40.0;
         let max_speed = 24.0;
 
@@ -1187,8 +1296,9 @@ if self.fade_interaction.is_dragging() {
         let prev_sx = self.scroll_x;
         self.scroll_x = (self.scroll_x + dx).max(0.0);
         // Ajusta scroll vertical
+        let prev_sy = self.scroll_y;
         self.scroll_y = (self.scroll_y + dy).max(0.0);
-        self.clamp_scroll_y(self.size.1 as f32);
+        self.clamp_scroll_y(self.input_view_size().1);
 
         // Compensa o beat virtual do clip em arrasto para que ele nÃ£o "salte"
         // na tela. O overlay Ã© renderizado em:
@@ -1197,11 +1307,163 @@ if self.fade_interaction.is_dragging() {
         // `dx / px_per_beat` para manter a mesma posiÃ§Ã£o na tela.
         // Usa o delta efetivo (nÃ£o o pretendido) â€” se scroll_x foi clampado,
         // o clip nÃ£o deve ser empurrado alÃ©m do limite.
+        //
+        // CRÃTICO: `drag_move` recalcula live_beat/live_track a partir de
+        // `drag_start_cursor` (âncora) a cada evento de move. Compensar apenas
+        // `drag_live_beat` seria apagado no move seguinte (o clip "para" na
+        // timeline enquanto a view continua rolando). Por isso o âncora também
+        // é compensado em PX (na direção oposta ao scroll), fazendo o delta
+        // acumular o scroll e o clip permanecer colado ao cursor.
         if self.clip_interaction.is_dragging() && !self.clip_interaction.is_stretching() {
             let pps = self.px_per_beat.max(0.001);
             let actual_dx = self.scroll_x - prev_sx;
-            self.clip_interaction.drag_live_beat += actual_dx / pps;
+            let actual_dy = self.scroll_y - prev_sy;
+            if actual_dx != 0.0 {
+                self.clip_interaction.drag_start_cursor.0 -= actual_dx;
+                self.clip_interaction.drag_live_beat += actual_dx / pps;
+            }
+            if actual_dy != 0.0 {
+                self.clip_interaction.drag_start_cursor.1 -= actual_dy;
+            }
         }
+        // Mesma compensação de âncora para os handles de fade/ganho: o
+        // `update_drag` recalcula o delta a partir de `start_cursor` a cada
+        // move, então o âncora precisa acompanhar o scroll para o knob
+        // permanecer colado ao cursor mesmo com auto-scroll nas bordas.
+        if self.fade_interaction.is_dragging() {
+            if let Some(ref mut drag) = self.fade_interaction.active_drag {
+                let actual_dx = self.scroll_x - prev_sx;
+                let actual_dy = self.scroll_y - prev_sy;
+                if actual_dx != 0.0 {
+                    drag.start_cursor.0 -= actual_dx;
+                }
+                if actual_dy != 0.0 {
+                    drag.start_cursor.1 -= actual_dy;
+                }
+            }
+        }
+    }
+}
+
+// ===== Timewarp interaction helpers =====
+
+impl App {
+    fn timewarp_metrics(&self) -> super::timewarp::TimewarpMetrics {
+        let height = self.size.1 as f32;
+        let width = self.size.0 as f32;
+        let layout = self.layout(width, height);
+        let tw_ruler = layout.timewarp_ruler.unwrap();
+        let tw_rect = layout.timewarp.unwrap();
+        super::timewarp::TimewarpMetrics {
+            px_per_beat: self.timewarp_px_per_beat,
+            scroll_x: self.timewarp_scroll_x,
+            ruler_px: tw_ruler.y,
+            ruler_h: tw_ruler.height,
+            body_top: tw_rect.y,
+            body_h: tw_rect.height,
+            theme: self.theme.clamp(0, 6),
+        }
+    }
+
+    /// Pontos de tempo atuais (espelho das mudanças do `TempoMap`).
+    fn tw_points(&self) -> Vec<super::timewarp::TempoPoint> {
+        self.tempo_map
+            .changes
+            .iter()
+            .map(|c| super::timewarp::TempoPoint { beat: c.beat, bpm: c.bpm })
+            .collect()
+    }
+
+    /// Aplica uma lista de pontos editada de volta ao `TempoMap` e escreve no
+    /// projeto (via callback de write-back).
+    fn tw_apply_points(&mut self, points: &[super::timewarp::TempoPoint]) {
+        for p in points {
+            self.tempo_map.set_change(p.beat, p.bpm);
+        }
+        self.tw_write_back();
+    }
+
+    /// Dispara o callback de write-back (host grava no projeto) e re-renderiza.
+    fn tw_write_back(&mut self) {
+        if let Some(cb) = &self.tempo_write_back {
+            cb(&self.tempo_map);
+        }
+        self.request_redraw();
+    }
+
+    /// Clique na régua do TIMEWARP: inicia/finaliza o scrub da playhead.
+    pub fn tw_handle_ruler_click(&mut self, state: ButtonState, pos: (f32, f32)) {
+        match state {
+            ButtonState::Pressed => {
+                self.tw_scrubbing = true;
+                self.tw_set_scrub_beat(pos.0);
+                self.request_redraw();
+            }
+            ButtonState::Released => {
+                self.tw_scrubbing = false;
+                self.request_redraw();
+            }
+        }
+    }
+
+    /// Clique no corpo do timewarp: edição de pontos de tempo
+    /// (Select = mover, Draw = adicionar, Erase = remover).
+    pub fn handle_timewarp_click(&mut self, state: ButtonState, pos: (f32, f32)) {
+        let m = self.timewarp_metrics();
+        let tool = current_tool();
+
+        match state {
+            ButtonState::Pressed => {
+                if self.splitter_hit_test(pos.1, self.size.1 as f32) {
+                    self.splitter_drag = true;
+                    return;
+                }
+
+                match tool {
+                    Tool::Select => {
+                        let points = self.tw_points();
+                        let _ = self.timewarp_inter.begin_drag(&points, pos, &m);
+                    }
+                    Tool::Draw => {
+                        let (mut beat, bpm) = m.cursor_to_beat_bpm(pos);
+                        if !self.alt_pressed {
+                            beat = beat.round();
+                        }
+                        self.tempo_map.set_change(beat, bpm);
+                        self.tw_write_back();
+                        return;
+                    }
+                    Tool::Erase => {
+                        let points = self.tw_points();
+                        if let Some(idx) = self.timewarp_inter.hit_test(&points, pos, &m) {
+                            if let Some(p) = points.get(idx) {
+                                self.tempo_map.remove_change(p.beat);
+                                self.tw_write_back();
+                                return;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            ButtonState::Released => {
+                if self.splitter_drag {
+                    self.end_splitter_drag();
+                    return;
+                }
+                match tool {
+                    Tool::Select => {
+                        if self.timewarp_inter.is_dragging() {
+                            let mut points = self.tw_points();
+                            self.timewarp_inter.end_drag(&mut points);
+                            self.tw_apply_points(&points);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.request_redraw();
     }
 }
 

@@ -244,6 +244,7 @@ fn demo_clips() -> Vec<ClipDemo> {
     ];
     ROWS.iter()
         .map(|&(track, beat, len, is_midi, color, name)| ClipDemo {
+            id: 0,
             track_index: track,
             beat,
             len: len.max(0.05),

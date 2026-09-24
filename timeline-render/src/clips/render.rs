@@ -351,6 +351,7 @@ pub fn build_clip_instances(
             let live =
                 if inter.stretch_mode {
                     ClipDemo {
+                        id: clip.id,
                         track_index:
                             inter.drag_orig_track,
                         beat:
@@ -382,6 +383,7 @@ pub fn build_clip_instances(
                     }
                 } else {
                     ClipDemo {
+                        id: clip.id,
                         track_index:
                             inter.drag_live_track,
                         beat:
@@ -590,6 +592,7 @@ pub fn build_clip_instances(
                             .max(0) as usize;
 
                     let live = ClipDemo {
+                        id: clip.id,
                         track_index:
                             live_track,
                         beat:
@@ -731,6 +734,7 @@ pub fn build_clip_instances(
                     .min(draw_state.current_track);
 
             let temp_clip = ClipDemo {
+                id: 0,
                 track_index: track,
                 beat: start_beat,
                 len,

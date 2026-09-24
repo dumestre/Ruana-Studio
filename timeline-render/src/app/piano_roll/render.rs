@@ -138,13 +138,53 @@ pub fn build_piano_roll_instances(
     instances
 }
 
-/// Gera as instâncias da régua do piano roll (RÉPLICA EXATA da régua da
-/// timeline, com playhead, loop, subdivisões, FOLLOW etc. INDEPENDENTES).
-/// A área do conteúdo abaixo (corpo do piano roll) recebe fill do loop + bordas.
+/// Régua do piano roll: wrapper da régua compartilhada com `x_offset = teclado`
+/// e seletor de loop ativado. Mantém a assinatura original (usada por
+/// `app::piano_roll_instances`).
 pub fn build_piano_ruler_instances(
     _m: &PianoRollMetrics,
     width: f32,
     _pr_playhead_beat: f32,
+    px_per_beat: f32,
+    scroll_x: f32,
+    theme: usize,
+    ruler_y: f32,
+    ruler_h: f32,
+    body_top: f32,
+    body_h: f32,
+    loop_enabled: bool,
+    loop_start_beat: f32,
+    loop_end_beat: f32,
+    follow_playhead: bool,
+) -> Vec<RectInstance> {
+    build_bottom_ruler_instances(
+        KEYBOARD_W,
+        true,
+        width,
+        px_per_beat,
+        scroll_x,
+        theme,
+        ruler_y,
+        ruler_h,
+        body_top,
+        body_h,
+        loop_enabled,
+        loop_start_beat,
+        loop_end_beat,
+        follow_playhead,
+    )
+}
+
+/// Ruler compartilhada das áreas expandidas (piano roll e timewarp).
+///
+/// Idêntica em estrutura: fundo, compassos alternados, números, subdivisões,
+/// indicador FOLLOW e, quando `with_loop`, o seletor de loop (fill + alças).
+/// `x_offset` é a coluna esquerda (teclado do piano roll ou gutter de BPM do
+/// timewarp). O playhead é desenhado por último pela área (z-order).
+pub fn build_bottom_ruler_instances(
+    x_offset: f32,
+    with_loop: bool,
+    width: f32,
     px_per_beat: f32,
     scroll_x: f32,
     theme: usize,
@@ -164,9 +204,9 @@ pub fn build_piano_ruler_instances(
     let px_per_bar = px_per_beat * 4.0;
     let total_bars = ((width + scroll_x) / px_per_bar).ceil() as usize + 1;
 
-    // Helper: converte beat → x considerando KEYBOARD_W + scroll_x
+    // Helper: converte beat → x considerando x_offset + scroll_x
     let beat_to_x = |beat: f32| -> f32 {
-        KEYBOARD_W + beat * px_per_beat - scroll_x
+        x_offset + beat * px_per_beat - scroll_x
     };
 
     // ===== Fundo base da régua =====
@@ -179,13 +219,13 @@ pub fn build_piano_ruler_instances(
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
 
-    // ===== Fundos alternados dos compassos (par/ímpar) — a partir do teclado =====
+    // ===== Fundos alternados dos compassos (par/ímpar) — a partir da coluna =====
     for i in 0..total_bars {
-        let bx = KEYBOARD_W + i as f32 * px_per_bar - scroll_x;
+        let bx = x_offset + i as f32 * px_per_bar - scroll_x;
         if bx > width + px_per_bar || bx < -px_per_bar { continue; }
         let bg = if i % 2 == 1 { palette::SURFACE_HIGH[t] } else { palette::SURFACE_STEP[t] };
         let bw = px_per_bar;
-        let draw_x = bx.max(KEYBOARD_W);
+        let draw_x = bx.max(x_offset);
         let draw_w = (bx + bw).min(width) - draw_x;
         if draw_w > 0.0 {
             instances.push(RectInstance {
@@ -198,7 +238,7 @@ pub fn build_piano_ruler_instances(
 
     // ===== Linhas de compasso + números + subdivisões =====
     for i in 0..total_bars {
-        let bx = KEYBOARD_W + i as f32 * px_per_bar - scroll_x;
+        let bx = x_offset + i as f32 * px_per_bar - scroll_x;
         if bx > width || bx < -px_per_bar { continue; }
 
         // Número do compasso
@@ -207,7 +247,7 @@ pub fn build_piano_ruler_instances(
             instances.extend(build_text_instances(&format!("{}", i + 1), bx + 4.0, ruler_y + 3.0, ruler_text_color, 1.0));
         }
         // Linha vertical do compasso (altura cheia)
-        if bx >= KEYBOARD_W && bx <= width {
+        if bx >= x_offset && bx <= width {
             instances.push(RectInstance {
                 x: bx, y: ruler_y, w: 1.0, h: ruler_h,
                 color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
@@ -218,7 +258,7 @@ pub fn build_piano_ruler_instances(
         let beat_px = px_per_bar / 4.0;
         for k in 0..4 {
             let x = bx + k as f32 * beat_px;
-            if x < KEYBOARD_W || x > width { continue; }
+            if x < x_offset || x > width { continue; }
             if px_per_bar >= 40.0 {
                 instances.push(RectInstance {
                     x, y: 2.0 + ruler_y, w: 1.0, h: ruler_h - 2.0,
@@ -233,7 +273,7 @@ pub fn build_piano_ruler_instances(
             let step = px_per_bar / n as f32;
             for m in 1..n {
                 let x8 = bx + m as f32 * step;
-                if x8 < KEYBOARD_W || x8 > width { continue; }
+                if x8 < x_offset || x8 > width { continue; }
                 instances.push(RectInstance {
                     x: x8, y: ruler_y + ruler_h - 8.0, w: 1.0, h: 8.0,
                     color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 130],
@@ -247,7 +287,7 @@ pub fn build_piano_ruler_instances(
             let step = px_per_bar / n as f32;
             for m in 1..n {
                 let x16 = bx + m as f32 * step;
-                if x16 < KEYBOARD_W || x16 > width { continue; }
+                if x16 < x_offset || x16 > width { continue; }
                 instances.push(RectInstance {
                     x: x16, y: ruler_y + ruler_h - 6.0, w: 1.0, h: 6.0,
                     color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 110],
@@ -261,7 +301,7 @@ pub fn build_piano_ruler_instances(
             let step = px_per_bar / n as f32;
             for m in 1..n {
                 let x32 = bx + m as f32 * step;
-                if x32 < KEYBOARD_W || x32 > width { continue; }
+                if x32 < x_offset || x32 > width { continue; }
                 instances.push(RectInstance {
                     x: x32, y: ruler_y + ruler_h - 5.0, w: 1.0, h: 5.0,
                     color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 90],
@@ -275,7 +315,7 @@ pub fn build_piano_ruler_instances(
             let step = px_per_bar / n as f32;
             for m in 1..n {
                 let x64 = bx + m as f32 * step;
-                if x64 < KEYBOARD_W || x64 > width { continue; }
+                if x64 < x_offset || x64 > width { continue; }
                 instances.push(RectInstance {
                     x: x64, y: ruler_y + ruler_h - 4.0, w: 1.0, h: 4.0,
                     color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 70],
@@ -285,9 +325,9 @@ pub fn build_piano_ruler_instances(
         }
     }
 
-    // Linha vertical na borda direita do teclado (marca início do compasso 1)
+    // Linha vertical na borda direita da coluna (marca início do compasso 1)
     instances.push(RectInstance {
-        x: KEYBOARD_W, y: ruler_y, w: 1.0, h: ruler_h,
+        x: x_offset, y: ruler_y, w: 1.0, h: ruler_h,
         color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
@@ -299,18 +339,17 @@ pub fn build_piano_ruler_instances(
         instances.extend(build_text_instances("FOLLOW", px, py, rgba(palette::ACCENT[t], 255), 1.0));
     }
 
-    // ===== A PLAYHEAD do PR NÃO É DESENHADA AQUI (ordem de z-order). =====
-    // Ela é desenhada NO FIM de `piano_roll_instances()` em app/mod.rs,
-    // DEPOIS do grid e das notas. Se desenharmos aqui, o grid/notas cobrem
-    // a linha e ela fica "atrás" (invisível) sobre as teclas pretas e notas.
+    // ===== A PLAYHEAD NÃO É DESENHADA AQUI (ordem de z-order). =====
+    // Ela é desenhada NO FIM da montagem da área (app/mod.rs), DEPOIS do
+    // grid/notas/curva. Se desenharmos aqui, esses elementos cobrem a linha.
 
     // ===== Seletor de loop — handles + fill na ruler + fill + bordas no corpo =====
-    if loop_enabled {
-        let r: (u8, u8, u8) = (0x3A, 0x3A, 0x3A);
-        let border = [r.0, r.1, r.2, 255];
-        let fill_ruler = [r.0, r.1, r.2, 45];
-        let fill_body = [r.0, r.1, r.2, 70];
-        let border_body = [r.0, r.1, r.2, 185];
+    if with_loop && loop_enabled {
+        let a = palette::ACCENT[t];
+        let border = [a.0, a.1, a.2, 255];
+        let fill_ruler = [a.0, a.1, a.2, 30];
+        let fill_body = [a.0, a.1, a.2, 45];
+        let border_body = [a.0, a.1, a.2, 140];
         let sx = beat_to_x(loop_start_beat);
         let ex = beat_to_x(loop_end_beat);
         let lw = (ex - sx).max(0.0);

@@ -142,7 +142,7 @@ pub fn button_rects(strip: Rect) -> [(f32, f32, f32, f32); 6] {
 impl crate::App {
     /// Hit-test do cursor sobre os botões da toolbar (None = não está na faixa).
     pub fn toolbar_hit(&self, width: f32, height: f32, cursor: (f32, f32)) -> Option<usize> {
-        if !self.show_piano_roll {
+        if !self.show_piano_roll && !self.show_timewarp {
             return None;
         }
         let strip = self.layout(width, height).edit_toolbar?;
@@ -164,7 +164,7 @@ impl crate::App {
 
     /// Retângulos da toolbar (fundo + botões) para o pipeline principal.
     pub fn edit_toolbar_rect_instances(&self, width: f32, height: f32) -> Vec<RectInstance> {
-        if !self.show_piano_roll {
+        if !self.show_piano_roll && !self.show_timewarp {
             return Vec::new();
         }
         let strip = self.layout(width, height)
@@ -210,7 +210,7 @@ impl crate::App {
 
     /// Ícones texturizados da toolbar para o pipeline de ícones.
     pub fn edit_toolbar_icon_instances(&self, width: f32, height: f32) -> Vec<IconInstance> {
-        if !self.show_piano_roll || ICON_ATLAS_RGBA.is_empty() {
+        if (!self.show_piano_roll && !self.show_timewarp) || ICON_ATLAS_RGBA.is_empty() {
             return Vec::new();
         }
         let strip = self.layout(width, height)

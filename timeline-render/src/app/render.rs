@@ -269,10 +269,11 @@ impl App {
         let row_height = 64.0 * self.zoom_y;
 
         // Altura efetiva da timeline.
-        // Quando o piano roll está visível, a timeline termina na time_ruler
-        // (que é empurrada para cima). A splitter fica ENTRE a time_ruler e o piano roll.
+        // Quando o piano roll OU o timewarp está visível, a timeline termina
+        // na time_ruler (que é empurrada para cima). A splitter fica ENTRE a
+        // time_ruler e o bloco inferior.
         let layout = self.layout(width, height);
-        let timeline_bottom = if self.show_piano_roll {
+        let timeline_bottom = if self.show_piano_roll || self.show_timewarp {
             layout.time_ruler.y
         } else {
             height - self.time_ruler_h
@@ -646,11 +647,12 @@ impl App {
         // Seletor de loop — bordas laterais grossas na régua (alças de arrasto)
         // + centro translúcido descendo por toda a timeline.
         if self.loop_enabled {
-            let r: (u8, u8, u8) = (0x3A, 0x3A, 0x3A); // cinza escuro do loop
-            let border = [r.0, r.1, r.2, 255]; // bordas de ajuste (palitos): opacas
-            let fill_ruler = [r.0, r.1, r.2, 45]; // régua: centro bem transparente
-            let fill_body = [r.0, r.1, r.2, 70]; // timeline: mais translúcido ainda
-            let border_body = [r.0, r.1, r.2, 185]; // borda que desce na timeline: menos translúcida
+            // Cor accent do tema — seletor de loop destacado (não cinza).
+            let a = palette::ACCENT[t];
+            let border = [a.0, a.1, a.2, 255]; // bordas de ajuste (palitos): opacas
+            let fill_ruler = [a.0, a.1, a.2, 30]; // régua: mais translúcida
+            let fill_body = [a.0, a.1, a.2, 45]; // timeline: mais translúcido
+            let border_body = [a.0, a.1, a.2, 140]; // borda que desce: menos dominante
             let sx = self.beat_to_x(self.loop_start_beat);
             let ex = self.beat_to_x(self.loop_end_beat);
             let lw = (ex - sx).max(0.0);
@@ -830,8 +832,9 @@ impl App {
         // ===== Edit toolbar (ferramentas) — entre time_ruler e splitter =====
         instances.extend(self.edit_toolbar_rect_instances(width, height));
 
-        // ===== Piano roll (editor MIDI) + splitter (se visível) =====
+        // ===== Área inferior expandida (piano roll OU timewarp, exclusivos) =====
         instances.extend(self.piano_roll_instances(width, height));
+        instances.extend(self.timewarp_instances(width, height));
 
         instances
     }

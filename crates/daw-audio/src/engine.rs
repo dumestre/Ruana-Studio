@@ -795,6 +795,7 @@ impl AudioEngine {
         // ---- devolve o relógio ao transporte -------------------
         // Os ticks são DERIVADOS da posição em samples: o áudio é o
         // relógio autoritativo, o domínio musical é a projeção.
+
         if playing {
             rt.pos_frames = start_frames + frames as f64;
             let ticks_per_frame = bpm * ppq / (60.0 * sample_rate as f64);

@@ -223,6 +223,10 @@ export component MainWindow inherits Window {
     in-out property <length> timeline-scroll-y <=> workspace.timeline-scroll-y;
     in property <length> timeline-view-width: workspace.timeline-view-width;
 
+    // Piano roll/timewarp abertos (P/T): timeline ocupa a largura total
+    // (track panel oculto) — espelhado pela engine a cada frame.
+    in-out property <bool> timeline-area-expanded <=> workspace.timeline-area-expanded;
+
     // Métricas do motor de zoom/scroll (Rust): âncora do cursor + clamp.
     in-out property <length> timeline-left-padding <=> workspace.timeline-left-padding;
     in property <length> timeline-ruler-height: workspace.timeline-ruler-height;
@@ -277,6 +281,7 @@ export component MainWindow inherits Window {
     callback engine-pointer-up(float, float, int);
     callback engine-scroll(float, float, bool, bool, bool);
     callback engine-key-event(string, bool, bool, bool);
+    callback timeline-zoom-y-changed(float);
 
     in-out property <[ClipData]> clips:
         [
@@ -851,6 +856,7 @@ export component MainWindow inherits Window {
         engine-pointer-up(x, y, b) => { root.engine-pointer-up(x, y, b); }
         engine-scroll(dx, dy, c, s, a) => { root.engine-scroll(dx, dy, c, s, a); }
         engine-key-event(t, c, s, a) => { root.engine-key-event(t, c, s, a); }
+        timeline-zoom-y-changed(zy) => { root.timeline-zoom-y-changed(zy); }
         loop-enabled <=> root.loop-enabled;
         loop-start-beat <=> root.loop-start-beat;
         loop-end-beat <=> root.loop-end-beat;

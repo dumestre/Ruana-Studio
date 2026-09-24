@@ -103,6 +103,7 @@ impl App {
             let source_length_beats = data.duration_seconds as f32 * beats_per_second;
 
             let mut clip = clips::ClipDemo {
+                id: 0,
                 track_index: track,
                 beat: start_beat,
                 len: source_length_beats,
@@ -125,7 +126,13 @@ impl App {
 
             // Gera a waveform (real ou procedural)
             let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
-            clip.wave = match waveform::decode_real_wave(path, n_cols) {
+            clip.wave = match waveform::decode_real_wave(
+                path,
+                n_cols,
+                clip.source_start_beats,
+                clip.source_length_beats,
+                bpm,
+            ) {
                 Ok(w) => w,
                 Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
             };
@@ -178,6 +185,7 @@ impl App {
 
                 // Cria o clip de áudio
                 let mut clip = clips::ClipDemo {
+                    id: 0,
                     track_index: track,
                     beat,
                     len: source_length_beats,
@@ -199,7 +207,13 @@ impl App {
                 };
                 // Gera a waveform (real ou procedural)
                 let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
-                clip.wave = match waveform::decode_real_wave(path, n_cols) {
+                clip.wave = match waveform::decode_real_wave(
+                    path,
+                    n_cols,
+                    clip.source_start_beats,
+                    clip.source_length_beats,
+                    bpm,
+                ) {
                     Ok(w) => w,
                     Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
                 };

@@ -484,8 +484,18 @@ pub fn build_clip_fade_instances(
     let gain_area_h = 6.0;
     let gain_area_y = body_y;
     let gain_hovered = is_hovered(FadeHandleKind::GainLevel);
-    let gradient_strips: i32 = 7;
     let base_alpha: i32 = if gain_hovered { 110 } else { 40 };
+    if gain_hovered {
+        push_handle_circle(
+            instances,
+            body_x + body_w * 0.5,
+            body_y + 4.0,
+            5.0,
+            handle_fill_hover,
+            handle_border_color,
+        );
+    }
+    let gradient_strips: i32 = 7;
     for i in 0..gradient_strips {
         let frac = i as f32 / gradient_strips as f32;
         let strip_alpha = (base_alpha as f32 * (1.0 - frac * 0.85)).round() as u8;
@@ -588,11 +598,15 @@ pub fn hit_test_clip_handles(
         }
     }
 
-    // Handle de ganho/volume — faixa fina no topo do corpo (resto arrasta o clip)
-    let gain_area_h = 6.0;
-    let gain_area_y = body_y;
-    if cursor.0 >= body_x && cursor.0 <= body_x + body_w
-        && cursor.1 >= gain_area_y && cursor.1 <= gain_area_y + gain_area_h
+    // Handle de ganho/volume — botão pequeno no topo-central do corpo.
+    // O resto do corpo e o header arrastam/selecionam o clip normalmente.
+    let knob_w = 16.0;
+    let knob_h = 8.0;
+    let knob_cx = body_x + body_w * 0.5;
+    if cursor.0 >= knob_cx - knob_w * 0.5
+        && cursor.0 <= knob_cx + knob_w * 0.5
+        && cursor.1 >= body_y
+        && cursor.1 <= body_y + knob_h
     {
         return Some(FadeHandleKind::GainLevel);
     }

@@ -34,6 +34,7 @@ use winit::window::{Window, WindowId};
 use crate::slint_host::SlintOverlay;
 use crate::MainWindow;
 use daw_core::project::Project;
+use daw_core::timeline::TempoMap;
 use daw_core::transport::Transport;
 
 /// Estado pequeno compartilhado entre o handler e as closures da DAW.
@@ -76,7 +77,7 @@ pub struct EngineBridge {
 
 impl EngineBridge {
     pub fn new(
-        engine: TimelineEngine,
+        mut engine: TimelineEngine,
         overlay: SlintOverlay,
         transport: Arc<Mutex<Transport>>,
         project: Rc<RefCell<Project>>,
@@ -89,6 +90,15 @@ impl EngineBridge {
             project.borrow().subscribe(move |_event, _kind| {
                 flag.set(true);
             });
+        }
+        // Timewarp → write-back: quando o usuário edita pontos de tempo na
+        // engine (timewarp), o mapa atualizado é gravado no projeto do core
+        // (fonte da verdade), preservando undo/redo do documento.
+        {
+            let project = project.clone();
+            engine.tempo_write_back = Some(Box::new(move |map: &TempoMap| {
+                project.borrow_mut().tempo_map = map.clone();
+            }));
         }
         Self {
             engine,
@@ -130,14 +140,82 @@ impl EngineBridge {
         let rh = ui.get_timeline_canvas_rect_height() * ls;
         self.engine.set_timeline_rect(rx, ry, rw, rh);
 
+        // A engine é a fonte da verdade da área de exibição: P/T abertos
+        // (show_piano_roll/timewarp) fazem a timeline ocupar a largura total
+        // (esconde a track panel); zoom vertical e scroll são espelhados no
+        // Slint para a track panel acompanhar as linhas do wgpu (mesma
+        // proporção e mesmo offset).
+        let expanded = self.engine.show_piano_roll || self.engine.show_timewarp;
+        ui.set_timeline_area_expanded(expanded);
+        ui.set_zoom_y_level(self.engine.zoom_y);
+        ui.set_timeline_scroll_y((self.engine.scroll_y / ls.max(1e-4)).max(0.0));
+        let slint_sx = ui.get_timeline_scroll_x();
+        let eng_sx = self.engine.scroll_x;
+        if (slint_sx * ls - eng_sx).abs() > 1.0 {
+            eprintln!(
+                "[dbg-scroll-div] tick: engine.scroll_x={eng_sx} slint.scroll-x*scale={} (slint={slint_sx})",
+                slint_sx * ls,
+            );
+        }
+
         // Tamanho físico (px) da cena: igual ao quad (1:1).
         let aw = rw.round().clamp(0.0, 8192.0) as u32;
         let ah = rh.round().clamp(0.0, 8192.0) as u32;
 
         // Espelha clips (projeto mudou).
         if self.clips_flag.replace(false) {
-            crate::timeline_slint::sync_clips_from_project(&mut self.engine, &self.project.borrow());
+            let proj = self.project.borrow();
+            let bpm = self
+                .transport
+                .lock()
+                .map(|t| t.bpm as f32)
+                .unwrap_or(120.0);
+            self.engine.bpm = bpm;
+            // `bpm` alinha a região audível da wave (source_start_beats) com
+            // o mesmo mapeamento beats→frames do motor de áudio.
+            crate::timeline_slint::sync_clips_from_project(&mut self.engine, &proj, bpm);
+            self.engine.tempo_map = proj.tempo_map.clone();
+            drop(proj);
             self.dirty = true;
+        }
+
+        // BPM mudou → re-decoda as waves (offsets de trim em beats) para
+        // manter a waveform alinhada com o que o motor de áudio vai tocar.
+        let tbpm = self
+            .transport
+            .lock()
+            .map(|t| t.bpm as f32)
+            .unwrap_or(120.0);
+        if (self.engine.bpm - tbpm).abs() > 0.01 {
+            self.engine.bpm = tbpm;
+            self.clips_flag.set(true);
+        }
+
+        // Loop (botão da toolbar ↔ engine wgpu): o botão LOOP da toolbar
+        // liga/desliga o loop no Transport compartilhado (consumido pelo
+        // motor de áudio). Espelhamos esse estado no engine para a régua
+        // wgpu mostrar/ocultar a região. A faixa editada na régua é escrita
+        // de volta no Transport pela engine (`emit_loop_write_back`) quando o
+        // arrasto acaba; durante o arrasto não repomos a região (senão o drag
+        // "volta sozinho" a cada frame).
+        {
+            let t = self.transport.lock().unwrap();
+            if self.engine.loop_enabled != t.loop_enabled {
+                self.engine.loop_enabled = t.loop_enabled;
+                self.dirty = true;
+            }
+            if self.engine.loop_drag.is_none() {
+                let start_beat = t.loop_start_ticks as f32 / t.ppq as f32;
+                let end_beat = (t.loop_end_ticks as f32 / t.ppq as f32).max(start_beat + 0.01);
+                if (self.engine.loop_start_beat - start_beat).abs() > 0.0001 {
+                    self.engine.loop_start_beat = start_beat;
+                    self.dirty = true;
+                }
+                if (self.engine.loop_end_beat - end_beat).abs() > 0.0001 {
+                    self.engine.loop_end_beat = end_beat;
+                    self.dirty = true;
+                }
+            }
         }
 
         // Playhead segue o Transport compartilhado.
@@ -240,6 +318,19 @@ impl EngineBridge {
             }
         }
 
+        // Auto-scroll contínuo nas bordas durante drag ativo (mesmo com cursor
+        // parado), igual ao binário standalone (window.rs RedrawRequested).
+        if self.engine.clip_interaction.is_dragging() {
+            let (sx0, sy0) = (self.engine.scroll_x, self.engine.scroll_y);
+            self.engine.update_edge_scroll(self.engine.last_cursor);
+            self.engine.apply_edge_scroll();
+            if (self.engine.scroll_x - sx0).abs() > 0.0001
+                || (self.engine.scroll_y - sy0).abs() > 0.0001
+            {
+                self.dirty = true;
+            }
+        }
+
         // Renderiza a cena direto na textura do quad (sem readback).
         if self.dirty {
             self.dirty = false;
@@ -272,6 +363,17 @@ pub fn install_engine_callbacks(
             let mut b = b.borrow_mut();
             let scale = b.scale;
             let (px, py) = (x * scale, y * scale);
+            eprintln!(
+                "[dbg-ptr-down] x={x} y={y} btn={button} scale={scale} -> px={px} py={py} rect=({},{},{},{}) ruler={} pps={} scroll=({},{})",
+                b.engine.timeline_rect.0,
+                b.engine.timeline_rect.1,
+                b.engine.timeline_rect.2,
+                b.engine.timeline_rect.3,
+                b.engine.ruler_px,
+                b.engine.px_per_beat,
+                b.engine.scroll_x,
+                b.engine.scroll_y,
+            );
             let engine = &mut b.engine;
             engine.ctrl_pressed = ctrl;
             engine.shift_pressed = shift;
@@ -312,6 +414,13 @@ pub fn install_engine_callbacks(
                 }
             }
             engine.handle_cursor_moved((px, py));
+            if engine.clip_interaction.is_dragging() {
+                eprintln!(
+                    "[dbg-drag] pos=({px},{py}) live_beat={:.3} track={}",
+                    engine.clip_interaction.drag_live_beat,
+                    engine.clip_interaction.drag_live_track,
+                );
+            }
             b.dirty = true;
         });
     }
@@ -347,6 +456,7 @@ pub fn install_engine_callbacks(
     // ---- RODA / TOUCHPAD ---------------------------------------------
     {
         let b = bridge.clone();
+        let ui_weak = ui.as_weak();
         ui.on_engine_scroll(move |dx, dy, ctrl, _shift, alt| {
             let mut b = b.borrow_mut();
             let scale = b.scale;
@@ -354,6 +464,23 @@ pub fn install_engine_callbacks(
             let py = dy * scale;
             let engine = &mut b.engine;
             engine.handle_scroll(px, py, ctrl, alt);
+            let sx = engine.scroll_x;
+            let slint_sx = ui_weak.upgrade().map(|u| u.get_timeline_scroll_x()).unwrap_or(-1.0);
+            eprintln!(
+                "[dbg-scroll-host] engine.scroll_x={sx} slint.scroll-x={slint_sx} dx={dx} dy={dy}"
+            );
+            b.dirty = true;
+        });
+    }
+
+    // ---- ZOOM VERTICAL ESCRITO PELO SLINT ---------------------------------
+    // A engine é a fonte da verdade do zoom vertical: qualquer mudança vinda
+    // da UI (track panel) é gravada direto nela; o `tick` espelha de volta.
+    {
+        let b = bridge.clone();
+        ui.on_timeline_zoom_y_changed(move |zy| {
+            let mut b = b.borrow_mut();
+            b.engine.zoom_y = zy.clamp(0.25, 6.0);
             b.dirty = true;
         });
     }
