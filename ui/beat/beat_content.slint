@@ -119,6 +119,7 @@ export component BeatContent inherits Rectangle {
     callback add-track-requested;
 
     callback grid-resolution-changed(int);
+    callback drag-moved(length, length);
     callback track-selected(int);
     callback step-toggled(int, bool);
 
@@ -312,6 +313,10 @@ export component BeatContent inherits Rectangle {
 
         close-requested => {
             root.close-requested();
+        }
+
+        drag-moved(dx, dy) => {
+            root.drag-moved(dx, dy);
         }
 
         add-track-requested => {

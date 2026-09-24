@@ -215,128 +215,16 @@ export component BeatPopup inherits Rectangle {
 
 
         // ========================================================
-        // HEADER
-        // ========================================================
-
-        header := Rectangle {
-
-            x: 0px;
-            y: 0px;
-
-            width: parent.width;
-            height: 24px;
-
-            background: Theme.surface-high;
-
-            border-radius: 8px;
-
-
-            // ----------------------------------------------------
-            // TÍTULO
-            // ----------------------------------------------------
-
-            Text {
-                text: root.beat-name;
-
-                x: 8px;
-
-                y: parent.height / 2
-                    - self.height / 2;
-
-                color: Theme.text-primary;
-
-                font-size: 11px;
-                font-weight: 700;
-            }
-
-
-            // ----------------------------------------------------
-            // ARRASTAR POPUP
-            // ----------------------------------------------------
-
-            TouchArea {
-
-                x: 0px;
-                y: 0px;
-
-                width: parent.width;
-                height: parent.height;
-
-                mouse-cursor: grab;
-
-
-                moved => {
-
-                    // Move o popup acompanhando o mouse.
-                    root.popup-x +=
-                        self.mouse-x
-                        - self.pressed-x;
-
-                    root.popup-y +=
-                        self.mouse-y
-                        - self.pressed-y;
-
-
-                    // ------------------------------------------------
-                    // LIMITE ESQUERDO
-                    // ------------------------------------------------
-
-                    root.popup-x =
-                        max(
-                            0px,
-                            root.popup-x
-                        );
-
-
-                    // ------------------------------------------------
-                    // LIMITE SUPERIOR
-                    // ------------------------------------------------
-
-                    root.popup-y =
-                        max(
-                            0px,
-                            root.popup-y
-                        );
-
-
-                    // ------------------------------------------------
-                    // LIMITE DIREITO
-                    // ------------------------------------------------
-
-                    root.popup-x =
-                        min(
-                            root.popup-x,
-                            root.width
-                                - content.width
-                        );
-
-
-                    // ------------------------------------------------
-                    // LIMITE INFERIOR
-                    // ------------------------------------------------
-
-                    root.popup-y =
-                        min(
-                            root.popup-y,
-                            root.height
-                                - content.height
-                        );
-                }
-            }
-        }
-
-
-        // ========================================================
         // BEAT CONTENT
         // ========================================================
 
         beat_content := BeatContent {
 
             x: 0px;
-            y: 24px;
+            y: 0px;
 
             width: parent.width;
-            height: parent.height - 24px;
+            height: parent.height;
 
 
             // ====================================================
@@ -417,6 +305,60 @@ export component BeatPopup inherits Rectangle {
                 root.open = false;
 
                 root.close-requested();
+            }
+
+
+            drag-moved(dx, dy) => {
+
+                root.popup-x += dx;
+
+                root.popup-y += dy;
+
+
+                // ------------------------------------------------
+                // LIMITE ESQUERDO
+                // ------------------------------------------------
+
+                root.popup-x =
+                    max(
+                        0px,
+                        root.popup-x
+                    );
+
+
+                // ------------------------------------------------
+                // LIMITE SUPERIOR
+                // ------------------------------------------------
+
+                root.popup-y =
+                    max(
+                        0px,
+                        root.popup-y
+                    );
+
+
+                // ------------------------------------------------
+                // LIMITE DIREITO
+                // ------------------------------------------------
+
+                root.popup-x =
+                    min(
+                        root.popup-x,
+                        root.width
+                            - content.width
+                    );
+
+
+                // ------------------------------------------------
+                // LIMITE INFERIOR
+                // ------------------------------------------------
+
+                root.popup-y =
+                    min(
+                        root.popup-y,
+                        root.height
+                            - content.height
+                    );
             }
 
 
