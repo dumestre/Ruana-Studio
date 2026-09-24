@@ -1,5 +1,6 @@
 ## Ofunciona na prática
 
+
 1. O seu código gerencia o winit e o wgpu
 Você inicializa a janela com o winit, cria o dispositivo (Device), a fila (Queue) e a Surface do wgpu manualmente. O loop principal (event_loop.run(...)) pertence ao seu motor:
 
