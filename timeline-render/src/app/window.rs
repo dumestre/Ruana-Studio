@@ -348,13 +348,9 @@ if app.is_dragging_file {
                     if state == ElementState::Pressed && app.shift_pressed {
                         let pos = app.last_cursor;
                         if pos.1 >= app.ruler_px {
-                            // Converte cursor para beat e track com snap
-                            let beat = (pos.0 + app.scroll_x) / app.px_per_beat.max(0.001);
-                            let row_height = 64.0 * app.zoom_y.max(0.001);
-                            let track = ((pos.1 - app.ruler_px + app.scroll_y) / row_height)
-                                .floor()
-                                .max(0.0) as usize;
-                            app.paste_at_beat(beat.round().max(0.0), track);
+                            // Converte cursor para beat e track com snap (respeita snap_enabled)
+                            let (beat, track) = app.cursor_to_snapped_beat_track(pos);
+                            app.paste_at_beat(beat, track);
                             app.request_redraw();
                 } else {
                     app.handle_primary_button(state.into(), app.last_cursor);

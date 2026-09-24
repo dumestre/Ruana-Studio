@@ -432,8 +432,12 @@ impl App {
         self.record_undo();
         // Encontra o beat mÃ­nimo dos clips copiados para manter offsets relativos
         let min_beat = self.clipboard.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
-        let snap_beat = target_beat.round().max(0.0);
-        let beat_offset = snap_beat - min_beat.round();
+        let snap_beat = if self.snap_enabled {
+            target_beat.round().max(0.0)
+        } else {
+            target_beat.max(0.0)
+        };
+        let beat_offset = snap_beat - min_beat;
         // Track offset: usa a track do primeiro clip copiado como referÃªncia
         let min_track = self.clipboard.iter().map(|c| c.track_index).min().unwrap_or(0);
         let track_offset = target_track as i32 - min_track as i32;
@@ -441,7 +445,7 @@ impl App {
         for clip in &self.clipboard {
             let mut new_clip = clip.clone();
             new_clip.id = 0;
-            new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
+            new_clip.beat = (clip.beat + beat_offset).max(0.0);
             new_clip.track_index = (clip.track_index as i32 + track_offset)
                 .clamp(0, (max_track + 1).max(1) as i32 - 1) as usize;
             self.clips.push(new_clip);
@@ -479,14 +483,18 @@ impl App {
         let max_end = selected_indices.iter()
             .map(|&i| self.clips[i].beat + self.clips[i].len)
             .fold(0.0_f32, f32::max);
-        let snap_beat = max_end.round().max(0.0);
+        let snap_beat = if self.snap_enabled {
+            max_end.ceil().max(0.0)
+        } else {
+            max_end.max(0.0)
+        };
         let clips_to_dup: Vec<clips::ClipDemo> = selected_indices.iter().map(|&i| self.clips[i].clone()).collect();
         let min_beat = clips_to_dup.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
-        let beat_offset = snap_beat - min_beat.round();
+        let beat_offset = snap_beat - min_beat;
         for clip in &clips_to_dup {
             let mut new_clip = clip.clone();
             new_clip.id = 0;
-            new_clip.beat = (clip.beat + beat_offset).max(0.0).round();
+            new_clip.beat = (clip.beat + beat_offset).max(0.0);
             self.clips.push(new_clip);
         }
         // Seleciona os duplicados
