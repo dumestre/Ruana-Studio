@@ -212,10 +212,21 @@ pub fn setup(
 
     let (tracks_model, clips_model, track_colors_model) =
         initial_bind(ui, &project.borrow(), &waveforms.borrow());
+    let pool_clips_model = {
+        let pool: Vec<crate::ClipData> = (0..clips_model.row_count())
+            .filter_map(|i| clips_model.row_data(i))
+            .collect();
+        let pool_model = Rc::new(slint::VecModel::from(
+            crate::models::build_pool_clips(&pool),
+        ));
+        ui.set_pool_clips(pool_model.clone().into());
+        pool_model
+    };
     bind_document_events(
         &project.borrow(),
         tracks_model,
         clips_model.clone(),
+        pool_clips_model,
         waveforms.clone(),
         ui.as_weak(),
     );

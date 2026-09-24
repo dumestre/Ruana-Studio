@@ -290,6 +290,8 @@ export component MainWindow inherits Window {
             { id: 2, track-index: 2, name: "Vocal Verse", beat: 0.0, len: 4.0, is-midi: false }
         ];
 
+    in-out property <[ClipData]> pool-clips: [];
+
     in-out property <[string]> track-names:
         [
             "Drums",
@@ -896,6 +898,7 @@ export component MainWindow inherits Window {
         track-names <=> root.track-names;
         track-colors <=> root.track-colors;
         clips <=> root.clips;
+        pool-clips <=> root.pool-clips;
 
         drag-active <=> root.drag-active;
         drag-inited <=> root.drag-inited;

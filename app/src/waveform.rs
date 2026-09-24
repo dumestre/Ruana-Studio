@@ -251,6 +251,9 @@ pub fn to_clip_data_from_id(_id: u64, base: &ClipData, _waveforms: &WaveformCach
         fade_in: base.fade_in,
         fade_out: base.fade_out,
         gain_db: base.gain_db,
+        file_path: base.file_path.clone(),
+        source_offset: base.source_offset,
+        midi_fingerprint: base.midi_fingerprint.clone(),
         waveform: wave_image(base.id as u64),
     }
 }
@@ -580,6 +583,35 @@ pub fn to_clip_data(clip: &Clip, _waveforms: &WaveformCache) -> ClipData {
         multi_selected: false,
         fade_in: clip.fade_in_beats,
         fade_out: clip.fade_out_beats,
+        file_path: clip.file_path.clone().unwrap_or_default().into(),
+        source_offset: clip.source_start_beats,
+        midi_fingerprint: midi_notes_fingerprint(&clip.notes).into(),
         waveform: wave_image(clip.id),
     }
+}
+
+fn midi_notes_fingerprint(notes: &[daw_midi::Note]) -> String {
+    let mut sorted: Vec<_> = notes
+        .iter()
+        .map(|n| (n.start, n.pitch, n.length, n.velocity))
+        .collect();
+    sorted.sort_by(|a, b| {
+        a.0.total_cmp(&b.0)
+            .then(a.1.cmp(&b.1))
+            .then(a.2.total_cmp(&b.2))
+            .then(a.3.cmp(&b.3))
+    });
+    let mut s = String::new();
+    for (start, pitch, length, vel) in sorted {
+        use std::fmt::Write;
+        let _ = write!(
+            s,
+            "{},{},{},{};",
+            (start * 100.0).round() as i32,
+            pitch,
+            (length * 100.0).round() as i32,
+            vel
+        );
+    }
+    s
 }

@@ -2,6 +2,7 @@
 //! granular via eventos do documento.
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::ClipData;
@@ -20,6 +21,35 @@ use std::path::PathBuf;
 /// (undo não encolhe a timeline — comportamento padrão de DAW).
 pub fn bars_for_end_beat(end_beat: f64, beats_per_bar: i32) -> i32 {
     ((end_beat / beats_per_bar as f64).ceil() as i32 + 8).max(32)
+}
+
+/// Identidade de um clip como "material" do ClipPool.
+///
+/// Cópias idênticas (mesmo arquivo/notas + mesmas edições) compartilham a
+/// mesma chave e colapsam numa única entrada; alterar parâmetros audíveis
+/// (ganho, fades, região de origem, conteúdo MIDI) gera chave nova.
+fn pool_entry_key(c: &ClipData) -> String {
+    let gain = (c.gain_db * 100.0).round();
+    let fade_in = (c.fade_in * 100.0).round();
+    let fade_out = (c.fade_out * 100.0).round();
+    if c.is_midi {
+        format!("M|{}|{gain}|{fade_in}|{fade_out}", c.midi_fingerprint)
+    } else {
+        let path = c.file_path.as_str().to_lowercase().replace('\\', "/");
+        let offset = (c.source_offset * 100.0).round();
+        format!("A|{path}|{offset}|{gain}|{fade_in}|{fade_out}")
+    }
+}
+
+/// Entradas da biblioteca global do ClipPool: uma por material real,
+/// na ordem de primeiro uso na timeline.
+pub fn build_pool_clips(clips: &[ClipData]) -> Vec<ClipData> {
+    let mut seen = HashSet::new();
+    clips
+        .iter()
+        .filter(|c| seen.insert(pool_entry_key(c)))
+        .cloned()
+        .collect()
 }
 
 /// Fim (em batidas) relevante do evento, para crescer total-bars.
@@ -253,6 +283,7 @@ pub fn bind_document_events(
     project: &Project,
     tracks_model: Rc<slint::VecModel<slint::SharedString>>,
     clips_model: Rc<slint::VecModel<ClipData>>,
+    pool_clips_model: Rc<slint::VecModel<ClipData>>,
     waveforms: Rc<RefCell<WaveformCache>>,
     ui: slint::Weak<MainWindow>,
 ) {
@@ -266,6 +297,10 @@ pub fn bind_document_events(
             &wf,
         );
         drop(wf);
+        let pool: Vec<ClipData> = (0..clips_model.row_count())
+            .filter_map(|i| clips_model.row_data(i))
+            .collect();
+        pool_clips_model.set_vec(build_pool_clips(&pool));
         // Cresce a timeline se o clip passou do fim atual.
         if let Some(end) = event_max_end_beat(event) {
             if let Some(ui) = ui.upgrade() {
@@ -276,4 +311,84 @@ pub fn bind_document_events(
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use slint::SharedString;
+
+    fn audio(id: i32, path: &str, offset: f32, gain: f32) -> ClipData {
+        ClipData {
+            id,
+            track_index: 0,
+            name: SharedString::from("a"),
+            beat: 0.0,
+            len: 4.0,
+            is_midi: false,
+            color: 1,
+            multi_selected: false,
+            fade_in: 0.0,
+            fade_out: 0.0,
+            gain_db: gain,
+            file_path: SharedString::from(path),
+            source_offset: offset,
+            midi_fingerprint: SharedString::from(""),
+            waveform: slint::Image::default(),
+        }
+    }
+
+    fn midi(id: i32, fp: &str) -> ClipData {
+        ClipData {
+            id,
+            track_index: 0,
+            name: SharedString::from("m"),
+            beat: 0.0,
+            len: 4.0,
+            is_midi: true,
+            color: 1,
+            multi_selected: false,
+            fade_in: 0.0,
+            fade_out: 0.0,
+            gain_db: 0.0,
+            file_path: SharedString::from(""),
+            source_offset: 0.0,
+            midi_fingerprint: SharedString::from(fp),
+            waveform: slint::Image::default(),
+        }
+    }
+
+    #[test]
+    fn identical_audio_copies_collapse_to_one_pool_entry() {
+        let clips = vec![
+            audio(1, "C:/samples/kick.wav", 0.0, 0.0),
+            audio(2, "C:/samples/kick.wav", 0.0, 0.0),
+            audio(3, "c:\\samples\\KICK.wav", 0.0, 0.0),
+        ];
+        let pool = build_pool_clips(&clips);
+        assert_eq!(pool.len(), 1);
+        assert_eq!(pool[0].id, 1);
+    }
+
+    #[test]
+    fn modified_gain_or_region_split_pool_entry() {
+        let clips = vec![
+            audio(1, "C:/samples/kick.wav", 0.0, 0.0),
+            audio(2, "C:/samples/kick.wav", 0.0, -6.0),
+            audio(3, "C:/samples/kick.wav", 2.0, 0.0),
+        ];
+        let pool = build_pool_clips(&clips);
+        assert_eq!(pool.len(), 3);
+    }
+
+    #[test]
+    fn identical_midi_copies_collapse_distinct_notes_stay() {
+        let clips = vec![
+            midi(1, "0,60,100,100;"),
+            midi(2, "0,60,100,100;"),
+            midi(3, "0,64,100,100;"),
+        ];
+        let pool = build_pool_clips(&clips);
+        assert_eq!(pool.len(), 2);
+    }
 }
