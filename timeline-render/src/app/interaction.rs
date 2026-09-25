@@ -1376,6 +1376,22 @@ if self.fade_interaction.is_dragging() {
             }
         }
     }
+
+/// Atualiza o pan (botão do meio) consultando a posição atual do mouse via Win32.
+/// Útil quando o SO não envia eventos CursorMoved durante o drag do botão do meio.
+pub fn update_panning_from_mouse(&mut self) {
+    if let Some(ref win) = self.window {
+        if let Some(pos) = crate::app::window::current_cursor_pos(win) {
+            let (lx, ly) = self.last_cursor;
+            self.scroll_x = (self.scroll_x - (pos.0 - lx)).max(0.0);
+            self.scroll_y = (self.scroll_y - (pos.1 - ly)).max(0.0);
+            self.clamp_scroll_y(self.input_view_size().1);
+            self.last_cursor = pos;
+            self.request_redraw();
+        }
+    }
+}
+
 }
 
 // ===== Timewarp interaction helpers =====

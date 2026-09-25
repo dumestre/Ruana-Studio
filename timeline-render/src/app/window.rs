@@ -54,7 +54,7 @@ pub enum WindowCommand {
 // Obtém a posição atual do cursor em coordenadas lógicas da janela, usando
 // `GetCursorPos` (Win32) porque durante o arrasto de um arquivo o sistema
 // operacional não envia eventos `CursorMoved` para a janela.
-fn current_cursor_pos(window: &winit::window::Window) -> Option<(f32, f32)> {
+pub fn current_cursor_pos(window: &winit::window::Window) -> Option<(f32, f32)> {
     unsafe {
         let mut pt = POINT { x: 0, y: 0 };
         if GetCursorPos(&mut pt) != 0 {
@@ -354,6 +354,7 @@ if app.is_dragging_file {
                         }
                     }
                     // Shift+Left Click: cola o clipboard na posição do cursor (qualquer track)
+                    // Usa shift_pressed atualizado pelo handler de teclado
                     if state == ElementState::Pressed && app.shift_pressed {
                         let pos = click_pos;
                         if pos.1 >= app.ruler_px {
@@ -471,7 +472,7 @@ if app.is_dragging_file {
                     }
                 }
             }
-            WindowEvent::Focused(focused) => {
+WindowEvent::Focused(focused) => {
                 if !focused {
                     app.playing = false;
                 }
@@ -484,7 +485,7 @@ if app.is_dragging_file {
         }
     }
 
-fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         // Comandos vindos do app (espelho de clips/bpm/tema) têm prioridade.
         self.drain_commands();
         if let Some(app) = &mut self.app {
@@ -511,6 +512,11 @@ fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
                 && app.fade_interaction.hovered.is_none()
             {
                 tools::update_cursor();
+            }
+            // Atualiza pan com botão do meio (roda) - roda a cada frame para
+            // funcionar mesmo quando o SO não envia CursorMoved durante o drag.
+            if app.panning {
+                app.update_panning_from_mouse();
             }
             if app.playing || app.clip_interaction.is_drawing() {
                 app.request_redraw();
