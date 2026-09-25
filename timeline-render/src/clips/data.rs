@@ -55,6 +55,23 @@ pub struct ClipMetrics {
 }
 
 impl ClipMetrics {
+    /// Retorna o tamanho do passo do grid em beats, baseado no zoom (px_per_beat).
+    /// Espelha a lógica de renderização do grid em `render.rs`.
+    pub fn grid_beat_step(&self) -> f32 {
+        let px_per_bar = self.px_per_beat * 4.0;
+        if px_per_bar >= 960.0 {
+            1.0 / 16.0
+        } else if px_per_bar >= 480.0 {
+            1.0 / 8.0
+        } else if px_per_bar >= 240.0 {
+            1.0 / 4.0
+        } else if px_per_bar >= 120.0 {
+            1.0 / 2.0
+        } else {
+            1.0
+        }
+    }
+
     /// Converte o cursor da janela para o (beat, track) do conteúdo.
     pub(super) fn cursor_to_beat_track(&self, cursor: (f32, f32)) -> (f32, usize) {
         let content_x = cursor.0 + self.scroll_x;

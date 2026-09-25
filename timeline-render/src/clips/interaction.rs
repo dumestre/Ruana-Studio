@@ -433,8 +433,8 @@ impl ClipInteraction {
                 dx / m.px_per_beat.max(0.001);
 
             let new_len = if snap {
-                (self.stretch_orig_len + delta_beats)
-                    .round()
+                let step = m.grid_beat_step();
+                ((self.stretch_orig_len + delta_beats) / step).round() * step
                     .max(0.25)
             } else {
                 (self.stretch_orig_len + delta_beats)
@@ -469,7 +469,8 @@ impl ClipInteraction {
                     .max(0.0);
 
             self.drag_live_beat = if snap {
-                raw_beat.round().max(0.0)
+                let step = m.grid_beat_step();
+                (raw_beat / step).round() * step
             } else {
                 raw_beat
             };
@@ -624,8 +625,10 @@ impl ClipInteraction {
         let (beat, track) =
             m.cursor_to_beat_track(cursor);
 
-        let snapped_beat =
-            beat.round().max(0.0);
+        let snapped_beat = {
+            let step = m.grid_beat_step();
+            (beat / step).round() * step
+        }.max(0.0);
 
         self.draw_state =
             Some(DrawToolState {
@@ -652,8 +655,10 @@ impl ClipInteraction {
                 let (beat, track) =
                     m.cursor_to_beat_track(cursor);
 
-                draw_state.current_beat =
-                    beat.round().max(0.0);
+                draw_state.current_beat = {
+                    let step = m.grid_beat_step();
+                    (beat / step).round() * step
+                }.max(0.0);
 
                 draw_state.current_track =
                     track;

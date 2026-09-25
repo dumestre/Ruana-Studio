@@ -8,6 +8,24 @@ use std::time::Instant;
 
 
 impl App {
+    /// Calcula a resolução do grid (em beats) baseada no zoom atual (px_per_beat).
+    /// Retorna o tamanho de cada passo do grid em beats (ex: 1.0 = 1 beat, 0.5 = 1/2 beat, 0.25 = 1/4 beat, etc).
+    /// Espelha a lógica de renderização do grid em `render.rs`.
+    fn grid_beat_step(&self) -> f32 {
+        let px_per_bar = self.px_per_beat * 4.0;
+        if px_per_bar >= 960.0 {
+            1.0 / 16.0
+        } else if px_per_bar >= 480.0 {
+            1.0 / 8.0
+        } else if px_per_bar >= 240.0 {
+            1.0 / 4.0
+        } else if px_per_bar >= 120.0 {
+            1.0 / 2.0
+        } else {
+            1.0
+        }
+    }
+
     /// Atalhos de teclado do motor (mesma tecla do renderer standalone):
     /// `1..6` ferramentas, `P` piano roll, `F`/`Ctrl+F` foco/follow, `Ctrl+C/A/
     /// Z/Y/V/D`, `Delete/Backspace`, e o rastreio de modificadores. EspaÃ§o e
@@ -421,7 +439,7 @@ impl App {
         }
     }
 
-    /// Cola os clips do clipboard na posiÃ§Ã£o alvo (beat, track), com snap ao grid (1 beat).
+    /// Cola os clips do clipboard na posiÃ§Ã£o alvo (beat, track), com snap ao grid dinâmico.
     /// MantÃ©m a estrutura relativa dos clips copiados.
     pub fn paste_at_beat(&mut self, target_beat: f32, target_track: usize) {
         if self.clipboard.is_empty() {
@@ -431,10 +449,11 @@ impl App {
         // Encontra o beat mÃ­nimo dos clips copiados para manter offsets relativos
         let min_beat = self.clipboard.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
         let snap_beat = if self.snap_enabled {
-            target_beat.round().max(0.0)
+            let step = self.grid_beat_step();
+            (target_beat / step).round() * step
         } else {
-            target_beat.max(0.0)
-        };
+            target_beat
+        }.max(0.0);
         let beat_offset = snap_beat - min_beat;
         // Track offset: usa a track do primeiro clip copiado como referÃªncia
         let min_track = self.clipboard.iter().map(|c| c.track_index).min().unwrap_or(0);
@@ -482,10 +501,11 @@ impl App {
             .map(|&i| self.clips[i].beat + self.clips[i].len)
             .fold(0.0_f32, f32::max);
         let snap_beat = if self.snap_enabled {
-            max_end.ceil().max(0.0)
+            let step = self.grid_beat_step();
+            (max_end / step).ceil() * step
         } else {
-            max_end.max(0.0)
-        };
+            max_end
+        }.max(0.0);
         let clips_to_dup: Vec<clips::ClipDemo> = selected_indices.iter().map(|&i| self.clips[i].clone()).collect();
         let min_beat = clips_to_dup.iter().map(|c| c.beat).fold(f32::INFINITY, f32::min);
         let beat_offset = snap_beat - min_beat;
@@ -542,13 +562,15 @@ impl App {
 
     /// Converte posiÃ§Ã£o do cursor para beat e track com snap ao grid
     /// (respeitando `snap_enabled`: OFF mantém beat fracionário).
+    /// O snap segue o grid visual dinâmico: quanto mais zoom, mais fino o grid.
     pub fn cursor_to_snapped_beat_track(&self, pos: (f32, f32)) -> (f32, usize) {
         let beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
         let snapped_beat = if self.snap_enabled {
-            beat.round().max(0.0)
+            let step = self.grid_beat_step();
+            (beat / step).round() * step
         } else {
-            beat.max(0.0)
-        };
+            beat
+        }.max(0.0);
         let row_height = 64.0 * self.zoom_y.max(0.001);
         let track = ((pos.1 - self.ruler_px + self.scroll_y) / row_height)
             .floor()
@@ -609,7 +631,12 @@ impl App {
         if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
             let clip = self.clips[idx].clone();
             let click_beat = (pos.0 + self.scroll_x) / self.px_per_beat.max(0.001);
-            let click_beat_snapped = click_beat.round().max(clip.beat).min(clip.beat + clip.len);
+            let click_beat_snapped = if self.snap_enabled {
+                let step = self.grid_beat_step();
+                (click_beat / step).round() * step
+            } else {
+                click_beat
+            }.max(clip.beat).min(clip.beat + clip.len);
 
             // SÃ³ divide se o clique nÃ£o estiver na borda
             if click_beat_snapped > clip.beat && click_beat_snapped < clip.beat + clip.len {
