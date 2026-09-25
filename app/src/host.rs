@@ -410,9 +410,20 @@ pub fn install_engine_callbacks(
                             ((px + engine.scroll_x) / engine.px_per_beat.max(0.001)).max(0.0);
                         ui.invoke_seek_to(beat);
                     }
-                    engine.handle_primary_button(ButtonState::Pressed, (px, py));
+                    // Shift+Click (sem arrasto) = colar clipboard na posição
+                    if shift {
+                        engine.paste_at_beat(
+                            ((px + engine.scroll_x) / engine.px_per_beat.max(0.001)).max(0.0),
+                            ((py - engine.ruler_px + engine.scroll_y) / (64.0 * engine.zoom_y.max(0.001)))
+                                .floor()
+                                .max(0.0) as usize,
+                        );
+                    } else {
+                        engine.handle_primary_button(ButtonState::Pressed, (px, py));
+                    }
                 }
                 2 => {
+                    // Botão do meio (middle) = pan (Slint envia middle=2)
                     engine.handle_mouse_button(ButtonState::Pressed, Some((px, py)));
                 }
                 _ => {}
@@ -462,6 +473,7 @@ pub fn install_engine_callbacks(
                     engine.handle_primary_button(ButtonState::Released, (px, py));
                 }
                 2 => {
+                    // Botão do meio (middle) = pan (Slint envia middle=2)
                     engine.handle_mouse_button(ButtonState::Released, Some((px, py)));
                 }
                 _ => {}

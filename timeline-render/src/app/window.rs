@@ -58,7 +58,8 @@ pub fn current_cursor_pos(window: &winit::window::Window) -> Option<(f32, f32)> 
     unsafe {
         let mut pt = POINT { x: 0, y: 0 };
         if GetCursorPos(&mut pt) != 0 {
-            let window_pos = window.outer_position().ok()?;
+            // Usa inner_position (área cliente) em vez de outer_position
+            let window_pos = window.inner_position().ok()?;
             let scale = window.scale_factor();
             let x = (pt.x - window_pos.x) as f32 / scale as f32;
             let y = (pt.y - window_pos.y) as f32 / scale as f32;
