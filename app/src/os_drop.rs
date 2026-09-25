@@ -220,8 +220,11 @@ pub fn install(
     }
 }
 
-/// Feedback de hover do drop (arquivo de áudio do SO sobre a janela): liga o
-/// ghost/drag igual ao drag interno e pré-decodifica em background.
+/// Feedback de hover do drop (arquivo de áudio do SO sobre a janela):
+/// pré-decodifica em background. O preview visual ("normal da timeline") é
+/// alimentado pela própria engine (`drop_preview` via `is_dragging_file`),
+/// NÃO pelo ghost do ClipPool — por isso não há `invoke_drag_begin` aqui
+/// (antes, o ghost de pool aparecia em vez do highlight da timeline).
 ///
 /// Modo hosted (AGENTS.md): chamado direto do loop winit
 /// (`WindowEvent::HoveredFile`) — o `on_winit_window_event` do Slint não
@@ -234,20 +237,6 @@ pub fn handle_hovered(
     if !is_audio_path(path) {
         return;
     }
-    let name = path
-        .file_stem()
-        .and_then(|n| n.to_str())
-        .unwrap_or("Audio")
-        .to_string();
-    let path_str = path.to_string_lossy().to_string();
-    ui.invoke_drag_begin(
-        name.into(),
-        path_str.clone().into(),
-        "".into(),
-        "".into(),
-        slint::Color::from_argb_encoded(0xFF00C853),
-        false,
-    );
     // Pré-decode em background (cacheia).
     clip_cache::spawn_prefetch(sample_cache, path, ui.get_bpm() as f32);
 }

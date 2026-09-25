@@ -6,6 +6,7 @@ import { Theme } from "theme.slint";
 import { ClipPalette } from "clip_palette.slint";
 import { BeatState } from "beat/beat_state.slint";
 import { ClipData } from "timeline/clip_data.slint";
+import { Button } from "components/button.slint";
 
 
 // ============================================================
@@ -649,22 +650,71 @@ export component ClipPool inherits Rectangle {
         // SEÇÃO — BEAT PATTERNS
         // ====================================================
 
-        Text {
+        HorizontalLayout {
 
-            text:
-                "BEAT PATTERNS";
+            spacing: 6px;
 
-            visible:
-                BeatState.pattern-names.length > 0;
+            cross-axis-alignment: CrossAxisAlignment.center;
 
-            color:
-                Theme.text-dim;
+            Text {
 
-            font-size:
-                9px;
+                text:
+                    "BEAT PATTERNS";
 
-            font-weight:
-                700;
+                visible:
+                    BeatState.pattern-names.length > 0;
+
+                color:
+                    Theme.text-dim;
+
+                font-size:
+                    9px;
+
+                font-weight:
+                    700;
+
+                horizontal-stretch:
+                    1;
+            }
+
+            // ----------------------------------------------------
+            // "+" — CRIAR NOVO PADRÃO
+            //
+            // Cria um padrão vazio no core (BeatState.create-pattern)
+            // e o popup do beat se abre (o handler do Rust re-projeta
+            // o novo padrão como ativo e seta beat-open).
+            // ----------------------------------------------------
+
+            Button {
+
+                text:
+                    "+";
+
+                visible:
+                    BeatState.pattern-names.length > 0;
+
+                toggled:
+                    false;
+
+                padding-x:
+                    2px;
+
+                preferred-width:
+                    22px;
+
+                icon-size:
+                    12px;
+
+                text-color:
+                    Theme.text-dim;
+
+                hover-text-color:
+                    Theme.accent;
+
+                clicked => {
+                    BeatState.create-pattern();
+                }
+            }
         }
 
 

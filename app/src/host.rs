@@ -808,14 +808,21 @@ impl ApplicationHandler for Handler {
                 }
             }
             WindowEvent::HoveredFile(path) => {
-                // Roteia pelo DropSink (os_drop): ativa o overlay visual
-                // idêntico ao drag interno + pré-decode. Sem isso o drop
-                // sobre uma linha do beat virava importação de timeline.
+                // Roteia pelo DropSink (os_drop): pré-decode + drop efetivo.
+                // O feedback visual NÃO é o ghost do ClipPool e sim o
+                // `drop_preview` da engine ("normal da timeline"): ligamos
+                // `is_dragging_file` aqui para o `tick` alimentar o preview
+                // que segue o cursor real (mesmo caminho do binário
+                // standalone). Sem isso o hover mostraria o ghost do pool.
+                if crate::importer::is_audio_path(&path) {
+                    bridge.borrow_mut().engine.is_dragging_file = true;
+                }
                 if let Some(sink) = &self.drop_sink {
                     (sink.hovered)(path);
                 }
             }
             WindowEvent::HoveredFileCancelled => {
+                bridge.borrow_mut().engine.is_dragging_file = false;
                 if let Some(sink) = &self.drop_sink {
                     (sink.cancelled)();
                 }
@@ -823,6 +830,7 @@ impl ApplicationHandler for Handler {
             WindowEvent::DroppedFile(path) => {
                 // Decide o alvo pelo cursor real (beat → sampler →
                 // timeline) — o mesmo fluxo do binário standalone.
+                bridge.borrow_mut().engine.is_dragging_file = false;
                 if let Some(sink) = &self.drop_sink {
                     (sink.dropped)(path);
                 }

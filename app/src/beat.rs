@@ -365,6 +365,25 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
     }
 
     // =========================================================
+    // CRIAR NOVO PADRÃO (botão "+" do Clip Pool)
+    //
+    // Cria um padrão vazio no core, re-projeta e abre o popup do
+    // beat — o usuário vê imediatamente onde editar o novo padrão.
+    // =========================================================
+
+    {
+        let ui = ui.clone_strong();
+        let project = project.clone();
+        let audio = audio.clone();
+        st.on_create_pattern(move || {
+            commit(&ui, &project, &audio, |proj| {
+                proj.create_beat_pattern();
+            });
+            ui.set_beat_open(true);
+        });
+    }
+
+    // =========================================================
     // BEAT (padrão inteiro)
     // =========================================================
 

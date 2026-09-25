@@ -1100,6 +1100,31 @@ impl Project {
         self.beat_patterns.duplicate_current();
     }
 
+    /// Cria um novo padrão vazio e o seleciona como ativo.
+    ///
+    /// Nome único ("Pattern 1", "Pattern 2", ...) para o Clip Pool não
+    /// colidir com os existentes. Retorna o índice do novo padrão.
+    pub fn create_beat_pattern(&mut self) -> usize {
+        let mut n = 1;
+        let name = loop {
+            let candidate = format!("Pattern {}", n);
+            if !self
+                .beat_patterns
+                .patterns
+                .iter()
+                .any(|p| p.name == candidate)
+            {
+                break candidate;
+            }
+            n += 1;
+        };
+        self.beat_patterns
+            .add_pattern(DrumPattern::new(name, 8, 16));
+        let idx = self.beat_patterns.patterns.len() - 1;
+        self.beat_patterns.set_current(idx);
+        idx
+    }
+
     /// Remove o padrão atual.
     pub fn delete_beat_pattern(&mut self) -> bool {
         self.beat_patterns.delete_current()
@@ -1146,6 +1171,25 @@ mod tests {
         assert!(project.tracks[1].is_midi());
         assert!(!project.tracks[2].is_midi());
         assert!(project.tracks[3].is_midi());
+    }
+
+    #[test]
+    fn create_beat_pattern_adds_unique_and_selects() {
+        let mut project = demo();
+        let before = project.beat_patterns.patterns.len();
+        let idx = project.create_beat_pattern();
+        assert_eq!(project.beat_patterns.patterns.len(), before + 1);
+        assert_eq!(idx, before);
+        assert_eq!(project.beat_patterns.current, idx);
+        let name = project.beat_patterns.patterns[idx].name.clone();
+        // Nome único entre os padrões.
+        let matches = project
+            .beat_patterns
+            .patterns
+            .iter()
+            .filter(|p| p.name == name)
+            .count();
+        assert_eq!(matches, 1);
     }
 
     #[test]

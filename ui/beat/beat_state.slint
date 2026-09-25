@@ -74,6 +74,9 @@ export global BeatState {
 
     callback pattern-changed(int);
 
+    // Cria um novo padrão vazio e o seleciona (botão "+" do Clip Pool).
+    callback create-pattern;
+
     // Linha do beat selecionada pelo usuário → o Rust sincroniza o
     // sampler para refletir o instrumento (sample) daquela linha.
     callback track-selected(int);
