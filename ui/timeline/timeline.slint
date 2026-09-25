@@ -144,7 +144,9 @@ export component Timeline inherits Rectangle {
         width: max(0px, parent.width - root.timeline-left-padding);
         height: max(0px, parent.height);
 
-        mouse-cursor: crosshair;
+        // SEM mouse-cursor fixo — deixa o Rust (engine) controlar via
+        // slint::platform::set_cursor() / Window::set_cursor_icon()
+        // O crosshair fixo aqui impedia os cursores de ferramenta (hand, resize, etc.)
 
         private property <length> observed-w: self.width;
         private property <length> observed-h: self.height;

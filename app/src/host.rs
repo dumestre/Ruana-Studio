@@ -615,6 +615,7 @@ impl ApplicationHandler for Handler {
         )
         .expect("host: timeline-render init failed");
         engine.set_hosted(true);
+        engine.init_tools();
 
         // Cantos da timeline: mesmo raio (6px lógicos) dos painéis do Slint
         // (explorer/clip pool têm border-radius: 6px), escalado pelo DPR.

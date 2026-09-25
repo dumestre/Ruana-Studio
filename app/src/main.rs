@@ -70,6 +70,8 @@ use daw_core::transport::Transport;
 use daw_midi::NoteEditor;
 use raw_window_handle::HasWindowHandle;
 use slint::Model;
+#[cfg(windows)]
+use timeline_render::tools::{init_tool_manager, set_hwnd as set_tools_hwnd};
 
 #[cfg(windows)]
 fn choose_audio_file() -> Option<String> {
@@ -134,7 +136,11 @@ pub fn setup(
     {
         if let Ok(handle) = window.window_handle() {
             if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                set_cursor_window_handle(h.hwnd.get() as *mut std::ffi::c_void);
+                let hwnd = h.hwnd.get() as *mut std::ffi::c_void;
+                set_cursor_window_handle(hwnd);
+                // Também inicializa o ToolManager (cursores das ferramentas) com o mesmo HWND
+                let _ = init_tool_manager();
+                set_tools_hwnd(hwnd);
             }
         }
     }
