@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use daw_core::transport::Transport;
 use raw_window_handle::HasWindowHandle;
-use windows_sys::Win32::Foundation::{POINT, HWND};
-use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+use windows_sys::Win32::Foundation::{POINT, HWND, RECT};
+use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect, GetClientRect};
 
 /// Especificação do modo "encaixado": a janela da timeline vira uma janela
 /// winit borderless que rastreia a janela principal (do app Makepad/Slint) e
@@ -58,7 +58,22 @@ pub fn current_cursor_pos(window: &winit::window::Window) -> Option<(f32, f32)> 
     unsafe {
         let mut pt = POINT { x: 0, y: 0 };
         if GetCursorPos(&mut pt) != 0 {
-            // Usa inner_position (área cliente) em vez de outer_position
+            // Tenta obter a posição da área cliente via Win32
+            let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+            if let raw_window_handle::RawWindowHandle::Win32(h) = window.window_handle().ok()?.as_raw() {
+                let hwnd = h.hwnd.get() as HWND;
+                if GetWindowRect(hwnd, &mut rect) != 0 {
+                    // Obtém o tamanho da área cliente
+                    let mut client_rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+                    if GetClientRect(hwnd, &mut client_rect) != 0 {
+                        // O client_rect tem (0,0, width, height) - relativo à área cliente
+                        // O rect tem (left, top, right, bottom) - coordenadas de tela da janela
+                        // A área cliente começa em (rect.left + border_left, rect.top + caption_height)
+                        // Mas não temos border/caption facilmente. Use inner_position como fallback.
+                    }
+                }
+            }
+            // Fallback: inner_position (área cliente) - mais confiável para DPI
             let window_pos = window.inner_position().ok()?;
             let scale = window.scale_factor();
             let x = (pt.x - window_pos.x) as f32 / scale as f32;

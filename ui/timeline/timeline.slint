@@ -138,70 +138,74 @@ export component Timeline inherits Rectangle {
     // CAPTURA DE INPUT → ENGINE
     // ========================================================
 
-    engine-input := TouchArea {
+    // FocusScope cria um escopo de foco para a TouchArea receber eventos
+    // de ponteiro imediatamente no primeiro clique.
+    engine-input := FocusScope {
         x: root.timeline-left-padding;
         y: 0px;
         width: max(0px, parent.width - root.timeline-left-padding);
         height: max(0px, parent.height);
 
-        // SEM mouse-cursor fixo — deixa o Rust (engine) controlar via
-        // slint::platform::set_cursor() / Window::set_cursor_icon()
-        // O crosshair fixo aqui impedia os cursores de ferramenta (hand, resize, etc.)
+        TouchArea {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 100%;
 
-        private property <length> observed-w: self.width;
-        private property <length> observed-h: self.height;
-        changed observed-w => {
-            root.canvas-render-requested();
-        }
-        changed observed-h => {
-            root.canvas-render-requested();
-        }
+            // SEM mouse-cursor fixo — deixa o Rust (engine) controlar via
+            // slint::platform::set_cursor() / Window::set_cursor_icon()
+            // O crosshair fixo aqui impedia os cursores de ferramenta (hand, resize, etc.)
 
-        pointer-event(ev) => {
-            let btn = ev.button == PointerEventButton.left
-                ? 0
-                : ev.button == PointerEventButton.right
-                    ? 1
-                    : ev.button == PointerEventButton.middle
-                        ? 2
-                        : 3;
-            if ev.kind == PointerEventKind.down {
-                root.engine-pointer-down(
-                    self.mouse-x / 1px,
-                    self.mouse-y / 1px,
-                    btn,
+            private property <length> observed-w: self.width;
+            private property <length> observed-h: self.height;
+            changed observed-w => {
+                root.canvas-render-requested();
+            }
+            changed observed-h => {
+                root.canvas-render-requested();
+            }
+
+            pointer-event(ev) => {
+                let btn = ev.button == PointerEventButton.left
+                    ? 0
+                    : ev.button == PointerEventButton.right
+                        ? 1
+                        : ev.button == PointerEventButton.middle
+                            ? 2
+                            : 3;
+                if ev.kind == PointerEventKind.down {
+                    root.engine-pointer-down(
+                        self.mouse-x / 1px,
+                        self.mouse-y / 1px,
+                        btn,
+                        ev.modifiers.control,
+                        ev.modifiers.shift,
+                        ev.modifiers.alt
+                    );
+                } else if ev.kind == PointerEventKind.move {
+                    root.engine-pointer-move(
+                        self.mouse-x / 1px,
+                        self.mouse-y / 1px
+                    );
+                } else if ev.kind == PointerEventKind.up {
+                    root.engine-pointer-up(
+                        self.mouse-x / 1px,
+                        self.mouse-y / 1px,
+                        btn
+                    );
+                }
+            }
+
+            scroll-event(ev) => {
+                root.engine-scroll(
+                    ev.delta-x / 1px,
+                    ev.delta-y / 1px,
                     ev.modifiers.control,
                     ev.modifiers.shift,
                     ev.modifiers.alt
                 );
-            } else if ev.kind == PointerEventKind.move {
-                root.engine-pointer-move(
-                    self.mouse-x / 1px,
-                    self.mouse-y / 1px
-                );
-            } else if ev.kind == PointerEventKind.up {
-                root.engine-pointer-up(
-                    self.mouse-x / 1px,
-                    self.mouse-y / 1px,
-                    btn
-                );
+                accept;
             }
-        }
-
-        scroll-event(ev) => {
-            root.engine-scroll(
-                ev.delta-x / 1px,
-                ev.delta-y / 1px,
-                ev.modifiers.control,
-                ev.modifiers.shift,
-                ev.modifiers.alt
-            );
-            accept;
-        }
-
-        // Clique na área devolve o foco aos atalhos globais.
-        clicked => {
-            root.keyboard-focus-requested();
         }
     }
 
