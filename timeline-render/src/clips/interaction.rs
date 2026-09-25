@@ -456,22 +456,23 @@ impl ClipInteraction {
                         .fold(self.drag_orig_beat, f32::min)
                 };
 
-            // O snap arredonda o DELTA (não o beat resultante do âncora),
-            // preservando os offsets relativos entre os membros do grupo.
+            // O snap alinha o BEAT RESULTANTE do âncora ao grid (não apenas o
+            // delta), para que mesmo clips que começam fora do grid — como os
+            // importados via OS drop — grudem exatamente em cima da linha. Os
+            // offsets relativos entre os membros do grupo são preservados no
+            // `end_drag` (todos recebem o mesmo delta do âncora).
             let clamped_delta =
                 delta_beats.max(-min_group_beat);
 
-            let snapped_delta = if snap {
-                clamped_delta
-                    .round()
-                    .max(-min_group_beat)
-            } else {
-                clamped_delta
-            };
-
-            self.drag_live_beat =
-                (self.drag_orig_beat + snapped_delta)
+            let raw_beat =
+                (self.drag_orig_beat + clamped_delta)
                     .max(0.0);
+
+            self.drag_live_beat = if snap {
+                raw_beat.round().max(0.0)
+            } else {
+                raw_beat
+            };
 
             let row_delta =
                 (dy / m.row_height.max(0.001)).round() as i32;

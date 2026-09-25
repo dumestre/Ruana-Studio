@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 
 use slint::{ComponentHandle, SharedPixelBuffer, Timer, TimerMode};
 
+use daw_core::clip::{beats_eq, ClipKind};
 use daw_core::transport::Transport;
 use daw_core::Project;
 use timeline_render::app::ButtonState;
@@ -134,27 +135,99 @@ pub fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project, bpm:
     engine.wave_segments = segments;
 }
 
-pub fn sync_engine_clip_positions_to_project(clips: &[ClipDemo], project: &mut Project) {
-    if clips.len() != project.clips.len() {
-        return;
+/// Reconcilia a lista COMPLETA de clips da engine (`clips`) de volta para o
+/// `Project` (fonte da verdade) após qualquer edição estrutural feita na
+/// timeline (mover, deletar, colar, duplicar, desenhar, fatiar, cola).
+///
+/// Instalado como `engine.clip_write_back` no hosted: sempre que a engine
+/// termina uma edição ela entrega a lista inteira de `ClipDemo`. As regras:
+///
+/// 1. clips do `Project` que NÃO aparecem na engine são apagados
+///    (a engine já removeu do desenho);
+/// 2. clips com `id != 0` presentes nos dois são reposicionados
+///    (track/beat) quando a engine mudou a posição;
+/// 3. clips com `id == 0` (criados na engine: paste/duplicate/draw/slice)
+///    são adicionados ao `Project`, ganhando id real.
+///
+/// Sem isso, edições da timeline ficavam SÓ na engine: o áudio (que lê o
+/// `Project`) continuava tocando clips apagados/na posição antiga, e um
+/// import (que refaz o espelho a partir do `Project`) apagava os clips
+/// montados na própria engine.
+///
+/// `mirrored_ids` = ids que o espelho (tick) já admitiu no engine. Só clips
+/// COM esse id são candidatos a delete: um clip recém-importado ainda não
+/// forte para o engine até o próximo rebuild, então não pode ser apagado por
+/// um write-back disparado no mesmo frame do import.
+pub fn reconcile_engine_clips_to_project(
+    clips: &[ClipDemo],
+    project: &mut Project,
+    mirrored_ids: &[u64],
+) {
+    // 1) Clips do Project que sumiram da engine → apaga do documento.
+    //    Restrito a ids que o espelho já conhecia (evita matar um clip
+    //    recém-importado cujo rebuild ainda não rodou).
+    let engine_ids: Vec<u64> = clips.iter().map(|c| c.id as u64).collect();
+    let mut to_delete: Vec<u64> = Vec::new();
+    for core in &project.clips {
+        if mirrored_ids.contains(&core.id) && !engine_ids.contains(&core.id) {
+            to_delete.push(core.id);
+        }
+    }
+    for id in to_delete {
+        project.delete_clip(id);
     }
 
-    let moves = clips
-        .iter()
-        .zip(project.clips.iter())
-        .filter_map(|(clip, core_clip)| {
-            let track_id = project.tracks.get(clip.track_index)?.id;
-            if core_clip.track_id == track_id
-                && daw_core::clip::beats_eq(core_clip.start_beat, clip.beat)
-            {
-                return None;
-            }
-            Some((core_clip.id, track_id, clip.beat))
-        })
-        .collect::<Vec<_>>();
+    // 2) Reposicionar clips existentes (id casando entre engine e Project).
+    for clip in clips.iter().filter(|c| c.id != 0) {
+        let Some(track_id) = project.tracks.get(clip.track_index).map(|t| t.id) else {
+            continue;
+        };
+        // Descobre o clip correspondente no Project por id.
+        let Some(core) = project.clips.iter().find(|c| c.id == clip.id as u64) else {
+            continue;
+        };
+        let (core_id, core_track, core_beat, core_len) =
+            (core.id, core.track_id, core.start_beat, core.length_beats);
+        if core_track != track_id || !beats_eq(core_beat, clip.beat) {
+            project.move_clip(core_id, track_id, clip.beat);
+        }
+        if !beats_eq(core_len, clip.len) && clip.len > 0.0 {
+            let _ = project.resize_clip(core_id, clip.beat, clip.len);
+        }
+    }
 
-    for (clip_id, track_id, beat) in moves {
-        project.move_clip(clip_id, track_id, beat);
+    // 3) Clips novos da engine (id == 0) → adiciona ao Project.
+    //    Idempotente: se já existe um clip nestas track/beat/len/kind, é o
+    //    mesmo que o write-back anterior já persistiu (o rebuild que troca o
+    //    id==0 pelo id real ainda não rodou).
+    for clip in clips.iter().filter(|c| c.id == 0 && c.len > 0.05) {
+        let Some(track_id) = project.tracks.get(clip.track_index).map(|t| t.id) else {
+            continue;
+        };
+        let kind = if clip.is_midi { ClipKind::Midi } else { ClipKind::Audio };
+        let already_there = project.clips.iter().any(|c| {
+            c.track_id == track_id
+                && beats_eq(c.start_beat, clip.beat)
+                && beats_eq(c.length_beats, clip.len)
+                && (kind == ClipKind::Midi) == c.is_midi()
+        });
+        if already_there {
+            continue;
+        }
+        let name = clip.name.clone().unwrap_or_default();
+        if let Some(path) = &clip.file_path {
+            project.add_clip_with_source(
+                track_id,
+                kind,
+                name,
+                clip.beat,
+                clip.len,
+                clip.source_start_beats,
+                Some(path.clone()),
+            );
+        } else {
+            project.add_clip(track_id, kind, name, clip.beat, clip.len);
+        }
     }
 }
 
@@ -490,11 +563,12 @@ mod tests {
                 Some("sample.wav".to_string()),
             )
             .unwrap();
+        let mirrored_ids = project.clips.iter().map(|c| c.id).collect::<Vec<_>>();
         let mut clips = build_clip_demos(&project);
         clips[0].beat = 8.0;
         clips[0].track_index = 1;
 
-        sync_engine_clip_positions_to_project(&clips, &mut project);
+        reconcile_engine_clips_to_project(&clips, &mut project, &mirrored_ids);
 
         let clip = project.clip(clip_id).unwrap();
         assert_eq!(clip.start_beat, 8.0);

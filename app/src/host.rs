@@ -66,6 +66,10 @@ pub struct EngineBridge {
     pub win_pos: (f64, f64),
     /// O projeto mudou → o espelho de clips precisa de rebuild.
     pub clips_flag: Rc<Cell<bool>>,
+    /// Ids que o espelho já carregou no engine (tick). Guarda do write-back
+    /// de clips: um clip recém-importado só pode ser apagado do Project
+    /// depois que o rebuild admitir o id no engine.
+    pub mirrored_clip_ids: Rc<RefCell<Vec<u64>>>,
     /// A cena precisa de um novo frame (rendered direto para `timeline_bg`).
     pub dirty: bool,
 
@@ -100,6 +104,24 @@ impl EngineBridge {
                 project.borrow_mut().tempo_map = map.clone();
             }));
         }
+        let mirrored_clip_ids = Rc::new(RefCell::new(Vec::<u64>::new()));
+        // Clips → write-back: toda edição estrutural na engine (mover, deletar,
+        // colar, duplicar, desenhar, fatiar) entrega a lista completa de clips.
+        // Reconcilia com o `Project` (fonte da verdade do áudio): sem isso o
+        // áudio continuaria tocando clips apagados / na posição antiga e
+        // qualquer import (rebuild do espelho) sumiria com clips da engine.
+        {
+            let project = project.clone();
+            let mirrored = mirrored_clip_ids.clone();
+            engine.clip_write_back =
+                Some(Box::new(move |clips: &[timeline_render::clips::ClipDemo]| {
+                    crate::timeline_slint::reconcile_engine_clips_to_project(
+                        clips,
+                        &mut project.borrow_mut(),
+                        &mirrored.borrow(),
+                    );
+                }));
+        }
         Self {
             engine,
             overlay,
@@ -110,6 +132,7 @@ impl EngineBridge {
             audio_sync_timer: None,
             win_pos,
             clips_flag,
+            mirrored_clip_ids,
             dirty: true,
             waveforms: None,
             clips_model: None,
@@ -175,6 +198,7 @@ impl EngineBridge {
             // o mesmo mapeamento beats→frames do motor de áudio.
             crate::timeline_slint::sync_clips_from_project(&mut self.engine, &proj, bpm);
             self.engine.tempo_map = proj.tempo_map.clone();
+            *self.mirrored_clip_ids.borrow_mut() = proj.clips.iter().map(|c| c.id).collect();
             drop(proj);
             self.dirty = true;
         }
@@ -432,7 +456,6 @@ pub fn install_engine_callbacks(
             let mut b = b.borrow_mut();
             let scale = b.scale;
             let (px, py) = (x * scale, y * scale);
-            let sync_positions = button == 0 && b.engine.clip_interaction.is_dragging();
             let engine = &mut b.engine;
             match button {
                 0 => {
@@ -442,12 +465,6 @@ pub fn install_engine_callbacks(
                     engine.handle_mouse_button(ButtonState::Released, Some((px, py)));
                 }
                 _ => {}
-            }
-            if sync_positions {
-                crate::timeline_slint::sync_engine_clip_positions_to_project(
-                    &b.engine.clips,
-                    &mut b.project.borrow_mut(),
-                );
             }
             b.dirty = true;
         });

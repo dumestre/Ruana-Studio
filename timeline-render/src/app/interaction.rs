@@ -403,7 +403,6 @@ impl App {
             self.fades = snap.fades;
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
-            self.emit_clip_write_back();
         }
     }
 
@@ -419,7 +418,6 @@ impl App {
             self.fades = snap.fades;
             self.clip_interaction.sync_selection(self.clips.len());
             self.rebuild_wave_data();
-            self.emit_clip_write_back();
         }
     }
 
@@ -706,6 +704,7 @@ impl App {
                 self.clips[chain_end_idx].len = (next_beat - end_clip.beat).max(0.25);
                 self.clip_interaction.select_chain(&self.clips, &chain);
                 self.rebuild_wave_data();
+                self.emit_clip_write_back();
             }
         }
     }
@@ -981,7 +980,7 @@ self.play_start_seconds = self.transport_seconds;
                     // (motor de áudio + espelho do host usam a MESMA faixa).
                     self.emit_loop_write_back();
                 } else if self.clip_interaction.is_dragging() {
-                    let snap = true;
+                    let snap = self.snap_enabled;
                     let cm = self.clip_metrics();
                     self.clip_interaction.drag_move(pos, &cm, snap);
                     // Registra undo apenas se houve movimento real
