@@ -1039,12 +1039,11 @@ self.play_start_seconds = self.transport_seconds;
         }
     }
 
-    pub fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
-        // ====== CRÃTICO (winit 0.30): atualiza last_cursor ANTES de qualquer
-        // lÃ³gica. O evento MouseInput (clique) NÃƒO traz a posiÃ§Ã£o â€” ele usa
-        // `app.last_cursor` para saber onde o clique foi. Sem isso, todos os
-        // hit tests (splitter, ruler do piano roll, loop handles etc.) usam
-        // a posiÃ§Ã£o ANTERIOR do mouse e a interaÃ§Ã£o FICA COMPLETAMENTE FORA.
+pub fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
+        // ====== CRÍTICO (winit 0.30): atualiza last_cursor ANTES de qualquer
+        // lógica. O evento MouseInput (clique) NÃO traz a posição — ele usa
+        // `app.last_cursor` para saber onde o clique foi. O CursorMoved
+        // atualiza last_cursor; garanta que ele rode antes do primeiro clique.
         self.last_cursor = pos;
 
         // Se a splitter estÃ¡ sendo arrastada, redimensiona o piano roll em tempo real

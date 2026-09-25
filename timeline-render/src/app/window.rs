@@ -313,13 +313,22 @@ if app.is_dragging_file {
                 button,
                 ..
             } => {
+                // Tenta obter a posição atual do cursor via Win32 (fallback para
+                // o primeiro clique antes de qualquer CursorMoved).
+                let click_pos = if let Some(ref win) = app.window {
+                    current_cursor_pos(win).unwrap_or(app.last_cursor)
+                } else {
+                    app.last_cursor
+                };
+                app.last_cursor = click_pos;
+
                 if app.toolbar_hover.is_none() {
                     tools::update_cursor();
                 }
                 // Inicia arrasto da splitter da área inferior (piano roll ou timewarp)
                 if state == ElementState::Pressed
                     && (app.show_piano_roll || app.show_timewarp)
-                    && app.splitter_hit_test(app.last_cursor.1, app.size.1 as f32)
+                    && app.splitter_hit_test(click_pos.1, app.size.1 as f32)
                 {
                     app.splitter_drag = true;
                 }
@@ -327,7 +336,7 @@ if app.is_dragging_file {
                     app.splitter_drag = false;
                 }
                 if button == winit::event::MouseButton::Middle {
-                    let pos = Some(app.last_cursor);
+                    let pos = Some(click_pos);
                     app.handle_mouse_button(state.into(), pos);
                 } else if button == winit::event::MouseButton::Left {
                     // Edit toolbar: clique muda a ferramenta e NÃO propaga.
@@ -335,7 +344,7 @@ if app.is_dragging_file {
                         if let Some(idx) = app.toolbar_hit(
                             app.size.0 as f32,
                             app.size.1 as f32,
-                            app.last_cursor,
+                            click_pos,
                         ) {
                             if let Some(tool) = crate::app::edit_toolbar::tool_from_index(idx) {
                                 set_tool(tool);
@@ -346,17 +355,15 @@ if app.is_dragging_file {
                     }
                     // Shift+Left Click: cola o clipboard na posição do cursor (qualquer track)
                     if state == ElementState::Pressed && app.shift_pressed {
-                        let pos = app.last_cursor;
+                        let pos = click_pos;
                         if pos.1 >= app.ruler_px {
                             // Converte cursor para beat e track com snap (respeita snap_enabled)
                             let (beat, track) = app.cursor_to_snapped_beat_track(pos);
                             app.paste_at_beat(beat, track);
                             app.request_redraw();
-                } else {
-                    app.handle_primary_button(state.into(), app.last_cursor);
-                }
+                        }
                     } else {
-                        app.handle_primary_button(state.into(), app.last_cursor);
+                        app.handle_primary_button(state.into(), click_pos);
                     }
                 }
                 app.request_redraw();
@@ -468,6 +475,10 @@ if app.is_dragging_file {
                 if !focused {
                     app.playing = false;
                 }
+            }
+            WindowEvent::CursorEntered { .. } => {
+                // Inicializa last_cursor quando o mouse entra na janela
+                // (evita primeiro clique com posição (0,0) ou stale)
             }
             _ => {}
         }
