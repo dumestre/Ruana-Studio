@@ -178,10 +178,23 @@ component ClipItem inherits ClipItemVisual {
 
 
     // ========================================================
-    // CLIQUE
+    // CLIQUE / DUPLO CLIQUE
     // ========================================================
 
     callback clicked();
+    callback double-clicked();
+
+    private property <int> last-click-time: 0;
+    private property <int> current-time: 0;
+
+    // Timer para atualizar o tempo atual (1ms tick)
+    Timer {
+        interval: 1ms;
+        running: true;
+        triggered => {
+            root.current-time = root.current-time + 1;
+        }
+    }
 
 
     // ========================================================
@@ -276,12 +289,19 @@ component ClipItem inherits ClipItemVisual {
 
 
                 // ---------------------------------------------
-                // CLIQUE PURO
+                // CLIQUE PURO / DUPLO CLIQUE
                 // ---------------------------------------------
 
                 if !self.did-drag {
 
-                    root.clicked();
+                    // Detecta duplo clique (300ms) usando o timer do componente
+                    let now = root.current-time;
+                    if now - root.last-click-time < 300 {
+                        root.double-clicked();
+                    } else {
+                        root.clicked();
+                    }
+                    root.last-click-time = now;
                 }
 
 
@@ -759,6 +779,17 @@ export component ClipPool inherits Rectangle {
                     BeatState.pattern-changed(
                         i
                     );
+                }
+
+                // ============================================
+                // DUPLO CLIQUE → abre popup do beat sequencer
+                // ============================================
+
+                double-clicked => {
+                    BeatState.pattern-changed(
+                        i
+                    );
+                    BeatState.open-beat-popup();
                 }
 
 

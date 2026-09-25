@@ -132,6 +132,11 @@ export component MainWindow inherits Window {
     in-out property <bool> beat-open:
         false;
 
+    // Beat sequencer playing state (separado do timeline playing).
+    // Controlado pelo beat popup via beat-play-state-changed.
+    in-out property <bool> beat-playing:
+        false;
+
     // Aba ativa do bottom panel (0 mixer, 1 sampler, ...), exposta
     // ao Rust para abrir o sampler a partir de uma linha do beat.
     in-out property <int> bottom-active-tab:
@@ -789,8 +794,16 @@ export component MainWindow inherits Window {
 
             } else if event.text == " " {
 
-                root.playing = !root.playing;
-                root.play-state-changed(root.playing);
+                if root.beat-open {
+                    root.beat-playing = !root.beat-playing;
+                    root.beat-play-state-changed(root.beat-playing);
+                } else if root.drag-over-timeline {
+                    root.playing = !root.playing;
+                    root.play-state-changed(root.playing);
+                } else {
+                    root.playing = !root.playing;
+                    root.play-state-changed(root.playing);
+                }
                 accept
 
             } else if event.text == "f" || event.text == "F" {

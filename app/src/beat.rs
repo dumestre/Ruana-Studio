@@ -384,6 +384,17 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
     }
 
     // =========================================================
+    // ABRE POPUP DO BEAT SEQUENCER (do duplo clique no Clip Pool)
+    // =========================================================
+
+    {
+        let ui = ui.clone_strong();
+        st.on_open_beat_popup(move || {
+            ui.set_beat_open(true);
+        });
+    }
+
+    // =========================================================
     // BEAT (padrão inteiro)
     // =========================================================
 

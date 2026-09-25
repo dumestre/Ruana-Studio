@@ -179,10 +179,10 @@ export component BeatPopup inherits Rectangle {
 
 
     // ============================================================
-    // BLOQUEIA CLIQUES NA TIMELINE ATRÁS
+    // BACKDROP — fecha popup ao clicar fora do conteúdo
     // ============================================================
 
-    TouchArea {
+    backdrop := TouchArea {
         x: 0px;
         y: 0px;
 
@@ -190,6 +190,11 @@ export component BeatPopup inherits Rectangle {
         height: parent.height;
 
         enabled: root.open;
+
+        clicked => {
+            root.open = false;
+            root.close-requested();
+        }
     }
 
 
