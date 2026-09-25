@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 daw-core = { path = "../daw-core" }
 daw-media = { path = "../daw-media" }
+daw-midi = { path = "../daw-midi" }
 cpal = { version = "0.18", optional = true }
 memmap2 = "0.9"
 hound = "3.5"

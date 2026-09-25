@@ -1018,6 +1018,7 @@ dependencies = [
  "cpal",
  "daw-core",
  "daw-media",
+ "daw-midi",
  "hound",
  "memmap2",
  "windows-sys 0.61.2",

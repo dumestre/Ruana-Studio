@@ -2,6 +2,15 @@
 //!
 //! Estado autoritativo do beat sequencer: vive no core, UI projeta.
 
+use crate::notes::Note;
+
+/// Pitch base dos clips MIDI gerados por um padrão de bateria.
+///
+/// Cada trilha do padrão ocupa um pitch consecutivo a partir daqui; o
+/// motor de áudio mapeia o pitch de volta para a linha do padrão (36 +
+/// índice da trilha) para obter o sample daquela linha.
+pub const DRUM_PITCH_BASE: i32 = 36;
+
 /// Parâmetros de uma trilha do beat sequencer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DrumTrackParams {
@@ -193,6 +202,45 @@ impl DrumPattern {
             row.fill(false);
         }
     }
+
+    /// Converte a grade em notas MIDI (para arrastar o padrão pra timeline).
+    ///
+    /// Cada trilha vira um pitch fixo (`DRUM_PITCH_BASE + track`): o
+    /// motor de áudio usa esse pitch pra mapear a nota de volta pra
+    /// linha do pattern e tocar o sample da linha. O swing atrasa os
+    /// passos ímpares em até meio passo, igual ao scheduler RT do beat.
+    pub fn to_notes(&self) -> Vec<Note> {
+        let steps = self.steps();
+        let step_beats = if steps > 0 {
+            self.length_beats() / steps as f32
+        } else {
+            0.25
+        };
+        let mut notes = Vec::new();
+        let mut id: i32 = 1;
+        for (track, row) in self.grid.iter().enumerate() {
+            let pitch = DRUM_PITCH_BASE + track as i32;
+            for (step, on) in row.iter().enumerate() {
+                if !*on {
+                    continue;
+                }
+                let swing_delay = if step.rem_euclid(2) == 1 {
+                    self.swing.clamp(0.0, 1.0) * 0.5 * step_beats
+                } else {
+                    0.0
+                };
+                notes.push(Note {
+                    id,
+                    pitch,
+                    start: step as f32 * step_beats + swing_delay,
+                    length: step_beats,
+                    velocity: 100,
+                });
+                id += 1;
+            }
+        }
+        notes
+    }
 }
 
 /// Container de múltiplos padrões (song mode).
@@ -276,6 +324,38 @@ mod tests {
         // Meio compasso (8) → 2 beats; duplo (32) → 8 beats.
         assert_eq!(DrumPattern::new("B", 2, 8).length_beats(), 2.0);
         assert_eq!(DrumPattern::new("C", 2, 32).length_beats(), 8.0);
+    }
+
+    #[test]
+    fn to_notes_maps_tracks_to_pitches() {
+        let mut p = DrumPattern::new("Test", 3, 4);
+        p.set_step(0, 0, true);
+        p.set_step(2, 3, true);
+        p.track_params[1].volume = 0.5;
+        let notes = p.to_notes();
+        // Um passo por trilha → 2 notas com pitch base + índice.
+        assert_eq!(notes.len(), 2);
+        assert_eq!(notes[0].pitch, DRUM_PITCH_BASE);
+        assert_eq!(notes[0].start, 0.0);
+        assert_eq!(notes[0].length, 0.25);
+        assert_eq!(notes[1].pitch, DRUM_PITCH_BASE + 2);
+        // 4 passos = 1 beat; passo 3 começa em 0.75 beats.
+        assert_eq!(notes[1].start, 0.75);
+        assert_eq!(notes[1].velocity, 100);
+    }
+
+    #[test]
+    fn to_notes_applies_swing_to_odd_steps() {
+        let mut p = DrumPattern::new("Swing", 1, 8);
+        p.swing = 0.5;
+        p.set_step(0, 1, true);
+        p.set_step(0, 2, true);
+        let notes = p.to_notes();
+        assert_eq!(notes.len(), 2);
+        // Passo 1 (ímpar): atraso de swing*0.5*step = 0.5*0.5*0.25.
+        assert!((notes[0].start - 0.3125).abs() < 1e-6);
+        // Passo 2 (par): sem atraso.
+        assert!((notes[1].start - 0.5).abs() < 1e-6);
     }
 
     #[test]

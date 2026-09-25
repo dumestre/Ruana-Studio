@@ -86,6 +86,24 @@ struct ClipSlot {
     gain_linear: f32,
 }
 
+/// Nota MIDI de um clip da timeline (somente os campos que a thread RT
+/// precisa; sem histórico/edição).
+#[derive(Clone)]
+struct MidiNoteSlot {
+    pitch: i32,
+    start_beat: f64,
+    velocity: i32,
+}
+
+/// Clip MIDI da timeline: NOTAS, não áudio. O motor dispara o sample da
+/// linha do padrão correspondente ao pitch (sampler MIDI ao vivo).
+#[derive(Clone)]
+struct MidiClipSlot {
+    track_id: u64,
+    start_beat: f64,
+    notes: Vec<MidiNoteSlot>,
+}
+
 /// Trilha da timeline (pan 0..1, 0.5 = centro).
 #[derive(Clone)]
 struct TrackSlot {
@@ -126,6 +144,7 @@ struct BeatSlot {
 pub struct ProjectSnapshot {
     tracks: Vec<TrackSlot>,
     clips: Vec<ClipSlot>,
+    midi_clips: Vec<MidiClipSlot>,
     beat: BeatSlot,
 }
 
@@ -166,6 +185,26 @@ impl ProjectSnapshot {
             })
             .collect();
 
+        let midi_clips = project
+            .clips
+            .iter()
+            .filter(|c| c.kind == daw_core::ClipKind::Midi)
+            .map(|c| MidiClipSlot {
+                track_id: c.track_id,
+                start_beat: c.start_beat as f64,
+                notes: c
+                    .notes
+                    .iter()
+                    .map(|n| MidiNoteSlot {
+                        pitch: n.pitch,
+                        start_beat: n.start as f64,
+                        velocity: n.velocity,
+                    })
+                    .collect(),
+            })
+            .filter(|c| !c.notes.is_empty())
+            .collect();
+
         let beat = project
             .beat_patterns
             .current_pattern()
@@ -198,6 +237,7 @@ impl ProjectSnapshot {
         Self {
             tracks,
             clips,
+            midi_clips,
             beat,
         }
     }
@@ -684,6 +724,51 @@ impl AudioEngine {
 
         // ---- mix -----------------------------------------------
         let any_soloed = snap.tracks.iter().any(|t| t.soloed);
+
+        // ---- agendamento das notas MIDI (timeline) -------------
+        // Cada nota de um clip MIDI mapeia pra uma linha do pattern
+        // (pitch = DRUM_PITCH_BASE + índice) e dispara o sample daquela
+        // linha — mesmo banco que o step sequencer usa, com o mesmo
+        // respeito a active/solo. O ganho é o do TRACK da timeline
+        // vezes o da linha vezes a velocidade da nota.
+        if playing && !beat_only {
+            let end_frames = start_frames + frames as f64;
+            for clip in snap.midi_clips.iter() {
+                let Some(track) = snap.tracks.iter().find(|t| t.id == clip.track_id) else {
+                    continue;
+                };
+                if !track_is_active(track.muted, track.soloed, any_soloed) {
+                    continue;
+                }
+                let (tg_l, tg_r) = stereo_gains(track.volume, track.pan);
+                for note in clip.notes.iter() {
+                    let onset = (clip.start_beat + note.start_beat) * frames_per_beat;
+                    if onset < start_frames || onset >= end_frames {
+                        continue;
+                    }
+                    let row_idx = (note.pitch - daw_midi::DRUM_PITCH_BASE) as usize;
+                    let Some(row) = snap.beat.rows.get(row_idx) else {
+                        continue;
+                    };
+                    if !track_is_active(!row.active, row.solo, snap.beat.any_solo) {
+                        continue;
+                    }
+                    let Some(buffer) = row.buffer.clone() else {
+                        continue;
+                    };
+                    // Velocidade 0..127 → fator de ganho linear.
+                    let vel = (note.velocity as f32 / 127.0).clamp(0.0, 1.0);
+                    let (rg_l, rg_r) = stereo_gains_bipolar(row.volume, row.pan);
+                    let delay = (onset - start_frames).max(0.0) as u32;
+                    rt.trigger(
+                        buffer,
+                        tg_l * rg_l * vel,
+                        tg_r * rg_r * vel,
+                        delay.min(frames as u32),
+                    );
+                }
+            }
+        }
 
         for frame in 0..frames {
             let mut left = 0.0f32;

@@ -85,7 +85,22 @@ pub fn install(
                     4.0
                 };
                 let start = proj.find_free_slot(track_id, beat.max(0.0), len);
-                proj.add_clip(track_id, kind, name.as_str(), start, len);
+                // Clip MIDI vindo do pool: se o nome é de um padrão do
+                // beat sequencer, converte a grade em notas reais — o
+                // piano roll mostra a batida e o motor toca os samples.
+                let notes = if kind == ClipKind::Midi {
+                    proj.beat_patterns
+                        .patterns
+                        .iter()
+                        .find(|p| p.name == name.as_str())
+                        .map(|p| p.to_notes())
+                } else {
+                    None
+                };
+                let id = proj.add_clip(track_id, kind, name.as_str(), start, len);
+                if let (Some(id), Some(notes)) = (id, notes) {
+                    proj.set_clip_notes(id, notes);
+                }
             }
         });
     }

@@ -38,7 +38,6 @@ export component BeatHeader inherits Rectangle {
     callback grid-resolution-changed(int);
     callback drag-moved(length, length);
 
-    // Persistência no core.
     callback humanize-changed(float);
     callback swing-changed(float);
 
@@ -62,38 +61,63 @@ export component BeatHeader inherits Rectangle {
 
     z: 10;
 
+
+    // ============================================================
+    // ÁREA DE DRAG
+    // ============================================================
+
     drag-zone := TouchArea {
+
         x: 0px;
         y: 0px;
+
         width: 100%;
         height: 100%;
+
         mouse-cursor: grab;
 
         property <bool> grabbing: false;
         property <length> prev-x: 0px;
         property <length> prev-y: 0px;
 
+
         pointer-event(ev) => {
+
             if (ev.kind == PointerEventKind.down) {
+
                 self.grabbing = true;
-                self.prev-x = self.mouse-x;
-                self.prev-y = self.mouse-y;
+
+                self.prev-x =
+                    self.mouse-x;
+
+                self.prev-y =
+                    self.mouse-y;
+
             } else if (ev.kind == PointerEventKind.up) {
+
                 self.grabbing = false;
             }
         }
 
+
         moved => {
+
             if (self.grabbing) {
+
                 root.drag-moved(
                     self.mouse-x - self.prev-x,
                     self.mouse-y - self.prev-y
                 );
-                self.prev-x = self.mouse-x;
-                self.prev-y = self.mouse-y;
+
+                self.prev-x =
+                    self.mouse-x;
+
+                self.prev-y =
+                    self.mouse-y;
             }
         }
     }
+
 
     // ============================================================
     // HEADER
@@ -101,119 +125,100 @@ export component BeatHeader inherits Rectangle {
 
     HorizontalLayout {
 
-        spacing: 8px;
+        spacing: 8px;   
 
+        alignment: LayoutAlignment.stretch;
         cross-axis-alignment:
             CrossAxisAlignment.center;
-
-
-        // ========================================================
-        // ACCENT
-        // ========================================================
-
-        Rectangle {
-
-            width: 4px;
-            height: 24px;
-
-            background:
-                Theme.accent;
-
-            border-radius: 2px;
-
-            
-        }
-
-
-        // ========================================================
-        // NOME
-        // ========================================================
-
-        Text {
-
-            text:
-                root.beat-name;
-
-            color:
-                Theme.text-primary;
-
-            font-family: "";
-
-            font-size: 14px;
-
-            font-weight: 700;
-
-            vertical-alignment:
-                center;
-        }
 
 
         // ========================================================
         // ESPAÇO
         // ========================================================
 
+        Text {
+            font-size: 11px;
+            text: "Beat Sequencer";
+        }
         Rectangle {
 
             horizontal-stretch: 1;
 
-            background: transparent;
-
-            play-button := Rectangle {
-    width: 18px;
-    height: 18px;
-    background: transparent;
-
-    border-radius: 15px;
-
-    Image {
-        source:
-            root.playing
-            ? @image-url("../icons/pause.svg")
-            : @image-url("../icons/play.svg");
-
-        colorize: root.playing ? Theme.accent : Theme.text-primary;
-
-        width: 18px;
-        height: 18px;
-
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-
-        image-fit: ImageFit.contain;
-    }
-
-    TouchArea {
-        height: 18px;
-        mouse-cursor: pointer;
-        width: 18px;
-
-        clicked => {
-            root.playing = !root.playing;
-            root.play-state-changed(root.playing);
-        }
-    }
-}
+            background:
+                transparent;
         }
 
 
         // ========================================================
         // PLAY / PAUSE
-        //
-        // Usa:
-        // play.svg
-        // pause.svg
         // ========================================================
 
-       
+        play-button := Rectangle {
+
+            width: 18px;
+            height: 18px;
+
+            background:
+                transparent;
+
+            border-radius: 15px;
+
+
+            Image {
+
+                source:
+                    root.playing
+                    ? @image-url("../icons/pause.svg")
+                    : @image-url("../icons/play.svg");
+
+                colorize:
+                    root.playing
+                    ? Theme.accent
+                    : Theme.text-primary;
+
+                width: 18px;
+                height: 18px;
+
+                x:
+                    (parent.width - self.width) / 2;
+
+                y:
+                    (parent.height - self.height) / 2;
+
+                image-fit:
+                    ImageFit.contain;
+            }
+
+
+            TouchArea {
+
+                width: 18px;
+                height: 18px;
+
+                mouse-cursor:
+                    pointer;
+
+                clicked => {
+
+                    root.playing =
+                        !root.playing;
+
+                    root.play-state-changed(
+                        root.playing
+                    );
+                }
+            }
+        }
 
 
         // ========================================================
-        // HUMANIZE
+        // HUMANIZE LABEL
         // ========================================================
 
         Text {
 
-            text: "HUM";
+            text:
+                "HUM";
 
             color:
                 Theme.text-dim;
@@ -223,9 +228,13 @@ export component BeatHeader inherits Rectangle {
             font-weight: 700;
 
             vertical-alignment:
-                center;
+                TextVerticalAlignment.center;
         }
 
+
+        // ========================================================
+        // HUMANIZE KNOB
+        // ========================================================
 
         KnobWithoutText {
 
@@ -235,18 +244,20 @@ export component BeatHeader inherits Rectangle {
             value <=> root.humanize;
 
             changed(v) => {
+
                 root.humanize-changed(v);
             }
         }
 
 
         // ========================================================
-        // SWING
+        // SWING LABEL
         // ========================================================
 
         Text {
 
-            text: "SWG";
+            text:
+                "SWG";
 
             color:
                 Theme.text-dim;
@@ -256,9 +267,13 @@ export component BeatHeader inherits Rectangle {
             font-weight: 700;
 
             vertical-alignment:
-                center;
+                TextVerticalAlignment.center;
         }
 
+
+        // ========================================================
+        // SWING KNOB
+        // ========================================================
 
         KnobWithoutText {
 
@@ -268,18 +283,20 @@ export component BeatHeader inherits Rectangle {
             value <=> root.swing;
 
             changed(v) => {
+
                 root.swing-changed(v);
             }
         }
 
 
         // ========================================================
-        // STEPS
+        // STEPS LABEL
         // ========================================================
 
         Text {
 
-            text: "STEPS";
+            text:
+                "STEPS";
 
             color:
                 Theme.text-dim;
@@ -289,9 +306,13 @@ export component BeatHeader inherits Rectangle {
             font-weight: 700;
 
             vertical-alignment:
-                center;
+                TextVerticalAlignment.center;
         }
 
+
+        // ========================================================
+        // STEPS BUTTON
+        // ========================================================
 
         steps-button := Rectangle {
 
@@ -386,10 +407,10 @@ export component BeatHeader inherits Rectangle {
                 font-weight: 700;
 
                 horizontal-alignment:
-                    center;
+                    TextHorizontalAlignment.center;
 
                 vertical-alignment:
-                    center;
+                    TextVerticalAlignment.center;
             }
 
 
@@ -399,6 +420,7 @@ export component BeatHeader inherits Rectangle {
                     pointer;
 
                 clicked => {
+
                     root.add-track-requested();
                 }
             }
@@ -414,7 +436,9 @@ export component BeatHeader inherits Rectangle {
             width: 18px;
             height: 18px;
 
-            background: Theme.base;
+            background:
+                Theme.base;
+
             border-radius: 12px;
 
             icon:
@@ -422,8 +446,11 @@ export component BeatHeader inherits Rectangle {
                     "../icons/menu_dots.svg"
                 );
 
-            icon-size: 14px;
-            preferred-width: 18px;
+            icon-size:
+                14px;
+
+            preferred-width:
+                18px;
 
             icon-color:
                 Theme.text-dim;
@@ -453,14 +480,18 @@ export component BeatHeader inherits Rectangle {
                     "../icons/close.svg"
                 );
 
-            icon-size: 14px;
-            preferred-width: 0px;
+            icon-size:
+                14px;
+
+            preferred-width:
+                0px;
 
             icon-color:
                 Theme.text-primary;
 
 
             clicked => {
+
                 root.close-requested();
             }
         }

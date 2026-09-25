@@ -808,55 +808,23 @@ impl ApplicationHandler for Handler {
                 }
             }
             WindowEvent::HoveredFile(path) => {
-                if let Some(p) = path.to_str() {
-                    let ext = std::path::Path::new(p)
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .map(|e| e.to_lowercase())
-                        .unwrap_or_default();
-                    if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
-                        let mut b = bridge.borrow_mut();
-                        if !b.engine.drop_paths.contains(&p.to_string()) {
-                            b.engine.drop_paths.push(p.to_string());
-                        }
-                        let (beat, track) =
-                            b.engine.cursor_to_snapped_beat_track(b.engine.last_cursor);
-                        b.engine.drop_path = Some(p.to_string());
-                        b.engine.drop_preview =
-                            Some(timeline_render::app::DropPreview { beat, track, len_beats: 0.0 });
-                        b.engine.is_dragging_file = true;
-                        b.dirty = true;
-                    }
+                // Roteia pelo DropSink (os_drop): ativa o overlay visual
+                // idêntico ao drag interno + pré-decode. Sem isso o drop
+                // sobre uma linha do beat virava importação de timeline.
+                if let Some(sink) = &self.drop_sink {
+                    (sink.hovered)(path);
                 }
             }
             WindowEvent::HoveredFileCancelled => {
-                let mut b = bridge.borrow_mut();
-                b.engine.drop_preview = None;
-                b.engine.drop_path = None;
-                b.engine.drop_paths.clear();
-                b.engine.pending_drop_import = false;
-                b.engine.is_dragging_file = false;
-                b.dirty = true;
+                if let Some(sink) = &self.drop_sink {
+                    (sink.cancelled)();
+                }
             }
             WindowEvent::DroppedFile(path) => {
-                if let Some(p) = path.to_str() {
-                    let ext = std::path::Path::new(p)
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .map(|e| e.to_lowercase())
-                        .unwrap_or_default();
-                    if ["wav", "mp3", "flac", "ogg", "oga"].contains(&ext.as_str()) {
-                        let mut b = bridge.borrow_mut();
-                        if !b.engine.drop_paths.contains(&p.to_string()) {
-                            b.engine.drop_paths.push(p.to_string());
-                        }
-                        b.engine.pending_drop_import = true;
-                        b.engine.last_drop_instant = std::time::Instant::now();
-                        b.engine.drop_preview = None;
-                        b.engine.drop_path = None;
-                        b.engine.is_dragging_file = false;
-                        b.dirty = true;
-                    }
+                // Decide o alvo pelo cursor real (beat → sampler →
+                // timeline) — o mesmo fluxo do binário standalone.
+                if let Some(sink) = &self.drop_sink {
+                    (sink.dropped)(path);
                 }
             }
             _ => {}
