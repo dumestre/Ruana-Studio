@@ -31,7 +31,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
-use daw_core::Transport;
+use daw_core::{PlayMode, Transport};
 
 use crate::backend::{AudioConfig, AudioError, CpalBackend};
 use crate::{AudioBufferKind, buffer::BufferCache};
@@ -382,6 +382,9 @@ struct RtState {
     /// Cursor de round-robin para roubo de voz.
     voice_cursor: usize,
     was_playing: bool,
+    /// Modo visto no buffer anterior. A virada Timeline↔BeatOnly tem
+    /// que re-ancorar o agendador de passos como se fosse um play.
+    was_beat_only: bool,
     metronome_beat: i64,
     metronome_remaining: u32,
     metronome_phase: f32,
@@ -406,6 +409,7 @@ impl RtState {
             voices: (0..MAX_VOICES).map(|_| Voice::silent()).collect(),
             voice_cursor: 0,
             was_playing: false,
+            was_beat_only: false,
             metronome_beat: -1,
             metronome_remaining: 0,
             metronome_phase: 0.0,
@@ -607,12 +611,12 @@ impl AudioEngine {
 
         // ---- transporte ----------------------------------------
         let mut playing = false;
-        let mut beat_only = false;
+        let mut mode = PlayMode::Timeline;
         let mut bpm = 120.0f64;
         let mut ppq = 960.0f64;
         if let Ok(t) = transport.try_lock() {
             playing = t.playing;
-            beat_only = t.beat_only;
+            mode = t.mode;
             bpm = t.bpm as f64;
             ppq = t.ppq as f64;
 
@@ -644,6 +648,20 @@ impl AudioEngine {
             rt.was_playing = playing;
         }
 
+        // Trocar o modo no meio da reprodução (a UI sempre passa por um
+        // stop, mas o Transport é público) precisa do mesmo reset: o
+        // agendador de passos não pode retomar de um cursor velho e
+        // despejar uma rajada de passos atrasados.
+        let beat_only = playing && mode == PlayMode::BeatOnly;
+        if beat_only != rt.was_beat_only {
+            if beat_only {
+                rt.next_step = i64::MIN;
+            } else {
+                rt.kill_voices();
+            }
+            rt.was_beat_only = beat_only;
+        }
+
         let start_frames = rt.pos_frames;
 
         let (metronome_enabled, metronome_sound, metronome_volume) = transport
@@ -651,7 +669,7 @@ impl AudioEngine {
             .map(|t| (t.metronome_enabled, t.metronome_sound.min(4), t.metronome_volume.clamp(0.0, 1.0)))
             .unwrap_or((false, 0, 0.7));
         // Modo "só beat": o metrônomo não toca — só o pattern.
-        if playing && !beat_only && metronome_enabled {
+        if playing && mode == PlayMode::Timeline && metronome_enabled {
             let beat = (start_frames / frames_per_beat).floor() as i64;
             if beat != rt.metronome_beat {
                 rt.metronome_beat = beat;
@@ -665,7 +683,12 @@ impl AudioEngine {
         // ---- agendamento dos passos do beat --------------------
         // Feito ANTES do mix, com o offset exato de cada disparo
         // dentro deste buffer.
-        if playing && !snap.beat.rows.is_empty() && snap.beat.steps > 0 {
+        //
+        // O pattern é EXCLUSIVO ao modo "só beat": tocando a timeline
+        // o sequenciador fica mudo, senão a bateria do canal rack
+        // duplica por cima da arranjo (ou vice-versa) — o usuário
+        // escolhe qual das duas está em cena pelo cursor.
+        if beat_only && !snap.beat.rows.is_empty() && snap.beat.steps > 0 {
             let steps = snap.beat.steps as i64;
             let swing = snap.beat.swing as f64;
 
@@ -731,7 +754,7 @@ impl AudioEngine {
         // linha — mesmo banco que o step sequencer usa, com o mesmo
         // respeito a active/solo. O ganho é o do TRACK da timeline
         // vezes o da linha vezes a velocidade da nota.
-        if playing && !beat_only {
+        if playing && mode == PlayMode::Timeline {
             let end_frames = start_frames + frames as f64;
             for clip in snap.midi_clips.iter() {
                 let Some(track) = snap.tracks.iter().find(|t| t.id == clip.track_id) else {
@@ -776,7 +799,7 @@ impl AudioEngine {
 
             // Clips da timeline (só com o transporte andando e fora do
             // modo "só beat").
-            if playing && !beat_only {
+            if playing && mode == PlayMode::Timeline {
                 let pos = start_frames + frame as f64;
 
                 for track in snap.tracks.iter() {

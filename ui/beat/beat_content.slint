@@ -241,21 +241,6 @@ export component BeatContent inherits Rectangle {
 
 
     // ============================================================
-    // MOUSE OVER
-    // ============================================================
-
-    out property <bool> mouse-over:
-        hover-zone.has-hover;
-
-    hover-zone := TouchArea {
-        width: 100%;
-        height: 100%;
-
-        mouse-cursor: default;
-    }
-
-
-    // ============================================================
     // HEADER
     // ============================================================
 

@@ -4,13 +4,29 @@
 //! futuro (daw-audio) consome e avança este estado; a UI apenas
 //! projeta a posição.
 
+/// O que o transporte está tocando.
+///
+/// A UI decide o modo pelo contexto do ponteiro: com o cursor sobre a
+/// popup do beat o play é do step sequencer; sobre a timeline é da
+/// timeline. Os dois são EXCLUSIVOS — nunca tocam juntos.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlayMode {
+    /// Reprodução da timeline: os clips (áudio e MIDI) tocam e o
+    /// playhead anda. O step sequencer fica SILENCIADO.
+    #[default]
+    Timeline,
+    /// Só o beat sequencer: o pattern soa e o grid avança, mas os
+    /// clips da timeline NÃO tocam e o playhead dela fica parado.
+    BeatOnly,
+}
+
 /// Estado de transporte da DAW.
 #[derive(Debug, Clone)]
 pub struct Transport {
     pub playing: bool,
-    /// Modo "só beat": o transporte roda e o step sequencer soa e
-    /// avança, mas os clips da timeline NÃO tocam nem andam.
-    pub beat_only: bool,
+    /// O que está tocando (ver [`PlayMode`]). Só é lido com
+    /// `playing == true`; parado, o modo volta a [`PlayMode::Timeline`].
+    pub mode: PlayMode,
     /// Posição do playhead em ticks (PPQ).
     pub position_ticks: u64,
     /// Onde o último play começou. SPACE (stop) devolve a agulha
@@ -37,7 +53,7 @@ impl Default for Transport {
     fn default() -> Self {
         Self {
             playing: false,
-            beat_only: false,
+            mode: PlayMode::Timeline,
             position_ticks: 0,
             play_start_ticks: 0,
             bpm: 120,
@@ -54,16 +70,34 @@ impl Default for Transport {
 }
 
 impl Transport {
+    /// Verdadeiro quando o transporte está no modo "só beat".
+    pub fn beat_only(&self) -> bool {
+        self.mode == PlayMode::BeatOnly
+    }
+
+    /// Toca a timeline (clips + playhead). Silencia o step sequencer.
     pub fn play(&mut self) {
         self.playing = true;
+        self.mode = PlayMode::Timeline;
+    }
+
+    /// Toca só o step sequencer. A timeline fica parada.
+    pub fn play_beat(&mut self) {
+        self.playing = true;
+        self.mode = PlayMode::BeatOnly;
     }
 
     pub fn pause(&mut self) {
         self.playing = false;
+        self.mode = PlayMode::Timeline;
     }
 
     pub fn toggle(&mut self) {
-        self.playing = !self.playing;
+        if self.playing {
+            self.pause();
+        } else {
+            self.play();
+        }
     }
 
     /// Posiciona o playhead em ticks.
@@ -112,10 +146,31 @@ mod tests {
     fn defaults_match_daw() {
         let t = Transport::default();
         assert!(!t.playing);
+        assert_eq!(t.mode, PlayMode::Timeline);
         assert_eq!(t.position_ticks, 0);
         assert_eq!(t.bpm, 120);
         assert_eq!(t.ppq, 960);
         assert_eq!(t.beats_per_bar, 4);
+    }
+
+    #[test]
+    fn play_modes_are_exclusive() {
+        let mut t = Transport::default();
+        assert!(!t.beat_only());
+
+        t.play();
+        assert_eq!(t.mode, PlayMode::Timeline);
+        assert!(!t.beat_only());
+
+        t.play_beat();
+        assert_eq!(t.mode, PlayMode::BeatOnly);
+        assert!(t.beat_only());
+
+        // Trocar de modo no meio da reprodução troca o que soa, sem
+        // desligar o transporte: parar devolve a timeline.
+        t.pause();
+        assert!(!t.playing);
+        assert_eq!(t.mode, PlayMode::Timeline);
     }
 
     #[test]

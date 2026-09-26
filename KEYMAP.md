@@ -34,7 +34,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 
 | Atalho | Ação |
 | --- | --- |
-| `Espaço` | Toca / pausa o transporte (play/stop). |
+| `Espaço` | Toca / pausa, **roteado pelo cursor**: sobre a popup do **Beat Sequencer** aberta comanda o sequenciador (o pattern soa e a timeline fica parada — nenhum clip toca, a agulha não anda); em qualquer outro lugar comanda a **timeline** (os clips tocam e a agulha anda, com o step sequencer mudo). Os dois nunca tocam juntos; pedir play no outro modo troca o que está em cena. |
 | `F` | Centraliza e faz **zoom no clip selecionado**; `F` de novo restaura o viewport ao contexto geral. |
 | Rodinha do mouse | Zoom horizontal e rolagem vertical da timeline. |
 
@@ -42,6 +42,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 
 | Atalho / Ação | Descrição |
 | --- | --- |
+| Botão ▶/⏸ do header do popup | Play/stop do sequenciencer. É o mesmo transporte do `Espaço` com o cursor sobre a popup, então nunca mexe na timeline. |
 | Clique em um passo do grid | Liga/desliga a nota (`Ctrl+clique` para estender/caret). |
 | Clique num padrão na seção **BEAT PATTERNS** do Clip Pool | Seleciona o padrão no sequencer (song mode). |
 | Arraste um padrão do Clip Pool para a timeline | Cria um clip MIDI regular com a duração do padrão. |
@@ -55,11 +56,13 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 | `Ctrl+D` | Duplicar clip |
 | `Ctrl+Z` / `Ctrl+Y` / `Ctrl+Shift+Z` | Undo / Redo |
 | `Delete` / `Backspace` | Apagar clip(s) |
-| `Space` | Play/Stop |
+| `Space` | Play/Stop (roteado pelo cursor: popup do beat → sequenciencer; resto → timeline) |
 | `F` | Focar/zoom no clip selecionado |
 
 ---
 
 *Mantido em sincronia com o código: `ui/main.slint` (handler global de
-teclas), `ui/timeline/timeline.slint` (clique fora, Shift+clique,
+teclas + `toggle-play-routed`), `app/src/host.rs` (rota do `Espaço` do
+winit + contexto do ponteiro), `app/src/playback.rs` (troca de modo do
+transporte), `ui/timeline/timeline.slint` (clique fora, Shift+clique,
 marquee), `ui/clip_pool.slint` (seção BEAT PATTERNS).*

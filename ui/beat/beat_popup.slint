@@ -82,9 +82,14 @@ export component BeatPopup inherits Rectangle {
     // ============================================================
     // GEOMETRIA DO POPUP
     // ============================================================
-
-    out property <bool> mouse-over:
-        content.mouse-over;
+    //
+    // Não existe mais um `mouse-over` aqui por TouchArea: o hit-test
+    // do Slint entrega o ponteiro só ao item de TOPO, e todo o
+    // conteúdo (title-bar, header, grid, trilhas) fica acima de um
+    // probe de hover — ele nunca veria `has-hover == true`, e a rota
+    // do play por contexto morria calada. Quem decide é o Rust, com
+    // a posição do cursor e estes retângulos (ver `pointer-over-beat`
+    // em main.slint e `update_pointer_context` em host.rs).
 
     out property <length> content-x:
         beat_content.absolute-position.x;
@@ -217,16 +222,6 @@ export component BeatPopup inherits Rectangle {
         border-color: Theme.border;
 
         z: 10;
-
-        // Track if mouse is over the popup content
-        out property <bool> mouse-over:
-            popup-hover.has-hover;
-
-        popup-hover := TouchArea {
-            width: 100%;
-            height: 100%;
-            mouse-cursor: default;
-        }
 
         // ========================================================
         // TITLE BAR — para arrastar o popup

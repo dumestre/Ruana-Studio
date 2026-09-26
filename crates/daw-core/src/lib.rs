@@ -15,4 +15,4 @@ pub use mixer::{MixerChannel, MixerParam};
 pub use project::{ChangeKind, DocumentEvent, Project};
 pub use timeline::{Grid, RulerTick, TempoChange, TempoMap};
 pub use track::{Track, TrackKind};
-pub use transport::Transport;
+pub use transport::{PlayMode, Transport};

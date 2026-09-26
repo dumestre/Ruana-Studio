@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use daw_core::project::Project;
-use daw_core::transport::Transport;
+use daw_core::transport::{PlayMode, Transport};
 use slint::{ComponentHandle, Global, Model};
 
 use crate::MainWindow;
@@ -114,40 +114,51 @@ pub fn install(
     // closures dos timers (evita ciclo com a event loop).
     let Some(ui) = ui.upgrade() else { return };
     let ui_weak = ui.as_weak();
-    let mut seed: u64 = 0x1234_5678_9abc_def0;
 
     let meter_timer = Rc::new(RefCell::new(slint::Timer::default()));
     let playhead_timer = Rc::new(RefCell::new(slint::Timer::default()));
     let visual_clock: Rc<RefCell<Option<VisualClock>>> = Rc::new(RefCell::new(None));
-    // Guarda de idempotência: espaço/stop repetidos não re-executam
-    // o start/stop (evita timers duplicados).
-    let is_playing = Rc::new(Cell::new(false));
+    // O que está no ar agora (`None` = parado). Substitui o antigo
+    // `is_playing`: não basta saber que "toca", é preciso saber O QUÊ,
+    // porque trocar de modo é uma troca de conteúdo, não um no-op.
+    let mode_now: Rc<Cell<Option<PlayMode>>> = Rc::new(Cell::new(None));
 
     // ---- PLAY / STOP ------------------------------------------------
     //
-    // Um único controlador serve aos DOIS gatilhos de play:
-    //  • play do transporte/timeline (play-state-changed) → modo
-    //    global: clips + beat + playhead da timeline.
-    //  • play do beat sequencer (beat-play-state-changed) → modo
-    //    "só beat": o pattern soa e o grid acende, mas a timeline
-    //    fica parada (nenhum clip toca e o playhead não anda).
+    // Um único controlador serve aos DOIS gatilhos de play, e o QUE
+    // toca é decidido pela UI pelo contexto do ponteiro:
+    //  • play do transporte/timeline (`play-state-changed`) →
+    //    `PlayMode::Timeline`: clips de áudio e MIDI tocam, o playhead
+    //    anda e o step sequencer fica MUDO.
+    //  • play do beat (`beat-play-state-changed`) → `PlayMode::BeatOnly`:
+    //    o pattern soa e o grid acende, mas a timeline fica parada
+    //    (nenhum clip toca e o playhead não anda).
+    //
+    // Os modos são EXCLUSIVOS e o motor de áudio tem UM transporte só:
+    // pedir play no outro modo enquanto este toca é uma TROCA (stop +
+    // start), nunca uma sobreposição. Por isso o estado local é
+    // `Option<PlayMode>` e não um booleano.
     {
-        let ui_weak_c = ui_weak.clone();
         let transport = transport.clone();
-        let project = project.clone();
-        let visual_clock = visual_clock.clone();
-        let is_playing = is_playing.clone();
-        let playhead_timer = playhead_timer.clone();
-        let meter_timer = meter_timer.clone();
-        let audio = audio.clone();
 
-        // `play` = quer tocar; `beat_only` = modo "só beat".
-        let control = move |play: bool, beat_only: bool| {
-            if play {
-                if is_playing.get() {
-                    return;
-                }
-                is_playing.set(true);
+        // ---- START ------------------------------------------------
+        let start: Rc<dyn Fn(PlayMode)> = {
+            let ui_weak_s = ui_weak.clone();
+            let transport = transport.clone();
+            let project = project.clone();
+            let visual_clock = visual_clock.clone();
+            let playhead_timer = playhead_timer.clone();
+            let meter_timer = meter_timer.clone();
+            let audio = audio.clone();
+            let meter_model = meter_model.clone();
+            let meter_state = meter_state.clone();
+            let mode_now = mode_now.clone();
+            // PRNG dos meters (VU fake). Vive dentro do closure porque
+            // o timer de metro é (re)criado a cada play.
+            let mut seed: u64 = 0x1234_5678_9abc_def0;
+
+            Rc::new(move |mode: PlayMode| {
+                mode_now.set(Some(mode));
 
                 // O snapshot precisa estar publicado ANTES do primeiro
                 // buffer tocar, senão o começo sai em silêncio.
@@ -156,9 +167,9 @@ pub fn install(
                 {
                     let mut t = transport.lock().unwrap();
                     t.playing = true;
-                    t.beat_only = beat_only;
-                    // Lembra onde o play começou: SPACE (stop) devolve
-                    // a agulha pra cá (comportamento padrão de DAW).
+                    t.mode = mode;
+                    // Lembra onde o play começou: STOP devolve a agulha
+                    // pra cá (comportamento padrão de DAW).
                     t.play_start_ticks = t.position_ticks;
                     // Âncora inicial do clock visual (segundos contínuos)
                     *visual_clock.borrow_mut() = Some(VisualClock {
@@ -166,11 +177,18 @@ pub fn install(
                         anchor_at: Instant::now(),
                     });
                 }
-                rt_log(if beat_only {
-                    "[PLAY] beat-only: pattern soa, timeline parada"
-                } else {
-                    "[PLAY] transport.playing=true, playhead timer started"
+                rt_log(match mode {
+                    PlayMode::BeatOnly => "[PLAY] beat-only: pattern soa, timeline parada",
+                    PlayMode::Timeline => "[PLAY] timeline: clips + playhead, step sequencer mudo",
                 });
+
+                // O Rust é a fonte da verdade dos DOIS flags de UI:
+                // um play que trocou de modo tem que desmarcar o
+                // botão do outro transporte, senão os ícones mentem.
+                if let Some(ui) = ui_weak_s.upgrade() {
+                    ui.set_playing(matches!(mode, PlayMode::Timeline));
+                    ui.set_beat_playing(matches!(mode, PlayMode::BeatOnly));
+                }
 
                 // Playhead timer: roda NA event loop. Lê o clock
                 // autoritativo (áudio) via try_lock e projeta por tempo
@@ -179,7 +197,7 @@ pub fn install(
                 // o LCD. No modo "só beat" NÃO publica posição (timeline
                 // parada), mas continua avançando o passo do beat.
                 {
-                    let ui_weak_t = ui_weak_c.clone();
+                    let ui_weak_t = ui_weak_s.clone();
                     let transport = transport.clone();
                     let clock = visual_clock.clone();
                     let last_lcd = Cell::new(i32::MIN);
@@ -197,7 +215,7 @@ pub fn install(
                                 if !t.playing {
                                     return;
                                 }
-                                beat_only = t.beat_only;
+                                beat_only = t.mode == PlayMode::BeatOnly;
                                 bpm = t.bpm as f64;
                                 let actual = t.position_seconds();
                                 let drift = actual - c.projected();
@@ -236,7 +254,13 @@ pub fn install(
                                 // MESMO relógio do áudio, então a coluna
                                 // acesa é a que está soando (antes era um
                                 // Timer de 140ms sem relação com nada).
-                                publish_beat_step(&ui, secs, bpm, &last_step);
+                                // Na timeline o sequenciador está desligado:
+                                // o passo fica em -1 (nenhuma coluna acesa).
+                                if beat_only {
+                                    publish_beat_step(&ui, secs, bpm, &last_step);
+                                } else if last_step.replace(-1) != -1 {
+                                    crate::BeatState::get(&ui).set_playhead(-1);
+                                }
                             }
                         },
                     );
@@ -266,20 +290,34 @@ pub fn install(
                         }
                     },
                 );
-            } else {
-                if !is_playing.get() {
+            })
+        };
+
+        // ---- STOP -------------------------------------------------
+        // Para o que estiver tocando, em qualquer modo (o botão STOP
+        // e o espaço são absolutos). A agulha volta pra onde o play
+        // começou.
+        let stop: Rc<dyn Fn()> = {
+            let ui_weak_x = ui_weak.clone();
+            let transport = transport.clone();
+            let visual_clock = visual_clock.clone();
+            let playhead_timer = playhead_timer.clone();
+            let meter_timer = meter_timer.clone();
+            let mode_now = mode_now.clone();
+
+            Rc::new(move || {
+                let was = mode_now.replace(None);
+                if was.is_none() {
                     return;
                 }
-                is_playing.set(false);
-                rt_log("[STOP] stopping transport + timers");
+                rt_log(&format!("[STOP] mode={was:?} + timers"));
                 playhead_timer.borrow().stop();
                 *visual_clock.borrow_mut() = None;
 
-                // SPACE = STOP: agulha volta pra onde o play começou.
+                // STOP: agulha volta pra onde o play começou.
                 let (ret_ticks, ret_secs) = {
                     let mut t = transport.lock().unwrap();
-                    t.playing = false;
-                    t.beat_only = false;
+                    t.pause();
                     t.position_ticks = t.play_start_ticks;
                     (t.position_ticks, t.position_seconds())
                 };
@@ -287,12 +325,31 @@ pub fn install(
                 // O dispositivo de áudio NÃO fecha aqui: continua
                 // aberto para a pré-escuta de samples com o transporte
                 // parado. Ver `audio_bridge`.
-                if let Some(ui) = ui_weak_c.upgrade() {
+                if let Some(ui) = ui_weak_x.upgrade() {
                     let st = crate::BeatState::get(&ui);
                     st.set_playhead(-1);
+                    ui.set_playing(false);
+                    ui.set_beat_playing(false);
                     ui.set_transport_time_seconds(ret_secs as f32);
                     ui.set_transport_position(ret_ticks.min(i32::MAX as u64) as i32);
                 }
+            })
+        };
+
+        // `play` = quer tocar; `mode` = o quê. Pedir play já no mesmo
+        // modo é no-op (espaço repetido não reinicia os timers);
+        // pedir no outro modo troca.
+        let control = move |play: bool, mode: PlayMode| {
+            let current = mode_now.get();
+            match (play, current) {
+                (true, Some(current)) if current == mode => {}
+                (true, Some(_)) => {
+                    stop();
+                    start(mode);
+                }
+                (true, None) => start(mode),
+                (false, Some(_)) => stop(),
+                (false, None) => {}
             }
         };
 
@@ -301,14 +358,14 @@ pub fn install(
         let c = control.clone();
         ui.on_play_state_changed(move |playing| {
             if let Some(f) = c.borrow_mut().as_mut() {
-                f(playing, false);
+                f(playing, PlayMode::Timeline);
             }
         });
 
         let c = control.clone();
         ui.on_beat_play_state_changed(move |playing| {
             if let Some(f) = c.borrow_mut().as_mut() {
-                f(playing, true);
+                f(playing, PlayMode::BeatOnly);
             }
         });
     }

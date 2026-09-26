@@ -35,7 +35,7 @@ use crate::slint_host::SlintOverlay;
 use crate::MainWindow;
 use daw_core::project::Project;
 use daw_core::timeline::TempoMap;
-use daw_core::transport::Transport;
+use daw_core::transport::{PlayMode, Transport};
 
 /// Estado pequeno compartilhado entre o handler e as closures da DAW.
 pub struct SharedState {
@@ -46,6 +46,32 @@ pub struct SharedState {
     pub ctrl: bool,
     pub alt: bool,
     pub shift: bool,
+}
+
+/// Publica no Slint em qual superfície o ponteiro está, para o play ser
+/// roteado pelo contexto (espaço / botão de play do header do beat).
+///
+/// Feito aqui porque o Rust é o dono do `CursorMoved` do winit e o Slint
+/// não expõe um ponteiro global. Um `TouchArea.has-hover` dentro da
+/// popup não serviria: o hit-test do Slint entrega o ponteiro só ao item
+/// de cima, e todo o conteúdo (header, grid, trilhas) fica ACIMA de um
+/// probe de hover — ele nunca veria `has-hover == true`.
+///
+/// `x`/`y` em px LÓGICOS de janela (o mesmo espaço de
+/// `beat-popup-x`… e de `timeline-canvas-abs-x`).
+fn update_pointer_context(ui: &MainWindow, x: f32, y: f32) {
+    let w = ui.get_beat_popup_w();
+    let h = ui.get_beat_popup_h();
+    let over_beat = ui.get_beat_open()
+        && w > 0.0
+        && h > 0.0
+        && x >= ui.get_beat_popup_x()
+        && x < ui.get_beat_popup_x() + w
+        && y >= ui.get_beat_popup_y()
+        && y < ui.get_beat_popup_y() + h;
+    if ui.get_pointer_over_beat() != over_beat {
+        ui.set_pointer_over_beat(over_beat);
+    }
 }
 
 /// Ponte da engine wgpu para o app hosted: transições de estado a cada frame.
@@ -64,6 +90,10 @@ pub struct EngineBridge {
     /// `Moved`; usado para converter a posição GLOBAL do cursor (GetCursorPos)
     /// em coordenadas da janela durante drags do SO.
     pub win_pos: (f64, f64),
+    /// Posição do cursor em px LÓGICOS relativos à janela (último
+    /// `CursorMoved`). Usada pela rota do play por contexto — o Slint
+    /// não tem um "ponteiro global" para consultar.
+    pub cursor_logical: (f32, f32),
     /// O projeto mudou → o espelho de clips precisa de rebuild.
     pub clips_flag: Rc<Cell<bool>>,
     /// Ids que o espelho já carregou no engine (tick). Guarda do write-back
@@ -131,6 +161,7 @@ impl EngineBridge {
             audio_engine: None,
             audio_sync_timer: None,
             win_pos,
+            cursor_logical: (0.0, 0.0),
             clips_flag,
             mirrored_clip_ids,
             dirty: true,
@@ -162,6 +193,15 @@ impl EngineBridge {
         let rw = (ui.get_timeline_canvas_rect_width() * ls - lp).max(0.0);
         let rh = ui.get_timeline_canvas_rect_height() * ls;
         self.engine.set_timeline_rect(rx, ry, rw, rh);
+
+        // Refresca a rota do play por contexto. O `CursorMoved` já faz
+        // isso a cada movimento, mas a popup do beat é ARRASTÁVEL: sem
+        // esta passada, mover a janela do beat com o cursor por cima
+        // deixaria `pointer-over-beat` preso no valor antigo.
+        {
+            let (cx, cy) = self.cursor_logical;
+            update_pointer_context(ui, cx, cy);
+        }
 
         // A engine é a fonte da verdade da área de exibição: P/T abertos
         // (show_piano_roll/timewarp) fazem a timeline ocupar a largura total
@@ -243,9 +283,19 @@ impl EngineBridge {
         }
 
         // Playhead segue o Transport compartilhado.
-        let (playing, pos) = {
+        //
+        // No modo "só beat" o transporte TAMBÉM está `playing` (o motor
+        // de áudio precisa da posição para agrupar o pattern), mas a
+        // timeline tem de ficar CONGELADA: para a engine beat-only é
+        // equivalente a não estar tocando — senão a agulha anda e o
+        // follow-playhead rola a timeline enquanto só o pattern soa.
+        let (playing, beat_only, pos) = {
             let t = self.transport.lock().unwrap();
-            (t.playing, t.position_seconds() as f32)
+            (
+                t.playing && t.mode == PlayMode::Timeline,
+                t.playing && t.mode == PlayMode::BeatOnly,
+                t.position_seconds() as f32,
+            )
         };
         {
             let e = &mut self.engine;
@@ -256,7 +306,10 @@ impl EngineBridge {
             if playing {
                 e.update_playhead();
                 self.dirty = true;
-            } else if (e.transport_seconds - pos).abs() > 0.00005 {
+            } else if !beat_only && (e.transport_seconds - pos).abs() > 0.00005 {
+                // Parado de verdade: espelha a posição (seek/clique na
+                // régua). Em modo beat o `pos` está descartado de
+                // propósito, senão a agulha andaria junto do pattern.
                 e.transport_seconds = pos;
                 self.dirty = true;
             }
@@ -515,19 +568,13 @@ pub fn install_engine_callbacks(
     }
 
     // ---- TECLADO -----------------------------------------------------
-    // Espaço = play/pause (mesma rota do botão da UI).
+    // Espaço = play/pause. NÃO é tratado aqui: o atalho vive no
+    // `undo-scope` do main.slint e no `KeyAction::TogglePlay` do winit,
+    // e os dois chamam o MESMO `toggle-play-routed`, que decide pelo
+    // contexto do ponteiro (`pointer-over-beat`). Tratar aqui também
+    // causaria double-toggle.
     {
-        let _b = bridge.clone();
-        let ui_weak = ui.as_weak();
-        ui.on_engine_key_event(move |text, _ctrl, _shift, _alt| {
-            // Space key handled in Slint (main.slint) with mouse position logic
-            // to decide beat-only vs timeline play. Do NOT toggle here.
-            if text == " " {
-                // Forward to Slint for proper routing - ensures
-                // the key event reaches the Slint focus scope.
-                let _ = ui_weak.upgrade();
-            }
-        });
+        ui.on_engine_key_event(move |_text, _ctrl, _shift, _alt| {});
     }
 }
 
@@ -730,11 +777,18 @@ impl ApplicationHandler for Handler {
             WindowEvent::CursorMoved { position, .. } => {
                 self.state.borrow_mut().last_cursor = (position.x as f32, position.y as f32);
                 let logical = logical_pos(position.x, position.y, scale);
+                bridge.borrow_mut().cursor_logical = (logical.x, logical.y);
+                // Rota do play por contexto: com o cursor sobre a popup
+                // do beat o espaço comanda o sequenciencer, não a timeline.
+                update_pointer_context(ui, logical.x, logical.y);
                 overlay_dispatch(bridge, slint::platform::WindowEvent::PointerMoved {
                     position: logical,
                 });
             }
             WindowEvent::CursorLeft { .. } => {
+                // Saiu da janela: nada está "sobre" a popup, então o
+                // play volta a ser o da timeline.
+                ui.set_pointer_over_beat(false);
                 overlay_dispatch(bridge, slint::platform::WindowEvent::PointerExited);
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -793,33 +847,20 @@ impl ApplicationHandler for Handler {
                 let adapter = bridge.borrow().overlay.window.clone();
                 // O motor processa os mesmos atalhos do renderer standalone
                 // (1-6, P, F/Ctrl+F, Ctrl+C/A/Z/Y/V/D, Delete, etc.). Espaço
-                // (§`TogglePlay`) é resolvido AQUI e vai pelo MESMO caminho do
-                // botão de play da UI (`play-state-changed` → playback.rs):
-                // mexe no `Transport` compartilhado, dispara o clock visual e o
-                // flush de áudio — o `tick` do host espelha tudo no engine.
-                // Antes o espaço togglava o `engine.playing` direto, mas o tick
-                // re-sincronizava o engine a partir do Transport (que ficava
-                // parado) e o play nunca engatava.
-                // Não vai pro Slint para não depender do foco do FocusScope
-                // nem acontecer double-toggle.
+                // (§`TogglePlay`) é resolvido AQUI, mas a DECISÃO de o que
+                // tocar é do Slint (`toggle-play-routed`), que conhece o
+                // contexto do ponteiro: sobre a popup do beat o espaço
+                // comanda o step sequencer, em qualquer outro lugar comanda
+                // a timeline. O callback do Rust confirma o estado real
+                // (`set_playing`/`set_beat_playing` em playback.rs), então
+                // os dois botões de play ficam coerentes.
+                // Não vai para o Slint como tecla, nem acontece
+                // double-toggle — só o routed-toggle resolve.
                 let forward_to_slint = {
                     let mut b = bridge.borrow_mut();
                     match b.engine.handle_key(&key) {
                         timeline_render::app::KeyAction::TogglePlay => {
-                            let playing = b
-                                .transport
-                                .lock()
-                                .map(|t| t.playing)
-                                .unwrap_or(false);
-                            ui.invoke_play_state_changed(!playing);
-                            // O callback já mexeu no Transport; espelha no
-                            // ícone do Slint para o botão continuar coerente.
-                            let playing = b
-                                .transport
-                                .lock()
-                                .map(|t| t.playing)
-                                .unwrap_or(false);
-                            ui.set_playing(playing);
+                            ui.invoke_toggle_play_routed();
                             false
                         }
                         timeline_render::app::KeyAction::ExitWindow
