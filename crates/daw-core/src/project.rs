@@ -617,6 +617,44 @@ impl Project {
         Some(id)
     }
 
+    /// Adiciona um clip MIDI JÁ COM AS NOTAS, num único evento.
+    ///
+    /// Existe para a pintura do beat sequencer na timeline: um clique que
+    /// liga o primeiro passo cria o clip E a nota, e o usuário espera um
+    /// Ctrl+Z só. Com `add_clip` seguido de `set_clip_notes` seriam dois
+    /// eventos e dois undos — desfazer tirava a nota mas deixava um clip
+    /// vazio para trás.
+    pub fn add_midi_clip_with_notes(
+        &mut self,
+        track_id: u64,
+        name: impl Into<String>,
+        start_beat: f32,
+        length_beats: f32,
+        notes: Vec<daw_midi::Note>,
+    ) -> Option<u64> {
+        if self.track(track_id).is_none() || length_beats <= crate::clip::BEAT_EPSILON {
+            return None;
+        }
+        let id = self.next_clip_id();
+        let mut clip = Clip::new(
+            id,
+            track_id,
+            name,
+            ClipKind::Midi,
+            start_beat.max(0.0),
+            length_beats,
+        );
+        clip.notes = notes;
+        self.clips.push(clip.clone());
+
+        // Um evento só: o undo do `ClipAdded` remove o clip inteiro, já
+        // com as notas dentro.
+        let event = DocumentEvent::ClipAdded(clip);
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        Some(id)
+    }
+
     /// Adiciona uma CÓPIA de um clip existente (paste/duplicate),
     /// herdando os dados de áudio E a cor (incluindo override).
     ///
@@ -1260,6 +1298,51 @@ mod tests {
         let mut project = demo();
         assert_eq!(project.add_clip(999, ClipKind::Midi, "X", 0.0, 4.0), None);
         assert_eq!(project.add_clip(0, ClipKind::Midi, "X", 0.0, 0.0), None);
+    }
+
+    #[test]
+    fn add_midi_clip_with_notes_is_a_single_undo_step() {
+        let mut project = demo();
+        let notes = vec![daw_midi::Note {
+            id: 1,
+            pitch: daw_midi::DRUM_PITCH_BASE,
+            start: 0.0,
+            length: 0.25,
+            velocity: 100,
+        }];
+        let id = project
+            .add_midi_clip_with_notes(0, "PAT", 0.0, 4.0, notes)
+            .unwrap();
+
+        let clip = project.clip(id).unwrap();
+        assert!(clip.is_midi());
+        assert_eq!(clip.notes.len(), 1);
+        assert_eq!(clip.notes[0].pitch, daw_midi::DRUM_PITCH_BASE);
+
+        // UM undo só: o clip nasce com a nota e sai com ela. Com
+        // add_clip + set_clip_notes seriam dois undos e sobraria um clip
+        // vazio depois do primeiro.
+        assert!(project.undo());
+        assert!(project.clip(id).is_none());
+
+        // E o redo traz os dois de volta.
+        assert!(project.redo());
+        assert_eq!(project.clip(id).unwrap().notes.len(), 1);
+    }
+
+    #[test]
+    fn add_midi_clip_with_notes_validates_like_add_clip() {
+        let mut project = demo();
+        assert_eq!(
+            project.add_midi_clip_with_notes(999, "PAT", 0.0, 4.0, vec![]),
+            None,
+            "trilha inexistente"
+        );
+        assert_eq!(
+            project.add_midi_clip_with_notes(0, "PAT", 0.0, 0.0, vec![]),
+            None,
+            "duração zero"
+        );
     }
 
     #[test]

@@ -19,6 +19,8 @@ use std::sync::{Arc, Mutex};
 use slint::{ComponentHandle, Global, ModelRc, SharedString, VecModel};
 
 use daw_core::project::Project;
+use daw_core::track::TrackKind;
+use daw_core::transport::Transport;
 use daw_midi::{DrumPattern, DrumTrackParams};
 
 use crate::audio_bridge::AudioBridge;
@@ -243,8 +245,183 @@ fn preview_row(project: &RefCell<Project>, audio: &AudioBridge, track: i32) {
     audio.preview(path, t.volume, t.pan);
 }
 
+/// Tolerância para casar a nota pintada com a nota já existente.
+///
+/// Só existe porque as posições são `f32`: o mesmo passo pode ter sido
+/// gravado num clip e agora ser re-calculado a partir de um playhead
+/// ligeiramente diferente. Fica bem abaixo da grade mínima (1/16 =
+/// 0.0625), então nunca casa com o passo vizinho.
+const PAINT_EPS: f32 = 0.0005;
+
+/// Trilha que recebe a pintura: a primeira de bateria, senão a primeira
+/// que aceita MIDI. Se o projeto não tem nenhuma, cria uma — um padrão
+/// sem track não tem onde morar, e o usuário não deve ter que montar a
+/// trilha antes de conseguir programear.
+fn paint_track_id(project: &mut Project) -> u64 {
+    if let Some(t) = project
+        .tracks
+        .iter()
+        .find(|t| t.kind == TrackKind::Drum)
+        .or_else(|| project.tracks.iter().find(|t| t.kind.is_midi()))
+    {
+        return t.id;
+    }
+    project.add_track(TrackKind::Drum, "Drums")
+}
+
+/// Compasso em que o pattern pintado mora, em beats.
+///
+/// O pattern entra na timeline sempre INTEIRO e alinhado ao compasso:
+/// com o playhead no meio do compasso 2, um padrão de 4 beats ocupa
+/// `2..6`, não `2.3..6.3`. É o que mantém o compasso musicalmente
+/// fechado, e o que faz a pintura coincidir com o clip do Clip Pool.
+fn paint_origin(playhead: f32, length_beats: f32) -> f32 {
+    if length_beats <= 0.0 {
+        return playhead.max(0.0);
+    }
+    (playhead / length_beats).floor() * length_beats
+}
+
+/// Duas notas ocupam a mesma célula do grid?
+fn same_cell(note: daw_midi::Note, pitch: i32, start: f32) -> bool {
+    note.pitch == pitch && (note.start - start).abs() <= PAINT_EPS
+}
+
+/// Pinta um passo do pattern na timeline — o modelo do channel rack do
+/// FL Studio: ligar o passo GRAVA a nota no compasso do playhead,
+/// desligar REMOVE.
+///
+/// Sem isto o pattern só existia dentro do beat sequencer, e como o
+/// play da timeline silencia o step sequencer (ver `PlayMode::Timeline`),
+/// a bateria não soaria na timeline. Pintada, ela vira clip MIDI de
+/// verdade e o motor de áudio a toca pelo caminho normal dos clips
+/// (`engine.rs` mapeia o pitch de volta pra linha do pattern).
+///
+/// O clip resultante é um MIDI comum e INDEPENDENTE do pattern: mudar o
+/// swing ou a resolução depois não reescreve o que já foi gravado (como
+/// no FL), e apagar a nota no piano roll não religa o passo.
+///
+/// O clip leva o NOME DO PADRÃO de propósito: é assim que o Clip Pool já
+/// reconhece um clip de bateria (`timeline.rs`), então o clip pintado
+/// passo a passo e o clip arrastado do pool são o mesmo tipo de objeto.
+///
+/// Devolve `true` se o documento mudou (algo foi pintado ou removido).
+fn paint_step(
+    proj: &mut Project,
+    transport: &Arc<Mutex<Transport>>,
+    row: usize,
+    step: usize,
+    on: bool,
+) -> bool {
+    let playhead = transport.lock().unwrap().position_beats();
+
+    // Geometria da nota + grade do padrão. Usa `cell_note` (e não
+    // `step_note`) porque DESLIGAR o passo também precisa saber onde a
+    // nota estava. A conversão é a mesma do drop do Clip Pool, então
+    // pintar e arrastar soam idênticos.
+    let (clip_name, note, pattern_len) = {
+        let Some(p) = proj.current_beat_pattern() else {
+            return false;
+        };
+        let Some(note) = p.cell_note(row, step) else {
+            return false;
+        };
+        (p.name.clone(), note, p.length_beats())
+    };
+
+    // `note.start` é a COLUNA do passo dentro do padrão (0..len), já
+    // com o swing. A origem na timeline é o compasso do playhead.
+    let origin = paint_origin(playhead, pattern_len);
+    let len = pattern_len.max(0.25);
+    let track_id = paint_track_id(proj);
+
+    // Clip de pintura que comporta o compasso: MIDI, na trilha alvo, com
+    // o nome do padrão e cobrindo a origem. Sem ele (primeira pintura, ou
+    // o usuário arrastou o clip para outro compasso) criamos um.
+    let existing = proj
+        .clips
+        .iter()
+        .find(|c| {
+            c.track_id == track_id
+                && c.is_midi()
+                && c.name == clip_name
+                && c.start_beat <= origin
+                && origin < c.start_beat + c.length_beats
+        })
+        .map(|c| c.id);
+
+    // A nota é a COLUNA dentro do padrão, não o offset do playhead: o
+    // pattern é uma peça inteira, então se `find_free_slot` empurrar o
+    // clip para o próximo compasso o pattern inteiro vai junto, e a nota
+    // continua valendo `origin + coluna` em termos absolutos. Usar
+    // `pos - clip.start_beat` aqui daria posição NEGATIVA justamente no
+    // caso do clip deslocado.
+    let local = note.start;
+
+    if let Some(id) = existing {
+        // Clip já existe: edita as notas.
+        let Some(clip) = proj.clip(id) else {
+            return false;
+        };
+        // Já está no estado pedido? Então não é operação — repintar o
+        // mesmo passo não deve gerar evento de documento (e um id de
+        // nota novo) sem mudar nada.
+        let painted = clip.notes.iter().any(|n| same_cell(*n, note.pitch, local));
+        if painted == on {
+            return false;
+        }
+
+        let mut notes = clip.notes.clone();
+        // Casa por pitch + posição, nunca por id: o id é reatribuído a
+        // cada `set_clip_notes` e não sobrevive entre rotas de escrita.
+        notes.retain(|n| !same_cell(*n, note.pitch, local));
+
+        if on {
+            notes.push(daw_midi::Note {
+                id: notes.iter().map(|n| n.id).max().unwrap_or(0) + 1,
+                pitch: note.pitch,
+                start: local,
+                length: note.length,
+                velocity: note.velocity,
+            });
+        }
+        return proj.set_clip_notes(id, notes);
+    }
+
+    if !on {
+        // Nunca pintou neste compasso e o passo foi desligado: não há o
+        // que remover.
+        return false;
+    }
+
+    // Primeira nota do compasso: cria o clip JÁ COM ela, num evento só,
+    // para um clique = um Ctrl+Z. Nasce no início do compasso, não na
+    // coluna: o swing desloca a NOTA, e um clip que começasse na coluna
+    // cortaria o onset da última coluna da grade.
+    let start = proj.find_free_slot(track_id, origin, len);
+    proj.add_midi_clip_with_notes(
+        track_id,
+        &clip_name,
+        start,
+        len,
+        vec![daw_midi::Note {
+            id: 1,
+            pitch: note.pitch,
+            start: local,
+            length: note.length,
+            velocity: note.velocity,
+        }],
+    )
+    .is_some()
+}
+
 /// Conecta todos os callbacks do beat sequencer ao core.
-pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBridge) {
+pub fn wire_beat(
+    ui: &MainWindow,
+    project: Rc<RefCell<Project>>,
+    audio: AudioBridge,
+    transport: Arc<Mutex<Transport>>,
+) {
     let st = BeatState::get(ui);
 
     // Snapshot para Copy Beat / Copy Track (paste consumirá quando
@@ -261,21 +438,40 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
         let ui = ui.clone_strong();
         let project = project.clone();
         let audio = audio.clone();
+        let transport = transport.clone();
         st.on_step_committed(move |index, value| {
-            let mut row = 0usize;
-            commit(&ui, &project, &audio, |proj| {
-                let stride = proj
+            // `index` é a posição GLOBAL na grade achatada
+            // (track * steps + step); a largura vem do padrão atual.
+            let (row, step) = {
+                let stride = project
+                    .borrow()
                     .current_beat_pattern()
                     .map(|p| p.steps())
                     .unwrap_or(16)
                     .max(1);
-                row = index as usize / stride;
-                proj.set_beat_step(row, index as usize % stride, value);
+                ((index as usize) / stride, (index as usize) % stride)
+            };
+
+            commit(&ui, &project, &audio, |proj| {
+                proj.set_beat_step(row, step, value);
+                // O passo não fica preso ao sequenciador: ele também
+                // vira nota na timeline, no compasso do playhead. É o
+                // que faz a bateria soar no play da timeline (ver
+                // `paint_step`).
+                //
+                // Dentro do `commit` de propósito: o `mark_dirty` do
+                // áudio vem DEPOIS, então o snapshot da thread RT já
+                // enxerga o clip novo — pintando fora, o motor poderia
+                // ler o projeto sem a nota até o próximo flush.
+                paint_step(proj, &transport, row, step, value);
             });
 
             // Ligar um passo toca o som da linha na hora (FL Studio faz
-            // isso). Desligar não toca nada.
-            if value {
+            // isso). Desligar não toca nada. Durante a reprodução a
+            // pré-escuta é DISPENSÁVEL: a nota acabou de ser pintada e
+            // o motor dispara o sample no bloco atual — sem o corte, o
+            // mesmo sample tocaria duas vezes.
+            if value && !transport.lock().unwrap().playing {
                 preview_row(&project, &audio, row as i32);
             }
         });
@@ -609,4 +805,258 @@ pub fn wire_beat(ui: &MainWindow, project: Rc<RefCell<Project>>, audio: AudioBri
 
     // Projeção inicial do estado do core.
     refresh_beat(ui, &project.borrow());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use daw_core::clip::ClipKind;
+    use daw_midi::{BeatPatterns, DrumPattern, DRUM_PITCH_BASE};
+
+    /// Pattern 8x16 = 4 beats, passo de 0.25, sem swing.
+    fn pattern() -> DrumPattern {
+        DrumPattern::new("PAT", 8, 16)
+    }
+
+    /// Projeto com o padrão "PAT" selecionado e UMA trilha de bateria.
+    fn project_with_drum() -> RefCell<Project> {
+        let mut p = Project::default();
+        p.add_track(TrackKind::Drum, "Drums");
+        p.beat_patterns = BeatPatterns {
+            patterns: vec![pattern()],
+            current: 0,
+        };
+        RefCell::new(p)
+    }
+
+    /// Transporte parado com o playhead em `beats` (PPQ 960).
+    fn transport_at(beats: f32) -> Arc<Mutex<Transport>> {
+        let mut t = Transport::default();
+        t.seek((beats * t.ppq as f32) as u64);
+        Arc::new(Mutex::new(t))
+    }
+
+    /// Liga o passo no padrão (o que o `commit` faz antes de pintar) e
+    /// devolve o documento pintado, como na UI.
+    fn paint(
+        project: &RefCell<Project>,
+        t: &Arc<Mutex<Transport>>,
+        row: usize,
+        step: usize,
+        on: bool,
+    ) -> bool {
+        let mut proj = project.borrow_mut();
+        proj.set_beat_step(row, step, on);
+        paint_step(&mut proj, t, row, step, on)
+    }
+
+    fn midi_clips(proj: &RefCell<Project>) -> Vec<(u64, f32, f32, Vec<daw_midi::Note>)> {
+        proj.borrow()
+            .clips
+            .iter()
+            .filter(|c| c.is_midi())
+            .map(|c| (c.id, c.start_beat, c.length_beats, c.notes.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn painting_a_step_creates_a_midi_clip_on_the_drum_track() {
+        let proj = project_with_drum();
+        let t = transport_at(0.0);
+        assert!(paint(&proj, &t, 0, 0, true));
+
+        let clips = midi_clips(&proj);
+        assert_eq!(clips.len(), 1, "um passo pintado cria um clip");
+        let (_, start, len, notes) = &clips[0];
+        assert_eq!(*start, 0.0);
+        assert_eq!(*len, 4.0, "o clip tem a duração do padrão");
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].pitch, DRUM_PITCH_BASE, "linha 0 = pitch base");
+        assert_eq!(notes[0].start, 0.0, "notas são relativas ao clip");
+        assert!((notes[0].length - 0.25).abs() < 1e-6, "duração = 1 passo");
+    }
+
+    #[test]
+    fn turning_a_step_off_removes_the_note_and_keeps_the_clip() {
+        let proj = project_with_drum();
+        let t = transport_at(0.0);
+        paint(&proj, &t, 0, 0, true);
+        assert!(paint(&proj, &t, 0, 0, false));
+
+        let clips = midi_clips(&proj);
+        assert_eq!(clips.len(), 1, "o clip sobrevive ao passo desligado");
+        assert!(clips[0].3.is_empty(), "a nota foi removida");
+    }
+
+    #[test]
+    fn painting_uses_the_bar_the_playhead_is_in() {
+        // Playhead no meio do compasso 0 → o padrão cabe em 0..4.
+        let proj = project_with_drum();
+        paint(&proj, &transport_at(2.5), 0, 0, true);
+        assert_eq!(midi_clips(&proj)[0].1, 0.0);
+
+        // Playhead no compasso 1 → o padrão vai para 4..8.
+        let proj = project_with_drum();
+        paint(&proj, &transport_at(4.0), 0, 0, true);
+        let clips = midi_clips(&proj);
+        assert_eq!(clips[0].1, 4.0);
+        assert_eq!(clips[0].2, 4.0);
+    }
+
+    #[test]
+    fn steps_in_the_same_bar_reuse_one_clip() {
+        let proj = project_with_drum();
+        let t = transport_at(0.0);
+        paint(&proj, &t, 0, 0, true);
+        // Mesmo compasso (origin 0), outra linha e outra coluna.
+        paint(&proj, &t, 2, 4, true);
+
+        let clips = midi_clips(&proj);
+        assert_eq!(clips.len(), 1, "o mesmo compasso reusa o clip");
+        let mut notes = clips[0].3.clone();
+        notes.sort_by(|a, b| a.pitch.cmp(&b.pitch));
+        assert_eq!(notes.len(), 2);
+        assert_eq!(notes[0].pitch, DRUM_PITCH_BASE);
+        assert_eq!(notes[1].pitch, DRUM_PITCH_BASE + 2, "linha 2");
+        assert!((notes[1].start - 1.0).abs() < 1e-6, "coluna 4 = beat 1");
+    }
+
+    #[test]
+    fn other_bars_get_their_own_clip() {
+        let proj = project_with_drum();
+        let t = transport_at(0.0);
+        paint(&proj, &t, 0, 0, true);
+        paint(&proj, &transport_at(4.0), 0, 0, true);
+        assert_eq!(midi_clips(&proj).len(), 2, "cada compasso tem seu clip");
+    }
+
+    #[test]
+    fn painting_the_same_step_twice_does_not_duplicate_the_note() {
+        let proj = project_with_drum();
+        let t = transport_at(0.0);
+        paint(&proj, &t, 0, 0, true);
+        // Reaplica o mesmo passo (mesma linha/coluna/compasso).
+        assert!(!paint(&proj, &t, 0, 0, true), "nada a fazer");
+        assert_eq!(midi_clips(&proj)[0].3.len(), 1);
+    }
+
+    #[test]
+    fn swing_offsets_the_note_but_not_the_clip() {
+        let mut p = Project::default();
+        p.add_track(TrackKind::Drum, "Drums");
+        let mut pat = pattern();
+        pat.swing = 1.0;
+        p.beat_patterns = BeatPatterns {
+            patterns: vec![pat],
+            current: 0,
+        };
+        let proj = RefCell::new(p);
+        let t = transport_at(0.0);
+
+        // Coluna 1 (ímpar) recebe swing de meio passo: 0.25 + 0.125.
+        paint(&proj, &t, 0, 1, true);
+        // Coluna 15 (ímpar), a última: precisa caber no clip de 4 beats.
+        paint(&proj, &t, 0, 15, true);
+
+        let clips = midi_clips(&proj);
+        let mut notes = clips[0].3.clone();
+        notes.sort_by(|a, b| a.start.total_cmp(&b.start));
+        assert!((notes[0].start - 0.375).abs() < 1e-6, "0.25 + swing 0.125");
+        // 15 * 0.25 = 3.75 + 0.125 = 3.875: o ONSET da última coluna
+        // ainda cai dentro do clip de 4 beats (é o que o motor usa para
+        // disparar). A CAUDA pode passar do fim — o motor de bateria
+        // ignora o comprimento da nota, e o drop do Clip Pool produz
+        // exatamente o mesmo overhang, então os dois caminhos coincidem.
+        assert!((notes[1].start - 3.875).abs() < 1e-6);
+        assert!(notes[1].start < clips[0].2, "onset dentro do clip");
+    }
+
+    #[test]
+    fn an_occupied_slot_moves_the_whole_pattern_not_the_note() {
+        let mut p = Project::default();
+        let drum = p.add_track(TrackKind::Drum, "Drums");
+        p.beat_patterns = BeatPatterns {
+            patterns: vec![pattern()],
+            current: 0,
+        };
+        // Já ocupa 0..8 na trilha: o paint tem de ir para 8.
+        p.add_clip(drum, ClipKind::Audio, "ocupa", 0.0, 8.0);
+        let proj = RefCell::new(p);
+
+        assert!(paint(&proj, &transport_at(0.0), 0, 0, true));
+        let clips = midi_clips(&proj);
+        assert_eq!(clips.len(), 1);
+        assert_eq!(clips[0].1, 8.0, "clip empurrado para depois do vizinho");
+        // A coluna continua valendo 0 — a nota NUNCA fica negativa.
+        assert_eq!(clips[0].3[0].start, 0.0);
+    }
+
+    #[test]
+    fn a_project_without_a_drum_track_gets_one() {
+        let mut p = Project::default();
+        p.beat_patterns = BeatPatterns {
+            patterns: vec![pattern()],
+            current: 0,
+        };
+        let proj = RefCell::new(p);
+
+        assert!(paint(&proj, &transport_at(0.0), 0, 0, true));
+        let proj = proj.borrow();
+        assert_eq!(proj.tracks.len(), 1);
+        assert_eq!(proj.tracks[0].kind, TrackKind::Drum);
+        assert_eq!(proj.clips[0].track_id, proj.tracks[0].id);
+    }
+
+    #[test]
+    fn an_existing_midi_track_is_preferred_over_creating_one() {
+        let mut p = Project::default();
+        let midi = p.add_track(TrackKind::Midi, "Sint");
+        p.beat_patterns = BeatPatterns {
+            patterns: vec![pattern()],
+            current: 0,
+        };
+        let proj = RefCell::new(p);
+
+        assert!(paint(&proj, &transport_at(0.0), 0, 0, true));
+        let proj = proj.borrow();
+        assert_eq!(proj.tracks.len(), 1, "nenhuma trilha nova");
+        assert_eq!(proj.clips[0].track_id, midi);
+    }
+
+    #[test]
+    fn painting_is_recorded_in_the_undo_history() {
+        let proj = project_with_drum();
+        let t = transport_at(0.0);
+        paint(&proj, &t, 0, 0, true);
+        assert!(proj.borrow().can_undo(), "cada pintura é um passo de undo");
+
+        // Desfazer devolve a timeline ao estado anterior: o clip criado
+        // pela pintura some junto.
+        assert!(proj.borrow_mut().undo());
+        assert!(midi_clips(&proj).is_empty());
+    }
+
+    #[test]
+    fn paint_origin_snaps_to_the_pattern_length() {
+        assert_eq!(paint_origin(0.0, 4.0), 0.0);
+        assert_eq!(paint_origin(3.9, 4.0), 0.0);
+        assert_eq!(paint_origin(4.0, 4.0), 4.0);
+        assert_eq!(paint_origin(7.5, 4.0), 4.0);
+        // Padrão degenerado: sem divisão por zero.
+        assert_eq!(paint_origin(3.0, 0.0), 3.0);
+    }
+
+    #[test]
+    fn same_cell_ignores_float_noise_but_not_the_neighbour() {
+        let note = daw_midi::Note {
+            id: 1,
+            pitch: DRUM_PITCH_BASE,
+            start: 1.0,
+            length: 0.25,
+            velocity: 100,
+        };
+        assert!(same_cell(note, DRUM_PITCH_BASE, 1.0001));
+        assert!(!same_cell(note, DRUM_PITCH_BASE, 1.25), "coluna vizinha");
+        assert!(!same_cell(note, DRUM_PITCH_BASE + 1, 1.0), "outra linha");
+    }
 }

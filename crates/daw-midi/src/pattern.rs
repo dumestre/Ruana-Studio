@@ -203,6 +203,58 @@ impl DrumPattern {
         }
     }
 
+    /// Duração de um passo em beats da timeline.
+    ///
+    /// Com `resolution` passos por compasso, um passo dura
+    /// `length_beats / resolution`. É a grade em que o pattern é
+    /// pintado na timeline e a duração de cada nota gerada.
+    pub fn step_beats(&self) -> f32 {
+        let steps = self.steps();
+        if steps > 0 {
+            self.length_beats() / steps as f32
+        } else {
+            0.25
+        }
+    }
+
+    /// Geometria da nota de uma célula, INDEPENDENTE do estado on/off.
+    ///
+    /// Pitch `DRUM_PITCH_BASE + track` e coluna `step * step_beats` (com
+    /// o swing aplicado). Retorna `None` só se a célula não existe na
+    /// grade — uma célula desligada DEVolve a nota, porque quem remove
+    /// uma nota pintada precisa saber onde ela estava.
+    ///
+    /// É a mesma conversão que [`DrumPattern::to_notes`] usa (arrastar o
+    /// padrão do Clip Pool) e que a pintura passo a passo na timeline usa:
+    /// as duas rotas produzem exatamente as mesmas notas, então pintar e
+    /// arrastar soam idênticos.
+    ///
+    /// O `id` sai zerado — quem decide é quem grava no clip.
+    pub fn cell_note(&self, track: usize, step: usize) -> Option<Note> {
+        // Só a grade importa aqui; o estado da célula NÃO.
+        self.grid.get(track)?.get(step)?;        let step_beats = self.step_beats();
+        let swing_delay = if step.rem_euclid(2) == 1 {
+            self.swing.clamp(0.0, 1.0) * 0.5 * step_beats
+        } else {
+            0.0
+        };
+        Some(Note {
+            id: 0,
+            pitch: DRUM_PITCH_BASE + track as i32,
+            start: step as f32 * step_beats + swing_delay,
+            length: step_beats,
+            velocity: 100,
+        })
+    }
+
+    /// Idem [`DrumPattern::cell_note`], mas só para célula LIGADA.
+    pub fn step_note(&self, track: usize, step: usize) -> Option<Note> {
+        if !*self.grid.get(track)?.get(step)? {
+            return None;
+        }
+        self.cell_note(track, step)
+    }
+
     /// Converte a grade em notas MIDI (para arrastar o padrão pra timeline).
     ///
     /// Cada trilha vira um pitch fixo (`DRUM_PITCH_BASE + track`): o
@@ -210,32 +262,15 @@ impl DrumPattern {
     /// linha do pattern e tocar o sample da linha. O swing atrasa os
     /// passos ímpares em até meio passo, igual ao scheduler RT do beat.
     pub fn to_notes(&self) -> Vec<Note> {
-        let steps = self.steps();
-        let step_beats = if steps > 0 {
-            self.length_beats() / steps as f32
-        } else {
-            0.25
-        };
         let mut notes = Vec::new();
         let mut id: i32 = 1;
         for (track, row) in self.grid.iter().enumerate() {
-            let pitch = DRUM_PITCH_BASE + track as i32;
-            for (step, on) in row.iter().enumerate() {
-                if !*on {
+            for step in 0..row.len() {
+                let Some(mut note) = self.step_note(track, step) else {
                     continue;
-                }
-                let swing_delay = if step.rem_euclid(2) == 1 {
-                    self.swing.clamp(0.0, 1.0) * 0.5 * step_beats
-                } else {
-                    0.0
                 };
-                notes.push(Note {
-                    id,
-                    pitch,
-                    start: step as f32 * step_beats + swing_delay,
-                    length: step_beats,
-                    velocity: 100,
-                });
+                note.id = id;
+                notes.push(note);
                 id += 1;
             }
         }
@@ -376,5 +411,64 @@ mod tests {
         b.duplicate_current();
         assert_eq!(b.patterns.len(), 2);
         assert_eq!(b.current, 1);
+    }
+
+    #[test]
+    fn cell_note_exists_even_when_the_cell_is_off() {
+        let mut p = DrumPattern::new("A", 2, 16);
+        // Desligada: `step_note` não tem o que devolver...
+        assert!(p.step_note(0, 0).is_none());
+        // ...mas a GEOMETRIA existe, porque quem desliga uma nota
+        // pintada precisa saber exatamente onde ela estava.
+        let cell = p.cell_note(0, 0).expect("geometria da célula");
+        assert_eq!(cell.pitch, DRUM_PITCH_BASE);
+        assert_eq!(cell.start, 0.0);
+
+        p.set_step(0, 0, true);
+        assert_eq!(p.step_note(0, 0).map(|n| n.pitch), Some(cell.pitch));
+    }
+
+    #[test]
+    fn cells_outside_the_grid_have_no_note() {
+        let p = DrumPattern::new("A", 2, 16);
+        assert!(p.cell_note(5, 0).is_none(), "trilha fora");
+        assert!(p.cell_note(0, 99).is_none(), "passo fora");
+        assert!(p.step_note(5, 0).is_none());
+    }
+
+    #[test]
+    fn cell_note_and_to_notes_agree() {
+        // A pintura passo a passo e o drop do Clip Pool têm que produzir
+        // as MESMAS notas — é o que garante que soem idênticos.
+        let mut p = DrumPattern::new("A", 3, 16);
+        p.swing = 0.5;
+        for (t, s) in [(0usize, 0usize), (1, 3), (2, 15)] {
+            p.set_step(t, s, true);
+        }
+        let all = p.to_notes();
+        assert_eq!(all.len(), 3);
+        for (t, s) in [(0usize, 0usize), (1, 3), (2, 15)] {
+            let cell = p.cell_note(t, s).unwrap();
+            let same = all
+                .iter()
+                .find(|n| n.pitch == cell.pitch && (n.start - cell.start).abs() < 1e-6)
+                .unwrap_or_else(|| panic!("nota {t}/{s} ausente em to_notes"));
+            assert_eq!(same.length, cell.length);
+            assert_eq!(same.velocity, cell.velocity);
+        }
+    }
+
+    #[test]
+    fn step_note_reuses_the_cell_geometry() {
+        let mut p = DrumPattern::new("A", 2, 16);
+        p.swing = 1.0;
+        p.set_step(1, 1, true);
+        let step = p.step_note(1, 1).unwrap();
+        let cell = p.cell_note(1, 1).unwrap();
+        assert_eq!(step.pitch, cell.pitch);
+        assert_eq!(step.start, cell.start);
+        assert_eq!(step.length, cell.length);
+        // Coluna ímpar com swing máximo: 0.25 + 0.125.
+        assert!((step.start - 0.375).abs() < 1e-6);
     }
 }

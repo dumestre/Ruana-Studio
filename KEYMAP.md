@@ -43,9 +43,9 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 | Atalho / Ação | Descrição |
 | --- | --- |
 | Botão ▶/⏸ do header do popup | Play/stop do sequenciencer. É o mesmo transporte do `Espaço` com o cursor sobre a popup, então nunca mexe na timeline. |
-| Clique em um passo do grid | Liga/desliga a nota (`Ctrl+clique` para estender/caret). |
+| Clique em um passo do grid | Liga/desliga a nota (`Ctrl+clique` para estender/caret). **Ligar também pinta a nota na timeline**: o passo não fica preso ao sequenciador, ele vira nota MIDI no **compasso em que o playhead está**, dentro de um clip com o nome do padrão. É o que faz a bateria soar no play da timeline (que silencia o step sequencer). Desligar o passo remove a nota. O clip resultante é um MIDI normal e **independente** do pattern: dá pra arrastar, cortar, abrir no piano roll e apagar, e mexer no swing/resolução depois não reescreve o que já foi gravado. Um clique = um `Ctrl+Z`. |
 | Clique num padrão na seção **BEAT PATTERNS** do Clip Pool | Seleciona o padrão no sequencer (song mode). |
-| Arraste um padrão do Clip Pool para a timeline | Cria um clip MIDI regular com a duração do padrão. |
+| Arraste um padrão do Clip Pool para a timeline | Cria um clip MIDI regular com a duração do padrão. Equivale a pintar o pattern inteiro de uma vez — as duas rotas geram as mesmas notas. |
 | **Botões do popup**: `Copy` / `Duplicate` / `Clear` / `Delete` | Copiam/duplicam/limpam/apagam padrões, trilhas ou linhas. |
 
 ## Referência rápida

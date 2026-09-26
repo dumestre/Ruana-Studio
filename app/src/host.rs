@@ -919,8 +919,19 @@ impl ApplicationHandler for Handler {
 }
 
 /// Entrada do app: dono do `EventLoop` (winit) — NUNCA o Slint.
+///
+/// O `main` sobe isto numa thread com stack grande (ver `main.rs`): a
+/// construção da árvore do Slint em `resumed` é recursiva e estoura os
+/// 1 MB da thread principal. O winit recusa criar o event loop fora da
+/// thread principal, daí o `any_thread` no Windows.
 pub fn run() -> Result<(), slint::PlatformError> {
-    let event_loop = EventLoop::new().map_err(|e| {
+    let mut builder = EventLoop::with_user_event();
+    #[cfg(windows)]
+    {
+        use winit::platform::windows::EventLoopBuilderExtWindows;
+        builder.with_any_thread(true);
+    }
+    let event_loop = builder.build().map_err(|e| {
         slint::PlatformError::Other(format!("winit: falha ao criar event loop: {e}"))
     })?;
     let mut handler = Handler::new();

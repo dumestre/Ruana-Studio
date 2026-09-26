@@ -109,8 +109,43 @@ fn choose_audio_file() -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Stack do event loop. A construção da árvore do Slint é recursiva e cada
+/// elemento com `drop-shadow-*` acrescenta um nível; a UI atual (knob,
+/// toolbar, transport, mixer) estoura os 1 MB da thread principal do Windows
+/// em `MainWindow::new()`.
+const MAIN_STACK_SIZE: usize = 32 * 1024 * 1024;
+
 fn main() -> Result<(), slint::PlatformError> {
-    host::run()
+    // No macOS o winit exige que o event loop rode na thread principal.
+    #[cfg(target_os = "macos")]
+    {
+        host::run()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let event_loop = std::thread::Builder::new()
+            .name("ruana-main".into())
+            .stack_size(MAIN_STACK_SIZE)
+            .spawn(|| {
+                if let Err(e) = host::run() {
+                    eprintln!("[main] event loop encerrou com erro: {e}");
+                }
+            })
+            .expect("main: nao foi possivel iniciar a thread do event loop");
+
+        match event_loop.join() {
+            Ok(()) => Ok(()),
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "panic desconhecido".to_string());
+                eprintln!("[main] thread do event loop morreu: {msg}");
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 /// Instala todo o wiring da DAW quando a janela winit sobe (`resumed` no
@@ -323,7 +358,7 @@ pub fn setup(
     // Beat sequencer: projeção inicial + persistência no core.
     {
         let project = project.clone();
-        beat::wire_beat(ui, project, audio.clone());
+        beat::wire_beat(ui, project, audio.clone(), transport.clone());
     }
 
     {
