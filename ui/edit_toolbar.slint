@@ -62,6 +62,9 @@ export component EditToolbar inherits Rectangle {
 
                 icon-size: 16px;
                 icon-color: Theme.text-primary;
+                drop-shadow-blur: 1px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
 
                 padding-x: 0px;
 
@@ -69,9 +72,6 @@ export component EditToolbar inherits Rectangle {
 
                 borderless: true;
                 corner-radius: 2px;
-                drop-shadow-blur: 1px;
-                drop-shadow-color: #2f2f2f;
-                drop-shadow-offset-y: 3px;
 
                 toggled: root.active-tool == 0;
 
