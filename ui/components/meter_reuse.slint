@@ -21,6 +21,11 @@ export component StereoMeter inherits Rectangle {
     in property <color> meter-background: #111111;
     in property <color> meter-border: transparent;
 
+    // Fader cap (play icon) properties
+    in property <bool> show-fader-cap: true;
+    in property <float> left-cap-position: 0.0;   // 0.0 = bottom, 1.0 = top
+    in property <float> right-cap-position: 0.0;  // 0.0 = bottom, 1.0 = top
+
     // ========================================================
     // DIMENSÕES
     // ========================================================
@@ -90,6 +95,19 @@ export component StereoMeter inherits Rectangle {
                 background: root.left-clipped ? #FF3030 : #FFFFFF;
                 visible: root.left-peak > 0.001;
             }
+
+            // Fader Cap (Play Icon) - CANAL L
+            if root.show-fader-cap : Image {
+                width: 30px;
+                height: 22px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height * (1.0 - root.left-cap-position)) - (self.height / 2);
+                source: @image-url("../icons/fader.png");
+                horizontal-tiling: ImageTiling.none;
+                image-fit: ImageFit.contain;
+                image-rendering: ImageRendering.smooth;
+                z: 10;
+            }
         }
 
         // ----------------------------------------------------
@@ -140,6 +158,19 @@ export component StereoMeter inherits Rectangle {
                 height: 2px;
                 background: root.right-clipped ? #FF3030 : #FFFFFF;
                 visible: root.right-peak > 0.001;
+            }
+
+            // Fader Cap (Play Icon) - CANAL R
+            if root.show-fader-cap : Image {
+                width: 30px;
+                height: 22px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height * (1.0 - root.right-cap-position)) - (self.height / 2);
+                source: @image-url("../icons/fader.png");
+                horizontal-tiling: ImageTiling.none;
+                image-fit: ImageFit.contain;
+                image-rendering: ImageRendering.smooth;
+                z: 10;
             }
         }
     }

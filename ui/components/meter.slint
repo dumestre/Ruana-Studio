@@ -1,68 +1,41 @@
 import { Theme } from "../theme.slint";
+import { StereoMeter } from "meter_reuse.slint";
 
-export component Meter {
-    in property <float> level: 0.0;
+export component Meter inherits Rectangle {
+    in property <float> left-level: 0.0;
+    in property <float> right-level: 0.0;
+    in property <float> left-peak: 0.0;
+    in property <float> right-peak: 0.0;
+    in property <bool> left-clipped: false;
+    in property <bool> right-clipped: false;
     in property <bool> active: false;
 
-    width: 8px;
+    // Fader cap position properties
+    in property <bool> show-fader-cap: true;
+    in property <float> left-cap-position: 0.0;
+    in property <float> right-cap-position: 0.0;
+
+    width: 13px;
     min-height: 40px;
 
-    // ==========================================
-    // CORES
-    // ==========================================
-
-    property <color> bar-color:
-        root.level > 0.92
-            ? Theme.danger
-            : root.level > 0.75
-                ? Theme.warn
-                : Theme.ok;
-
-    // ==========================================
-    // SMOOTH LEVEL
-    //
-    // SEM animação Slint: o smoothing (attack instantâneo,
-    // decay lento) é feito no Rust a cada tick do timer.
-    // Animações aqui mantêm o renderer sob carga contínua
-    // e travam o playhead durante o playback.
-    // ==========================================
-
-    property <float> smooth-level: root.level;
-
-    // ==========================================
-    // BACKGROUND
-    // ==========================================
-
-    Rectangle {
+    StereoMeter {
         width: 100%;
         height: 100%;
 
-        background: Theme.surface-high;
+        left-level: root.left-level;
+        right-level: root.right-level;
+        left-peak: root.left-peak;
+        right-peak: root.right-peak;
+        left-clipped: root.left-clipped;
+        right-clipped: root.right-clipped;
 
-        border-radius: 3px;
-        border-width: 1px;
-        border-color: Theme.border;
-    }
+        meter-width: 5px;
+        channel-gap: 2px;
+        meter-background: Theme.surface-high;
+        meter-border: Theme.border;
 
-    // ==========================================
-    // LEVEL
-    // ==========================================
-
-    Rectangle {
-        width: 100%;
-
-        height: parent.height * root.smooth-level;
-
-        y: parent.height - self.height;
-
-        background: root.bar-color;
-
-        border-radius: 3px;
-
-        states [
-            idle when !root.active: {
-                opacity: 0.55;
-            }
-        ]
+        show-fader-cap: root.show-fader-cap;
+        left-cap-position: root.left-cap-position;
+        right-cap-position: root.right-cap-position;
     }
 }

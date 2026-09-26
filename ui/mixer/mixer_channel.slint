@@ -354,13 +354,19 @@ export component MixerChannel inherits Rectangle {
                 }
 
                 // ==================================
-                // LEVEL METER
+                // LEVEL METER (StereoMeter)
                 // ==================================
                 Meter {
-                    width: 8px;
+                    width: 13px;
 
-                    level: root.level;
+                    left-level: root.level;
+                    right-level: root.level;
+                    left-peak: root.level;
+                    right-peak: root.level;
                     active: root.level > 0.05;
+                    show-fader-cap: true;
+                    left-cap-position: root.level;
+                    right-cap-position: root.level;
 
                     vertical-stretch: 1;
                 }
