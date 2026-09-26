@@ -517,19 +517,15 @@ pub fn install_engine_callbacks(
     // ---- TECLADO -----------------------------------------------------
     // Espaço = play/pause (mesma rota do botão da UI).
     {
-        let b = bridge.clone();
+        let _b = bridge.clone();
         let ui_weak = ui.as_weak();
         ui.on_engine_key_event(move |text, _ctrl, _shift, _alt| {
+            // Space key handled in Slint (main.slint) with mouse position logic
+            // to decide beat-only vs timeline play. Do NOT toggle here.
             if text == " " {
-                let playing = b
-                    .borrow()
-                    .transport
-                    .lock()
-                    .map(|t| t.playing)
-                    .unwrap_or(false);
-                if let Some(ui) = ui_weak.upgrade() {
-                    ui.invoke_play_state_changed(!playing);
-                }
+                // Forward to Slint for proper routing - ensures
+                // the key event reaches the Slint focus scope.
+                let _ = ui_weak.upgrade();
             }
         });
     }

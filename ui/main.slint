@@ -795,15 +795,11 @@ export component MainWindow inherits Window {
             } else if event.text == " " {
 
                 if root.beat-open && beat_popup.mouse-over {
-                    // Mouse sobre o beat popup → play apenas beat
+                    // Mouse sobre beat popup → play APENAS beat sequencer
                     root.beat-playing = !root.beat-playing;
                     root.beat-play-state-changed(root.beat-playing);
-                } else if root.drag-over-timeline {
-                    // Mouse sobre timeline → play timeline
-                    root.playing = !root.playing;
-                    root.play-state-changed(root.playing);
                 } else {
-                    // Default → play timeline
+                    // Mouse sobre timeline OU popup fechada → play APENAS timeline
                     root.playing = !root.playing;
                     root.play-state-changed(root.playing);
                 }
