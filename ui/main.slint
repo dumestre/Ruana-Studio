@@ -844,6 +844,148 @@ export component MainWindow inherits Window {
                 reject;
             }
         }
+        workspace := Workspace {
+            full-screen <=> root.full-screen;
+            native-overlay <=> root.native-overlay;
+        
+            // Clique na timeline devolve o foco de teclado aos atalhos.
+            keyboard-focus-requested() => {
+                root.restore-keyboard-focus();
+            }
+        
+            // Scroll/zoom (roda/touchpad) → RUST (motor da interação).
+            scroll-input(dx, dy, ctrl, shift, alt, mx, my) => {
+                root.scroll-input(dx, dy, ctrl, shift, alt, mx, my);
+            }
+        
+            snap-enabled <=> root.snap-enabled;
+            follow-playhead <=> root.follow-playhead;
+            zoom-level <=> root.zoom-level;
+            zoom-y-level <=> root.zoom-y-level;
+            timeline-canvas-background <=> root.timeline-canvas-background;
+            timeline-canvas-render-requested() => {
+                root.timeline-canvas-render-requested();
+            }
+            // Eventos crus → engine wgpu headless (Rust em Fase 3).
+            engine-pointer-down(x, y, b, c, s, a) => { root.engine-pointer-down(x, y, b, c, s, a); }
+            engine-pointer-move(x, y) => { root.engine-pointer-move(x, y); }
+            engine-pointer-up(x, y, b) => { root.engine-pointer-up(x, y, b); }
+            engine-scroll(dx, dy, c, s, a) => { root.engine-scroll(dx, dy, c, s, a); }
+            engine-key-event(t, c, s, a) => { root.engine-key-event(t, c, s, a); }
+            timeline-zoom-y-changed(zy) => { root.timeline-zoom-y-changed(zy); }
+            loop-enabled <=> root.loop-enabled;
+            loop-start-beat <=> root.loop-start-beat;
+            loop-end-beat <=> root.loop-end-beat;
+            loop-state-changed(state) => { root.loop-state-changed(state); }
+            loop-range-changed(a, b) => { root.loop-range-changed(a, b); }
+            playing <=> root.playing;
+            metronome-enabled <=> root.metronome-enabled;
+            metronome-sound <=> root.metronome-sound;
+            metronome-volume <=> root.metronome-volume;
+            transport-position <=> root.transport-position;
+            transport-time-seconds <=> root.transport-time-seconds;
+            ppq <=> root.ppq;
+            beats-per-bar <=> root.beats-per-bar;
+            total-bars <=> root.total-bars;
+            bpm <=> root.bpm;
+            metronome-state-changed(enabled) => { root.metronome-state-changed(enabled); }
+            metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
+            metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
+            selected-track <=> root.selected-track;
+            active-tool <=> root.active-tool;
+            beat-open <=> root.beat-open;
+            explorer-visible <=> root.explorer-visible;
+            sampler-sample-name <=> root.sampler-sample-name;
+            sampler-sample-loaded <=> root.sampler-sample-loaded;
+            sampler-sample-format <=> root.sampler-sample-format;
+            sampler-sample-duration <=> root.sampler-sample-duration;
+            sampler-load-requested() => { root.sampler-load-requested(root.beat-selected-track); }
+            sampler-sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
+            theme-selected(i) => { root.theme-selected(i); }
+            left-panel-width <=> root.left-panel-width;
+            tracks-header-width <=> root.tracks-header-width;
+            explorer-width <=> root.explorer-width;
+            bottom-panel-height <=> root.bottom-panel-height;
+            floated <=> root.floated;
+            selected-tab <=> root.bottom-active-tab;
+            bottom-panel-visible <=> root.bottom-panel-open;
+            track-names <=> root.track-names;
+            track-colors <=> root.track-colors;
+            clips <=> root.clips;
+            pool-clips <=> root.pool-clips;
+        
+            drag-active <=> root.drag-active;
+            drag-inited <=> root.drag-inited;
+            drag-over-timeline <=> root.drag-over-timeline;
+            drag-snap-beat <=> root.drag-snap-beat;
+            drag-drop-track <=> root.drag-drop-track;
+            drag-x <=> root.drag-x;
+            drag-y <=> root.drag-y;
+            drag-name <=> root.drag-name;
+            drag-position <=> root.drag-position;
+            drag-duration <=> root.drag-duration;
+            drag-color <=> root.drag-color;
+            drag-is-midi <=> root.drag-is-midi;
+            drag-tilt-display <=> root.drag-tilt-display;
+            mixer-meters <=> root.mixer-meters;
+            mixer-mutes <=> root.mixer-mutes;
+            mixer-soloes <=> root.mixer-soloes;
+            mixer-arms <=> root.mixer-arms;
+            mixer-volumes <=> root.mixer-volumes;
+            mixer-pans <=> root.mixer-pans;
+            mixer-insert-counts <=> root.mixer-insert-counts;
+            mixer-insert-names <=> root.mixer-insert-names;
+            mixer-insert-enabled <=> root.mixer-insert-enabled;
+            mixer-max-inserts <=> root.mixer-max-inserts;
+            explorer-current-path <=> root.explorer-current-path;
+            explorer-path-history <=> root.explorer-path-history;
+            explorer-history-index <=> root.explorer-history-index;
+            explorer-entries <=> root.explorer-entries;
+            explorer-can-go-up <=> root.explorer-can-go-up;
+            explorer-search-text <=> root.explorer-search-text;
+        
+            close => { root.window-close(); }
+            minimize => { root.minimize(); }
+            window-drag-started() => { root.window-drag-started(); }
+            window-drag-moved(x, y) => { root.window-drag-moved(x, y); }
+            window-drag-finished() => { root.window-drag-finished(); }
+            play-state-changed(state) => { root.play-state-changed(state); }
+            seek-to(beat) => { root.seek-to(beat); }
+            set-bpm(bpm) => { root.set-bpm(bpm); }
+            add-track-requested(type) => { root.add-track-requested(type); }
+            clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
+            clip-glue-requested(id) => { root.clip-glue-requested(id); }
+            glue-clip-at(row, x, sx, ppb) => { root.glue-clip-at(row, x, sx, ppb) }
+        clip-move-committed(id, track, beat) => { root.clip-move-committed(id, track, beat); }
+        clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, side, len, beat); }
+            clip-delete-requested(id) => { root.clip-delete-requested(id); }
+            clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
+            clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
+            clip-copy-requested(id) => { root.clip-copy-requested(id); }
+            piano-roll-open-requested(id) => { root.piano-roll-open-requested(id); }
+            clip-fade-committed(id, fi, fo) => { root.clip-fade-committed(id, fi, fo); }
+            clip-gain-committed(id, db) => { root.clip-gain-committed(id, db); }
+            clip-paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }
+            pencil-created(beat, track, len) => { root.pencil-created(beat, track, len); }
+            marquee-select(b0, b1, t0, t1) => { root.marquee-select(b0, b1, t0, t1); }
+            mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+            mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
+            mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
+            mixer-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }
+            explorer-path-changed(path) => { root.explorer-path-changed(path); }
+            explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
+            explorer-go-up() => { root.explorer-go-up(); }
+            explorer-history-go(delta) => { root.explorer-history-go(delta); }
+            explorer-search-changed(term) => { root.explorer-search-changed(term); }
+            explorer-go-to-drives() => { root.explorer-go-to-drives(); }
+            float-toggle(tab) => { root.float-toggle(tab); }
+            tool-changed(tool) => { root.tool-changed(tool); }
+            track-recolor-requested(track, color) => { root.track-recolor-requested(track, color); }
+            timeline-bounds-changed(x, y, w, h) => { root.timeline-bounds-changed(x, y, w, h); }
+            drag-begin(name, path, position, duration, color, is-midi) => { root.drag-begin(name, path, position, duration, color, is-midi); }
+            drag-move(x, y) => { root.drag-move(x, y); }
+            drag-end() => { root.drag-end(); }
+        }
     }
 
     init => {
@@ -891,148 +1033,6 @@ export component MainWindow inherits Window {
         };
     }
 
-    workspace := Workspace {
-        full-screen <=> root.full-screen;
-        native-overlay <=> root.native-overlay;
-
-        // Clique na timeline devolve o foco de teclado aos atalhos.
-        keyboard-focus-requested() => {
-            root.restore-keyboard-focus();
-        }
-
-        // Scroll/zoom (roda/touchpad) → RUST (motor da interação).
-        scroll-input(dx, dy, ctrl, shift, alt, mx, my) => {
-            root.scroll-input(dx, dy, ctrl, shift, alt, mx, my);
-        }
-
-        snap-enabled <=> root.snap-enabled;
-        follow-playhead <=> root.follow-playhead;
-        zoom-level <=> root.zoom-level;
-        zoom-y-level <=> root.zoom-y-level;
-        timeline-canvas-background <=> root.timeline-canvas-background;
-        timeline-canvas-render-requested() => {
-            root.timeline-canvas-render-requested();
-        }
-        // Eventos crus → engine wgpu headless (Rust em Fase 3).
-        engine-pointer-down(x, y, b, c, s, a) => { root.engine-pointer-down(x, y, b, c, s, a); }
-        engine-pointer-move(x, y) => { root.engine-pointer-move(x, y); }
-        engine-pointer-up(x, y, b) => { root.engine-pointer-up(x, y, b); }
-        engine-scroll(dx, dy, c, s, a) => { root.engine-scroll(dx, dy, c, s, a); }
-        engine-key-event(t, c, s, a) => { root.engine-key-event(t, c, s, a); }
-        timeline-zoom-y-changed(zy) => { root.timeline-zoom-y-changed(zy); }
-        loop-enabled <=> root.loop-enabled;
-        loop-start-beat <=> root.loop-start-beat;
-        loop-end-beat <=> root.loop-end-beat;
-        loop-state-changed(state) => { root.loop-state-changed(state); }
-        loop-range-changed(a, b) => { root.loop-range-changed(a, b); }
-        playing <=> root.playing;
-        metronome-enabled <=> root.metronome-enabled;
-        metronome-sound <=> root.metronome-sound;
-        metronome-volume <=> root.metronome-volume;
-        transport-position <=> root.transport-position;
-        transport-time-seconds <=> root.transport-time-seconds;
-        ppq <=> root.ppq;
-        beats-per-bar <=> root.beats-per-bar;
-        total-bars <=> root.total-bars;
-        bpm <=> root.bpm;
-        metronome-state-changed(enabled) => { root.metronome-state-changed(enabled); }
-        metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
-        metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
-        selected-track <=> root.selected-track;
-        active-tool <=> root.active-tool;
-        beat-open <=> root.beat-open;
-        explorer-visible <=> root.explorer-visible;
-        sampler-sample-name <=> root.sampler-sample-name;
-        sampler-sample-loaded <=> root.sampler-sample-loaded;
-        sampler-sample-format <=> root.sampler-sample-format;
-        sampler-sample-duration <=> root.sampler-sample-duration;
-        sampler-load-requested() => { root.sampler-load-requested(root.beat-selected-track); }
-        sampler-sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
-        theme-selected(i) => { root.theme-selected(i); }
-        left-panel-width <=> root.left-panel-width;
-        tracks-header-width <=> root.tracks-header-width;
-        explorer-width <=> root.explorer-width;
-        bottom-panel-height <=> root.bottom-panel-height;
-        floated <=> root.floated;
-        selected-tab <=> root.bottom-active-tab;
-        bottom-panel-visible <=> root.bottom-panel-open;
-        track-names <=> root.track-names;
-        track-colors <=> root.track-colors;
-        clips <=> root.clips;
-        pool-clips <=> root.pool-clips;
-
-        drag-active <=> root.drag-active;
-        drag-inited <=> root.drag-inited;
-        drag-over-timeline <=> root.drag-over-timeline;
-        drag-snap-beat <=> root.drag-snap-beat;
-        drag-drop-track <=> root.drag-drop-track;
-        drag-x <=> root.drag-x;
-        drag-y <=> root.drag-y;
-        drag-name <=> root.drag-name;
-        drag-position <=> root.drag-position;
-        drag-duration <=> root.drag-duration;
-        drag-color <=> root.drag-color;
-        drag-is-midi <=> root.drag-is-midi;
-        drag-tilt-display <=> root.drag-tilt-display;
-        mixer-meters <=> root.mixer-meters;
-        mixer-mutes <=> root.mixer-mutes;
-        mixer-soloes <=> root.mixer-soloes;
-        mixer-arms <=> root.mixer-arms;
-        mixer-volumes <=> root.mixer-volumes;
-        mixer-pans <=> root.mixer-pans;
-        mixer-insert-counts <=> root.mixer-insert-counts;
-        mixer-insert-names <=> root.mixer-insert-names;
-        mixer-insert-enabled <=> root.mixer-insert-enabled;
-        mixer-max-inserts <=> root.mixer-max-inserts;
-        explorer-current-path <=> root.explorer-current-path;
-        explorer-path-history <=> root.explorer-path-history;
-        explorer-history-index <=> root.explorer-history-index;
-        explorer-entries <=> root.explorer-entries;
-        explorer-can-go-up <=> root.explorer-can-go-up;
-        explorer-search-text <=> root.explorer-search-text;
-
-        close => { root.window-close(); }
-        minimize => { root.minimize(); }
-        window-drag-started() => { root.window-drag-started(); }
-        window-drag-moved(x, y) => { root.window-drag-moved(x, y); }
-        window-drag-finished() => { root.window-drag-finished(); }
-        play-state-changed(state) => { root.play-state-changed(state); }
-        seek-to(beat) => { root.seek-to(beat); }
-        set-bpm(bpm) => { root.set-bpm(bpm); }
-        add-track-requested(type) => { root.add-track-requested(type); }
-        clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
-        clip-glue-requested(id) => { root.clip-glue-requested(id); }
-        glue-clip-at(row, x, sx, ppb) => { root.glue-clip-at(row, x, sx, ppb) }
-clip-move-committed(id, track, beat) => { root.clip-move-committed(id, track, beat); }
-clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, side, len, beat); }
-        clip-delete-requested(id) => { root.clip-delete-requested(id); }
-        clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
-        clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
-        clip-copy-requested(id) => { root.clip-copy-requested(id); }
-        piano-roll-open-requested(id) => { root.piano-roll-open-requested(id); }
-        clip-fade-committed(id, fi, fo) => { root.clip-fade-committed(id, fi, fo); }
-        clip-gain-committed(id, db) => { root.clip-gain-committed(id, db); }
-        clip-paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }
-        pencil-created(beat, track, len) => { root.pencil-created(beat, track, len); }
-        marquee-select(b0, b1, t0, t1) => { root.marquee-select(b0, b1, t0, t1); }
-        mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
-        mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
-        mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
-        mixer-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }
-        explorer-path-changed(path) => { root.explorer-path-changed(path); }
-        explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
-        explorer-go-up() => { root.explorer-go-up(); }
-        explorer-history-go(delta) => { root.explorer-history-go(delta); }
-        explorer-search-changed(term) => { root.explorer-search-changed(term); }
-        explorer-go-to-drives() => { root.explorer-go-to-drives(); }
-        float-toggle(tab) => { root.float-toggle(tab); }
-        tool-changed(tool) => { root.tool-changed(tool); }
-        track-recolor-requested(track, color) => { root.track-recolor-requested(track, color); }
-        timeline-bounds-changed(x, y, w, h) => { root.timeline-bounds-changed(x, y, w, h); }
-        drag-begin(name, path, position, duration, color, is-midi) => { root.drag-begin(name, path, position, duration, color, is-midi); }
-        drag-move(x, y) => { root.drag-move(x, y); }
-        drag-end() => { root.drag-end(); }
-    }
 
     // =====================================================
     // BEAT POPUP

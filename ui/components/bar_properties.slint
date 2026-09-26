@@ -41,6 +41,7 @@ export component BarProperties inherits Rectangle {
     height: 32px;
 
     background: transparent;
+    
 
 
     // ============================================================
@@ -69,6 +70,11 @@ export component BarProperties inherits Rectangle {
         // ========================================================
 
         Button {
+            drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
             width: 18px;
             height: 18px;
             resting-bg: Theme.surface-high;
@@ -77,7 +83,7 @@ export component BarProperties inherits Rectangle {
             icon-color: Theme.text-primary;
             text: "";
             borderless: true;
-            corner-radius: 2px;
+            corner-radius: 4px;
             toggled: root.clip-pool-open;
             toggled-fg: Theme.on-accent;
             toggled-bg: Theme.accent;
@@ -92,7 +98,12 @@ export component BarProperties inherits Rectangle {
         // ========================================================
         // DIVISOR
         // ========================================================
-        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
 
         HorizontalLayout {
             alignment: LayoutAlignment.center;
@@ -108,12 +119,18 @@ export component BarProperties inherits Rectangle {
                 Text { text: "GAIN"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
                 TextInput { text: root.gain + " dB"; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
             }
+            
         }
 
         // ========================================================
         // DIVISOR
         // ========================================================
-        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
 
         // ========================================================
         // PITCH
@@ -130,7 +147,12 @@ export component BarProperties inherits Rectangle {
         // ========================================================
         // DIVISOR
         // ========================================================
-        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
 
         // ========================================================
         // OCTAVE
@@ -147,7 +169,12 @@ export component BarProperties inherits Rectangle {
         // ========================================================
         // DIVISOR
         // ========================================================
-        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
 
         // ========================================================
         // PAN
@@ -164,7 +191,12 @@ export component BarProperties inherits Rectangle {
         // ========================================================
         // DIVISOR
         // ========================================================
-        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
 
         // ========================================================
         // INVERT PHASE
@@ -190,7 +222,12 @@ export component BarProperties inherits Rectangle {
         // ========================================================
         // DIVISOR
         // ========================================================
-        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
 
         // ========================================================
         // REVERSE
@@ -218,7 +255,12 @@ export component BarProperties inherits Rectangle {
         // ========================================================
         // DIVISOR
         // ========================================================
-        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
 
         HorizontalLayout {
             spacing: 2px;
@@ -228,15 +270,25 @@ export component BarProperties inherits Rectangle {
         // ========================================================
         // DIVISOR
         // ========================================================
-        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
 
         // ========================================================
         // DRUM / BEAT
         // ========================================================
         Button {
+            drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
             width: 18px; height: 18px; resting-bg: Theme.surface-high;
             icon: @image-url("../icons/drum.svg"); icon-size: 16px; icon-color: Theme.text-primary;
-            text: ""; borderless: true; corner-radius: 2px;
+            text: ""; borderless: true; corner-radius: 4px;
             toggled: root.beat-open;
             toggled-fg: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
             toggled-bg: Theme.accent;
@@ -249,9 +301,14 @@ export component BarProperties inherits Rectangle {
         // EXPLORER
         // ========================================================
         Button {
+            drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
             width: 18px; height: 18px; resting-bg: Theme.surface-high;
             icon: @image-url("../icons/folder.svg"); icon-size: 16px; icon-color: Theme.text-primary;
-            text: ""; borderless: true; corner-radius: 2px;
+            text: ""; borderless: true; corner-radius: 4px;
             toggled: root.explorer-visible;
             toggled-fg: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
             toggled-bg: Theme.accent;
@@ -264,9 +321,14 @@ export component BarProperties inherits Rectangle {
         // PANEL
         // ========================================================
         Button {
+            drop-shadow-blur: 3px;
+                drop-shadow-color: #2f2f2f;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
             width: 18px; height: 18px; resting-bg: Theme.surface-high;
             icon: @image-url("../icons/restore.svg"); icon-size: 16px; icon-color: Theme.text-primary;
-            text: ""; borderless: true; corner-radius: 2px;
+            text: ""; borderless: true; corner-radius: 4px;
             toggled: root.panel-visible;
             toggled-fg: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
             toggled-bg: Theme.accent;
