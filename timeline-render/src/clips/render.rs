@@ -1109,7 +1109,34 @@ fn push_clip(
             && !clip.is_midi
             && body_h > 40.0;
 
-    if is_stereo {
+    // ============================================================
+    // A BANDA É UM VIEWPORT PARA O SHADER, NÃO UM CORPO
+    //
+    // Com `wave_count > 0` o shader descarta tudo fora da onda, então
+    // a banda fica invisível e serve só de moldura para o traço. Com
+    // `wave_count == 0` o shader faz o oposto — `timeline.wgsl:380`
+    // devolve o `frag_color` e pinta a banda INTEIRA:
+    //
+    //     if wave_count == 0u { return in.frag_color; }
+    //
+    // E `body_col` tem alpha. O corpo já foi pintado pelo retângulo de
+    // cima, com a MESMA cor. Empilhar a banda aqui compõe `body_col`
+    // sobre ele mesmo e o terço do meio do corpo sai com cor mais
+    // forte — um retângulo no meio que só o clip sem onda mostra.
+    //
+    // O áudio real nunca cai nessa faixa: enquanto não há barra, ele
+    // também fica sem faixa e mostra o corpo simples. O MIDI cai
+    // SEMPRE, porque não tem waveform. Ou seja: o corpo que o MIDI
+    // recebia era o corpo de placeholder, e não o corpo do áudio.
+    //
+    // Sem faixa quando não há onda, os dois clip passam a usar o mesmo
+    // corpo — o retângulo de cima — e o MIDI deixa de ter um retângulo
+    // mais forte atravessando o meio.
+    // ============================================================
+
+    if wc == 0 {
+        // Corpo já desenhado acima. Nada a fazer aqui.
+    } else if is_stereo {
         let fifth =
             body_h / 5.0;
 
