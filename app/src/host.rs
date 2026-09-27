@@ -100,6 +100,13 @@ pub struct EngineBridge {
     /// de clips: um clip recém-importado só pode ser apagado do Project
     /// depois que o rebuild admitir o id no engine.
     pub mirrored_clip_ids: Rc<RefCell<Vec<u64>>>,
+    /// Duplo clique num clip na timeline → id para abrir o editor. A engine
+    /// roda com o `bridge` emprestado durante o press, então ela só marca a
+    /// flag; o `tick` (que tem o `ui`) despacha de fato.
+    pub open_clip_flag: Rc<Cell<Option<u32>>>,
+    /// Roteamento de "abrir clip", instalado pelo `setup` do app: só o app
+    /// tem `AudioBridge`/`Project` para escolher e abrir o editor certo.
+    pub open_clip_handler: Option<Rc<dyn Fn(u64)>>,
     /// A cena precisa de um novo frame (rendered direto para `timeline_bg`).
     pub dirty: bool,
 
@@ -152,6 +159,15 @@ impl EngineBridge {
                     );
                 }));
         }
+        // Duplo clique num clip: a engine só marca o id (ela roda com o bridge
+        // emprestado). O tick resolve no Project e abre o editor.
+        let open_clip_flag: Rc<Cell<Option<u32>>> = Rc::new(Cell::new(None));
+        {
+            let flag = open_clip_flag.clone();
+            engine.clip_open_request = Some(Box::new(move |id: u32| {
+                flag.set(Some(id));
+            }));
+        }
         Self {
             engine,
             overlay,
@@ -164,6 +180,8 @@ impl EngineBridge {
             cursor_logical: (0.0, 0.0),
             clips_flag,
             mirrored_clip_ids,
+            open_clip_flag,
+            open_clip_handler: None,
             dirty: true,
             waveforms: None,
             clips_model: None,
@@ -177,6 +195,16 @@ impl EngineBridge {
     /// passo.
     pub fn tick(&mut self, ui: &MainWindow) {
         let ls = self.scale;
+
+        // Duplo clique num clip → abre o editor correspondente. O id chega
+        // pela flag porque a engine não pode chamar de volta enquanto o
+        // bridge está emprestado pelo callback de ponteiro do Slint; o
+        // roteamento (piano roll / sampler) é do app, instalado no setup.
+        if let Some(id) = self.open_clip_flag.take() {
+            if let Some(handler) = self.open_clip_handler.clone() {
+                handler(id as u64);
+            }
+        }
 
         // Snap do grid vem da edit toolbar do Slint (mesmo estado que o
         // paste/clippool lê). Alimenta o engine a cada frame para os arrastos

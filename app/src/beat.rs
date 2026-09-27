@@ -64,6 +64,15 @@ fn sampler_view_cached(path: &str) -> Option<Arc<SamplerViewData>> {
         .and_then(|m| m.get(path).cloned())
 }
 
+/// Abre a aba do sampler focando a linha `index` do beat. Usado pelo botão
+/// "SP" da linha e pelo duplo clique num clip de ÁUDIO na timeline.
+pub(crate) fn open_sampler_for_track(ui: &MainWindow, project: &Rc<RefCell<Project>>, index: usize) {
+    ui.set_beat_selected_track(index as i32);
+    sync_sampler_to_beat(ui, &project.borrow());
+    ui.set_bottom_panel_open(true);
+    ui.set_bottom_active_tab(1);
+}
+
 /// Sincroniza o painel Sampler com a linha selecionada do beat.
 ///
 /// Cada linha do beat com sample tem UM sampler: é este painel,
@@ -517,10 +526,7 @@ pub fn wire_beat(
         let ui = ui.clone_strong();
         let project = project.clone();
         st.on_sampler_open(move |index| {
-            ui.set_beat_selected_track(index);
-            sync_sampler_to_beat(&ui, &project.borrow());
-            ui.set_bottom_panel_open(true);
-            ui.set_bottom_active_tab(1);
+            open_sampler_for_track(&ui, &project, index.max(0) as usize);
         });
     }
 

@@ -246,6 +246,14 @@ pub struct App {
     /// desenhar, deletar, desfazer/refazer...). O host reconciliam com
     /// `Project` (fonte da verdade do áudio). `None` = standalone.
     pub clip_write_back: Option<Box<dyn FnMut(&[clips::ClipDemo])>>,
+    /// Callback de "abrir clip" (duplo clique na timeline). Recebe o id do
+    /// clip no `Project` (nunca 0 — clip ainda sem id real é ignorado). O
+    /// host decide o editor: MIDI → piano roll, áudio → sampler. `None` =
+    /// standalone (nenhum host para notificar).
+    pub clip_open_request: Option<Box<dyn FnMut(u32)>>,
+    /// Último press para detectar duplo clique: (instante, posição, clip).
+    /// `None` depois de um duplo clique, para o terceiro clique não reabrir.
+    pub(crate) last_press: crate::app::interaction::DoubleClickState,
 
     /// ===== Edit toolbar (ferramentas do piano roll) =====
     /// Pipeline de quads texturizados (ícones da toolbar).
@@ -876,6 +884,8 @@ transport,
             tw_playhead_beat: 0.0,
             tempo_write_back: None,
             clip_write_back: None,
+            clip_open_request: None,
+            last_press: None,
 
             // Edit toolbar
             icon_pipeline,

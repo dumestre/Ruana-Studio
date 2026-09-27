@@ -61,6 +61,7 @@ use crate::cursors::{
 };
 #[cfg(windows)]
 use crate::cursors::set_cursor_window_handle;
+use crate::audio_bridge::AudioBridge;
 use crate::mixer::MixerModels;
 use crate::models::{bars_for_end_beat, bind_document_events, initial_bind};
 use crate::waveform::WaveformCache;
@@ -146,6 +147,70 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         }
     }
+}
+
+/// Roteia o duplo clique na timeline para o editor do clip.
+///
+/// - **MIDI** → piano roll, que carrega as NOTAS REAIS do clip. O beat
+///   sequencer edita os patterns do clip pool (outra coisa, e ainda
+///   placeholder), não o clip.
+/// - **Áudio** → sampler mostrando o ARQUIVO DO CLIP, com decode em thread
+///   de fundo. Clip sem `file_path` cai no sample da linha do beat (o mesmo
+///   que o botão "SP" mostra).
+///
+/// Id que o `Project` não conhece (clip ainda sem espelho) é ignorado.
+fn open_clip_editor(
+    ui: &MainWindow,
+    project: &Rc<RefCell<Project>>,
+    audio: &AudioBridge,
+    sampler_decode: &async_sampler::SamplerDecode,
+    ui_weak: &slint::Weak<MainWindow>,
+    id: u64,
+) {
+    let (is_midi, track_index, file_path) = {
+        let proj = project.borrow();
+        let Some(clip) = proj.clip(id) else {
+            return;
+        };
+        let track_index = proj.tracks.iter().position(|t| t.id == clip.track_id);
+        (
+            clip.is_midi(),
+            track_index,
+            clip.file_path.clone().filter(|p| !p.is_empty()),
+        )
+    };
+
+    if is_midi {
+        ui.invoke_piano_roll_open_requested(id as i32);
+        return;
+    }
+
+    let Some(track_index) = track_index else {
+        return;
+    };
+    ui.set_beat_selected_track(track_index as i32);
+    ui.set_bottom_panel_open(true);
+    ui.set_bottom_active_tab(1);
+
+    let Some(path) = file_path else {
+        beat::open_sampler_for_track(ui, project, track_index);
+        return;
+    };
+    let path_buf = std::path::PathBuf::from(&path);
+    let name = path_buf
+        .file_stem()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Clip")
+        .to_string();
+    sampler_decode.schedule(
+        ui_weak,
+        project.clone(),
+        audio.clone(),
+        track_index as i32,
+        path_buf,
+        async_sampler::SamplerSource::Clip,
+        name,
+    );
 }
 
 /// Instala todo o wiring da DAW quando a janela winit sobe (`resumed` no
@@ -361,11 +426,15 @@ pub fn setup(
         beat::wire_beat(ui, project, audio.clone(), transport.clone());
     }
 
+    // Filtro de carga do sampler compartilhado pelos três caminhos (diálogo,
+    // drop e duplo clique no clip de áudio): uma única fila de decodes.
+    let sampler_decode = async_sampler::SamplerDecode::default();
+
     {
         let project = project.clone();
         let audio = audio.clone();
         let ui_weak = ui.as_weak();
-        let sampler_decode = async_sampler::SamplerDecode::default();
+        let sampler_decode = sampler_decode.clone();
         ui.on_sampler_load_requested(move |track| {
             let Some(path) = choose_audio_file() else {
                 return;
@@ -409,7 +478,7 @@ pub fn setup(
         let project = project.clone();
         let audio = audio.clone();
         let ui_weak = ui.as_weak();
-        let sampler_decode = async_sampler::SamplerDecode::default();
+        let sampler_decode = sampler_decode.clone();
         ui.on_debug_log(move |msg| {
             eprintln!("[slint] {msg}");
         });
@@ -440,6 +509,22 @@ pub fn setup(
                 display_name,
             );
         });
+    }
+
+    // Duplo clique num clip da timeline → abre o editor daquele clip. A engine
+    // só sinaliza o id (ela roda com o bridge emprestado); o roteamento é
+    // daqui, que tem `AudioBridge` para o decode do sampler.
+    {
+        let project = project.clone();
+        let audio = audio.clone();
+        let sampler_decode = sampler_decode.clone();
+        let ui_weak = ui.as_weak();
+        bridge.borrow_mut().open_clip_handler = Some(Rc::new(move |id| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            open_clip_editor(&ui, &project, &audio, &sampler_decode, &ui_weak, id);
+        }));
     }
 
     // Modo single-window (AGENTS.md): sem janelas flutuantes — os handles

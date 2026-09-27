@@ -34,6 +34,10 @@ pub enum SamplerSource {
     Load,
     /// Drop (explorador/SO): linha = a selecionada no momento do apply.
     Drop,
+    /// Duplo clique num clip de ÁUDIO da timeline: mostra o ARQUIVO DO CLIP
+    /// no painel. Não grava no pattern do beat — o clip é a fonte da verdade
+    /// do áudio, e escrever no pattern faria o beat "roubar" o sample.
+    Clip,
 }
 
 struct PendingJob {
@@ -171,6 +175,16 @@ fn apply_ready(ready: SamplerReady, job: PendingJob) {
     ui.set_sampler_sample_loaded(true);
     ui.set_sampler_sample_format(ready.format.clone().into());
     ui.set_sampler_sample_duration(ready.duration.clone().into());
+
+    // Clip de áudio: o painel já mostra o arquivo do clip. NÃO toca no
+    // pattern do beat nem no `refresh_beat` (que re-sincronizaria o painel
+    // com o sample da linha e apagaria o que acabamos de mostrar).
+    if job.source == SamplerSource::Clip {
+        job.audio.preload(&job.path);
+        job.audio.mark_dirty();
+        job.audio.preview(&job.path, 0.9, 0.0);
+        return;
+    }
 
     // Linha-alvo: drop grava na LINHA SELECIONADA na hora do apply.
     let index = if job.source == SamplerSource::Drop {
