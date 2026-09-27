@@ -707,27 +707,33 @@ export component ClipPool inherits Rectangle {
 
             Button {
 
-                text:
-                    "+";
+                Image {
+                    image-fit: ImageFit.fill;
+                    source: @image-url(                             "icons/add.svg"                         );
+                    width: 18px;
+                    height: 18px;
+                }
 
+                // Sempre visível: serve para criar o PRIMEIRO pattern
+                // quando o pool está vazio.
                 visible:
-                    BeatState.pattern-names.length > 0;
+                    true;
+                width: 18px;
 
                 toggled:
                     false;
 
                 padding-x:
                     2px;
-
-                preferred-width:
-                    22px;
+                preferred-width: 0px;
 
                 icon-size:
-                    12px;
+                    22px;
 
                 text-color:
                     Theme.text-dim;
 
+                height: 18px;
                 hover-text-color:
                     Theme.accent;
 
