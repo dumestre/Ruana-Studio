@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use slint::{ComponentHandle, SharedPixelBuffer, Timer, TimerMode};
 
 use daw_core::clip::{beats_eq, Clip, ClipKind};
+use daw_core::track::{Track, TrackKind};
 use daw_core::transport::Transport;
 use daw_core::Project;
 use timeline_render::app::ButtonState;
@@ -570,7 +571,9 @@ mod tests {
 
     #[test]
     fn moved_engine_clip_updates_project_without_changing_source_offset() {
-        let mut project = Project::startup();
+        let mut project = Project::default();
+        project.tracks.push(Track::new(0, "Track 1", TrackKind::Audio));
+        project.tracks.push(Track::new(1, "Track 2", TrackKind::Audio));
         let clip_id = project
             .add_clip_with_source(
                 0,

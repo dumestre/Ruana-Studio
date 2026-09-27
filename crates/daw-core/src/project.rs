@@ -123,17 +123,10 @@ impl Default for Project {
 }
 
 impl Project {
-    /// Projeto inicial da aplicação: dez trilhas vazias, prontas para uso.
+    /// Projeto inicial da aplicação: uma trilha vazia, pronta para uso.
     pub fn startup() -> Self {
         let mut project = Self::default();
-        for i in 0..10u64 {
-            project.tracks.push(Track::new(i, format!("Track {}", i + 1), TrackKind::Audio));
-        }
-        // Padrão de beat padrão (8 linhas / 16 passos), igual ao
-        // channel rack do FL: sem ele o beat fica vazio, o drop de
-        // sample não tem para onde gravar e a detecção de alvo
-        // (BeatMetrics.track-count) fica 0 → cai na timeline.
-        project.beat_patterns.add_pattern(DrumPattern::new("BEAT SEQUENCER", 8, 16));
+        project.tracks.push(Track::new(0, "Track 1", TrackKind::Audio));
         project
     }
 
