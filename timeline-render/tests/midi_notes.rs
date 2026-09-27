@@ -14,6 +14,7 @@ use timeline_render::clips::{
     ClipMetrics,
     ClipNote,
 };
+use timeline_render::srgb_to_linear;
 
 fn midi_clip(len: f32, notes: Vec<ClipNote>) -> ClipDemo {
     ClipDemo {
@@ -80,34 +81,49 @@ fn notas_midi_geram_mais_instancias_que_clip_vazio() {
 }
 
 #[test]
-fn nota_usa_a_mesma_tinta_escura_da_onda_de_audio() {
+fn nota_usa_a_cor_do_clip_nao_a_da_onda() {
     let inter = ClipInteraction::new();
     let m = metrics();
-    let inst = build_clip_instances(
-        &[midi_clip(
-            4.0,
-            vec![ClipNote { pitch: 36, start: 0.0, length: 1.0, velocity: 120 }],
-        )],
-        &inter,
-        &m,
-        900.0,
-    );
+
+    // color = 0 -> usa CLIP_MIDI_DEFAULT[theme] = CLIP_MIDI_DEFAULT[0]
+    // = (0x6F, 0xA8, 0x6B) = (111, 168, 107) em sRGB.
+    let clip = ClipDemo {
+        id: 1,
+        track_index: 0,
+        beat: 0.0,
+        len: 4.0,
+        is_midi: true,
+        color: 0,
+        name: Some("BEAT SEQUENCER".into()),
+        seam_beat: None,
+        pre_glue_len: None,
+        pre_glue_color: None,
+        wave: Vec::new(),
+        notes: vec![ClipNote { pitch: 36, start: 0.0, length: 1.0, velocity: 120 }],
+        file_path: None,
+        source_start_beats: 0.0,
+        source_length_beats: 4.0,
+        channels: 1,
+    };
+
+    let inst = build_clip_instances(&[clip], &inter, &m, 900.0);
 
     let barras: Vec<_> = inst.iter().filter(|r| r.radius == 1.0).collect();
     assert_eq!(barras.len(), 1);
 
     let c = barras[0].color;
-    // A onda de áudio é pintada pelo shader com 0.0194 em linear
-    // (timeline.wgsl, "Cor fixa da waveform"). A nota precisa ter a
-    // mesma tinta: em quase-branco, um compasso só de bumbo vira uma
-    // faixa clara chapada no corpo e o clip MIDI deixa de ler como
-    // clip para ler como placeholder.
-    assert_eq!(
-        (c[0], c[1], c[2]),
-        (4, 4, 4),
-        "a nota precisa usar a tinta da onda, veio {c:?}"
+    // CLIP_MIDI_DEFAULT[0] = (0x6F, 0xA8, 0x6B) = (111, 168, 107) em sRGB.
+    // Pipeline converte para linear antes de ir pra GPU.
+    let expected_r = (srgb_to_linear(111.0 / 255.0) * 255.0).round() as u8;
+    let expected_g = (srgb_to_linear(168.0 / 255.0) * 255.0).round() as u8;
+    let expected_b = (srgb_to_linear(107.0 / 255.0) * 255.0).round() as u8;
+    // Tolerância de ±1 por diferenças de arredondamento FP.
+    let (dr, dg, db) = (c[0] as i16 - expected_r as i16, c[1] as i16 - expected_g as i16, c[2] as i16 - expected_b as i16);
+    assert!(
+        dr.abs() <= 1 && dg.abs() <= 1 && db.abs() <= 1,
+        "a nota deve usar a cor do clip em linear, veio {c:?}, esperado ~({expected_r}, {expected_g}, {expected_b})"
     );
-    assert_eq!(c[3], 255, "a onda é opaca; a nota também");
+    assert_eq!(c[3], 255, "a nota é opaca");
 }
 
 #[test]
