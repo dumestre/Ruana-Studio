@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { SamplerStyle } from "sampler_style.slint";
-import { SamplerCurves } from "sampler_curves.slint";
+import { SamplerTabs } from "sampler_tabs.slint";
 import { SamplerHeader } from "sampler_header.slint";
 import { SamplerWaveform } from "sampler_waveform.slint";
 import { SamplerTransport } from "sampler_transport.slint";
@@ -9,41 +9,30 @@ import { SamplerPitch } from "sampler_pitch.slint";
 import { SamplerFilter } from "sampler_filter.slint";
 import { SamplerAmp } from "sampler_amp.slint";
 import { SamplerModulation } from "sampler_modulation.slint";
+import { SamplerKeymap } from "sampler_keymap.slint";
+import { SamplerReadout } from "sampler_widgets.slint";
+
+// ============================================================
+// SAMPLER
+// ============================================================
+//
+// O sampler empilhava ~500px de cards em posição absoluta dentro de
+// um painel de 215px (ui/windows/workspace.slint:121), então o que
+// ficava abaixo da dobra — envelope, filtro, amp, LFO — NUNCA
+// aparecia, e o teclado não tinha onde entrar.
+//
+// Aqui o conteúdo vira páginas. A fileira de abas ocupa 20px e cada
+// página estica na altura restante, o que cabe no painel sem
+// aumentar nada fora dele.
+//
+// A ordem das abas segue o caminho do sinal: amostra (MAIN) -> o que
+// muda a afinação e o timbre (TUNE) -> o contorno de ganho (ENV) ->
+// onde a amostra responde no teclado (MAP) -> o que modula por cima
+// (MOD). O ponto verde em cada aba diz que existe algo LIGADO ali,
+// senão esconder atrás de aba esconderia estado.
+// ============================================================
 
 export component Sampler inherits Rectangle {
-
-    private property <string> probe-a: SamplerCurves.filter-curve("LP", root.cutoff, root.resonance, true)
-        + SamplerCurves.adsr(root.attack, root.decay, root.sustain, root.release, false)
-        + SamplerCurves.lfo-curve(root.lfo-waveform, root.lfo-depth)
-        + SamplerCurves.velocity-curve("EXP", true)
-        + SamplerCurves.knob-track()
-        + SamplerCurves.knob-value(root.volume)
-        + SamplerCurves.knob-value-bipolar(root.pan)
-        + SamplerCurves.knob-pointer(root.tune)
-        + SamplerCurves.knob-detent();
-    private property <string> probe-b: SamplerStyle.fmt-hz(root.cutoff)
-        + SamplerStyle.fmt-db(root.volume)
-        + SamplerStyle.fmt-gain-db(root.filter-drive)
-        + SamplerStyle.fmt-semis(root.tune)
-        + SamplerStyle.fmt-cents(root.fine)
-        + SamplerStyle.fmt-octaves(root.octave)
-        + SamplerStyle.fmt-time(root.attack)
-        + SamplerStyle.fmt-glide(root.glide)
-        + SamplerStyle.fmt-lfo-rate(root.lfo-rate)
-        + SamplerStyle.fmt-lfo-sync(root.lfo-rate)
-        + SamplerStyle.fmt-pct(root.resonance)
-        + SamplerStyle.fmt-pct-bi(root.stereo-width)
-        + SamplerStyle.fmt-pan(root.pan)
-        + SamplerStyle.fmt-phase(root.phase)
-        + SamplerStyle.fmt-q(root.resonance)
-        + SamplerStyle.fmt-key(root.tune)
-        + SamplerStyle.fmt-vel(root.volume)
-        + SamplerStyle.fmt-pos(0.5, 3000)
-        + SamplerStyle.note-name(60);
-    private property <length> probe-c: SamplerStyle.pad(true) + SamplerStyle.gap(false)
-        + SamplerStyle.card-pad(true) + SamplerStyle.header-h(false) + SamplerStyle.tab-h(true)
-        + SamplerStyle.knob(false) + SamplerStyle.row-h(true) + SamplerStyle.title-size(false)
-        + SamplerStyle.label-size(true) + SamplerStyle.value-size(false) + SamplerStyle.name-size(true);
 
     // ============================================================
     // SAMPLE
@@ -122,92 +111,109 @@ export component Sampler inherits Rectangle {
     in-out property <bool> lfo-sync: false;
 
     // ============================================================
-    // DIMENSÕES
+    // KEYMAP
     // ============================================================
 
-    private property <length> content-padding: 10px;
-    private property <length> section-gap: 8px;
-    private property <length> header-height: 42px;
-    private property <length> transport-height: 36px;
+    in-out property <float> root-key: 0.5;
+    in-out property <float> low-key: 0.0;
+    in-out property <float> high-key: 1.0;
+
+    in-out property <bool> chromatic: true;
+
+    // ============================================================
+    // PÁGINAS
+    // ============================================================
+
+    in-out property <int> active-tab: 0;
+    callback tab-changed(int);
+
+    private property <[string]> tab-labels: ["MAIN", "TUNE", "ENV", "MAP", "MOD"];
+
+    // Uma página conta como "ligada" quando tem modulate, filtro,
+    // glide ou sample de verdade — é o que o ponto verde marca.
+    private property <[bool]> tab-active: [
+        root.sample-loaded,
+        root.filter-enabled || root.glide-enabled,
+        root.attack > 0.0 || root.release > 0.0,
+        root.low-key > 0.0 || root.high-key < 1.0 || !root.chromatic,
+        root.lfo-enabled
+    ];
+
+    private property <string> sample-line: root.sample-loaded
+        ? (root.sample-name + "  ·  " + root.sample-duration)
+        : "No Sample";
 
     background: Theme.base;
 
     // ============================================================
-    // CONTAINER
+    // SHELL
     // ============================================================
 
-    Rectangle {
-        x: root.content-padding;
-        y: root.content-padding;
-
-        width:
-            parent.width
-            - root.content-padding * 2;
-
-        height:
-            parent.height
-            - root.content-padding * 2;
-
-        background: Theme.surface;
-
-        border-width: 1px;
-        border-color: Theme.border;
-        border-radius: 4px;
+    VerticalLayout {
+        padding: SamplerStyle.pad(true);
+        spacing: SamplerStyle.gap(true);
 
         // ========================================================
-        // HEADER
+        // ABAS
         // ========================================================
 
-SamplerHeader {
-            x: 0;
-            y: 0;
+        SamplerTabs {
+            tabs: root.tab-labels;
+            current: root.active-tab;
+            active: root.tab-active;
+            compact: true;
 
-            width: parent.width;
-            height: root.header-height;
+            picked(index) => {
+                root.active-tab = index;
+                root.tab-changed(index);
+            }
 
-            sample-name: root.sample-name;
-            sample-loaded: root.sample-loaded;
-
-            sample-format: root.sample-format;
-            sample-duration: root.sample-duration;
-            load-clicked => { root.load-sample-requested(); }
-            clear-clicked => {
-                root.sample-name = "No Sample";
-                root.sample-loaded = false;
-                root.sample-format = "";
-                root.sample-duration = "";
+            // O slot livre da fileira (sampler_tabs.slint:113) carrega o
+            // nome do sample: ele sobrevive à troca de página, então
+            // sempre se sabe o que está aberto.
+            SamplerReadout {
+                label: "SAMPLE";
+                value: root.sample-line;
+                compact: true;
+                value-color: root.sample-loaded
+                    ? SamplerStyle.text
+                    : SamplerStyle.text-faint;
             }
         }
 
         // ========================================================
-        // CONTEÚDO
+        // MAIN — a amostra
         // ========================================================
 
-        Rectangle {
-            x: 0;
-            y: root.header-height;
+        if root.active-tab == 0: VerticalLayout {
+            spacing: SamplerStyle.gap(true);
+            vertical-stretch: 1;
 
-            width: parent.width;
+            SamplerHeader {
+                height: SamplerStyle.header-h(true);
+                compact: true;
 
-            height:
-                parent.height
-                - root.header-height;
+                sample-name: root.sample-name;
+                sample-loaded: root.sample-loaded;
 
-            background: Theme.surface;
+                sample-format: root.sample-format;
+                sample-duration: root.sample-duration;
 
-            // ====================================================
-            // WAVEFORM
-            // ====================================================
+                load-clicked => {
+                    root.load-sample-requested();
+                }
+
+                clear-clicked => {
+                    root.sample-name = "No Sample";
+                    root.sample-loaded = false;
+                    root.sample-format = "";
+                    root.sample-duration = "";
+                }
+            }
 
             SamplerWaveform {
-                x: root.section-gap;
-                y: root.section-gap;
-
-                width:
-                    parent.width
-                    - root.section-gap * 2;
-
-                height: 150px;
+                vertical-stretch: 1;
+                compact: true;
 
                 sample-loaded: root.sample-loaded;
                 playing: root.playing;
@@ -219,33 +225,27 @@ SamplerHeader {
                 playhead-position: 0.0;
             }
 
-            // ====================================================
-            // TRANSPORT
-            // ====================================================
-
             SamplerTransport {
-                x: root.section-gap;
-                y: 158px;
-
-                width: 280px;
-                height: root.transport-height;
+                compact: true;
 
                 playing: root.playing;
                 loop-enabled: root.loop-enabled;
                 reverse-enabled: root.reverse-enabled;
                 one-shot: root.one-shot;
             }
+        }
 
-            // ====================================================
-            // PITCH
-            // ====================================================
+        // ========================================================
+        // TUNE — afinação e filtro
+        // ========================================================
+
+        if root.active-tab == 1: HorizontalLayout {
+            spacing: SamplerStyle.gap(true);
+            vertical-stretch: 1;
 
             SamplerPitch {
-                x: root.section-gap;
-                y: 202px;
-
-                width: 320px;
-                height: 140px;
+                compact: true;
+                horizontal-stretch: 1;
 
                 tune: root.tune;
                 fine: root.fine;
@@ -274,16 +274,9 @@ SamplerHeader {
                 }
             }
 
-            // ====================================================
-            // FILTER
-            // ====================================================
-
             SamplerFilter {
-                x: 336px;
-                y: 202px;
-
-                width: 320px;
-                height: 150px;
+                compact: true;
+                horizontal-stretch: 1;
 
                 cutoff: root.cutoff;
                 resonance: root.resonance;
@@ -312,17 +305,29 @@ SamplerHeader {
                     root.filter-enabled = value;
                 }
             }
+        }
 
-            // ====================================================
-            // AMP
-            // ====================================================
+        // ========================================================
+        // ENV — contorno de ganho
+        // ========================================================
+
+        if root.active-tab == 2: HorizontalLayout {
+            spacing: SamplerStyle.gap(true);
+            vertical-stretch: 1;
+
+            SamplerEnvelope {
+                compact: true;
+                horizontal-stretch: 1;
+
+                attack: root.attack;
+                decay: root.decay;
+                sustain: root.sustain;
+                release: root.release;
+            }
 
             SamplerAmp {
-                x: 672px;
-                y: 202px;
-
-                width: 320px;
-                height: 140px;
+                compact: true;
+                horizontal-stretch: 1;
 
                 volume: root.volume;
                 pan: root.pan;
@@ -356,67 +361,78 @@ SamplerHeader {
                     root.solo = value;
                 }
             }
+        }
 
-            // ====================================================
-            // ENVELOPE
-            // ====================================================
+        // ========================================================
+        // MAP — o teclado
+        // ========================================================
 
-            SamplerEnvelope {
-                x: root.section-gap;
-                y: 350px;
+        if root.active-tab == 3: SamplerKeymap {
+            compact: true;
+            vertical-stretch: 1;
 
-                width: 320px;
-                height: 180px;
+            root-key: root.root-key;
+            low-key: root.low-key;
+            high-key: root.high-key;
 
-                attack: root.attack;
-                decay: root.decay;
-                sustain: root.sustain;
-                release: root.release;
+            chromatic: root.chromatic;
+
+            root-key-changed(value) => {
+                root.root-key = value;
             }
 
-            // ====================================================
-            // MODULATION / LFO
-            // ====================================================
+            low-key-changed(value) => {
+                root.low-key = value;
+            }
 
-            SamplerModulation {
-                x: 336px;
-                y: 360px;
+            high-key-changed(value) => {
+                root.high-key = value;
+            }
 
-                width: 320px;
-                height: 140px;
+            chromatic-changed(value) => {
+                root.chromatic = value;
+            }
+        }
 
-                rate: root.lfo-rate;
-                depth: root.lfo-depth;
+        // ========================================================
+        // MOD — LFO
+        // ========================================================
 
-                waveform: root.lfo-waveform;
-                destination: root.lfo-destination;
+        if root.active-tab == 4: SamplerModulation {
+            compact: true;
+            vertical-stretch: 1;
 
-                enabled: root.lfo-enabled;
-                sync: root.lfo-sync;
+            rate: root.lfo-rate;
+            depth: root.lfo-depth;
 
-                rate-changed(value) => {
-                    root.lfo-rate = value;
-                }
+            waveform: root.lfo-waveform;
+            destination: root.lfo-destination;
 
-                depth-changed(value) => {
-                    root.lfo-depth = value;
-                }
+            enabled: root.lfo-enabled;
+            sync: root.lfo-sync;
 
-                waveform-changed(value) => {
-                    root.lfo-waveform = value;
-                }
+            rate-changed(value) => {
+                root.lfo-rate = value;
+            }
 
-                destination-changed(value) => {
-                    root.lfo-destination = value;
-                }
+            depth-changed(value) => {
+                root.lfo-depth = value;
+            }
 
-                enabled-changed(value) => {
-                    root.lfo-enabled = value;
-                }
+            waveform-changed(value) => {
+                root.lfo-waveform = value;
+            }
 
-                sync-changed(value) => {
-                    root.lfo-sync = value;
-                }
+            destination-changed(value) => {
+                root.lfo-destination = value;
+            }
+
+            enabled-changed(value) => {
+                root.lfo-enabled = value;
+            }
+
+            sync-changed(value) => {
+                root.lfo-sync = value;
             }
         }
     }
