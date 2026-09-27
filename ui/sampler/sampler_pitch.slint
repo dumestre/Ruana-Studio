@@ -1,19 +1,34 @@
 import { Theme } from "../theme.slint";
-import { Knob } from "../components/knob.slint";
-import { Button } from "../components/button.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCard, SamplerKnob, SamplerToggle } from "sampler_widgets.slint";
+
+// ============================================================
+// PITCH
+// ============================================================
+//
+// A versão antiga posicionava 4 Knobs de 54px em x: 8/70/132/194
+// e o botão GLD em x: 256 — ou seja, exigia 304px de largura para
+// caber 4 knobs. Dentro do bottom panel isso não cabe em lugar
+// nenhum, e o desalinhamento vinha dos passos fixos de 62px, não do
+// dial.
+//
+// Agora a fileira estica: cada knob recebe o mesmo `horizontal-stretch`
+// e o `SamplerKnob` centraliza o corpo quadrado dentro da coluna
+// (sampler_widgets.slint:275), então a largura disponível é que
+// distribui. `compact` troca a métrica do dial (40px -> 30px) e
+// encolhe a fonte, permitindo a página inteira caber na altura do
+// painel.
+// ============================================================
 
 export component SamplerPitch inherits Rectangle {
-
-    // ============================================================
-    // PROPRIEDADES
-    // ============================================================
 
     in-out property <float> tune: 0.5;
     in-out property <float> fine: 0.5;
     in-out property <float> octave: 0.5;
     in-out property <float> glide: 0.0;
-
     in-out property <bool> glide-enabled: false;
+
+    in-out property <bool> compact: false;
 
     callback tune-changed(float);
     callback fine-changed(float);
@@ -21,267 +36,104 @@ export component SamplerPitch inherits Rectangle {
     callback glide-changed(float);
     callback glide-enabled-changed(bool);
 
-    // ============================================================
-    // FUNDO
-    // ============================================================
+    SamplerCard {
+        title: "PITCH";
+        accent: SamplerStyle.sec-pitch;
+        compact: root.compact;
 
-    background: Theme.surface-high;
+        width: 100%;
+        height: 100%;
 
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: 3px;
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
 
-    // ============================================================
-    // TÍTULO
-    // ============================================================
+            SamplerKnob {
+                label: "TUNE";
+                value: root.tune;
+                default-value: 0.5;
+                bipolar: true;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                value-text: SamplerStyle.fmt-semis(root.tune);
 
-    Text {
-        x: 8px;
-        y: 5px;
+                changed(value) => {
+                    root.tune = value;
+                    root.tune-changed(value);
+                }
+            }
 
-        width: parent.width - 16px;
-        height: 18px;
+            SamplerKnob {
+                label: "FINE";
+                value: root.fine;
+                default-value: 0.5;
+                bipolar: true;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                value-text: SamplerStyle.fmt-cents(root.fine);
 
-        text: "PITCH";
+                changed(value) => {
+                    root.fine = value;
+                    root.fine-changed(value);
+                }
+            }
 
-        color: Theme.text-dim;
+            SamplerKnob {
+                label: "OCTAVE";
+                value: root.octave;
+                default-value: 0.5;
+                bipolar: true;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                value-text: SamplerStyle.fmt-octaves(root.octave);
 
-        font-size: 9px;
-        font-weight: 600;
+                changed(value) => {
+                    root.octave = value;
+                    root.octave-changed(value);
+                }
+            }
 
-        vertical-alignment: center;
-    }
+            SamplerKnob {
+                label: "GLIDE";
+                value: root.glide;
+                default-value: 0;
+                enabled: root.glide-enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                value-text: SamplerStyle.fmt-glide(root.glide);
 
-    // ============================================================
-    // DIVISÓRIA
-    // ============================================================
-
-    Rectangle {
-        x: 8px;
-        y: 27px;
-
-        width: parent.width - 16px;
-        height: 1px;
-
-        background: Theme.border;
-    }
-
-    // ============================================================
-    // TUNE
-    // ============================================================
-
-    Knob {
-        x: 8px;
-        y: 36px;
-
-        width: 54px;
-        height: 68px;
-
-        value: root.tune;
-
-        centered: true;
-
-        caption: "TUNE";
-
-        display-value:
-            root.tune == 0.5
-                ? "0 st"
-                : (
-                    root.tune < 0.5
-                        ? "-" + Math.round(
-                            (0.5 - root.tune) * 48
-                        ) + " st"
-                        : "+" + Math.round(
-                            (root.tune - 0.5) * 48
-                        ) + " st"
-                );
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.tune = value;
-            root.tune-changed(value);
+                changed(value) => {
+                    root.glide = value;
+                    root.glide-changed(value);
+                }
+            }
         }
-    }
 
-    // ============================================================
-    // FINE
-    // ============================================================
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact);
 
-    Knob {
-        x: 70px;
-        y: 36px;
+            SamplerToggle {
+                text: "GLIDE";
+                on: root.glide-enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                horizontal-stretch: 0;
 
-        width: 54px;
-        height: 68px;
+                clicked => {
+                    root.glide-enabled = !root.glide-enabled;
+                    root.glide-enabled-changed(root.glide-enabled);
+                }
+            }
 
-        value: root.fine;
-
-        centered: true;
-
-        caption: "FINE";
-
-        display-value:
-            root.fine == 0.5
-                ? "0 ct"
-                : (
-                    root.fine < 0.5
-                        ? "-" + Math.round(
-                            (0.5 - root.fine) * 200
-                        ) + " ct"
-                        : "+" + Math.round(
-                            (root.fine - 0.5) * 200
-                        ) + " ct"
-                );
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.fine = value;
-            root.fine-changed(value);
+            Text {
+                text: "±24 st  ·  ±200 ct  ·  ±4 oct";
+                font-size: SamplerStyle.label-size(root.compact);
+                color: SamplerStyle.text-faint;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+                overflow: elide;
+            }
         }
-    }
-
-    // ============================================================
-    // OCTAVE
-    // ============================================================
-
-    Knob {
-        x: 132px;
-        y: 36px;
-
-        width: 54px;
-        height: 68px;
-
-        value: root.octave;
-
-        centered: true;
-
-        caption: "OCTAVE";
-
-        display-value:
-            root.octave == 0.5
-                ? "0"
-                : (
-                    root.octave < 0.5
-                        ? "-" + Math.round(
-                            (0.5 - root.octave) * 8
-                        )
-                        : "+" + Math.round(
-                            (root.octave - 0.5) * 8
-                        )
-                );
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.octave = value;
-            root.octave-changed(value);
-        }
-    }
-
-    // ============================================================
-    // GLIDE
-    // ============================================================
-
-    Knob {
-        x: 194px;
-        y: 36px;
-
-        width: 54px;
-        height: 68px;
-
-        value: root.glide;
-
-        caption: "GLIDE";
-
-        display-value:
-            Math.round(
-                root.glide * 2000
-            ) + " ms";
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.glide = value;
-            root.glide-changed(value);
-        }
-    }
-
-    // ============================================================
-    // GLIDE ON/OFF
-    // ============================================================
-
-    Button {
-        x: 256px;
-        y: 48px;
-
-        width: 48px;
-        height: 26px;
-
-        text: "GLD";
-
-        toggled: root.glide-enabled;
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.glide-enabled = !root.glide-enabled;
-            root.glide-enabled-changed(
-                root.glide-enabled
-            );
-        }
-    }
-
-    // ============================================================
-    // RANGE
-    // ============================================================
-
-    Text {
-        x: 8px;
-        y: 110px;
-
-        width: 240px;
-        height: 18px;
-
-        text: "±24 ST  •  ±200 CT  •  ±4 OCT";
-
-        color: Theme.text-dim;
-
-        font-size: 8px;
-
-        vertical-alignment: center;
-    }
-
-    // ============================================================
-    // STATUS
-    // ============================================================
-
-    Text {
-        x: 256px;
-        y: 80px;
-
-        width: 48px;
-        height: 18px;
-
-        text: root.glide-enabled
-            ? "ON"
-            : "OFF";
-
-        color: root.glide-enabled
-            ? Theme.accent
-            : Theme.text-dim;
-
-        font-size: 7px;
-
-        horizontal-alignment: center;
-        vertical-alignment: center;
     }
 }

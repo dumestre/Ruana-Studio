@@ -1,12 +1,27 @@
 import { Theme } from "../theme.slint";
-import { Knob } from "../components/knob.slint";
-import { Button } from "../components/button.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCard, SamplerKnob, SamplerToggle } from "sampler_widgets.slint";
+
+// ============================================================
+// KEYMAP
+// ============================================================
+//
+// Este componente existia no repositório e NINGUÉM importava: o
+// sampler.slint antigo nunca o referenciou, então não havia teclado
+// em lugar nenhum. Pior, ele exigia 364px de largura (5 knobs de
+// 48px em x: 8/64/120/176/232 + o CHROMATIC em x: 288) e 152px de
+// altura cravada.
+//
+// O teclado visual continua desenhado tecla por tecla, mas agora
+// preenche a largura disponível e é o que mais estica na página — é
+// a referência visual da zona, não um enfeite. Os 5 knobs dividem a
+// linha de baixo e o CHROMATIC vira toggle.
+//
+// LOW nunca passa de HIGH e vice-versa: os clamps ficam no callback,
+// senão o marcador do range no teclado some.
+// ============================================================
 
 export component SamplerKeymap inherits Rectangle {
-
-    // ============================================================
-    // PROPRIEDADES
-    // ============================================================
 
     in-out property <float> root-key: 0.5;
     in-out property <float> low-key: 0.0;
@@ -17,343 +32,206 @@ export component SamplerKeymap inherits Rectangle {
 
     in-out property <bool> chromatic: true;
 
+    in-out property <bool> compact: false;
+
     callback root-key-changed(float);
     callback low-key-changed(float);
     callback high-key-changed(float);
-
     callback low-velocity-changed(float);
     callback high-velocity-changed(float);
-
     callback chromatic-changed(bool);
 
-    // ============================================================
-    // FUNDO
-    // ============================================================
+    SamplerCard {
+        title: "KEYMAP";
+        accent: SamplerStyle.sec-map;
+        compact: root.compact;
+        badge: SamplerStyle.note-name(
+            Math.round(root.root-key * 127)
+        ) + "  ·  MIDI 0–127";
 
-    background: Theme.surface-high;
-
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: 3px;
-
-    // ============================================================
-    // TÍTULO
-    // ============================================================
-
-    Text {
-        x: 8px;
-        y: 5px;
-
-        width: parent.width - 16px;
-        height: 18px;
-
-        text: "KEYMAP";
-
-        color: Theme.text-dim;
-
-        font-size: 9px;
-        font-weight: 600;
-
-        vertical-alignment: center;
-    }
-
-    Rectangle {
-        x: 8px;
-        y: 27px;
-
-        width: parent.width - 16px;
-        height: 1px;
-
-        background: Theme.border;
-    }
-
-    // ============================================================
-    // TECLADO VISUAL
-    // ============================================================
-
-    Rectangle {
-        x: 8px;
-        y: 34px;
-
-        width: parent.width - 16px;
-        height: 44px;
-
-        background: Theme.base;
-
-        border-width: 1px;
-        border-color: Theme.border;
-        border-radius: 2px;
+        width: 100%;
+        height: 100%;
 
         // --------------------------------------------------------
-        // TECLAS BRANCAS
+        // TECLADO
         // --------------------------------------------------------
 
-        for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]: Rectangle {
-            x: i * (parent.width / 16.0);
-
-            y: 0;
-
-            width: parent.width / 16.0 - 1px;
-
-            height: parent.height;
-
-            background: Colors.whitesmoke;
-            border-bottom-left-radius: 8px;
-            border-bottom-right-radius: 8px;
-
-            border-width: 1px;
-            border-color: Theme.border;
-        }
-
-        // --------------------------------------------------------
-        // TECLAS PRETAS
-        // --------------------------------------------------------
-
-        for i in [0, 1, 3, 4, 5, 7, 8, 10, 11, 12, 14]: Rectangle {
-            x: (i + 0.70) * (parent.width / 16.0);
-
-            y: 0;
-
-            width: parent.width / 16.0 * 0.58;
-
-            height: parent.height * 0.60;
+        Rectangle {
+            vertical-stretch: 1;
+            min-height: 40px;
 
             background: Theme.base;
-            border-bottom-left-radius: 10px;
-            border-bottom-right-radius: 10px;
 
             border-width: 1px;
             border-color: Theme.border;
+            border-radius: 2px;
+
+            for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]: Rectangle {
+                x: i * (parent.width / 16.0);
+
+                y: 0;
+
+                width: parent.width / 16.0 - 1px;
+
+                height: parent.height;
+
+                background: Colors.whitesmoke;
+                border-bottom-left-radius: 8px;
+                border-bottom-right-radius: 8px;
+
+                border-width: 1px;
+                border-color: Theme.border;
+            }
+
+            for i in [0, 1, 3, 4, 5, 7, 8, 10, 11, 12, 14]: Rectangle {
+                x: (i + 0.70) * (parent.width / 16.0);
+
+                y: 0;
+
+                width: parent.width / 16.0 * 0.58;
+
+                height: parent.height * 0.60;
+
+                background: Theme.base;
+                border-bottom-left-radius: 10px;
+                border-bottom-right-radius: 10px;
+
+                border-width: 1px;
+                border-color: Theme.border;
+            }
+
+            // ROOT KEY
+            Rectangle {
+                x: root.root-key * (parent.width - 1px);
+
+                y: 0;
+
+                width: 2px;
+
+                height: parent.height;
+
+                background: Theme.accent;
+            }
+
+            // LOW RANGE
+            Rectangle {
+                x: root.low-key * (parent.width - 1px);
+
+                y: parent.height - 4px;
+
+                width: 2px;
+
+                height: 4px;
+
+                background: Theme.warn;
+            }
+
+            // HIGH RANGE
+            Rectangle {
+                x: root.high-key * (parent.width - 1px);
+
+                y: parent.height - 4px;
+
+                width: 2px;
+
+                height: 4px;
+
+                background: Theme.warn;
+            }
         }
 
         // --------------------------------------------------------
-        // ROOT KEY
+        // LIMITES
         // --------------------------------------------------------
 
-        Rectangle {
-            x: root.root-key * (parent.width - 1px);
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact) + SamplerStyle.knob(root.compact) + 8px;
 
-            y: 0;
+            SamplerKnob {
+                label: "ROOT";
+                value: root.root-key;
+                compact: root.compact;
+                accent: SamplerStyle.sec-map;
+                value-text: SamplerStyle.note-name(
+                    Math.round(root.root-key * 127)
+                );
 
-            width: 2px;
+                changed(value) => {
+                    root.root-key = value;
+                    root.root-key-changed(value);
+                }
+            }
 
-            height: parent.height;
+            SamplerKnob {
+                label: "LOW";
+                value: root.low-key;
+                compact: root.compact;
+                accent: SamplerStyle.sec-map;
+                value-text: SamplerStyle.note-name(
+                    Math.round(root.low-key * 127)
+                );
 
-            background: Theme.accent;
+                changed(value) => {
+                    root.low-key = Math.min(value, root.high-key);
+                    root.low-key-changed(root.low-key);
+                }
+            }
+
+            SamplerKnob {
+                label: "HIGH";
+                value: root.high-key;
+                compact: root.compact;
+                accent: SamplerStyle.sec-map;
+                value-text: SamplerStyle.note-name(
+                    Math.round(root.high-key * 127)
+                );
+
+                changed(value) => {
+                    root.high-key = Math.max(value, root.low-key);
+                    root.high-key-changed(root.high-key);
+                }
+            }
+
+            SamplerKnob {
+                label: "VEL LO";
+                value: root.low-velocity;
+                compact: root.compact;
+                accent: SamplerStyle.sec-map;
+                value-text: "" + Math.round(root.low-velocity * 127);
+
+                changed(value) => {
+                    root.low-velocity = Math.min(value, root.high-velocity);
+                    root.low-velocity-changed(root.low-velocity);
+                }
+            }
+
+            SamplerKnob {
+                label: "VEL HI";
+                value: root.high-velocity;
+                compact: root.compact;
+                accent: SamplerStyle.sec-map;
+                value-text: "" + Math.round(root.high-velocity * 127);
+
+                changed(value) => {
+                    root.high-velocity = Math.max(value, root.low-velocity);
+                    root.high-velocity-changed(root.high-velocity);
+                }
+            }
+
+            SamplerToggle {
+                text: "CHROMATIC";
+                on: root.chromatic;
+                compact: root.compact;
+                accent: SamplerStyle.sec-map;
+                horizontal-stretch: 0;
+                vertical-alignment: center;
+
+                clicked => {
+                    root.chromatic = !root.chromatic;
+                    root.chromatic-changed(root.chromatic);
+                }
+            }
         }
-
-        // --------------------------------------------------------
-        // LOW RANGE
-        // --------------------------------------------------------
-
-        Rectangle {
-            x: root.low-key * (parent.width - 1px);
-
-            y: parent.height - 4px;
-
-            width: 2px;
-
-            height: 4px;
-
-            background: Theme.warn;
-        }
-
-        // --------------------------------------------------------
-        // HIGH RANGE
-        // --------------------------------------------------------
-
-        Rectangle {
-            x: root.high-key * (parent.width - 1px);
-
-            y: parent.height - 4px;
-
-            width: 2px;
-
-            height: 4px;
-
-            background: Theme.warn;
-        }
-    }
-
-    // ============================================================
-    // ROOT KEY
-    // ============================================================
-
-    Knob {
-        x: 8px;
-        y: 86px;
-
-        width: 48px;
-        height: 64px;
-
-        value: root.root-key;
-
-        caption: "ROOT";
-
-        display-value:
-            Math.round(root.root-key * 127);
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.root-key = value;
-            root.root-key-changed(value);
-        }
-    }
-
-    // ============================================================
-    // LOW KEY
-    // ============================================================
-
-    Knob {
-        x: 64px;
-        y: 86px;
-
-        width: 48px;
-        height: 64px;
-
-        value: root.low-key;
-
-        caption: "LOW";
-
-        display-value:
-            Math.round(root.low-key * 127);
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.low-key = min(value, root.high-key);
-            root.low-key-changed(root.low-key);
-        }
-    }
-
-    // ============================================================
-    // HIGH KEY
-    // ============================================================
-
-    Knob {
-        x: 120px;
-        y: 86px;
-
-        width: 48px;
-        height: 64px;
-
-        value: root.high-key;
-
-        caption: "HIGH";
-
-        display-value:
-            Math.round(root.high-key * 127);
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.high-key = max(value, root.low-key);
-            root.high-key-changed(root.high-key);
-        }
-    }
-
-    // ============================================================
-    // LOW VELOCITY
-    // ============================================================
-
-    Knob {
-        x: 176px;
-        y: 86px;
-
-        width: 48px;
-        height: 64px;
-
-        value: root.low-velocity;
-
-        caption: "VEL LOW";
-
-        display-value:
-            Math.round(root.low-velocity * 127);
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.low-velocity = min(value, root.high-velocity);
-            root.low-velocity-changed(root.low-velocity);
-        }
-    }
-
-    // ============================================================
-    // HIGH VELOCITY
-    // ============================================================
-
-    Knob {
-        x: 232px;
-        y: 86px;
-
-        width: 48px;
-        height: 64px;
-
-        value: root.high-velocity;
-
-        caption: "VEL HIGH";
-
-        display-value:
-            Math.round(root.high-velocity * 127);
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.high-velocity = max(value, root.low-velocity);
-            root.high-velocity-changed(root.high-velocity);
-        }
-    }
-
-    // ============================================================
-    // CHROMATIC
-    // ============================================================
-
-    Button {
-        x: 288px;
-        y: 102px;
-
-        width: 76px;
-        height: 26px;
-
-        text: "CHROMATIC";
-
-        toggled: root.chromatic;
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.chromatic = !root.chromatic;
-            root.chromatic-changed(root.chromatic);
-        }
-    }
-
-    // ============================================================
-    // INFO
-    // ============================================================
-
-    Text {
-        x: 288px;
-        y: 132px;
-
-        width: 76px;
-        height: 20px;
-
-        text: "MIDI 0–127";
-
-        color: Theme.text-dim;
-
-        font-size: 8px;
-
-        horizontal-alignment: center;
-        vertical-alignment: center;
     }
 }

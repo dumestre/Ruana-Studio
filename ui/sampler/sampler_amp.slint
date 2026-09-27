@@ -1,21 +1,33 @@
 import { Theme } from "../theme.slint";
-import { Knob, PanKnob } from "../components/knob.slint";
-import { Button } from "../components/button.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCard, SamplerKnob, SamplerToggle } from "sampler_widgets.slint";
+
+// ============================================================
+// AMP
+// ============================================================
+//
+// Este era o pior caso: o componente declarava `height: 150px` no
+// PRÓPRIO corpo (sampler_amp.slint:16), ou seja, o pai não conseguia
+// encolher nem esticar — a página ficava 150px mais alta que o
+// espaço e o MUTE/SOLO aparecia cortado. Além disso o PAN usava
+// `PanKnob`, um segundo dial só para ele.
+//
+// Agora a altura é 100% (vem do pai) e o PAN é um `SamplerKnob`
+// bipolar com o detente no meio, que é o que o formato bipolar do
+// `SamplerStyle` já esperava.
+// ============================================================
 
 export component SamplerAmp inherits Rectangle {
-
-    // ============================================================
-    // PROPRIEDADES
-    // ============================================================
 
     in-out property <float> volume: 0.75;
     in-out property <float> pan: 0.5;
     in-out property <float> stereo-width: 1.0;
     in-out property <float> phase: 0.0;
 
-    height: 150px;
     in-out property <bool> muted: false;
     in-out property <bool> solo: false;
+
+    in-out property <bool> compact: false;
 
     callback volume-changed(float);
     callback pan-changed(float);
@@ -24,199 +36,91 @@ export component SamplerAmp inherits Rectangle {
     callback muted-changed(bool);
     callback solo-changed(bool);
 
-    // ============================================================
-    // FUNDO
-    // ============================================================
+    SamplerCard {
+        title: "AMP";
+        accent: SamplerStyle.sec-amp;
+        compact: root.compact;
+        on: !root.muted;
 
-    background: Theme.surface-high;
+        width: 100%;
+        height: 100%;
 
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: 3px;
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
 
-    // ============================================================
-    // TÍTULO
-    // ============================================================
+            SamplerKnob {
+                label: "VOL";
+                value: root.volume;
+                default-value: 0.75;
+                enabled: !root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-db(root.volume);
 
-    Text {
-        x: 8px;
-        y: 5px;
+                changed(value) => {
+                    root.volume = value;
+                    root.volume-changed(value);
+                }
+            }
 
-        width: parent.width - 16px;
-        height: 18px;
+            SamplerKnob {
+                label: "PAN";
+                value: root.pan;
+                default-value: 0.5;
+                bipolar: true;
+                enabled: !root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-pan(root.pan);
 
-        text: "AMP";
+                changed(value) => {
+                    root.pan = value;
+                    root.pan-changed(value);
+                }
+            }
 
-        color: Theme.text-dim;
+            SamplerKnob {
+                label: "WIDTH";
+                value: root.stereo-width;
+                default-value: 1;
+                enabled: !root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-pct(root.stereo-width);
 
-        font-size: 9px;
-        font-weight: 600;
+                changed(value) => {
+                    root.stereo-width = value;
+                    root.stereo-width-changed(value);
+                }
+            }
 
-        vertical-alignment: center;
-    }
+            SamplerKnob {
+                label: "PHASE";
+                value: root.phase;
+                default-value: 0;
+                enabled: !root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-phase(root.phase);
 
-    // ============================================================
-    // DIVISÓRIA
-    // ============================================================
-
-    Rectangle {
-        x: 8px;
-        y: 27px;
-
-        width: parent.width - 16px;
-        height: 1px;
-
-        background: Theme.border;
-    }
-
-    // ============================================================
-    // CONTROLES
-    // ============================================================
-
-    HorizontalLayout {
-        x: 8px;
-        y: 36px;
-
-        width: parent.width - 16px;
-        height: 58px;
-
-        spacing: 18px;
-
-        // ========================================================
-        // VOLUME
-        // ========================================================
-
-        Knob {
-            width: 42px;
-            height: 58px;
-
-            value: root.volume;
-
-            caption: "VOLUME";
-
-            display-value:
-                Math.round(root.volume * 100) + "%";
-
-            show-display: true;
-            show-text: true;
-
-            changed(value) => {
-                root.volume = value;
-                root.volume-changed(value);
+                changed(value) => {
+                    root.phase = value;
+                    root.phase-changed(value);
+                }
             }
         }
 
-        // ========================================================
-        // PAN
-        // ========================================================
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact);
 
-        PanKnob {
-            width: 42px;
-            height: 58px;
-
-            value: root.pan;
-
-            caption: "PAN";
-
-            display-value:
-                root.pan == 0.5
-                    ? "C"
-                    : (
-                        root.pan < 0.5
-                            ? "L "
-                                + Math.round(
-                                    (0.5 - root.pan) * 200
-                                )
-                            : "R "
-                                + Math.round(
-                                    (root.pan - 0.5) * 200
-                                )
-                    );
-
-            show-display: true;
-            show-text: true;
-
-            changed(value) => {
-                root.pan = value;
-                root.pan-changed(value);
-            }
-        }
-
-        // ========================================================
-        // STEREO WIDTH
-        // ========================================================
-
-        Knob {
-            width: 42px;
-            height: 58px;
-
-            value: root.stereo-width;
-
-            caption: "WIDTH";
-
-            display-value:
-                Math.round(
-                    root.stereo-width * 100
-                ) + "%";
-
-            show-display: true;
-            show-text: true;
-
-            changed(value) => {
-                root.stereo-width = value;
-                root.stereo-width-changed(value);
-            }
-        }
-
-        // ========================================================
-        // PHASE
-        // ========================================================
-
-        Knob {
-            width: 42px;
-            height: 58px;
-
-            value: root.phase;
-
-            caption: "PHASE";
-
-            display-value:
-                Math.round(
-                    root.phase * 180
-                ) + "°";
-
-            show-display: true;
-            show-text: true;
-
-            changed(value) => {
-                root.phase = value;
-                root.phase-changed(value);
-            }
-        }
-
-        // ========================================================
-        // MUTE / SOLO
-        // ========================================================
-
-        VerticalLayout {
-            width: 18px;
-            height: 42px;
-
-            alignment: center;
-            spacing: 4px;
-
-            Button {
-                width: 18px;
-                height: 18px;
-
-                text: "M";
-
-                toggled: root.muted;
-
-                text-color: Theme.text-dim;
-
-                toggled-bg: Theme.danger;
-                toggled-fg: Theme.text-primary;
+            SamplerToggle {
+                text: "MUTE";
+                on: root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                horizontal-stretch: 1;
 
                 clicked => {
                     root.muted = !root.muted;
@@ -224,18 +128,12 @@ export component SamplerAmp inherits Rectangle {
                 }
             }
 
-            Button {
-                width: 18px;
-                height: 18px;
-
-                text: "S";
-
-                toggled: root.solo;
-
-                text-color: Theme.text-dim;
-
-                toggled-bg: Theme.accent;
-                toggled-fg: Theme.on-accent;
+            SamplerToggle {
+                text: "SOLO";
+                on: root.solo;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                horizontal-stretch: 1;
 
                 clicked => {
                     root.solo = !root.solo;

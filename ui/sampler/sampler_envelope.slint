@@ -1,5 +1,20 @@
 import { Theme } from "../theme.slint";
-import { Knob } from "../components/knob.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCurves } from "sampler_curves.slint";
+import { SamplerCard, SamplerKnob, SamplerCurve } from "sampler_widgets.slint";
+
+// ============================================================
+// AMP ENVELOPE
+// ============================================================
+//
+// A curva ADSR aqui era desenhada com um punhado de `Rectangle`
+// empilhados (a versão antiga, y: 40..~100) e os 4 knobs ficavam
+// numa fileira de 48px em x: 8/60/112/164.
+//
+// `SamplerCurves.adsr` já devolve a curva como Path; o poço agora é
+// `SamplerCurve` e ocupa a sobra da altura. Os knobs esticam igual
+// nos outros cards.
+// ============================================================
 
 export component SamplerEnvelope inherits Rectangle {
 
@@ -8,129 +23,93 @@ export component SamplerEnvelope inherits Rectangle {
     in-out property <float> sustain: 0.80;
     in-out property <float> release: 0.25;
 
+    in-out property <bool> compact: false;
+
     callback attack-changed(float);
     callback decay-changed(float);
     callback sustain-changed(float);
     callback release-changed(float);
 
-    background: Theme.surface-high;
+    SamplerCard {
+        title: "AMP ENVELOPE";
+        accent: SamplerStyle.sec-amp;
+        compact: root.compact;
 
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: 3px;
+        width: 100%;
+        height: 100%;
 
-    Text {
-        x: 8px;
-        y: 5px;
-
-        width: parent.width - 16px;
-        height: 18px;
-
-        text: "AMP ENVELOPE";
-
-        color: Theme.text-dim;
-
-        font-size: 9px;
-        font-weight: 600;
-
-        vertical-alignment: center;
-    }
-
-    Rectangle {
-        x: 8px;
-        y: 27px;
-
-        width: parent.width - 16px;
-        height: 1px;
-
-        background: Theme.border;
-    }
-
-    Knob {
-        x: 8px;
-        y: 34px;
-
-        width: 48px;
-        height: 64px;
-
-        value: root.attack;
-
-        caption: "ATTACK";
-
-        display-value: Math.round(root.attack * 1000) + " ms";
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.attack = value;
-            root.attack-changed(value);
+        SamplerCurve {
+            commands: SamplerCurves.adsr(
+                root.attack,
+                root.decay,
+                root.sustain,
+                root.release,
+                true
+            );
+            stroke: SamplerStyle.sec-amp;
+            compact: root.compact;
+            vertical-stretch: 1;
         }
-    }
 
-    Knob {
-        x: 64px;
-        y: 34px;
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
 
-        width: 48px;
-        height: 64px;
+            SamplerKnob {
+                label: "A";
+                value: root.attack;
+                default-value: 0.01;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-time(root.attack);
 
-        value: root.decay;
+                changed(value) => {
+                    root.attack = value;
+                    root.attack-changed(value);
+                }
+            }
 
-        caption: "DECAY";
+            SamplerKnob {
+                label: "D";
+                value: root.decay;
+                default-value: 0.20;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-time(root.decay);
 
-        display-value: Math.round(root.decay * 1000) + " ms";
+                changed(value) => {
+                    root.decay = value;
+                    root.decay-changed(value);
+                }
+            }
 
-        show-display: true;
-        show-text: true;
+            SamplerKnob {
+                label: "S";
+                value: root.sustain;
+                default-value: 0.80;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-pct(root.sustain);
 
-        changed(value) => {
-            root.decay = value;
-            root.decay-changed(value);
-        }
-    }
+                changed(value) => {
+                    root.sustain = value;
+                    root.sustain-changed(value);
+                }
+            }
 
-    Knob {
-        x: 120px;
-        y: 34px;
+            SamplerKnob {
+                label: "R";
+                value: root.release;
+                default-value: 0.25;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-time(root.release);
 
-        width: 48px;
-        height: 64px;
-
-        value: root.sustain;
-
-        caption: "SUSTAIN";
-
-        display-value: Math.round(root.sustain * 100) + "%";
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.sustain = value;
-            root.sustain-changed(value);
-        }
-    }
-
-    Knob {
-        x: 176px;
-        y: 34px;
-
-        width: 48px;
-        height: 64px;
-
-        value: root.release;
-
-        caption: "RELEASE";
-
-        display-value: Math.round(root.release * 1000) + " ms";
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.release = value;
-            root.release-changed(value);
+                changed(value) => {
+                    root.release = value;
+                    root.release-changed(value);
+                }
+            }
         }
     }
 }

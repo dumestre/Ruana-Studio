@@ -1,12 +1,29 @@
 import { Theme } from "../theme.slint";
-import { Knob } from "../components/knob.slint";
-import { Button } from "../components/button.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCurves } from "sampler_curves.slint";
+import {
+    SamplerCard,
+    SamplerKnob,
+    SamplerSegments,
+    SamplerToggle,
+    SamplerCurve,
+    SamplerReadout,
+} from "sampler_widgets.slint";
+
+// ============================================================
+// MODULAÇÃO / LFO
+// ============================================================
+//
+// RATE, DEPTH, os segmentos de forma/destino e a curva ficavam todos
+// em posição absoluta (x: 8..254, y: 36..110), com a curva por último
+// em y: 110 — 180px exigidos.
+//
+// O valor do RATE muda de unidade quando o SYNC liga (Hz livre vs
+// compassos), então o readout mostra um ou outro. Sem isso o knob
+// mentia: `fmt-lfo-rate` em modo sync mostraria "0.35 Hz".
+// ============================================================
 
 export component SamplerModulation inherits Rectangle {
-
-    // ============================================================
-    // PROPRIEDADES
-    // ============================================================
 
     in-out property <float> rate: 0.35;
     in-out property <float> depth: 0.0;
@@ -17,6 +34,8 @@ export component SamplerModulation inherits Rectangle {
     in-out property <bool> enabled: false;
     in-out property <bool> sync: false;
 
+    in-out property <bool> compact: false;
+
     callback rate-changed(float);
     callback depth-changed(float);
     callback waveform-changed(string);
@@ -24,383 +43,120 @@ export component SamplerModulation inherits Rectangle {
     callback enabled-changed(bool);
     callback sync-changed(bool);
 
-    // ============================================================
-    // FUNDO
-    // ============================================================
+    SamplerCard {
+        title: "MODULATION";
+        accent: SamplerStyle.sec-mod;
+        compact: root.compact;
+        has-toggle: true;
+        on: root.enabled;
 
-    background: Theme.surface-high;
+        width: 100%;
+        height: 100%;
 
-    border-width: 1px;
-    border-color: Theme.border;
-    border-radius: 3px;
-
-    // ============================================================
-    // TÍTULO
-    // ============================================================
-
-    Text {
-        x: 8px;
-        y: 5px;
-
-        width: parent.width - 16px;
-        height: 18px;
-
-        text: "LFO";
-
-        color: Theme.text-dim;
-
-        font-size: 9px;
-        font-weight: 600;
-
-        vertical-alignment: center;
-    }
-
-    // ============================================================
-    // ON/OFF
-    // ============================================================
-
-    Button {
-        x: parent.width - 50px;
-        y: 4px;
-
-        width: 42px;
-        height: 20px;
-
-        text: "ON";
-
-        toggled: root.enabled;
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
+        toggled => {
             root.enabled = !root.enabled;
             root.enabled-changed(root.enabled);
         }
-    }
 
-    // ============================================================
-    // DIVISÓRIA
-    // ============================================================
-
-    Rectangle {
-        x: 8px;
-        y: 27px;
-
-        width: parent.width - 16px;
-        height: 1px;
-
-        background: Theme.border;
-    }
-
-    // ============================================================
-    // RATE
-    // ============================================================
-
-    Knob {
-        x: 8px;
-        y: 36px;
-
-        width: 54px;
-        height: 68px;
-
-        value: root.rate;
-
-        caption: "RATE";
-
-        display-value:
-            root.sync
-                ? (
-                    root.rate < 0.25
-                        ? "1/16"
-                        : root.rate < 0.50
-                            ? "1/8"
-                            : root.rate < 0.75
-                                ? "1/4"
-                                : "1/2"
-                )
-                : (
-                    Math.round(
-                        0.1 + root.rate * 19.9
-                    ) / 10
-                ) + " Hz";
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.rate = value;
-            root.rate-changed(value);
+        SamplerCurve {
+            commands: SamplerCurves.lfo-curve(root.waveform, root.depth);
+            stroke: SamplerStyle.sec-mod;
+            dim: !root.enabled;
+            compact: root.compact;
+            vertical-stretch: 1;
         }
-    }
 
-    // ============================================================
-    // DEPTH
-    // ============================================================
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
 
-    Knob {
-        x: 70px;
-        y: 36px;
+            SamplerKnob {
+                label: "RATE";
+                value: root.rate;
+                default-value: 0.35;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
+                value-text: root.sync
+                    ? SamplerStyle.fmt-lfo-sync(root.rate)
+                    : SamplerStyle.fmt-lfo-rate(root.rate);
 
-        width: 54px;
-        height: 68px;
+                changed(value) => {
+                    root.rate = value;
+                    root.rate-changed(value);
+                }
+            }
 
-        value: root.depth;
+            SamplerKnob {
+                label: "DEPTH";
+                value: root.depth;
+                default-value: 0;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
+                value-text: SamplerStyle.fmt-pct(root.depth);
 
-        caption: "DEPTH";
-
-        display-value:
-            Math.round(
-                root.depth * 100
-            ) + "%";
-
-        show-display: true;
-        show-text: true;
-
-        changed(value) => {
-            root.depth = value;
-            root.depth-changed(value);
+                changed(value) => {
+                    root.depth = value;
+                    root.depth-changed(value);
+                }
+            }
         }
-    }
 
-    // ============================================================
-    // SYNC
-    // ============================================================
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact);
 
-    Button {
-        x: 132px;
-        y: 48px;
+            SamplerSegments {
+                options: ["SINE", "TRI", "SAW", "SQR"];
+                value: root.waveform;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
 
-        width: 54px;
-        height: 26px;
+                picked(choice) => {
+                    root.waveform = choice;
+                    root.waveform-changed(choice);
+                }
+            }
 
-        text: "SYNC";
+            SamplerSegments {
+                options: ["PITCH", "FILTER", "AMP"];
+                value: root.destination;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
 
-        toggled: root.sync;
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.sync = !root.sync;
-            root.sync-changed(root.sync);
+                picked(choice) => {
+                    root.destination = choice;
+                    root.destination-changed(choice);
+                }
+            }
         }
-    }
 
-    // ============================================================
-    // DESTINO
-    // ============================================================
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact);
 
-    Text {
-        x: 198px;
-        y: 36px;
+            SamplerToggle {
+                text: "SYNC";
+                on: root.sync;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
+                horizontal-stretch: 0;
 
-        width: 60px;
-        height: 18px;
+                clicked => {
+                    root.sync = !root.sync;
+                    root.sync-changed(root.sync);
+                }
+            }
 
-        text: "DEST";
-
-        color: Theme.text-dim;
-
-        font-size: 8px;
-
-        vertical-alignment: center;
-    }
-
-    Button {
-        x: 198px;
-        y: 56px;
-
-        width: 52px;
-        height: 22px;
-
-        text: "PITCH";
-
-        toggled: root.destination == "PITCH";
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.destination = "PITCH";
-            root.destination-changed("PITCH");
+            SamplerReadout {
+                label: "DEST";
+                value: root.destination + " " + SamplerStyle.fmt-pct(root.depth);
+                compact: root.compact;
+            }
         }
-    }
-
-    Button {
-        x: 254px;
-        y: 56px;
-
-        width: 52px;
-        height: 22px;
-
-        text: "FILTER";
-
-        toggled: root.destination == "FILTER";
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.destination = "FILTER";
-            root.destination-changed("FILTER");
-        }
-    }
-
-    Button {
-        x: 198px;
-        y: 82px;
-
-        width: 52px;
-        height: 22px;
-
-        text: "AMP";
-
-        toggled: root.destination == "AMP";
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.destination = "AMP";
-            root.destination-changed("AMP");
-        }
-    }
-
-    // ============================================================
-    // FORMA DE ONDA
-    // ============================================================
-
-    Text {
-        x: 8px;
-        y: 110px;
-
-        width: 50px;
-        height: 18px;
-
-        text: "SHAPE";
-
-        color: Theme.text-dim;
-
-        font-size: 8px;
-
-        vertical-alignment: center;
-    }
-
-    Button {
-        x: 62px;
-        y: 106px;
-
-        width: 48px;
-        height: 22px;
-
-        text: "SINE";
-
-        toggled: root.waveform == "SINE";
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.waveform = "SINE";
-            root.waveform-changed("SINE");
-        }
-    }
-
-    Button {
-        x: 114px;
-        y: 106px;
-
-        width: 48px;
-        height: 22px;
-
-        text: "TRI";
-
-        toggled: root.waveform == "TRI";
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.waveform = "TRI";
-            root.waveform-changed("TRI");
-        }
-    }
-
-    Button {
-        x: 166px;
-        y: 106px;
-
-        width: 48px;
-        height: 22px;
-
-        text: "SAW";
-
-        toggled: root.waveform == "SAW";
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.waveform = "SAW";
-            root.waveform-changed("SAW");
-        }
-    }
-
-    Button {
-        x: 218px;
-        y: 106px;
-
-        width: 48px;
-        height: 22px;
-
-        text: "SQR";
-
-        toggled: root.waveform == "SQR";
-
-        text-color: Theme.text-dim;
-
-        toggled-bg: Theme.accent;
-        toggled-fg: Theme.on-accent;
-
-        clicked => {
-            root.waveform = "SQR";
-            root.waveform-changed("SQR");
-        }
-    }
-
-    // ============================================================
-    // INDICADOR
-    // ============================================================
-
-    Rectangle {
-        x: parent.width - 20px;
-        y: 30px;
-
-        width: 6px;
-        height: 6px;
-
-        background:
-            root.enabled
-                ? Theme.accent
-                : Theme.border;
-
-        border-radius: 3px;
     }
 }
