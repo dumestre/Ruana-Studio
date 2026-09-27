@@ -80,8 +80,38 @@ fn notas_midi_geram_mais_instancias_que_clip_vazio() {
 }
 
 #[test]
-fn nota_que_atravessa_a_borda_da_janela_e_cortada() {
+fn nota_usa_a_mesma_tinta_escura_da_onda_de_audio() {
     let inter = ClipInteraction::new();
+    let m = metrics();
+    let inst = build_clip_instances(
+        &[midi_clip(
+            4.0,
+            vec![ClipNote { pitch: 36, start: 0.0, length: 1.0, velocity: 120 }],
+        )],
+        &inter,
+        &m,
+        900.0,
+    );
+
+    let barras: Vec<_> = inst.iter().filter(|r| r.radius == 1.0).collect();
+    assert_eq!(barras.len(), 1);
+
+    let c = barras[0].color;
+    // A onda de áudio é pintada pelo shader com 0.0194 em linear
+    // (timeline.wgsl, "Cor fixa da waveform"). A nota precisa ter a
+    // mesma tinta: em quase-branco, um compasso só de bumbo vira uma
+    // faixa clara chapada no corpo e o clip MIDI deixa de ler como
+    // clip para ler como placeholder.
+    assert_eq!(
+        (c[0], c[1], c[2]),
+        (4, 4, 4),
+        "a nota precisa usar a tinta da onda, veio {c:?}"
+    );
+    assert_eq!(c[3], 255, "a onda é opaca; a nota também");
+}
+
+#[test]
+fn nota_que_atravessa_a_borda_da_janela_e_cortada() {    let inter = ClipInteraction::new();
 
     // Janela de 100px: o clip tem 4 beats a 60px/beat = 240px, então
     // a última nota vive inteira fora da tela.

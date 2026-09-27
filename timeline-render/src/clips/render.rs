@@ -6,13 +6,19 @@ use crate::{
     get_font,
     rgba,
     rgba_alpha,
-    srgb_to_linear,
     palette,
     RectInstance,
     build_text_instances_font,
 };
 use ab_glyph::{Font, ScaleFont};
 use super::{clip_rect, ClipDemo, ClipInteraction, ClipMetrics};
+
+/// Tinta da waveform de áudio, em espaço linear.
+///
+/// O shader pinta a onda com `vec3(0.0194)` (timeline.wgsl, "Cor fixa
+/// da waveform"). As barras de nota do clip MIDI usam a mesma tinta:
+/// é o que faz o MIDI ler como clip, e não como um bloco claro.
+const WAVE_INK: u8 = (0.0194 * 255.0) as u8;
 
 /// Desenha o nome do clip no header, alinhado à esquerda com padding fixo.
 /// Trunca com "..." se não couber.
@@ -1255,12 +1261,18 @@ fn push_clip(
                 y: (ny - th * 0.5).max(inner_top),
                 w: nw,
                 h: th,
-                color: [
-                    (srgb_to_linear(0.93) * 255.0) as u8,
-                    (srgb_to_linear(0.95) * 255.0) as u8,
-                    (srgb_to_linear(0.99) * 255.0) as u8,
-                    (165.0 + 90.0 * vel) as u8,
-                ],
+                // A MESMA tinta da waveform de áudio. O shader usa
+                // 0.0194 em linear (timeline.wgsl:514) e o pipeline
+                // converte sRGB -> linear antes de encher a instância,
+                // então este é o valor linear direto — não passar por
+                // `srgb_to_linear` de novo.
+                //
+                // Aqui estava `srgb_to_linear(0.93)`, quase branco: um
+                // compasso só de bumbo (todas as notas na mesma altura)
+                // virava uma faixa clara chapada no corpo, que lia como
+                // placeholder em vez de clip. A nota é o conteúdo do
+                // clip MIDI e tem que ter a mesma tinta da onda.
+                color: [WAVE_INK, WAVE_INK, WAVE_INK, 255],
                 wave_offset: 0,
                 wave_count: 0,
                 clip_w: 0.0,
