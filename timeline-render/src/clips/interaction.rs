@@ -705,6 +705,7 @@ impl ClipInteraction {
                     pre_glue_len: None,
                     pre_glue_color: None,
                     wave: Vec::new(),
+                    notes: Vec::new(),
                     file_path: None,
                     source_start_beats: 0.0,
                     source_length_beats: 0.0,

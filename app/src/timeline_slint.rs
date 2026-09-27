@@ -18,11 +18,11 @@ use std::sync::{Arc, Mutex};
 
 use slint::{ComponentHandle, SharedPixelBuffer, Timer, TimerMode};
 
-use daw_core::clip::{beats_eq, ClipKind};
+use daw_core::clip::{beats_eq, Clip, ClipKind};
 use daw_core::transport::Transport;
 use daw_core::Project;
 use timeline_render::app::ButtonState;
-use timeline_render::clips::ClipDemo;
+use timeline_render::clips::{ClipDemo, ClipNote};
 use timeline_render::App as TimelineEngine;
 use timeline_render::WindowCommand;
 
@@ -55,6 +55,25 @@ pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
             pre_glue_len: None,
             pre_glue_color: None,
             wave: Vec::new(),
+
+            // As notas vão junto porque a timeline DRA o clip MIDI: sem
+            // elas o renderer não tem o que desenhar e o clip fica igual a
+            // um retângulo vazio — que era como o arrasto do beat sequencer
+            // aparecia, com o pattern inteiro sem nenhuma célula ligada.
+            notes: if c.is_midi() {
+                c.notes
+                    .iter()
+                    .map(|n| ClipNote {
+                        pitch: n.pitch,
+                        start: n.start,
+                        length: n.length,
+                        velocity: n.velocity,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+
             file_path: c.file_path.clone(),
             source_start_beats: c.source_start_beats,
             source_length_beats: c.length_beats,
@@ -574,5 +593,91 @@ mod tests {
         assert_eq!(clip.start_beat, 8.0);
         assert_eq!(clip.track_id, 1);
         assert_eq!(clip.source_start_beats, 2.0);
+    }
+
+    /// O arrasto do "BEAT SEQUENCER" do Clip Pool nascia um clip MIDI com
+    /// `notes: []`, porque `DrumPattern::new` monta a grade toda desligada
+    /// (`crates/daw-midi/src/pattern.rs:80`). A timeline desenhava esse
+    /// clip como um retângulo chapado — indistinguível de um placeholder.
+    ///
+    /// Este teste trava o elo que faltava: as notas do `Project` precisam
+    /// chegar no `ClipDemo`, senão o renderer não tem o que desenhar.
+    #[test]
+    fn build_clip_demos_carrega_as_notas_do_clip_midi() {
+        let mut project = Project::default();
+        let track_id = project.tracks.first().map(|t| t.id).unwrap_or(0);
+
+        let mut com_notas = Clip::new(
+            1,
+            track_id,
+            "COM NOTAS",
+            ClipKind::Midi,
+            0.0,
+            4.0,
+        );
+        com_notas.notes = vec![
+            daw_midi::Note {
+                id: 1,
+                pitch: 36,
+                start: 0.0,
+                length: 0.25,
+                velocity: 110,
+            },
+            daw_midi::Note {
+                id: 2,
+                pitch: 42,
+                start: 1.0,
+                length: 0.25,
+                velocity: 90,
+            },
+        ];
+
+        let sem_notas = Clip::new(
+            2,
+            track_id,
+            "VAZIO",
+            ClipKind::Midi,
+            4.0,
+            4.0,
+        );
+
+        let audio = Clip::new(
+            3,
+            track_id,
+            "AUDIO",
+            ClipKind::Audio,
+            8.0,
+            4.0,
+        );
+
+        project.clips.push(com_notas);
+        project.clips.push(sem_notas);
+        project.clips.push(audio);
+
+        let demos = build_clip_demos(&project);
+
+        let com = demos
+            .iter()
+            .find(|d| d.name.as_deref() == Some("COM NOTAS"))
+            .expect("clip MIDI com notas");
+        let vazio = demos
+            .iter()
+            .find(|d| d.name.as_deref() == Some("VAZIO"))
+            .expect("clip MIDI sem notas");
+        let audio = demos
+            .iter()
+            .find(|d| d.name.as_deref() == Some("AUDIO"))
+            .expect("clip de audio");
+
+        assert_eq!(com.notes.len(), 2);
+        assert_eq!(com.notes[0].pitch, 36);
+        assert_eq!(com.notes[0].length, 0.25);
+        assert_eq!(com.notes[1].pitch, 42);
+
+        // Sem notas é honesto: o clip aparece vazio.
+        assert!(vazio.notes.is_empty());
+
+        // Áudio nunca carrega notas, mesmo que sobre.
+        assert!(audio.notes.is_empty());
     }
 }

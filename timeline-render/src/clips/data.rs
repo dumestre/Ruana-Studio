@@ -1,6 +1,24 @@
 //! Tipos de dados e geometria dos clips: `ClipDemo`, `ClipMetrics` e
 //! `clip_rect` (conversões cursor ↔ conteúdo e retângulos de render).
 
+/// Uma nota dentro de um clip MIDI.
+///
+/// `start` é em beats **locais** (relativos a `ClipDemo::beat`), igual a
+/// `daw_midi::Note`. O renderer desenha uma barra por nota, então um
+/// pattern vazio aparece vazio — que é a diferença visível entre um clip
+/// de verdade e um clip sem conteúdo.
+#[derive(Clone, Copy, Debug)]
+pub struct ClipNote {
+    /// Altura MIDI (0..127, 60 = C4).
+    pub pitch: i32,
+    /// Início em beats locais ao clip.
+    pub start: f32,
+    /// Duração em beats locais.
+    pub length: f32,
+    /// Velocidade 0..127.
+    pub velocity: i32,
+}
+
 /// Um clip posicionado numa faixa (track) da timeline.
 #[derive(Clone, Debug)]
 pub struct ClipDemo {
@@ -20,6 +38,11 @@ pub struct ClipDemo {
 
     /// Amostras da waveform deste clip (min/max interleaved, 2 por coluna).
     pub wave: Vec<f32>,
+
+    /// Conteúdo MIDI do clip. Vazio = clip sem notas, que é desenhado
+    /// como um retângulo vazio (e não toca: o motor de áudio descarta
+    /// clip MIDI sem notas, `daw-audio/src/engine.rs`).
+    pub notes: Vec<ClipNote>,
 
     /// Caminho do arquivo de áudio original, se houver.
     pub file_path: Option<String>,

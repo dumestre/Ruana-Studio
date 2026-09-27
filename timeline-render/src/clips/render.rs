@@ -6,6 +6,7 @@ use crate::{
     get_font,
     rgba,
     rgba_alpha,
+    srgb_to_linear,
     palette,
     RectInstance,
     build_text_instances_font,
@@ -372,6 +373,8 @@ pub fn build_clip_instances(
                             clip.pre_glue_color,
                         wave:
                             clip.wave.clone(),
+                        notes:
+                            clip.notes.clone(),
                         file_path:
                             clip.file_path.clone(),
                         source_start_beats:
@@ -404,6 +407,8 @@ pub fn build_clip_instances(
                             clip.pre_glue_color,
                         wave:
                             clip.wave.clone(),
+                        notes:
+                            clip.notes.clone(),
                         file_path:
                             clip.file_path.clone(),
                         source_start_beats:
@@ -613,6 +618,8 @@ pub fn build_clip_instances(
                             clip.pre_glue_color,
                         wave:
                             clip.wave.clone(),
+                        notes:
+                            clip.notes.clone(),
                         file_path:
                             clip.file_path.clone(),
                         source_start_beats:
@@ -745,6 +752,7 @@ pub fn build_clip_instances(
                 pre_glue_len: None,
                 pre_glue_color: None,
                 wave: Vec::new(),
+                notes: Vec::new(),
                 file_path: None,
                 source_start_beats: 0.0,
                 source_length_beats: 0.0,
@@ -1176,6 +1184,90 @@ fn push_clip(
                 radius: clip_r,
             },
         );
+    }
+
+    // ============================================================
+    // NOTAS MIDI
+    //
+    // Um clip MIDI com conteúdo desenha uma barra por nota dentro do
+    // corpo. Sem isto o clip era um retângulo chapado: o header opaco e
+    // o divisor de 1px eram as únicas faixas horizontais, e é exatamente
+    // esse o desenho que o arrasto do beat sequencer do Clip Pool
+    // produzia — um pattern sem célula ligada vira `notes: []`.
+    //
+    // A altura usa a faixa PRÓPRIA do clip, com piso de 12 semitons: um
+    // compasso só de bumbo fica embaixo e um só de chimbal fica em
+    // cima, então o desenho muda de forma quando as notas mudam. O
+    // clamp é o que impede o clip de virar um bloco sólido de altura
+    // inteira quando todas as notas são a mesma.
+    //
+    // A largura é a duração real da nota, e o corte em `draw_w` evita
+    // que uma nota que atravessa a borda da janela seja desenhada fora
+    // do clip.
+    // ============================================================
+
+    if clip.is_midi && !clip.notes.is_empty() && clip.len > 0.0 && w > 0.0 {
+        // `w` vem de `clip_rect`, que é `clip.len * px_per_beat` — então
+        // a divisão devolve o zoom exato sem precisar passar px_per_beat
+        // para dentro de push_clip.
+        let px_per_beat = w / clip.len;
+
+        let inner_top = y + header_h + 2.0;
+        let inner_h = (body_h - 4.0).max(0.0);
+
+        let mut p_lo = i32::MAX;
+        let mut p_hi = i32::MIN;
+        for note in clip.notes.iter() {
+            p_lo = p_lo.min(note.pitch);
+            p_hi = p_hi.max(note.pitch);
+        }
+
+        let span = (p_hi - p_lo).max(12) as f32;
+
+        let body_x = x + bw;
+        let body_right = x + draw_w;
+
+        for note in clip.notes.iter() {
+            let nx = (body_x + note.start * px_per_beat).max(body_x);
+
+            if nx >= body_right {
+                continue;
+            }
+
+            // Mínimo de 2px: um passo de 1/32 some de vez se a largura
+            // vier só da duração.
+            let nw = (note.length * px_per_beat)
+                .max(2.0)
+                .min(body_right - nx);
+
+            if nw <= 0.0 {
+                continue;
+            }
+
+            let t = (note.pitch - p_lo) as f32 / span;
+            let ny = inner_top + (1.0 - t) * inner_h;
+
+            let vel = (note.velocity.clamp(0, 127) as f32) / 127.0;
+            let th = (1.8 + 2.2 * vel).min(inner_h.max(1.0));
+
+            instances.push(RectInstance {
+                x: nx,
+                y: (ny - th * 0.5).max(inner_top),
+                w: nw,
+                h: th,
+                color: [
+                    (srgb_to_linear(0.93) * 255.0) as u8,
+                    (srgb_to_linear(0.95) * 255.0) as u8,
+                    (srgb_to_linear(0.99) * 255.0) as u8,
+                    (165.0 + 90.0 * vel) as u8,
+                ],
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 1.0,
+            });
+        }
     }
 
     // ============================================================

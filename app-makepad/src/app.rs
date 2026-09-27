@@ -255,6 +255,7 @@ fn demo_clips() -> Vec<ClipDemo> {
             pre_glue_len: None,
             pre_glue_color: None,
             wave: Vec::new(),
+            notes: Vec::new(),
             file_path: None,
             source_start_beats: beat,
             source_length_beats: len,
