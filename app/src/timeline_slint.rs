@@ -235,7 +235,7 @@ pub fn reconcile_engine_clips_to_project(
             continue;
         }
         let name = clip.name.clone().unwrap_or_default();
-        if let Some(path) = &clip.file_path {
+        let new_id = if let Some(path) = &clip.file_path {
             project.add_clip_with_source(
                 track_id,
                 kind,
@@ -244,9 +244,33 @@ pub fn reconcile_engine_clips_to_project(
                 clip.len,
                 clip.source_start_beats,
                 Some(path.clone()),
-            );
+            )
         } else {
-            project.add_clip(track_id, kind, name, clip.beat, clip.len);
+            project.add_clip(track_id, kind, name, clip.beat, clip.len)
+        };
+        // Preserva a cor do ClipDemo da engine — sem isso, clips duplicados
+        // ou importados de patterns MIDI nascem com cor aleatória (baseada
+        // no id novo, via (id % 19) + 1 em Clip::new).
+        if let Some(id) = new_id {
+            project.set_clip_color(id, clip.color as u8);
+        }
+        // Preserva as notas MIDI — sem isso, clips MIDI duplicados/colados
+        // nascem vazios (o piano roll e o motor não têm notas para tocar).
+        if kind == ClipKind::Midi && !clip.notes.is_empty() {
+            if let Some(id) = new_id {
+                let notes: Vec<daw_midi::Note> = clip
+                    .notes
+                    .iter()
+                    .map(|cn| daw_midi::Note {
+                        id: 0,
+                        pitch: cn.pitch,
+                        start: cn.start,
+                        length: cn.length,
+                        velocity: cn.velocity,
+                    })
+                    .collect();
+                project.set_clip_notes(id, notes);
+            }
         }
     }
 }

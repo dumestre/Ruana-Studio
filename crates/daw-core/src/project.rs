@@ -678,6 +678,9 @@ impl Project {
         clip.fade_in_beats = src.fade_in_beats;
         clip.fade_out_beats = src.fade_out_beats;
         clip.gain_db = src.gain_db;
+        // Preserva as notas MIDI — sem isso, clips MIDI duplicados/colados
+        // nascem vazios (o piano roll e o motor não têm notas para tocar).
+        clip.notes = src.notes.clone();
         self.clips.push(clip.clone());
 
         let event = DocumentEvent::ClipAdded(clip);

@@ -820,17 +820,49 @@ impl ApplicationHandler for Handler {
                 overlay_dispatch(bridge, slint::platform::WindowEvent::PointerExited);
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                let (px, py) = self.state.borrow().last_cursor;
+                let st = self.state.borrow();
+                let (px, py) = st.last_cursor;
+                let scale = st.scale;
+                let (ctrl, alt, shift) = (st.ctrl, st.alt, st.shift);
+                drop(st);
                 let slint_button = match button {
                     winit::event::MouseButton::Left => slint::platform::PointerEventButton::Left,
                     winit::event::MouseButton::Right => slint::platform::PointerEventButton::Right,
                     _ => slint::platform::PointerEventButton::Middle,
                 };
                 let event = match state {
-                    ElementState::Pressed => slint::platform::WindowEvent::PointerPressed {
-                        position: logical_pos(px as f64, py as f64, scale),
-                        button: slint_button,
-                    },
+                    ElementState::Pressed => {
+                        // Shift+clique na timeline (sem Ctrl/Alt) = colar clipboard
+                        // na posição do cursor. No modo hosted, o Slint não recebe
+                        // os modificadores do winit (ModifiersChanged não é roteado
+                        // pra ele), então `on_engine_pointer_down` sempre vê
+                        // `shift=false`. A gente intercepta AQUI, com os modificadores
+                        // reais, e chama o paste direto na engine — o mesmo caminho
+                        // que o `on_engine_pointer_down` usa no modo native.
+                        if shift && !ctrl && !alt && button == winit::event::MouseButton::Left {
+                            let mut b = bridge.borrow_mut();
+                            let engine = &mut b.engine;
+                            // Só cola se o clique estiver dentro da área da timeline
+                            // (abaixo da régua), não dentro de popups/knobs do Slint.
+                            if py >= engine.ruler_px {
+                                let beat = ((px + engine.scroll_x) / engine.px_per_beat.max(0.001)).max(0.0);
+                                let track = ((py - engine.ruler_px + engine.scroll_y)
+                                    / (64.0 * engine.zoom_y.max(0.001)))
+                                    .floor()
+                                    .max(0.0) as usize;
+                                engine.shift_pressed = true;
+                                engine.paste_at_beat(beat, track);
+                                b.dirty = true;
+                                // Não despacha para o Slint também: o paste já
+                                // manipulou o clique, evitando duplo processamento.
+                                return;
+                            }
+                        }
+                        slint::platform::WindowEvent::PointerPressed {
+                            position: logical_pos(px as f64, py as f64, scale),
+                            button: slint_button,
+                        }
+                    }
                     ElementState::Released => slint::platform::WindowEvent::PointerReleased {
                         position: logical_pos(px as f64, py as f64, scale),
                         button: slint_button,

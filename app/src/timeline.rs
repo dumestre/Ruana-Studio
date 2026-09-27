@@ -10,7 +10,7 @@ use crate::MainWindow;
 use crate::importer::{import_audio_file_async, is_audio_path};
 use crate::models::clip_row;
 use crate::waveform::WaveformCache;
-use daw_core::clip::{Clip, ClipKind};
+use daw_core::clip::{Clip, ClipKind, pattern_color};
 use daw_core::project::Project;
 use daw_core::track::TrackKind;
 use slint::ComponentHandle;
@@ -98,6 +98,20 @@ pub fn install(
                     None
                 };
                 let id = proj.add_clip(track_id, kind, name.as_str(), start, len);
+                // MIDI vindo do pool (beat pattern): cor determinística pelo
+                // nome do pattern → sempre a mesma cor para o mesmo padrão.
+                if kind == ClipKind::Midi {
+                    let pattern = proj
+                        .beat_patterns
+                        .patterns
+                        .iter()
+                        .find(|p| p.name == name.as_str());
+                    if pattern.is_some() {
+                        if let Some(id) = id {
+                            proj.set_clip_color(id, pattern_color(name.as_str()));
+                        }
+                    }
+                }
                 if let (Some(id), Some(notes)) = (id, notes) {
                     proj.set_clip_notes(id, notes);
                 }

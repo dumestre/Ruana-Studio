@@ -779,14 +779,26 @@ impl AudioEngine {
                     let Some(buffer) = row.buffer.clone() else {
                         continue;
                     };
-                    // Velocidade 0..127 → fator de ganho linear.
+                    // Velocidade 0..127 → fator de ganho linear (MIDI típico 100/127).
                     let vel = (note.velocity as f32 / 127.0).clamp(0.0, 1.0);
-                    let (rg_l, rg_r) = stereo_gains_bipolar(row.volume, row.pan);
+                    // Volume da row como ganho linear (sem equal-power de pan:
+                    // o pan já foi aplicado por `tg` acima; aplicar de novo
+                    // (stereo_gains_bipolar) corta -6dB no centro, fazendo o
+                    // beat sair bem mais baixo na timeline do que no popup
+                    // — que usa só um pan). A row.pan, se diferente de 0, ajusta
+                    // o L/R como um desvio adicional, não um redirecionamento.
+                    let rg = row.volume * vel;
+                    let (rg_l, rg_r) = if row.pan == 0.0 {
+                        (rg, rg)
+                    } else {
+                        let (rl, rr) = stereo_gains_bipolar(1.0, row.pan);
+                        (rg * rl, rg * rr)
+                    };
                     let delay = (onset - start_frames).max(0.0) as u32;
                     rt.trigger(
                         buffer,
-                        tg_l * rg_l * vel,
-                        tg_r * rg_r * vel,
+                        tg_l * rg_l,
+                        tg_r * rg_r,
                         delay.min(frames as u32),
                     );
                 }

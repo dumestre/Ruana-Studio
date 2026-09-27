@@ -24,6 +24,21 @@ pub fn sample_color(path: &str) -> u8 {
     1 + (hash % 20) as u8
 }
 
+/// Cor determinística para um padrão de bateria (MIDI clip vindo do pool).
+///
+/// Igual ao `sample_color`, mas aplicada ao NOME do pattern: padrões
+/// com o mesmo nome nascem com a mesma cor, estável entre projetos.
+/// Usado pelo drop do Clip Pool na timeline — sem isso, cada instância
+/// do mesmo padrão nasce com cor aleatória (dependia do `id` do clip).
+pub fn pattern_color(name: &str) -> u8 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in name.to_lowercase().bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    1 + (hash % 20) as u8
+}
+
 /// Duas posições em beats são a mesma?
 #[inline]
 pub fn beats_eq(a: f32, b: f32) -> bool {
