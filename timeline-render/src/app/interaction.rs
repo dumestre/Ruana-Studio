@@ -126,7 +126,11 @@ impl App {
     /// Calcula a resolução do grid (em beats) baseada no zoom atual (px_per_beat).
     /// Retorna o tamanho de cada passo do grid em beats (ex: 1.0 = 1 beat, 0.5 = 1/2 beat, 0.25 = 1/4 beat, etc).
     /// Espelha a lógica de renderização do grid em `render.rs`.
-    fn grid_beat_step(&self) -> f32 {
+    ///
+    /// `pub` porque o host publica esse mesmo passo no `TimelineMetrics`
+    /// (Slint): o ghost do ClipPool e o ponto de inserção precisam
+    /// arredondar no MESMO grid que o `drop_preview` desenhou.
+    pub fn grid_beat_step(&self) -> f32 {
         let px_per_bar = self.px_per_beat * 4.0;
         if px_per_bar >= 960.0 {
             1.0 / 16.0

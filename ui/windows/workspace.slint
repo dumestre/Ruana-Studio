@@ -318,11 +318,22 @@ export component Workspace inherits Rectangle {
 
     in-out property <length> timeline-scroll-y <=> timeline.scroll-y;
 
-    out property <length> timeline-px-per-beat:
-        timeline.px-per-beat;
+    // =================================================
+    // ESCALA REAL DA CENA ( dona: Rust )
+    //
+    // `px-per-beat`, `row-height` e `ruler-height` não são mais
+    // constantes do Slint: o Rust escreve aqui, a cada frame, os
+    // valores que a engine wgpu USOU para desenhar (px/beat vivo,
+    // 64*zoom_y de linha, ruler_px). O ghost do ClipPool, o preview
+    // de drop e o ponto de inserção leem daqui, então o card que o
+    // usuário vê e o clip que entra na timeline não podem divergir.
+    // =================================================
 
-    out property <length> timeline-row-height:
-        timeline.row-height;
+    in-out property <length> timeline-px-per-beat <=> timeline.px-per-beat;
+
+    in-out property <length> timeline-row-height <=> timeline.row-height;
+
+    in-out property <length> timeline-ruler-height <=> timeline.ruler-height;
 
     // Tamanho físico do componente Timeline (o frame wgpu do host é
     // composto cobrindo exatamente este retângulo no modo nativo).
@@ -335,9 +346,6 @@ export component Workspace inherits Rectangle {
     // Métricas do motor de zoom/scroll (Rust). O blur de âncora do
     // cursor e o clamp dos targets precisam desses valores ATUAIS.
     in-out property <length> timeline-left-padding <=> timeline.timeline-left-padding;
-
-    out property <length> timeline-ruler-height:
-        timeline.ruler-height;
 
     out property <length> timeline-max-scroll-x:
         timeline.max-scroll-x;
@@ -2027,14 +2035,35 @@ export component Workspace inherits Rectangle {
                     root.drag-active
                     && root.drag-inited;
 
+                // =================================================
+                // POSIÇÃO DO GHOST
+                //
+                // Fora da timeline: o card segue o cursor livremente
+                // (centrado nele, com a inclinação da velocidade).
+                //
+                // Sobre a timeline: o card vira o PRÉVISO DO DROP —
+                // trava no beat e na LINHA onde o clip vai entrar.
+                // Antes ele travava só no X e continuava no Y cru
+                // do cursor, enquanto o clip caía numa linha
+                // calculada com 42px — número que a engine nunca
+                // usou: ela desenha com 64*zoom_y. O usuário via o
+                // card num lugar e o clip entrava em outro — o
+                // "arrastar" não parecia automático porque não dava
+                // para prever onde ia cair.
+                //
+                // `TimelineMetrics` é o que a engine usou no frame
+                // anterior (publicado pelo Rust a cada frame), então
+                // card e `drop_preview` caem no mesmo lugar.
+                // =================================================
+
                 x:
                     root.drag-over-timeline
 
                     ? timeline.absolute-position.x
                         - workspace.absolute-position.x
-                        - timeline.scroll-x
+                        - TimelineMetrics.scroll-x
                         + root.drag-snap-beat
-                            * timeline.px-per-beat
+                            * TimelineMetrics.px-per-beat
 
                     : root.drag-x
                         - workspace.absolute-position.x
@@ -2044,18 +2073,36 @@ export component Workspace inherits Rectangle {
                         ) / 2;
 
                 y:
-                    root.drag-y
-                    - workspace.absolute-position.y
-                    - 19px;
+                    root.drag-over-timeline
+
+                    ? TimelineMetrics.content-top-abs-y
+                        - workspace.absolute-position.y
+                        + TimelineMetrics.scroll-y
+                        + root.drag-drop-track
+                            * TimelineMetrics.row-height
+                        + (
+                            TimelineMetrics.row-height
+                            - 38px
+                        ) / 2
+
+                    : root.drag-y
+                        - workspace.absolute-position.y
+                        - 19px;
+
+                // Inclinação só faz sentido enquanto o card está
+                // sob o cursor. Preso ao grid da timeline ele já
+                // comunica a posição pelo snap; girar um retângulo
+                // que já está travado só embaralha a leitura.
+                transform-rotation:
+                    root.drag-over-timeline
+                        ? 0deg
+                        : root.drag-tilt-display;
 
                 width:
                     root.left-panel-width - 16px;
 
                 height:
                     38px;
-
-                transform-rotation:
-                    root.drag-tilt-display;
 
                 transform-origin:
                     {
@@ -2290,33 +2337,21 @@ export component Workspace inherits Rectangle {
 
             triggered() => {
 
-                TimelineMetrics.timeline-abs-x =
-                    timeline.absolute-position.x;
-
-                TimelineMetrics.content-top-abs-y =
-                    timeline.absolute-position.y
-                    + timeline.ruler-height;
-
-                TimelineMetrics.width =
-                    timeline.width;
-
-                TimelineMetrics.scroll-x =
-                    timeline.scroll-x;
-
-                TimelineMetrics.scroll-y =
-                    timeline.scroll-y;
-
-                TimelineMetrics.px-per-beat =
-                    timeline.px-per-beat;
-
-                TimelineMetrics.ruler-height =
-                    timeline.ruler-height;
-
-                TimelineMetrics.timeline-abs-y =
-                    timeline.absolute-position.y;
-
-                TimelineMetrics.row-height =
-                    timeline.row-height;
+                // =============================================
+                // TimelineMetrics: SÓ o que é layout.
+                //
+                // A escala da cena (px/beat, altura da linha, altura
+                // da régua, scroll, resolução do grid) é publicada
+                // pelo Rust a CADA FRAME no `tick` do host — é a
+                // mesma que a engine wgpu usou para desenhar o
+                // frame anterior. Escrever aqui de novo (a 50ms)
+                // reintroduzia a divergência: o preview da engine
+                // e o ponto de inserção usavam escalas diferentes,
+                // e o ghost chegava atrasado em relação ao cursor.
+                //
+                // `track-count` continua aqui: só muda quando uma
+                // track é criada/apagada, não a cada frame.
+                // =============================================
 
                 TimelineMetrics.track-count =
                     root.track-names.length;

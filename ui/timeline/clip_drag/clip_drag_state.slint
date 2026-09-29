@@ -201,6 +201,18 @@ export global ClipDragState {
 // de mouse, não a cada tick.
 // ------------------------------------------------------------
 
+// DONO: o Rust (host.rs `tick`).
+//
+// Estas métricas descrevem a cena que o wgpu REALMENTE desenhou no
+// último frame (px/beat, altura da linha, altura da régua, scroll,
+// resolução do grid). O `drag-move` do main.slint converte cursor →
+// beat/linha com elas, e o ghost do ClipPool se posiciona com elas.
+//
+// Publicá-las por um Timer de 50ms fazia o preview e o ponto de
+// inserção divergirem: enquanto o Timer não rodava, o drop usava
+// 40px/beat e 42px de linha — números que NUNCA foram os da engine
+// (que desenha com `px_per_beat` vivo e 64*zoom_y de linha). Por
+// isso o `tick` publica aqui a cada frame, sem Timer no meio.
 export global TimelineMetrics {
 
     in-out property <length> timeline-abs-x: 0px;
@@ -213,6 +225,12 @@ export global TimelineMetrics {
 
     in-out property <length> width: 0px;
 
+    // Altura do componente Timeline (régua + conteúdo). O drag só
+    // aceita o clip dentro de `timeline-abs-y + rect-height`; sem
+    // esse limite o "arrastar" aproveitava a área do painel de
+    // baixo e da barra de status, que não é timeline.
+    in-out property <length> rect-height: 0px;
+
     // Altura da régua — quem converte coordenadas de janela →
     // conteúdo a partir do topo DA TIMELINE precisa descontá-la.
     in-out property <length> ruler-height: 0px;
@@ -224,6 +242,13 @@ export global TimelineMetrics {
     in-out property <length> px-per-beat: 40px;
 
     in-out property <length> row-height: 64px;
+
+    // Resolução do grid em BEATS (1.0 = 1 beat, 0.0625 = 1/16),
+    // espelhando `grid_beat_step` da engine. É o passo que o drop
+    // usa para arredondar o beat — sem ele, o Slint arredondava
+    // sempre em 0.5 beat e o preview (engine) em 1 beat: o mesmo
+    // cursor produzia dois alvos diferentes.
+    in-out property <float> snap-beat-step: 1.0;
 
     in-out property <int> track-count: 0;
 

@@ -266,7 +266,14 @@ export component MainWindow inherits Window {
 
     // Métricas do motor de zoom/scroll (Rust): âncora do cursor + clamp.
     in-out property <length> timeline-left-padding <=> workspace.timeline-left-padding;
-    in property <length> timeline-ruler-height: workspace.timeline-ruler-height;
+    in-out property <length> timeline-ruler-height <=> workspace.timeline-ruler-height;
+
+    // Escala REAL da cena wgpu (Rust escreve a cada frame). O Slint
+    // usava 40px/beat e 42px de linha fixos, que nunca foram os
+    // valores com que a engine desenhou — daí o preview e o drop
+    // discordarem. two-way para o Rust ser dono.
+    in-out property <length> timeline-px-per-beat <=> workspace.timeline-px-per-beat;
+    in-out property <length> timeline-row-height <=> workspace.timeline-row-height;
     in property <length> timeline-max-scroll-x: workspace.timeline-max-scroll-x;
     in property <length> timeline-max-scroll-y: workspace.timeline-max-scroll-y;
 
@@ -614,15 +621,24 @@ export component MainWindow inherits Window {
         // PREVIEW DE DROP EM TEMPO REAL
         //
         // Calculado a CADA evento de mouse (antes: Timer de
-        // 16ms). Métricas da timeline vêm do global
-        // TimelineMetrics, publicado pelo workspace.
+        // 16ms). As métricas vêm do global TimelineMetrics,
+        // publicado pelo RUST a cada frame com os valores que a
+        // engine wgpu usou para desenhar (px/beat, 64*zoom_y de
+        // linha, ruler_px, scroll, resolução do grid).
         // =================================================
 
+        // Só a área de CONTEÚDO da timeline aceita o clip: abaixo
+        // da régua e dentro do retângulo do componente. Sem o
+        // limite inferior, soltar sobre o painel de baixo ou
+        // sobre a barra de status "incluía" o clip num lugar
+        // que o usuário não tinha apontado.
         root.drag-over-timeline =
             x >= TimelineMetrics.timeline-abs-x
             && x <= TimelineMetrics.timeline-abs-x
                 + TimelineMetrics.width
-            && y >= TimelineMetrics.content-top-abs-y;
+            && y >= TimelineMetrics.content-top-abs-y
+            && y <= TimelineMetrics.timeline-abs-y
+                + TimelineMetrics.rect-height;
 
         root.drag-over-sampler =
             SamplerMetrics.visible
@@ -633,6 +649,10 @@ export component MainWindow inherits Window {
             && y / 1px <= SamplerMetrics.abs-y
                 + SamplerMetrics.height;
 
+        // Arredonda no MESMO grid da engine (`grid_beat_step`).
+        // Antes o Slint fixava 0.5 beat e a engine 1.0 no zoom
+        // padrão: o mesmo cursor produzia dois alvos diferentes e
+        // o clip entrava fora do bloco que o usuário via.
         root.drag-snap-beat =
             Math.max(
                 0.0,
@@ -644,20 +664,21 @@ export component MainWindow inherits Window {
                                 - TimelineMetrics.timeline-abs-x
                                 + TimelineMetrics.scroll-x
                             )
-                            / 1px
+                                / 1px
                         )
                             / (
                                 TimelineMetrics.px-per-beat / 1px
                             )
-                        * 2.0
-                    ) / 2.0
+                            / TimelineMetrics.snap-beat-step
+                    )
+                        * TimelineMetrics.snap-beat-step
                     : (
                         (
                             x
                             - TimelineMetrics.timeline-abs-x
                             + TimelineMetrics.scroll-x
                         )
-                        / 1px
+                            / 1px
                     )
                         / (
                             TimelineMetrics.px-per-beat / 1px

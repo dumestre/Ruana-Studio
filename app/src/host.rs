@@ -222,6 +222,62 @@ impl EngineBridge {
         let rh = ui.get_timeline_canvas_rect_height() * ls;
         self.engine.set_timeline_rect(rx, ry, rw, rh);
 
+        // =====================================================
+        // ESCALA DA CENA → SLINT (a cada frame, sem Timer)
+        //
+        // A engine é quem desenhou o frame anterior; o `drag-move`
+        // do main.slint e o ghost do ClipPool precisam das MESMAS
+        // medidas para converter cursor → beat/linha. Antes elas
+        // vinham de um Timer de 50ms copiando constantes do Slint
+        // (40px/beat, 42px de linha, 25px de régua) que nunca
+        // foram as da engine (px_per_beat vivo, 64*zoom_y, 28px):
+        // o preview que o usuário via e o ponto onde o clip entrava
+        // discordavam, e o ghost só "acertava" quando o Timer
+        // tinha rodado. Publicar aqui elimina a divergência E o
+        // atraso de 50ms — o card passa a seguir o cursor no mesmo
+        // frame em que o cursor se moveu.
+        //
+        // Tudo em px LÓGICOS (o Slint trabalha em lógico; a engine
+        // em físico).
+        // =====================================================
+        {
+            // Origem: o MESMO retângulo do quad (`rx`/`ry` já incluem o
+            // `left-padding`), para o cursor → beat/linha do Slint cair
+            // em cima do que a engine desenhou, e não numa origem
+            // paralela que Divergiria com o padding.
+            let abs_x = rx / ls;
+            let abs_y = ry / ls;
+            let rect_w = rw / ls;
+            let rect_h = rh / ls;
+
+            // Altura da linha: a engine desenha 64 * zoom_y (físico).
+            let row_h = 64.0 * self.engine.zoom_y.max(0.001) / ls;
+            let ruler_h = self.engine.ruler_px / ls;
+            let ppb = self.engine.px_per_beat / ls;
+
+            // O `px-per-beat`/`row-height`/`ruler-height` do
+            // componente Timeline deixam de ser constantes: o
+            // Rust passa a ser o dono, o que conserta também o
+            // `map-window-coords-to-timeline` (main.slint), que
+            // fazia a mesma conta com os números velhos.
+            ui.set_timeline_px_per_beat(ppb);
+            ui.set_timeline_row_height(row_h);
+            ui.set_timeline_ruler_height(ruler_h);
+
+            let m = <crate::TimelineMetrics as slint::Global<crate::MainWindow>>::get(&ui);
+            m.set_timeline_abs_x(abs_x);
+            m.set_timeline_abs_y(abs_y);
+            m.set_content_top_abs_y(abs_y + ruler_h);
+            m.set_width(rect_w);
+            m.set_rect_height(rect_h);
+            m.set_ruler_height(ruler_h);
+            m.set_px_per_beat(ppb);
+            m.set_row_height(row_h);
+            m.set_scroll_x(self.engine.scroll_x / ls);
+            m.set_scroll_y(self.engine.scroll_y / ls);
+            m.set_snap_beat_step(self.engine.grid_beat_step().max(1e-4));
+        }
+
         // Refresca a rota do play por contexto. O `CursorMoved` já faz
         // isso a cada movimento, mas a popup do beat é ARRASTÁVEL: sem
         // esta passada, mover a janela do beat com o cursor por cima
@@ -358,7 +414,32 @@ impl EngineBridge {
         // qualquer track/região (que a TouchArea com captura não repassa para o
         // engine-input da timeline).
         let file_drag = self.engine.is_dragging_file;
-        let clip_drag = ui.get_drag_active();
+        let mut clip_drag = ui.get_drag_active();
+
+        // =====================================================
+        // DRAG PRESO: o botão já foi solto mas o Slint não viu
+        //
+        // O `drag-finished` do ClipPool só dispara no
+        // `PointerEventKind.up` DA TouchArea que fez o grab. Se o
+        // `up` se perde — soltar fora da janela, Alt+Tab no meio
+        // do arrasto, perder o foco — ninguém volta `drag-active`
+        // para false: o card fica grudado na tela seguindo o
+        // mouse, e o próximo clique é gasto como se fosse o
+        // "soltar" daquele arrasto. É daí que vem a sensação de
+        // que só.funciona se você for rápido.
+        //
+        // O estado real do botão do SO é a única fonte confiável
+        // aqui: se ele já subiu, o arrasto acabou, ponto.
+        // =====================================================
+        if clip_drag && !left_button_is_down() {
+            // Resolve o drop com a posição atual (o `drag-move` do
+            // frame anterior já publishou beat/linha) e desliga o
+            // ghost. `drag-end` limpa `drag-active` e `drag-inited`.
+            ui.invoke_drag_end();
+            clip_drag = false;
+            self.dirty = true;
+        }
+
         if clip_drag || file_drag {
             #[cfg(windows)]
             {
@@ -1031,6 +1112,26 @@ fn forward_key(adapter: &Rc<crate::slint_host::OverlayWindowAdapter>, event: &Ke
 /// Converte posição em px físicos para px lógicos do Slint.
 fn logical_pos(x: f64, y: f64, scale_factor: f32) -> slint::LogicalPosition {
     slint::LogicalPosition::new(x as f32 / scale_factor, y as f32 / scale_factor)
+}
+
+/// O botão esquerdo do mouse ainda está pressionado?
+///
+/// Usado como rede de segurança do arrasto: o `PointerEvent::up`
+/// do Slint pode se perder (soltar fora da janela, Alt+Tab, perda
+/// de foco) e, sem isto, o ghost do ClipPool grudava na tela. Sem
+/// Windows não há como perguntar — aí assumimos "pressionado" e o
+/// comportamento é o de sempre (o `up` resolve).
+fn left_button_is_down() -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+        const VK_LBUTTON: i32 = 0x01;
+        unsafe { GetAsyncKeyState(VK_LBUTTON) as u16 & 0x8000 != 0 }
+    }
+    #[cfg(not(windows))]
+    {
+        true
+    }
 }
 
 /// Mapeia teclas nomeadas do winit para os nomes que o Slint entende.
