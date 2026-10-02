@@ -58,7 +58,13 @@ impl InsertSlot {
 /// Canal do mixer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MixerChannel {
-    /// Ganho linear 0..1 (0.8 ≈ 0 dB no display da UI).
+    /// Ganho linear 0..1.
+    ///
+    /// O unity é 1.0. O fader da UI é posicionado em dB (-60..0), então
+    /// o valor 0.8 aqui corresponde a -1,9 dB e o triângulo abre quase no
+    /// topo mas não nele. Foi por isso que o default passou a ser 1.0:
+    /// uma faixa nova tem de abrir no unity, e não numa posição que
+    /// parece um arrasto de fader pela metade.
     pub volume: f32,
     /// Panorama 0..1 (0.5 = centro).
     pub pan: f32,
@@ -72,7 +78,7 @@ pub struct MixerChannel {
 impl Default for MixerChannel {
     fn default() -> Self {
         Self {
-            volume: 0.8,
+            volume: 1.0,
             pan: 0.5,
             muted: false,
             soloed: false,
@@ -127,7 +133,9 @@ mod tests {
     #[test]
     fn defaults() {
         let ch = MixerChannel::default();
-        assert_eq!(ch.volume, 0.8);
+        // Unity: a UI posiciona o fader em dB, e um default abaixo de
+        // 1.0 abriria a faixa nova quase no topo sem estar nele.
+        assert_eq!(ch.volume, 1.0);
         assert_eq!(ch.pan, 0.5);
         assert!(!ch.muted);
         assert!(!ch.soloed);

@@ -95,6 +95,42 @@ impl AudioBridge {
             handle.preload_path(path);
         }
     }
+
+    /// Banco de medição da engine (pico por canal).
+    ///
+    /// A engine escreve, a UI lê. Ver [`crate::meters`]: aqui é só o
+    /// caminho, a suavização e a escala em dB são do lado da UI.
+    pub fn meters(&self) -> &daw_audio::MeterBank {
+        static SILENT: std::sync::OnceLock<daw_audio::MeterBank> = std::sync::OnceLock::new();
+        match self.handle.as_ref() {
+            Some(handle) => handle.meters(),
+            // Sem dispositivo de áudio não há o que medir, mas o
+            // chamador não pode ter que lidar com `Option` só por isso.
+            None => SILENT.get_or_init(daw_audio::MeterBank::new),
+        }
+    }
+
+    /// Declara quantos canais os medidores devem esperar (trilhas +
+    /// master).
+    pub fn set_meter_channels(&self, channels: usize) {
+        if let Some(handle) = self.handle.as_ref() {
+            handle.set_meter_channels(channels);
+        }
+    }
+
+    /// Apaga o latch de clip de um canal (clique no medidor).
+    pub fn clear_meter_clip(&self, channel: usize) {
+        if let Some(handle) = self.handle.as_ref() {
+            handle.clear_meter_clip(channel);
+        }
+    }
+
+    /// Apaga todos os latches de clip.
+    pub fn clear_meter_clips(&self) {
+        if let Some(handle) = self.handle.as_ref() {
+            handle.clear_meter_clips();
+        }
+    }
 }
 
 /// Liga o timer que consolida os snapshots sujos.

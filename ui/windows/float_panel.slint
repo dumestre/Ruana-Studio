@@ -13,8 +13,11 @@ export component FloatPanel inherits Window {
 
     in-out property <int> tool-tab: 0;
 
+    // Medição real, compartilhada com a janela principal.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
+
     // Estado do mixer (espelhado do core via Rust)
-    in-out property <[float]> mixer-meters: [0, 0, 0, 0, 0];
     in-out property <[bool]> mixer-mutes: [false, false, false, false, false];
     in-out property <[bool]> mixer-soloes: [false, false, false, false, false];
     in-out property <[bool]> mixer-arms: [false, false, false, false, false];
@@ -32,6 +35,7 @@ export component FloatPanel inherits Window {
 
     callback close-panel();
     callback mixer-param-changed(int, string, float);
+    callback channel-clip-cleared(int);
     callback mixer-insert-added(int);
     callback mixer-insert-removed(int, int);
     callback mixer-insert-toggled(int, int);
@@ -116,7 +120,8 @@ export component FloatPanel inherits Window {
                 height: 100%;
                 visible: root.tool-tab == 0;
                 show-header: false;
-                meters <=> root.mixer-meters;
+                meters <=> root.channel-meters;
+                clipped <=> root.channel-clipped;
                 mutes <=> root.mixer-mutes;
                 soloes <=> root.mixer-soloes;
                 arms <=> root.mixer-arms;
@@ -127,6 +132,7 @@ export component FloatPanel inherits Window {
                 insert-enabled <=> root.mixer-insert-enabled;
                 max-inserts <=> root.mixer-max-inserts;
                 channel-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+                channel-clip-cleared(ch) => { root.channel-clip-cleared(ch); }
                 channel-insert-added(ch) => { root.mixer-insert-added(ch); }
                 channel-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
                 channel-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }

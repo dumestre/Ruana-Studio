@@ -6,6 +6,8 @@ use daw_core::project::Project;
 use slint::Model;
 use std::rc::Rc;
 
+use crate::meters::linear_to_fader_pos;
+
 /// Máximo de slots de insert renderizados por canal no mixer.
 pub const MAX_INSERTS: usize = 8;
 
@@ -18,18 +20,22 @@ pub fn mixer_state(project: &Project) -> (Vec<bool>, Vec<bool>, Vec<bool>, Vec<f
     let mut volumes = Vec::with_capacity(n);
     let mut pans = Vec::with_capacity(n);
 
+    // O core guarda o volume como GANHO LINEAR; o modelo da UI guarda a
+    // POSIÇÃO do fader na curva dB. A conversão é feita aqui, num lugar
+    // só, para o triângulo e o medidor compartilhados lerem a mesma
+    // curva que o usuário arrasta.
     for t in &project.tracks {
         mutes.push(t.mixer.muted);
         soloes.push(t.mixer.soloed);
         arms.push(t.mixer.armed);
-        volumes.push(t.mixer.volume);
+        volumes.push(linear_to_fader_pos(t.mixer.volume));
         pans.push(t.mixer.pan);
     }
     // Master
     mutes.push(project.master_mixer.muted);
     soloes.push(project.master_mixer.soloed);
     arms.push(project.master_mixer.armed);
-    volumes.push(project.master_mixer.volume);
+    volumes.push(linear_to_fader_pos(project.master_mixer.volume));
     pans.push(project.master_mixer.pan);
 
     (mutes, soloes, arms, volumes, pans)
@@ -91,6 +97,13 @@ impl MixerModels {
     }
 
     /// Atualiza apenas o canal informado (propaga para todas as janelas).
+    ///
+    /// `value` no `Volume` é a POSIÇÃO do fader (0..1 na curva dB), e
+    /// não o ganho linear: é o que o triângulo produz ao ser arrastado e
+    /// o que o modelo `volumes` precisa conter para o LCD ler a curva
+    /// certa. A conversão para linear acontece em
+    /// [`crate::meters::fader_pos_to_linear`] no momento de gravar no
+    /// core. Os outros parâmetros não têm curva.
     pub fn update_channel(&self, channel: usize, param: MixerParam, value: f32) {
         match param {
             MixerParam::Volume => self.volumes.set_row_data(channel, value.clamp(0.0, 1.0)),

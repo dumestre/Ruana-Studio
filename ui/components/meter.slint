@@ -1,41 +1,212 @@
 import { Theme } from "../theme.slint";
 import { StereoMeter } from "meter_reuse.slint";
 
+// ============================================================
+// METER — estilo Ableton Live
+//
+// Layout horizontal: triângulo (fader) à esquerda, meter no centro,
+// e níveis de dB à direita. O triângulo é o indicador de volume,
+// posicionado verticalmente conforme o volume. O meter mostra os
+// níveis de áudio L/R.
+// ============================================================
+
 export component Meter inherits Rectangle {
+    // ========================================================
+    // MEDIÇÃO (normalizada em dB, ver `app/src/meters.rs`)
+    // ========================================================
+
     in property <float> left-level: 0.0;
     in property <float> right-level: 0.0;
     in property <float> left-peak: 0.0;
     in property <float> right-peak: 0.0;
     in property <bool> left-clipped: false;
     in property <bool> right-clipped: false;
-    in property <bool> active: false;
 
-    // Fader cap position properties
-    in property <bool> show-fader-cap: true;
-    in property <float> left-cap-position: 0.0;
-    in property <float> right-cap-position: 0.0;
+    in property <int> channel-index: 0;
 
-    width: 13px;
+    // ========================================================
+    // VOLUME
+    // ========================================================
+
+    in-out property <float> volume: 0.8;
+    in property <bool> show-volume-control: true;
+
+    // ========================================================
+    // CALLBACKS
+    // ========================================================
+
+    callback volume-changed(float);
+    callback clip-cleared(int);
+
+    // ========================================================
+    // GEOMETRIA
+    // ========================================================
+
+    private property <length> clip-light-height: 6px;
+    private property <length> triangle-width: 14px;
+    private property <length> meter-width: 13px;
+    private property <length> db-width: 16px;
+    private property <length> gap: 2px;
+
+    // Nível de dB para display (pico mais alto dos dois canais)
+    private property <float> db-level: Math.max(root.left-level, root.right-level);
+
+    width: show-volume-control ? 45px : 13px;
     min-height: 40px;
 
-    StereoMeter {
-        width: 100%;
-        height: 100%;
+    // ========================================================
+    // TRIÂNGULO DE VOLUME (esquerda)
+    // ========================================================
 
-        left-level: root.left-level;
-        right-level: root.right-level;
-        left-peak: root.left-peak;
-        right-peak: root.right-peak;
-        left-clipped: root.left-clipped;
-        right-clipped: root.right-clipped;
+    if root.show-volume-control : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.triangle-width;
+        height: parent.height;
 
-        meter-width: 5px;
-        channel-gap: 2px;
-        meter-background: Theme.surface-high;
-        meter-border: Theme.border;
+        background: transparent;
 
-        show-fader-cap: root.show-fader-cap;
-        left-cap-position: root.left-cap-position;
-        right-cap-position: root.right-cap-position;
+        border-radius: 3px;
+
+        touch := TouchArea {
+            width: 100%;
+            height: 100%;
+
+            moved => {
+                root.volume = Math.max(0.0, Math.min(1.0,
+                    1.0 - (self.mouse-y / self.height)));
+                root.volume-changed(root.volume);
+            }
+
+            clicked => {
+                root.volume = Math.max(0.0, Math.min(1.0,
+                    1.0 - (self.mouse-y / self.height)));
+                root.volume-changed(root.volume);
+            }
+        }
+
+        Image {
+            source: @image-url("../icons/play.svg");
+
+            width: 12px;
+            height: 12px;
+
+            // Centralizado verticalmente na posição do volume
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) * (1.0 - root.volume);
+
+            horizontal-tiling: ImageTiling.none;
+            image-fit: ImageFit.contain;
+            image-rendering: ImageRendering.smooth;
+
+            colorize: touch.pressed
+                ? Theme.accent
+                : (root.volume > 0.999
+                    ? Theme.text-dim
+                    : Theme.text-primary.transparentize(0.15));
+
+            z: 10;
+        }
+    }
+
+    // ========================================================
+    // METER (centro)
+    // ========================================================
+
+    Rectangle {
+        x: root.show-volume-control ? root.triangle-width + root.gap : 0px;
+        y: 0px;
+        width: root.meter-width;
+        height: parent.height;
+
+        StereoMeter {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+
+            left-level: root.left-level;
+            right-level: root.right-level;
+            left-peak: root.left-peak;
+            right-peak: root.right-peak;
+            left-clipped: root.left-clipped;
+            right-clipped: root.right-clipped;
+
+            meter-width: 5px;
+            channel-gap: 2px;
+            meter-background: Theme.surface-high;
+            meter-border: Theme.border;
+        }
+
+        // ================================================
+        // LUZ DE CLIP (topo do meter)
+        // ================================================
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: root.clip-light-height;
+
+            background: Theme.base;
+            border-radius: 2px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            clip := TouchArea {
+                width: 100%;
+                height: 100%;
+
+                clicked => {
+                    root.clip-cleared(root.channel-index);
+                }
+            }
+
+            Rectangle {
+                x: 1px;
+                y: 1px;
+                width: 5px;
+                height: parent.height - 2px;
+                background: root.left-clipped ? #FF3030 : Theme.surface-high;
+            }
+
+            Rectangle {
+                x: 7px;
+                y: 1px;
+                width: 5px;
+                height: parent.height - 2px;
+                background: root.right-clipped ? #FF3030 : Theme.surface-high;
+            }
+
+            z: 20;
+        }
+    }
+
+    // ========================================================
+    // NÍVEIS DE dB (direita)
+    // ========================================================
+
+    if root.show-volume-control : Rectangle {
+        x: root.triangle-width + root.gap + root.meter-width + root.gap;
+        y: 0px;
+        width: root.db-width;
+        height: parent.height;
+
+        Text {
+            text: root.db-level > 0.001
+                ? (root.db-level * 100).to-fixed(0)
+                : "-inf";
+
+            color: Theme.text-dim;
+            font-size: 7px;
+            font-weight: 600;
+
+            horizontal-alignment: center;
+            vertical-alignment: bottom;
+
+            width: 100%;
+            height: 100%;
+            y: parent.height - 12px;
+        }
     }
 }

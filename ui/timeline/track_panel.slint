@@ -12,12 +12,19 @@ export component TrackPanel inherits Rectangle {
 
     in property <[int]> track-colors: [];
 
-    in property <[float]> track-meter-left-levels: [];
-    in property <[float]> track-meter-right-levels: [];
-    in property <[float]> track-meter-left-peaks: [];
-    in property <[float]> track-meter-right-peaks: [];
-    in property <[bool]> track-meter-left-clipped: [];
-    in property <[bool]> track-meter-right-clipped: [];
+    in property <[float]> track-volumes: [];
+
+    // M/S/R compartilhados com o mixer (mesmos arrays, mesmo estado).
+    in-out property <[bool]> track-mutes: [];
+    in-out property <[bool]> track-soloes: [];
+    in-out property <[bool]> track-arms: [];
+
+    // Medição real, achatada em 4 floats por canal
+    // ([L, R, pico L, pico R]) e 2 bools ([clip L, clip R]).
+    // Os MESMOS modelos que alimentam o mixer: o header da faixa e a
+    // tira do mixer mostram o mesmo canal com a mesma curva.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
 
     in-out property <int> selected-track: 0;
 
@@ -45,6 +52,20 @@ export component TrackPanel inherits Rectangle {
     callback add-track-requested(string);
 
     callback recolor-requested(int, int);
+
+    // Volume arrastado no triângulo do medidor (posição 0..1 na curva
+    // dB). Repassado do cabeçalho até o Rust, que converte para ganho
+    // linear e publica no core.
+    callback track-volume-changed(int, float);
+
+    // M/S/R do cabeçalho da faixa. Antes isto não ia a lugar nenhum —
+    // o botão desenhava o estado mas o core nunca era avisado.
+    callback track-mute-clicked(int, float);
+    callback track-solo-clicked(int, float);
+    callback track-record-clicked(int, float);
+
+    // Clique na luz de clip de um canal.
+    callback channel-clip-cleared(int);
 
     // Zoom vertical (Alt+roda) vindo das rows do header.
     callback zoom-y-scrolled(float);
@@ -89,18 +110,23 @@ export component TrackPanel inherits Rectangle {
         track-colors:
             root.track-colors;
 
-        track-meter-left-levels:
-            root.track-meter-left-levels;
-        track-meter-right-levels:
-            root.track-meter-right-levels;
-        track-meter-left-peaks:
-            root.track-meter-left-peaks;
-        track-meter-right-peaks:
-            root.track-meter-right-peaks;
-        track-meter-left-clipped:
-            root.track-meter-left-clipped;
-        track-meter-right-clipped:
-            root.track-meter-right-clipped;
+        channel-meters <=>
+            root.channel-meters;
+
+        channel-clipped <=>
+            root.channel-clipped;
+
+        track-volumes:
+            root.track-volumes;
+
+        track-mutes <=>
+            root.track-mutes;
+
+        track-soloes <=>
+            root.track-soloes;
+
+        track-arms <=>
+            root.track-arms;
 
         selected-track:
             root.selected-track;
@@ -136,6 +162,50 @@ export component TrackPanel inherits Rectangle {
             root.recolor-requested(
                 track,
                 color
+            );
+        }
+
+
+        track-volume-changed(track, pos) => {
+
+            root.track-volume-changed(
+                track,
+                pos
+            );
+        }
+
+
+        track-mute-clicked(track, on) => {
+
+            root.track-mute-clicked(
+                track,
+                on
+            );
+        }
+
+
+        track-solo-clicked(track, on) => {
+
+            root.track-solo-clicked(
+                track,
+                on
+            );
+        }
+
+
+        track-record-clicked(track, on) => {
+
+            root.track-record-clicked(
+                track,
+                on
+            );
+        }
+
+
+        channel-clip-cleared(channel) => {
+
+            root.channel-clip-cleared(
+                channel
             );
         }
 

@@ -35,6 +35,7 @@ mod host;
 mod icon;
 mod importer;
 mod interaction;
+mod meters;
 #[macro_use]
 mod mixer;
 mod models;
@@ -63,6 +64,7 @@ use crate::cursors::{
 use crate::cursors::set_cursor_window_handle;
 use crate::audio_bridge::AudioBridge;
 use crate::mixer::MixerModels;
+use crate::meters::MeterPump;
 use crate::models::{bars_for_end_beat, bind_document_events, initial_bind};
 use crate::waveform::WaveformCache;
 use daw_core::mixer::MixerParam;
@@ -362,15 +364,22 @@ pub fn setup(
         Rc::new(RefCell::new(MixerModels::from_project(&project.borrow())));
     apply_mixer_models!(ui, &mixer_models.borrow());
 
-    // Meters: modelo compartilhado + estado de decay (smoothing no Rust).
-    let meter_model: Rc<slint::VecModel<f32>> =
-        Rc::new(slint::VecModel::from(vec![
-            0.0;
-            project.borrow().tracks.len() + 1
-        ]));
-    ui.set_mixer_meters(meter_model.clone().into());
-    let meter_state: Rc<RefCell<Vec<f32>>> =
-        Rc::new(RefCell::new(vec![0.0; project.borrow().tracks.len() + 1]));
+    // Meters: um único par de modelos para o mixer E o track panel, mais
+    // o estado de suavização (ataque/decaimento/peak-hold). O bombeamento
+    // é feito por `playback::install` a partir do pico que a engine
+    // publica — não há mais VU simulado.
+    let meter_pump: Rc<RefCell<MeterPump>> = Rc::new(RefCell::new(MeterPump::new(
+        project.borrow().tracks.len() + 1,
+    )));
+    audio.set_meter_channels(project.borrow().tracks.len() + 1);
+    {
+        // Os `Rc<VecModel>` são clonado para dentro da janela e o pump
+        // fica com os originais: os dois lados escrevem/lêem o MESMO
+        // modelo, então resize e repintura andam juntos.
+        let pump = meter_pump.borrow();
+        ui.set_channel_meters(pump.models().values.clone().into());
+        ui.set_channel_clipped(pump.models().clipped.clone().into());
+    }
 
     // Piano roll da janela principal (estado por janela).
     // O editor da janela principal é VINCULADO ao clip MIDI ativo: abrir um
@@ -533,7 +542,6 @@ pub fn setup(
         ui,
         project.clone(),
         mixer_models.clone(),
-        meter_model.clone(),
         audio.clone(),
     );
 
@@ -580,13 +588,31 @@ pub fn setup(
         let mixer_models = mixer_models.clone();
         let audio = audio.clone();
         ui.on_mixer_param_changed(move |channel, param, value| {
-            let Some(param) = MixerParam::from_str(param.as_str()) else {
-                return;
-            };
-            let channel = channel as usize;
-            project.borrow_mut().set_mixer_param(channel, param, value);
-            mixer_models.borrow().update_channel(channel, param, value);
-            audio.mark_dirty();
+            apply_channel_param(&project, &mixer_models, &audio, channel, param, value);
+        });
+    }
+
+    // Parâmetros do CABEÇALHO da faixa → core.
+    //
+    // Antes estes botões não tinham destino: o M acendia na tela e a
+    // faixa continuava tocando. Agora passam pelo mesmo
+    // `apply_channel_param` do mixer, então as duas telas não podem
+    // divergir — mudar o M no mixer move o botão do cabeçalho e vice
+    // versa, porque as duas leem o mesmo modelo.
+    {
+        let project = project.clone();
+        let mixer_models = mixer_models.clone();
+        let audio = audio.clone();
+        ui.on_track_param_changed(move |channel, param, value| {
+            apply_channel_param(&project, &mixer_models, &audio, channel, param, value);
+        });
+    }
+
+    // Clique na luz de clip (mixer, cabeçalho da faixa e flutuantes).
+    {
+        let audio = audio.clone();
+        ui.on_channel_clip_cleared(move |channel| {
+            audio.clear_meter_clip(channel.max(0) as usize);
         });
     }
 
@@ -658,8 +684,7 @@ pub fn setup(
         &ui.as_weak(),
         transport.clone(),
         project.clone(),
-        meter_model.clone(),
-        meter_state.clone(),
+        meter_pump.clone(),
         audio.clone(),
     );
 
@@ -851,4 +876,47 @@ pub fn setup(
             dropped,
         }
     }
+}
+
+/// Aplica um parâmetro de canal vindo da UI no core e nos modelos.
+///
+/// O mixer e o cabeçalho da faixa chamam esta mesma função. Ter as duas
+/// rotas separadas foi como o M do cabeçalho passou a desenhar um estado
+/// que o core não tinha: o botão era local à `TrackHeaderRow` e nada
+/// confirmava a mudança.
+///
+/// `value` no volume é a POSIÇÃO do fader (0..1 na curva dB), convertida
+/// aqui para o ganho linear que o core e a engine consomem. Sem esta
+/// conversão o volume arrastado viraria ganho linear direto, e o fader
+/// responderia de forma não-linear — quase todo o curso preso perto do
+/// fundo.
+fn apply_channel_param(
+    project: &Rc<RefCell<Project>>,
+    mixer_models: &Rc<RefCell<MixerModels>>,
+    audio: &AudioBridge,
+    channel: i32,
+    param: slint::SharedString,
+    value: f32,
+) {
+    let Some(param) = MixerParam::from_str(param.as_str()) else {
+        return;
+    };
+    if channel < 0 {
+        return;
+    }
+    let channel = channel as usize;
+    let core_value = match param {
+        MixerParam::Volume => crate::meters::fader_pos_to_linear(value),
+        _ => value,
+    };
+    if !project
+        .borrow_mut()
+        .set_mixer_param(channel, param, core_value)
+    {
+        return;
+    }
+    // O modelo guarda a posição, não o ganho: quem lê é o triângulo e o
+    // LCD, e os dois falam em posição.
+    mixer_models.borrow().update_channel(channel, param, value);
+    audio.mark_dirty();
 }

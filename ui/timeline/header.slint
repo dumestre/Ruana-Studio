@@ -15,12 +15,65 @@ export component TimelineHeader inherits Rectangle {
 
     in property <[int]> track-colors: [];
 
-    in property <[float]> track-meter-left-levels: [];
-    in property <[float]> track-meter-right-levels: [];
-    in property <[float]> track-meter-left-peaks: [];
-    in property <[float]> track-meter-right-peaks: [];
-    in property <[bool]> track-meter-left-clipped: [];
-    in property <[bool]> track-meter-right-clipped: [];
+    in property <[float]> track-volumes: [];
+
+    // M/S/R dos mesmos arrays que o mixer usa. Vinculados ao estado do
+    // core, não a um `bool` local da row: com estado local, dar mute no
+    // mixer atualizava só o mixer e o cabeçalho continuava mostrando a
+    // faixa como audível — dois "verdades" para o mesmo canal.
+    in-out property <[bool]> track-mutes: [];
+    in-out property <[bool]> track-soloes: [];
+    in-out property <[bool]> track-arms: [];
+
+    // Medição real (4 floats por canal) e clip (2 bools por canal),
+    // compartilhada com o mixer.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
+
+    // Leitura com guarda: o comprimento do modelo é publicado pelo
+    // `MeterPump` num tick, e a reordenação de faixas acontece entre
+    // ticks. Indexar direto nesse intervalo mostraria o canal vizinho
+    // no lugar do errado.
+    function meter-at(track: int, slot: int) -> float {
+        let idx = track * 4 + slot;
+        return idx >= 0 && idx < root.channel-meters.length
+            ? root.channel-meters[idx]
+            : 0.0;
+    }
+
+    function clip-at(track: int, side: int) -> bool {
+        let idx = track * 2 + side;
+        return idx >= 0 && idx < root.channel-clipped.length
+            ? root.channel-clipped[idx]
+            : false;
+    }
+
+    function volume-at(track: int) -> float {
+        return track >= 0 && track < root.track-volumes.length
+            ? root.track-volumes[track]
+            : 0.8;
+    }
+
+    // Mesmas guardas da medição: o número de canais é publicado pelo
+    // Rust e muda entre ticks, então indexar direto leria a faixa
+    // vizinha.
+    function mute-at(track: int) -> bool {
+        return track >= 0 && track < root.track-mutes.length
+            ? root.track-mutes[track]
+            : false;
+    }
+
+    function solo-at(track: int) -> bool {
+        return track >= 0 && track < root.track-soloes.length
+            ? root.track-soloes[track]
+            : false;
+    }
+
+    function arm-at(track: int) -> bool {
+        return track >= 0 && track < root.track-arms.length
+            ? root.track-arms[track]
+            : false;
+    }
 
     in property <int> selected-track: 0;
 
@@ -40,6 +93,17 @@ export component TimelineHeader inherits Rectangle {
     callback add-track-requested(string);
 
     callback recolor-requested(int, int);
+
+    // Volume (posição 0..1 na curva dB) arrastado no triângulo.
+    callback track-volume-changed(int, float);
+
+    // M/S/R — agora com destino real no core.
+    callback track-mute-clicked(int, float);
+    callback track-solo-clicked(int, float);
+    callback track-record-clicked(int, float);
+
+    // Clique na luz de clip.
+    callback channel-clip-cleared(int);
 
     // Zoom vertical (Alt+roda) repassado pelas rows.
     callback zoom-y-scrolled(float);
@@ -290,12 +354,29 @@ export component TimelineHeader inherits Rectangle {
                     // METER
                     // -------------------------------------
 
-                    left-level: i < root.track-meter-left-levels.length ? root.track-meter-left-levels[i] : 0.0;
-                    right-level: i < root.track-meter-right-levels.length ? root.track-meter-right-levels[i] : 0.0;
-                    left-peak: i < root.track-meter-left-peaks.length ? root.track-meter-left-peaks[i] : 0.0;
-                    right-peak: i < root.track-meter-right-peaks.length ? root.track-meter-right-peaks[i] : 0.0;
-                    left-clipped: i < root.track-meter-left-clipped.length ? root.track-meter-left-clipped[i] : false;
-                    right-clipped: i < root.track-meter-right-clipped.length ? root.track-meter-right-clipped[i] : false;
+                    left-level: root.meter-at(i, 0);
+                    right-level: root.meter-at(i, 1);
+                    left-peak: root.meter-at(i, 2);
+                    right-peak: root.meter-at(i, 3);
+                    left-clipped: root.clip-at(i, 0);
+                    right-clipped: root.clip-at(i, 1);
+
+                    // O fader é o MESMO componente do mixer, então o
+                    // volume também vem do mesmo lugar. Aqui ainda
+                    // entra pelo array de volumes, e não por uma
+                    // propriedade da row, para não haver duas cópias
+                    // do valor.
+                    volume: root.volume-at(i);
+
+                    // -------------------------------------
+                    // M / S / R (estado vindo do core)
+                    // -------------------------------------
+
+                    muted: root.mute-at(i);
+
+                    solo: root.solo-at(i);
+
+                    record-armed: root.arm-at(i);
 
                     // -------------------------------------
                     // SELEÇÃO
@@ -316,6 +397,26 @@ export component TimelineHeader inherits Rectangle {
                     // Repassa o zoom vertical calculado na row.
                     zoom-y-scrolled(new-zoom-y) => {
                         root.zoom-y-scrolled(new-zoom-y);
+                    }
+
+                    volume-changed(index, pos) => {
+                        root.track-volume-changed(index, pos);
+                    }
+
+                    mute-clicked(index, on) => {
+                        root.track-mute-clicked(index, on);
+                    }
+
+                    solo-clicked(index, on) => {
+                        root.track-solo-clicked(index, on);
+                    }
+
+                    record-clicked(index, on) => {
+                        root.track-record-clicked(index, on);
+                    }
+
+                    clip-cleared(index) => {
+                        root.channel-clip-cleared(index);
                     }
                 }
         }

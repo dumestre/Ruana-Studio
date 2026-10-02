@@ -27,7 +27,7 @@ pub fn install(
     ui: &MainWindow,
     project: Rc<RefCell<Project>>,
     mixer_models: Rc<RefCell<MixerModels>>,
-    meter_model: Rc<slint::VecModel<f32>>,
+    meter_models: Rc<crate::meters::MeterModels>,
     audio: crate::audio_bridge::AudioBridge,
 ) -> FloatHandles {
     // Slots das janelas flutuantes, um por tool (0=Mixer, 1=Sampler, 2=Piano Roll).
@@ -110,7 +110,8 @@ pub fn install(
         let sync_floated = sync_floated.clone();
         // Clone para o float toggle sem consumir os originais
         let mixer_models_for_float = mixer_models.clone();
-        let meter_model_for_float = meter_model.clone();
+        let meter_values_for_float = meter_models.values.clone();
+        let meter_clipped_for_float = meter_models.clipped.clone();
         let audio_for_float = audio.clone();
         ui.on_float_toggle(move |tab| {
             let _ui = match ui_weak.upgrade() {
@@ -143,9 +144,11 @@ pub fn install(
                 Err(_) => return,
             };
             p.set_tool_tab(tab);
-            // Meters compartilhados: o timer atualiza um único modelo
-            // e todas as janelas recebem o mesmo sinal.
-            p.set_mixer_meters(meter_model_for_float.clone().into());
+            // Meters compartilhados: o bombeamento escreve nos mesmos
+            // `Rc<VecModel>` das outras janelas, então a barra do mixer
+            // flutuante e a da timeline não podem divergir.
+            p.set_channel_meters(meter_values_for_float.clone().into());
+            p.set_channel_clipped(meter_clipped_for_float.clone().into());
 
             // Piano roll próprio da janela flutuante.
             // Janelas flutuantes são voltadas ao uso em múltiplas telas:
@@ -191,10 +194,26 @@ pub fn install(
                     let Some(param) = MixerParam::from_str(param.as_str()) else {
                         return;
                     };
-                    let channel = channel as usize;
-                    project.borrow_mut().set_mixer_param(channel, param, value);
-                    mixer_models.borrow().update_channel(channel, param, value);
-                    audio.mark_dirty();
+                    let channel = channel.max(0) as usize;
+                    let core_value = match param {
+                        MixerParam::Volume => crate::meters::fader_pos_to_linear(value),
+                        _ => value,
+                    };
+                    if project
+                        .borrow_mut()
+                        .set_mixer_param(channel, param, core_value)
+                    {
+                        mixer_models.borrow().update_channel(channel, param, value);
+                        audio.mark_dirty();
+                    }
+                });
+            }
+
+            // Luz de clip na flutuante → apaga o latch daquele canal.
+            {
+                let audio = audio_for_float.clone();
+                p.on_channel_clip_cleared(move |channel| {
+                    audio.clear_meter_clip(channel.max(0) as usize);
                 });
             }
 
@@ -372,11 +391,15 @@ pub fn install(
 /// entrega os mesmos [`FloatHandles`] que os módulos esperam, mas sem criar
 /// janelas — `apply_mixer_state` espelha no painel principal e
 /// `fit_float_mixer_windows` é no-op.
+///
+/// Os medidores NÃO precisam de nada aqui: os `Rc<VecModel>` são
+/// publicados uma vez na janela principal e o `MeterPump` os redimensiona
+/// in-place quando o número de trilhas muda, então a timeline enxerga a
+/// mudança de comprimento sem re-publicar.
 pub fn install_no_floats(
     ui: &MainWindow,
     project: Rc<RefCell<Project>>,
     mixer_models: Rc<RefCell<MixerModels>>,
-    _meter_model: Rc<slint::VecModel<f32>>,
     _audio: crate::audio_bridge::AudioBridge,
 ) -> FloatHandles {
     // Nenhum float: todos os slots fechados para sempre.

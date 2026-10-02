@@ -1,9 +1,9 @@
 import { Theme } from "../theme.slint";
 import { Button } from "../components/button.slint";
 import { PanKnob } from "../components/knob.slint";
-import { Fader } from "../components/fader.slint";
 import { Meter } from "../components/meter.slint";
 import { InsertSlot } from "insert_slot.slint";
+import { AudioScale } from "../components/audio_scale.slint";
 
 export component MixerChannel inherits Rectangle {
 
@@ -30,7 +30,16 @@ export component MixerChannel inherits Rectangle {
     in-out property <float> volume: 0.8;
     
     in property <float> pan: 0.5;
-    in property <float> level: 0.0;
+
+    // Medição real, em dB normalizado (0..1). Quem popula é o
+    // `MeterPump` a partir do pico que a engine publica — não existe
+    // mais VU simulado.
+    in property <float> left-level: 0.0;
+    in property <float> right-level: 0.0;
+    in property <float> left-peak: 0.0;
+    in property <float> right-peak: 0.0;
+    in property <bool> left-clipped: false;
+    in property <bool> right-clipped: false;
 
     // ==========================================
     // INSERTS
@@ -51,6 +60,9 @@ export component MixerChannel inherits Rectangle {
     callback insert-remove(int);
     callback insert-toggle(int);
 
+    // Clique na luz de clip: apaga o latch daquele canal.
+    callback clear-clip(int);
+
     // ==========================================
     // DISPLAY
     // ==========================================
@@ -62,8 +74,17 @@ export component MixerChannel inherits Rectangle {
                 ? "R" + ((root.pan - 0.5) * 100).to-fixed(0)
                 : "C";
 
+    // O LCD passa a ler a curva oficial em vez de repetir a fórmula
+    // `-60 + pos*60` aqui. As duas versões divergiram uma vez e o
+    // medidor passou a discordar do número ao lado.
+    //
+    // O fundo é silêncio DE VERDADE (ver `AudioScale.fader-pos-to-
+    // linear`), então "-60.0 dB" mentiria ali: o ganho é zero. O piso
+    // da escala é onde a barra para de descer, não onde a faixa cala.
     property <string> vol-display:
-        (root.volume * 60 - 60).to-fixed(1) + " dB";
+        root.volume <= 0.0
+            ? "-inf dB"
+            : AudioScale.fader-pos-to-db(root.volume).to-fixed(1) + " dB";
 
     // ==========================================
     // CHANNEL
@@ -316,73 +337,33 @@ export component MixerChannel inherits Rectangle {
 
             vertical-stretch: 1;
 
-            // Layout horizontal unindo apenas Play e Meter (garante o 1px de distância)
-            HorizontalLayout {
-                spacing: 1px; // Exatamente 1px de distância
-                
-                alignment: LayoutAlignment.center;
+            // O medidor e o fader são o MESMO componente agora: o
+            // triângulo vive sobre a própria barra. Tira exatamente a
+            // duplicação que fazia o número do LCD e o desenho do
+            // controle discordarem.
+            Meter {
+                horizontal-stretch: 0;
                 vertical-stretch: 1;
 
-                // ==================================
-                // DRAGGABLE FADER (PLAY ICON)
-                // ==================================
-                Rectangle {
-                    width: 15px; 
-                    horizontal-stretch: 0;
-                    vertical-stretch: 1;
+                // Sem isto a luz de clip devolveria o índice padrão (0)
+                // e o clique no canal 5 apagaria o latch do canal 0.
+                channel-index: root.channel-index;
 
-                    touch := TouchArea {
-                        width: 100%;
-                        height: 100%;
+                left-level: root.left-level;
+                right-level: root.right-level;
+                left-peak: root.left-peak;
+                right-peak: root.right-peak;
+                left-clipped: root.left-clipped;
+                right-clipped: root.right-clipped;
 
-                        moved => {
-                            let v = Math.max(0.0, Math.min(1.0, 1.0 - (self.mouse-y / self.height)));
-                            
-                            // Atualiza visualmente na mesma hora
-                            root.volume = v;
-                            
-                            // Emite o evento
-                            root.param-changed(
-                                root.channel-index,
-                                "volume",
-                                v
-                            );
-                        }
-                    }
+                volume <=> root.volume;
 
-                    Image {
-                        source: @image-url("../icons/play.svg");
-                        
-                        width: 15px;
-                        height: 15px;
-                        
-                        // Fica aceso ao arrastar
-                        colorize: touch.pressed ? Theme.accent : Theme.text-dim;
-
-                        // Alinha totalmente à direita para encostar no Meter
-                        x: parent.width - self.width;
-                        
-                        // Calcula o Y mantendo o ícone dentro das bordas (sem cortar em cima ou embaixo)
-                        y: (parent.height - self.height) * (1.0 - root.volume);
-                    }
+                volume-changed(v) => {
+                    root.param-changed(root.channel-index, "volume", v);
                 }
 
-                // ==================================
-                // LEVEL METER (StereoMeter)
-                // ==================================
-                Meter {
-                    width: 13px;
-
-                    left-level: root.level;
-                    right-level: root.level;
-                    left-peak: root.level;
-                    right-peak: root.level;
-                    active: root.level > 0.05;
-                    show-fader-cap: true;
-                    left-cap-position: root.level;
-                    right-cap-position: root.level;
-
-                    vertical-stretch: 1;
+                clip-cleared(ch) => {
+                    root.clear-clip(ch);
                 }
             }
 

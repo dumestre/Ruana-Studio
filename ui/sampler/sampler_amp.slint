@@ -19,7 +19,7 @@ import { SamplerCard, SamplerKnob, SamplerToggle } from "sampler_widgets.slint";
 
 export component SamplerAmp inherits Rectangle {
 
-    in-out property <float> volume: 0.75;
+    in-out property <float> volume: 1.0;
     in-out property <float> pan: 0.5;
     in-out property <float> stereo-width: 1.0;
     in-out property <float> phase: 0.0;
@@ -52,7 +52,10 @@ export component SamplerAmp inherits Rectangle {
             SamplerKnob {
                 label: "VOL";
                 value: root.volume;
-                default-value: 0.75;
+                // 1.0 é unity de verdade na curva do projeto
+                // (`SamplerStyle.pos-to-db`). O 0.75 herdado do cap
+                // antigo significava -7,5 dB.
+                default-value: 1.0;
                 enabled: !root.muted;
                 compact: root.compact;
                 accent: SamplerStyle.sec-amp;

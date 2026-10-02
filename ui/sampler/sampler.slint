@@ -89,7 +89,8 @@ export component Sampler inherits Rectangle {
     // AMP
     // ============================================================
 
-    in-out property <float> volume: 0.75;
+    // Unity na curva de volume do projeto (ver `SamplerStyle.pos-to-db`).
+    in-out property <float> volume: 1.0;
     in-out property <float> pan: 0.5;
     in-out property <float> stereo-width: 1.0;
     in-out property <float> phase: 0.0;

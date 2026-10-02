@@ -1,7 +1,14 @@
 import { Theme } from "../theme.slint";
 
 // ============================================================
-// STEREO METER - alinhado no centro: [ L | div | R ]
+// STEREO METER — somente a medição
+//
+// Duas barras finas com divisor central, pico e luz de clip.
+//
+// NÃO tem fader. O controle de volume mora em `meter.slint`, que
+// encapsula este componente. A separação existe para o caso do canal
+// estreito do mixer, onde o medidor precisa caber em 13px e o
+// triangle não cabe ao lado sem roubar largura do pan knob.
 // ============================================================
 
 export component StereoMeter inherits Rectangle {
@@ -21,11 +28,6 @@ export component StereoMeter inherits Rectangle {
     in property <color> meter-background: #111111;
     in property <color> meter-border: transparent;
 
-    // Fader cap (play icon) properties
-    in property <bool> show-fader-cap: true;
-    in property <float> left-cap-position: 0.0;   // 0.0 = bottom, 1.0 = top
-    in property <float> right-cap-position: 0.0;  // 0.0 = bottom, 1.0 = top
-
     // ========================================================
     // DIMENSÕES
     // ========================================================
@@ -39,7 +41,13 @@ export component StereoMeter inherits Rectangle {
     background: transparent;
     border-radius: 15px;
 
-    pure function level-clamped(value: float) -> float {
+    // Os níveis já chegam normalizados em dB (ver `app/src/meters.rs`).
+    // Este clamp é só rede de segurança: um NaN vindo do core viraria
+    // geometria inválida e o Slint deixaria a barra inteira sumir.
+    function level-clamped(value: float) -> float {
+        if value != value {
+            return 0.0;
+        }
         return Math.max(0.0, Math.min(1.0, value));
     }
 
@@ -62,51 +70,53 @@ export component StereoMeter inherits Rectangle {
             width: root.channel-width;
             height: root.meter-height;
             background: root.meter-background;
-            border-bottom-left-radius: 0px;
             border-width: 1px;
             border-color: root.meter-border;
             border-radius: 6px;
             clip: true;
 
-            // Máscara do Nível (Cresce de baixo para cima)
+            // A barra cresce de baixo para cima. O truque é cobrir a
+            // parte de cima com a COR DO FUNDO do canal, deixando o
+            // gradiente visível só da altura do sinal para baixo.
+            //
+            // Dimensionar o gradiente direto (altura = nível) arredaria
+            // as pontas junto com o canal e a barra ficaria com as bordas
+            // tortas; e um retângulo "mascarador" SEM `background` não
+            // mascara nada — ele some e o gradiente aparece inteiro,
+            // com a barra travada no topo para sempre.
             Rectangle {
-                x: 1px;
-                y: parent.height - self.height - 1px;
-                width: parent.width - 2px;
-                height: root.level-clamped(root.left-level) * (parent.height - 2px);
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                background: @linear-gradient(
+                    180deg,
+                    #FF3B30 0%, #FF3B30 10%,
+                    #FFCC00 10%, #FFCC00 25%,
+                    #00C853 25%, #00C853 100%);
                 clip: true;
 
-                // Barra de Cor Estática (Fixada no fundo)
                 Rectangle {
                     x: 0px;
-                    y: parent.height - (root.meter-height - 2px);
+                    y: 0px;
                     width: parent.width;
-                    height: root.meter-height - 2px;
-                    background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
+                    height: parent.height
+                        * (1.0 - root.level-clamped(root.left-level));
+                    background: root.meter-background;
                 }
             }
 
-            // Peak Indicator
+            // Pico: linha fina que fica para trás do nível, mostrando
+            // o máximo recente mesmo depois da barra ter decaído.
             Rectangle {
-                x: 1px;
-                y: parent.height - (root.level-clamped(root.left-peak) * (parent.height - 2px)) - 1px;
-                width: parent.width - 2px;
+                x: 0px;
+                y: parent.height - (root.level-clamped(root.left-peak) * parent.height) - 1px;
+                width: parent.width;
                 height: 2px;
                 background: root.left-clipped ? #FF3030 : #FFFFFF;
+                // Também some no silêncio: um pixel branco no fundo
+                // parece uma leitura travada em -inf.
                 visible: root.left-peak > 0.001;
-            }
-
-            // Fader Cap (Play Icon) - CANAL L
-            if root.show-fader-cap : Image {
-                width: 30px;
-                height: 22px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height * (1.0 - root.left-cap-position)) - (self.height / 2);
-                source: @image-url("../icons/fader.png");
-                horizontal-tiling: ImageTiling.none;
-                image-fit: ImageFit.contain;
-                image-rendering: ImageRendering.smooth;
-                z: 10;
             }
         }
 
@@ -127,50 +137,41 @@ export component StereoMeter inherits Rectangle {
             height: root.meter-height;
             background: root.meter-background;
             border-width: 1px;
-            border-bottom-right-radius: 0px;
             border-color: root.meter-border;
             border-radius: 6px;
             clip: true;
 
-            // Máscara do Nível (Cresce de baixo para cima)
+            // Mesmo esquema do canal esquerdo: gradiente cheio por
+            // baixo, fundo por cima até a altura do sinal.
             Rectangle {
-                x: 1px;
-                y: parent.height - self.height - 1px;
-                width: parent.width - 2px;
-                height: root.level-clamped(root.right-level) * (parent.height - 2px);
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                background: @linear-gradient(
+                    180deg,
+                    #FF3B30 0%, #FF3B30 10%,
+                    #FFCC00 10%, #FFCC00 25%,
+                    #00C853 25%, #00C853 100%);
                 clip: true;
 
-                // Barra de Cor Estática (Fixada no fundo)
                 Rectangle {
                     x: 0px;
-                    y: parent.height - (root.meter-height - 2px);
+                    y: 0px;
                     width: parent.width;
-                    height: root.meter-height - 2px;
-                    background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
+                    height: parent.height
+                        * (1.0 - root.level-clamped(root.right-level));
+                    background: root.meter-background;
                 }
             }
 
-            // Peak Indicator
             Rectangle {
-                x: 1px;
-                y: parent.height - (root.level-clamped(root.right-peak) * (parent.height - 2px)) - 1px;
-                width: parent.width - 2px;
+                x: 0px;
+                y: parent.height - (root.level-clamped(root.right-peak) * parent.height) - 1px;
+                width: parent.width;
                 height: 2px;
                 background: root.right-clipped ? #FF3030 : #FFFFFF;
                 visible: root.right-peak > 0.001;
-            }
-
-            // Fader Cap (Play Icon) - CANAL R
-            if root.show-fader-cap : Image {
-                width: 30px;
-                height: 22px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height * (1.0 - root.right-cap-position)) - (self.height / 2);
-                source: @image-url("../icons/fader.png");
-                horizontal-tiling: ImageTiling.none;
-                image-fit: ImageFit.contain;
-                image-rendering: ImageRendering.smooth;
-                z: 10;
             }
         }
     }

@@ -140,13 +140,6 @@ export component Workspace inherits Rectangle {
         0
     ];
 
-    in-out property <[float]> track-meter-left-levels: [];
-    in-out property <[float]> track-meter-right-levels: [];
-    in-out property <[float]> track-meter-left-peaks: [];
-    in-out property <[float]> track-meter-right-peaks: [];
-    in-out property <[bool]> track-meter-left-clipped: [];
-    in-out property <[bool]> track-meter-right-clipped: [];
-
     in-out property <[ClipData]> clips: [
         {
             id: 0,
@@ -219,8 +212,9 @@ export component Workspace inherits Rectangle {
     // MIXER
     // ========================================================
 
-    in-out property <[float]> mixer-meters:
-        [0, 0, 0, 0, 0];
+    // Medição real compartilhada com o cabeçalho das faixas.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
 
     in-out property <[bool]> mixer-mutes:
         [false, false, false, false, false];
@@ -473,6 +467,14 @@ export component Workspace inherits Rectangle {
     callback scroll-input(float, float, bool, bool, bool, float, float);
 
     callback mixer-param-changed(int, string, float);
+
+    // Ações vindas do cabeçalho da faixa. O M/S/R do header usava para
+    // desenhar o estado e parar aí; agora chegam ao core pela MESMA
+    // rota do mixer, o que garante que as duas telas não divergem.
+    callback track-param-changed(int, string, float);
+
+    // Apaga o latch de clip de um canal.
+    callback channel-clip-cleared(int);
 
     callback mixer-insert-added(int);
 
@@ -1093,18 +1095,32 @@ export component Workspace inherits Rectangle {
                             track-colors:
                                 root.track-colors;
 
-                            track-meter-left-levels:
-                                root.track-meter-left-levels;
-                            track-meter-right-levels:
-                                root.track-meter-right-levels;
-                            track-meter-left-peaks:
-                                root.track-meter-left-peaks;
-                            track-meter-right-peaks:
-                                root.track-meter-right-peaks;
-                            track-meter-left-clipped:
-                                root.track-meter-left-clipped;
-                            track-meter-right-clipped:
-                                root.track-meter-right-clipped;
+                            channel-meters <=>
+                                root.channel-meters;
+
+                            channel-clipped <=>
+                                root.channel-clipped;
+
+                            // O header lê o volume do MESMO array do
+                            // mixer. Ler de outro lugar foi como a
+                            // timeline e o mixer passaram a mostrar
+                            // volumes diferentes para a mesma faixa.
+                            track-volumes:
+                                root.mixer-volumes;
+
+                            // M/S/R dos MESMOS arrays do mixer. Se o
+                            // cabeçalho guardasse o estado por conta
+                            // própria, dar mute no mixer deixaria o
+                            // cabeçalho asserting que a faixa ainda
+                            // está audível.
+                            track-mutes <=>
+                                root.mixer-mutes;
+
+                            track-soloes <=>
+                                root.mixer-soloes;
+
+                            track-arms <=>
+                                root.mixer-arms;
 
                             zoom-y:
                                 root.zoom-y-level;
@@ -1135,6 +1151,53 @@ export component Workspace inherits Rectangle {
                             // Alt+roda sobre a track panel faz zoom
                             // vertical, propagando pelo zoom-y-level
                             // (sincroniza timeline + ZoomBarVertical).
+                            // Volume/M/S/R do cabeçalho passam pelo
+                            // MESMO caminho do mixer. O nome da
+                            // propriedade não importa aqui: quem
+                            // converte posição em ganho é o Rust.
+                            track-volume-changed(track, pos) => {
+                                root.track-param-changed(
+                                    track,
+                                    "volume",
+                                    pos
+                                );
+                            }
+
+                            // `muted`/`soloed`/`arm` — os mesmos
+                            // nomes que `MixerParam::from_str`
+                            // reconhece. O valor vem do botão, que já
+                            // calculou o estado novo; aqui não há
+                            // dedução de toggle.
+                            track-mute-clicked(track, on) => {
+                                root.track-param-changed(
+                                    track,
+                                    "muted",
+                                    on
+                                );
+                            }
+
+                            track-solo-clicked(track, on) => {
+                                root.track-param-changed(
+                                    track,
+                                    "soloed",
+                                    on
+                                );
+                            }
+
+                            track-record-clicked(track, on) => {
+                                root.track-param-changed(
+                                    track,
+                                    "arm",
+                                    on
+                                );
+                            }
+
+                            channel-clip-cleared(channel) => {
+                                root.channel-clip-cleared(
+                                    channel
+                                );
+                            }
+
                             zoom-y-scrolled(new-zoom-y) => {
                                 root.zoom-y-level =
                                     new-zoom-y;
@@ -1699,7 +1762,10 @@ export component Workspace inherits Rectangle {
                         }
 
                         meters <=>
-                            root.mixer-meters;
+                            root.channel-meters;
+
+                        clipped <=>
+                            root.channel-clipped;
 
                         mutes <=>
                             root.mixer-mutes;
@@ -1770,6 +1836,14 @@ export component Workspace inherits Rectangle {
                             root.mixer-insert-toggled(
                                 ch,
                                 slot
+                            );
+                        }
+
+
+                        channel-clip-cleared(ch) => {
+
+                            root.channel-clip-cleared(
+                                ch
                             );
                         }
                     }

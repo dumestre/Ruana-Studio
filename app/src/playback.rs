@@ -23,10 +23,11 @@ use std::time::{Duration, Instant};
 
 use daw_core::project::Project;
 use daw_core::transport::{PlayMode, Transport};
-use slint::{ComponentHandle, Global, Model};
+use slint::{ComponentHandle, Global};
 
 use crate::MainWindow;
 use crate::audio_bridge::AudioBridge;
+use crate::meters::MeterPump;
 
 /// Log de runtime (playback) — só ativo com `RUANA_LOG` definido.
 fn rt_log(msg: &str) {
@@ -34,14 +35,6 @@ fn rt_log(msg: &str) {
     if *ON.get_or_init(|| std::env::var("RUANA_LOG").is_ok()) {
         eprintln!("{}", msg);
     }
-}
-
-/// PRNG determinístico dos meters (VU fake).
-fn next_random(seed: &mut u64) -> f32 {
-    *seed = seed
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
-    (*seed >> 33) as f32 / u32::MAX as f32
 }
 
 /// Clock visual do playhead: âncora `(segundos, Instant)`.
@@ -106,8 +99,7 @@ pub fn install(
     ui: &slint::Weak<MainWindow>,
     transport: Arc<Mutex<Transport>>,
     project: Rc<RefCell<Project>>,
-    meter_model: Rc<slint::VecModel<f32>>,
-    meter_state: Rc<RefCell<Vec<f32>>>,
+    meter_pump: Rc<RefCell<MeterPump>>,
     audio: AudioBridge,
 ) {
     // Handlers precisam da instância forte; o Weak é só para os
@@ -122,6 +114,33 @@ pub fn install(
     // `is_playing`: não basta saber que "toca", é preciso saber O QUÊ,
     // porque trocar de modo é uma troca de conteúdo, não um no-op.
     let mode_now: Rc<Cell<Option<PlayMode>>> = Rc::new(Cell::new(None));
+
+    // ---- METERS ------------------------------------------------------
+    //
+    // BOMBEAMENTO PERMANENTE, fora do play/stop. O medidor mede o que
+    // o DISPOSITIVO está entregando, não o que o transporte mandou:
+    // pré-escuta de sample, soltar um clip e o crossfade de loop soam
+    // com o play parado, e um VU congelado nesses momentos mente. Como
+    // o envelope decai sozinho, parar o transporte só faz a barra
+    // cair — que é exatamente o que se vê.
+    {
+        let project = project.clone();
+        let meter_pump = meter_pump.clone();
+        let audio = audio.clone();
+        meter_timer.borrow().start(
+            slint::TimerMode::Repeated,
+            crate::meters::PUMP_INTERVAL,
+            move || {
+                // `try_borrow`: se o documento estiver emprestado no
+                // meio de uma mutação, este tick é pulado em vez de
+                // entrar em pânico.
+                let Ok(proj) = project.try_borrow() else { return };
+                meter_pump
+                    .borrow_mut()
+                    .tick(&audio, proj.tracks.len() + 1);
+            },
+        );
+    }
 
     // ---- PLAY / STOP ------------------------------------------------
     //
@@ -148,14 +167,8 @@ pub fn install(
             let project = project.clone();
             let visual_clock = visual_clock.clone();
             let playhead_timer = playhead_timer.clone();
-            let meter_timer = meter_timer.clone();
             let audio = audio.clone();
-            let meter_model = meter_model.clone();
-            let meter_state = meter_state.clone();
             let mode_now = mode_now.clone();
-            // PRNG dos meters (VU fake). Vive dentro do closure porque
-            // o timer de metro é (re)criado a cada play.
-            let mut seed: u64 = 0x1234_5678_9abc_def0;
 
             Rc::new(move |mode: PlayMode| {
                 mode_now.set(Some(mode));
@@ -163,6 +176,11 @@ pub fn install(
                 // O snapshot precisa estar publicado ANTES do primeiro
                 // buffer tocar, senão o começo sai em silêncio.
                 audio.flush_now(&project.borrow());
+
+                // Luz de clip zerada a cada play: o latch lembra que a
+                // ÚLTIMA vez estourou, e sem isso o vermelho de uma
+                // tomada antiga continuaria aceso na sessão seguinte.
+                audio.clear_meter_clips();
 
                 {
                     let mut t = transport.lock().unwrap();
@@ -265,31 +283,6 @@ pub fn install(
                         },
                     );
                 }
-                // Meter timer: VU fake com smoothing no Rust (attack
-                // instantâneo, decay lento). SEM animação Slint — a
-                // animação contínua satura o renderer e trava o playhead.
-                let project = project.clone();
-                let meter_model = meter_model.clone();
-                let meter_state = meter_state.clone();
-                meter_timer.borrow().start(
-                    slint::TimerMode::Repeated,
-                    Duration::from_millis(80),
-                    move || {
-                        let count = project.borrow().tracks.len() + 1;
-                        let mut levels = meter_state.borrow_mut();
-                        if levels.len() != count {
-                            levels.resize(count, 0.0);
-                        }
-                        for level in levels.iter_mut() {
-                            let r = next_random(&mut seed);
-                            let new = r * r;
-                            *level = if new > *level { new } else { *level * 0.82 };
-                        }
-                        for (i, &v) in levels.iter().enumerate() {
-                            meter_model.set_row_data(i, v);
-                        }
-                    },
-                );
             })
         };
 
@@ -302,7 +295,6 @@ pub fn install(
             let transport = transport.clone();
             let visual_clock = visual_clock.clone();
             let playhead_timer = playhead_timer.clone();
-            let meter_timer = meter_timer.clone();
             let mode_now = mode_now.clone();
 
             Rc::new(move || {
@@ -321,7 +313,6 @@ pub fn install(
                     t.position_ticks = t.play_start_ticks;
                     (t.position_ticks, t.position_seconds())
                 };
-                meter_timer.borrow().stop();
                 // O dispositivo de áudio NÃO fecha aqui: continua
                 // aberto para a pré-escuta de samples com o transporte
                 // parado. Ver `audio_bridge`.

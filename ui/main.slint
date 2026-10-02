@@ -230,8 +230,16 @@ export component MainWindow inherits Window {
     // set_clips().
     // =====================================================
 
-    in-out property <[float]> mixer-meters:
-        [0, 0, 0, 0, 0];
+    // Medição real, um par de modelos compartilhado entre o mixer e
+    // o cabeçalho das faixas.
+    //
+    // `channel-meters` é achatado em 4 floats por canal
+    // ([L, R, pico L, pico R]) e `channel-clipped` em 2 bools
+    // ([clip L, clip R]). São estes mesmos modelos que o `MeterPump`
+    // escreve — foi a duplicação dos arrays por tela que permitia o
+    // medidor do mixer e o da timeline discordarem do mesmo áudio.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
 
     // Estado do mixer (projetado do core)
     in-out property <[bool]> mixer-mutes:
@@ -434,6 +442,14 @@ export component MainWindow inherits Window {
     callback redo-requested;
 
     callback mixer-param-changed(int, string, float);
+
+    // Parâmetro de canal originado no CABEÇALHO da faixa (volume
+    // arrastado, M, S, record). O Rust trata pelo mesmo caminho do
+    // mixer, e é isso que impede os dois botões de discordarem.
+    callback track-param-changed(int, string, float);
+
+    // Clique na luz de clip de um canal.
+    callback channel-clip-cleared(int);
 
     callback mixer-insert-added(int);
     callback mixer-insert-removed(int, int);
@@ -948,7 +964,8 @@ export component MainWindow inherits Window {
             drag-color <=> root.drag-color;
             drag-is-midi <=> root.drag-is-midi;
             drag-tilt-display <=> root.drag-tilt-display;
-            mixer-meters <=> root.mixer-meters;
+            channel-meters <=> root.channel-meters;
+            channel-clipped <=> root.channel-clipped;
             mixer-mutes <=> root.mixer-mutes;
             mixer-soloes <=> root.mixer-soloes;
             mixer-arms <=> root.mixer-arms;
@@ -990,6 +1007,8 @@ export component MainWindow inherits Window {
             pencil-created(beat, track, len) => { root.pencil-created(beat, track, len); }
             marquee-select(b0, b1, t0, t1) => { root.marquee-select(b0, b1, t0, t1); }
             mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+            track-param-changed(ch, param, val) => { root.track-param-changed(ch, param, val); }
+            channel-clip-cleared(ch) => { root.channel-clip-cleared(ch); }
             mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
             mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
             mixer-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }

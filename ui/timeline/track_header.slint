@@ -1,7 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Button } from "../components/button.slint";
-import { TimelineVolume } from "../components/timeline_fader.slint";
-import { StereoMeter } from "../components/meter_reuse.slint";
+import { Meter } from "../components/meter.slint";
 
 // ================================================================
 // TRACK HEADER ROW
@@ -35,6 +34,11 @@ in property <float> right-peak: 0.0;
 in property <bool> left-clipped: false;
 in property <bool> right-clipped: false;
 
+// Volume da faixa. `in-out` porque o triângulo do medidor move o
+// valor na hora do arrasto; o Rust reescreve aqui quando o estado
+// muda por fora (ex.: autoteste de loudness).
+in-out property <float> volume: 0.8;
+
 // Acumulador do zoom vertical (Alt+roda): mesmo esquema de passos
 // fixos da timeline -> fluidez uniforme p/ roda e touchpad.
 private property <float> zoom-accum: 0.0;
@@ -44,10 +48,26 @@ private property <float> zoom-accum: 0.0;
 // ============================================================
 
 callback clicked(int);
-callback mute-clicked(int);
-callback solo-clicked(int);
-callback record-clicked(int);
 callback automation-clicked(int);
+
+// M/S/R já com o valor NOVO (1.0 = ligado, 0.0 = desligado).
+//
+// O botão calcula o valor antes de emitir, em vez de mandar um
+// "toggle" e deixar o Rust deduzir. Sem o valor, um clique duplo
+// rápido podia ser lido com o estado antigo e não desligar nada — o
+// botão voltaria ao visual anterior e o core ficaria mudo.
+callback mute-clicked(int, float);
+callback solo-clicked(int, float);
+callback record-clicked(int, float);
+
+// Volume arrastado no triângulo do medidor. O valor é a POSIÇÃO
+// (0..1) na curva dB; quem converte para ganho linear é o Rust,
+// usando a mesma curva de `app/src/meters.rs` — o Slint não deve
+// inventar um ganho próprio.
+callback volume-changed(int, float);
+
+// Clique na luz de clip.
+callback clip-cleared(int);
 
 // Zoom vertical (Alt+roda) — novo valor de zoom-y já calculado.
 callback zoom-y-scrolled(float);
@@ -312,26 +332,7 @@ HorizontalLayout {
     }
 
     // ========================================================
-    // VOLUME
-    // ========================================================
-
-    Rectangle {
-        horizontal-stretch: 1;
-        height: parent.height;
-
-        TimelineVolume {
-            width: parent.width;
-            height: 32px;
-
-            value: 0.75;
-
-            changed(value) => {
-                // Futuramente ligar ao motor de áudio:
-                // root.volume-changed(root.track-index, value);
-            }
-        }
-    }
-
+    // CONTROLES
     // ========================================================
     // CONTROLES
     // ========================================================
@@ -369,7 +370,10 @@ HorizontalLayout {
 
             clicked => {
                 root.muted = !root.muted;
-                root.mute-clicked(root.track-index);
+                root.mute-clicked(
+                    root.track-index,
+                    root.muted ? 1.0 : 0.0
+                );
             }
         }
 
@@ -401,7 +405,10 @@ HorizontalLayout {
 
             clicked => {
                 root.solo = !root.solo;
-                root.solo-clicked(root.track-index);
+                root.solo-clicked(
+                    root.track-index,
+                    root.solo ? 1.0 : 0.0
+                );
             }
         }
 
@@ -440,9 +447,7 @@ HorizontalLayout {
                 );
             }
         }
-    }
-
-    // ========================================================
+         // ========================================================
     // RECORD
     // ========================================================
 
@@ -476,24 +481,31 @@ HorizontalLayout {
                 !root.record-armed;
 
             root.record-clicked(
-                root.track-index
+                root.track-index,
+                root.record-armed ? 1.0 : 0.0
             );
         }
     }
+    }
+
+   
 }
 
 // ============================================================
-// METER STEREO - colado na borda direita
+// MEDIDOR + VOLUME - colado na borda direita
+//
+// Mesmo componente do mixer, com a mesma curva. O header da faixa é
+// estreito, então aqui o medidor fica mais fino; o que não muda é a
+// relação entre a altura do triângulo e a leitura da barra — se as
+// duas telas dessincronizassem, o usuário teria duas respostas
+// diferentes para "quanto volume está nessa faixa".
 // ============================================================
 
-meter := StereoMeter {
+Meter {
     x: parent.width - self.width;
     y: 2px;
-    width: 12px;
+    width: 22px;
     height: parent.height - 4px;
-
-    channel-gap: 1px;
-    meter-background: Theme.base;
 
     left-level: root.left-level;
     right-level: root.right-level;
@@ -501,5 +513,19 @@ meter := StereoMeter {
     right-peak: root.right-peak;
     left-clipped: root.left-clipped;
     right-clipped: root.right-clipped;
+
+    // O medidor precisa saber a que canal pertence, senão devolve o
+    // índice padrão e o clique na luz apagaria o latch de outro canal.
+    channel-index: root.track-index;
+
+    volume <=> root.volume;
+
+    volume-changed(v) => {
+        root.volume-changed(root.track-index, v);
+    }
+
+    clip-cleared(ch) => {
+        root.clip-cleared(ch);
+    }
 }
 }

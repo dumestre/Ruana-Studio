@@ -22,6 +22,7 @@
 // ============================================================
 
 import { Theme } from "../theme.slint";
+import { AudioScale } from "../components/audio_scale.slint";
 
 export global SamplerStyle {
 
@@ -146,21 +147,20 @@ export global SamplerStyle {
         return Math.round(hz) + " Hz";
     }
 
-    // Volume: mesma curva do fader do projeto
-    // (ui/components/fader.slint) — 0 = -60 dB, 0.75 = 0 dB,
-    // 1.0 = +6 dB. Por isso o default 0.75 é unity de verdade.
+    // Volume: MESMA curva do fader e do medidor do projeto
+    // (`ui/components/audio_scale.slint`) — 0 = silêncio, 1 = unity,
+    // com -60 dB no piso. Antes isto repetia a fórmula antiga do cap
+    // (0.75 = unity, +6 dB de headroom) que não existe mais: o knob
+    // ficava em 0.75 e o texto dizia "0.0 dB" para um ganho que valia
+    // -7,5 dB. Delegar para a curva oficial é o que impede a divergência
+    // de voltar; o "+6 dB" da curva velha também faria a luz de clip
+    // parecer parte do medidor.
     public pure function pos-to-db(v: float) -> float {
-        if v <= 0.0 {
-            return -60;
-        }
-        if v <= 0.75 {
-            return -60 + (v / 0.75) * 60;
-        }
-        return ((v - 0.75) / 0.25) * 6;
+        return AudioScale.fader-pos-to-db(v);
     }
 
     public pure function fmt-db(v: float) -> string {
-        if v <= 0.001 {
+        if v <= 0.0 {
             return "-inf dB";
         }
         let db = pos-to-db(v);

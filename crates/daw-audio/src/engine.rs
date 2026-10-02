@@ -34,6 +34,7 @@ use std::sync::{Arc, Mutex};
 use daw_core::{PlayMode, Transport};
 
 use crate::backend::{AudioConfig, AudioError, CpalBackend};
+use crate::meter::{CLIP_L, CLIP_R, MeterBank};
 use crate::{AudioBufferKind, buffer::BufferCache};
 use crate::mixer::{
     limit_stereo, mix_stereo_source, soft_clip, stereo_gains, stereo_gains_bipolar, track_is_active,
@@ -140,12 +141,36 @@ struct BeatSlot {
 ///
 /// Construído na thread principal e publicado inteiro. A thread RT
 /// nunca percorre o `Project` (que não é `Send`) nem decodifica nada.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct ProjectSnapshot {
     tracks: Vec<TrackSlot>,
     clips: Vec<ClipSlot>,
     midi_clips: Vec<MidiClipSlot>,
     beat: BeatSlot,
+    /// Ganho linear do bus master, ANTES do limitador.
+    master_volume: f32,
+    /// Master mutado: zera o bus sem mexer no fader.
+    master_muted: bool,
+}
+
+/// O snapshot vazio precisa masterizar em unidade, não em silêncio.
+///
+/// `ProjectSnapshot::default()` é o que a RT usa antes do primeiro
+/// `sync_project` — e o programa abre o dispositivo no startup, muito
+/// antes do primeiro flush. Um default derivativo zeraria o master e o
+/// primeiro play sairia mudo, que é o tipo de bug que só aparece com
+/// o projeto já carregado.
+impl Default for ProjectSnapshot {
+    fn default() -> Self {
+        Self {
+            tracks: Vec::new(),
+            clips: Vec::new(),
+            midi_clips: Vec::new(),
+            beat: BeatSlot::default(),
+            master_volume: 1.0,
+            master_muted: false,
+        }
+    }
 }
 
 impl ProjectSnapshot {
@@ -239,6 +264,8 @@ impl ProjectSnapshot {
             clips,
             midi_clips,
             beat,
+            master_volume: project.master_mixer.volume,
+            master_muted: project.master_mixer.muted,
         }
     }
 }
@@ -296,6 +323,8 @@ pub struct EngineHandle {
     preview: Arc<Mutex<Vec<PreviewCmd>>>,
     cache: Arc<Mutex<BufferCache>>,
     sample_rate: u32,
+    /// Ponte de medição: a RT escreve, a UI lê. Ver [`crate::meter`].
+    meters: Arc<MeterBank>,
 }
 
 impl EngineHandle {
@@ -354,6 +383,31 @@ impl EngineHandle {
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
+
+    /// Banco de medição para os VU meters.
+    ///
+    /// Só a engine escreve; a UI lê. O `&MeterBank` sai daqui justamente
+    /// para não haver `Arc` a mais para manter vivo: quem já tem um
+    /// `EngineHandle` tem o banco.
+    pub fn meters(&self) -> &MeterBank {
+        &self.meters
+    }
+
+    /// Declara quantos canais os medidores devem esperar (trilhas +
+    /// master). Ao crescer, os canais novos começam em silêncio.
+    pub fn set_meter_channels(&self, channels: usize) {
+        self.meters.set_channel_count(channels);
+    }
+
+    /// Apaga o latch de clip de um canal (clique no medidor).
+    pub fn clear_meter_clip(&self, channel: usize) {
+        self.meters.clear_clip(channel);
+    }
+
+    /// Apaga todos os latches de clip.
+    pub fn clear_meter_clips(&self) {
+        self.meters.clear_all_clips();
+    }
 }
 
 // ============================================================
@@ -397,8 +451,15 @@ struct RtState {
     /// Comprimento do crossfade ativo (pode ser menor que
     /// `LOOP_XFADE_FRAMES` se o loop for curto ou a cauda incompleta).
     xfade_len: usize,
+    /// Pico do buffer por canal (L, R), em [`crate::meter::FLOATS_PER_CHANNEL`]
+    /// entradas por canal. Zera a cada callback — o que a UI mostra é o
+    /// pico DESTE buffer, e segurar o máximo histórico aqui faria o
+    /// medidor nunca cair.
+    meter_peaks: Vec<f32>,
+    /// Bitmask de clip por canal, acumulado no buffer. Vive na RT (que
+    /// decide o que estourou) e é publicado a cada callback.
+    meter_clips: Vec<u32>,
 }
-
 impl RtState {
     fn new() -> Self {
         Self {
@@ -416,6 +477,34 @@ impl RtState {
             loop_tail: VecDeque::with_capacity(LOOP_XFADE_FRAMES),
             xfade_remaining: 0,
             xfade_len: 0,
+            // Capacidade fixa, igual ao `MeterBank`. Alocar aqui, no
+            // construtor, é o que mantém `prepare_meters` livre de
+            // alocação — a versão anterior crescia o `Vec` no callback,
+            // e um `resize` na RT durante uma criação de faixa é uma
+            // queda de áudio justamente no gesto que a causou.
+            meter_peaks: vec![0.0; crate::meter::MAX_METER_CHANNELS * crate::meter::FLOATS_PER_CHANNEL],
+            meter_clips: vec![0u32; crate::meter::MAX_METER_CHANNELS],
+        }
+    }
+
+    /// Prepara os acumuladores de medição para `channels` canais.
+    ///
+    /// Só zera — nunca redimensiona. Os `Vec` já vêm com
+    /// [`crate::meter::MAX_METER_CHANNELS`] de capacidade, o mesmo teto do
+    /// banco publicado, então nem criar nem apagar trilha aloca na RT.
+    fn prepare_meters(&mut self, channels: usize) {
+        let need = channels * crate::meter::FLOATS_PER_CHANNEL;
+        if need > self.meter_peaks.len() {
+            // Mais canais do que o banco aceita medir: o excedente é
+            // ignorado pelo `publish`, e medir não pode custar um
+            // estouro de índice no callback.
+            return;
+        }
+        for v in self.meter_peaks[..need].iter_mut() {
+            *v = 0.0;
+        }
+        for v in self.meter_clips[..channels].iter_mut() {
+            *v = 0;
         }
     }
 
@@ -503,10 +592,14 @@ impl AudioEngine {
         let cache = Arc::new(Mutex::new(BufferCache::new(48_000)));
         let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::default())));
         let preview: Arc<Mutex<Vec<PreviewCmd>>> = Arc::new(Mutex::new(Vec::new()));
+        // Medidores: alocado antes da stream abrir, com capacidade fixa,
+        // e publicado para a UI pelo handle. A RT só escreve por índice.
+        let meters = Arc::new(MeterBank::new());
 
         let snapshot_cb = snapshot.clone();
         let preview_cb = preview.clone();
         let transport_cb = transport.clone();
+        let meters_cb = meters.clone();
 
         // Taxa e nº de canais reais só são conhecidos depois de abrir
         // a stream — mas o callback pode rodar antes disso. Um `Mutex`
@@ -528,6 +621,7 @@ impl AudioEngine {
                 &transport_cb,
                 &snapshot_cb,
                 &preview_cb,
+                &meters_cb,
                 sr,
             );
         })?;
@@ -560,6 +654,7 @@ impl AudioEngine {
                 preview,
                 cache,
                 sample_rate: actual_rate,
+                meters,
             },
         })
     }
@@ -581,6 +676,7 @@ impl AudioEngine {
         transport: &Arc<Mutex<Transport>>,
         snapshot: &Arc<Mutex<Arc<ProjectSnapshot>>>,
         preview: &Arc<Mutex<Vec<PreviewCmd>>>,
+        meters: &MeterBank,
         sample_rate: u32,
     ) {
         output.fill(0.0);
@@ -748,6 +844,13 @@ impl AudioEngine {
         // ---- mix -----------------------------------------------
         let any_soloed = snap.tracks.iter().any(|t| t.soloed);
 
+        // Canais medidos: uma entrada por trilha + o master no fim.
+        // É a MESMA ordem de `mixer_state()` no app, para o índice do
+        // medidor e o índice do canal do mixer coincidirem sem mapa.
+        let meter_channels = snap.tracks.len() + 1;
+        let master_channel = snap.tracks.len();
+        rt.prepare_meters(meter_channels);
+
         // ---- agendamento das notas MIDI (timeline) -------------
         // Cada nota de um clip MIDI mapeia pra uma linha do pattern
         // (pitch = DRUM_PITCH_BASE + índice) e dispara o sample daquela
@@ -814,11 +917,18 @@ impl AudioEngine {
             if playing && mode == PlayMode::Timeline {
                 let pos = start_frames + frame as f64;
 
-                for track in snap.tracks.iter() {
+                for (track_idx, track) in snap.tracks.iter().enumerate() {
                     if !track_is_active(track.muted, track.soloed, any_soloed) {
                         continue;
                     }
                     let (gain_l, gain_r) = stereo_gains(track.volume, track.pan);
+
+                    // Sub-soma DA TRACK, separada do bus. O medidor de
+                    // cada trilha precisa do que ELA entregou, não do
+                    // total com as vizinhas: somar direto no bus dava a
+                    // mesma barra para todas as trilhas.
+                    let mut track_l = 0.0f32;
+                    let mut track_r = 0.0f32;
 
                     for clip in snap.clips.iter().filter(|c| c.track_id == track.id) {
                         let clip_start = clip.start_beat * frames_per_beat;
@@ -852,10 +962,39 @@ impl AudioEngine {
                             sr * edge * clip_gain,
                             gain_l,
                             gain_r,
-                            &mut left,
-                            &mut right,
+                            &mut track_l,
+                            &mut track_r,
                         );
                     }
+
+                    // Pico do frame para o canal desta trilha. Medido
+                    // ANTES do master: baixar o master não pode fazer o
+                    // medidor de uma trilha mentir.
+                    //
+                    // A guarda de range não é decorativa: os acumuladores
+                    // têm capacidade fixa, e um projeto com mais faixas do
+                    // que o banco mede não pode estourar índice aqui — o
+                    // áudio continua passando, só esse canal não é medido.
+                    if track_idx < crate::meter::MAX_METER_CHANNELS {
+                        let base = track_idx * 2;
+                        let mag_l = track_l.abs();
+                        let mag_r = track_r.abs();
+                        if mag_l > rt.meter_peaks[base] {
+                            rt.meter_peaks[base] = mag_l;
+                        }
+                        if mag_r > rt.meter_peaks[base + 1] {
+                            rt.meter_peaks[base + 1] = mag_r;
+                        }
+                        if mag_l >= 1.0 {
+                            rt.meter_clips[track_idx] |= CLIP_L;
+                        }
+                        if mag_r >= 1.0 {
+                            rt.meter_clips[track_idx] |= CLIP_R;
+                        }
+                    }
+
+                    left += track_l;
+                    right += track_r;
                 }
             }
 
@@ -896,7 +1035,43 @@ impl AudioEngine {
                 rt.metronome_remaining -= 1;
             }
 
-            let (raw_l, raw_r) = limit_stereo(left, right);
+            // ---- MASTER ---------------------------------------
+            // O fader do master é aplicado AQUI, antes do limitador:
+            // é o último controle de ganho da cadeia, então puxar o
+            // master para baixo segura o material de verdade em vez de
+            // pedir ao limitador que faça o trabalho do fader. Sem
+            // isto, `Project.master_mixer` era lido só pela UI e o
+            // fader não mudava o áudio.
+            let master_gain = if snap.master_muted {
+                0.0
+            } else {
+                snap.master_volume
+            };
+            let bus_l = left * master_gain;
+            let bus_r = right * master_gain;
+
+            // Medidor do master: o sinal que o limitador vai receber.
+            // O clip é testado AQUI, e não na saída — `limit_stereo`
+            // segura tudo em ±1, então medir depois nunca acusaria
+            // clip. O que acende a luz é "o material passou do fundo de
+            // escala", que é a informação que o usuário precisa.
+            let master_base = master_channel * 2;
+            let mag_l = bus_l.abs();
+            let mag_r = bus_r.abs();
+            if mag_l > rt.meter_peaks[master_base] {
+                rt.meter_peaks[master_base] = mag_l;
+            }
+            if mag_r > rt.meter_peaks[master_base + 1] {
+                rt.meter_peaks[master_base + 1] = mag_r;
+            }
+            if mag_l >= 1.0 {
+                rt.meter_clips[master_channel] |= CLIP_L;
+            }
+            if mag_r >= 1.0 {
+                rt.meter_clips[master_channel] |= CLIP_R;
+            }
+
+            let (raw_l, raw_r) = limit_stereo(bus_l, bus_r);
             let (l, r) = rt.xfade_loop_frame(raw_l, raw_r);
             let base = frame * channels;
             match channels {
@@ -910,6 +1085,23 @@ impl AudioEngine {
                     // vez de repetir o par frontal e dobrar o nível.
                 }
             }
+        }
+
+        // ---- publica os medidores -------------------------------
+        // Uma vez por buffer, depois que o buffer inteiro foi medido:
+        // publicar por frame daria ao VU 48 kHz de atualizações para
+        // suavizar (e a UI lê a ~30 Hz de qualquer jeito). `Relaxed`
+        // basta: é um número de medição, não um sinal de ordem — a UI
+        // pode ler o pico do buffer anterior ao lado do atual sem que
+        // isso signifique nada para o áudio.
+        for channel in 0..meter_channels {
+            let base = channel * 2;
+            meters.publish(
+                channel,
+                rt.meter_peaks[base],
+                rt.meter_peaks[base + 1],
+                rt.meter_clips[channel],
+            );
         }
 
         // ---- devolve o relógio ao transporte -------------------
@@ -959,11 +1151,48 @@ impl AudioEngine {
 mod tests {
     use super::*;
     use crate::AudioBuffer;
+    use crate::meter::MeterReading;
 
     #[test]
     fn steps_per_beat_is_sixteenth() {
         // 4 passos por batida = semicolcheia; 16 passos = 1 compasso.
         assert_eq!(STEPS_PER_BEAT, 4.0);
+    }
+
+    #[test]
+    fn meter_accumulators_are_allocated_once_and_never_grow() {
+        // A RT não pode alocar. A versão anterior crescia os `Vec` com
+        // `resize` no callback, o que punia a criação de uma faixa com
+        // uma queda de áudio exatamente no gesto que a causou.
+        let mut rt = RtState::new();
+        let peaks = crate::meter::MAX_METER_CHANNELS * crate::meter::FLOATS_PER_CHANNEL;
+        assert_eq!(rt.meter_peaks.len(), peaks);
+        assert_eq!(rt.meter_clips.len(), crate::meter::MAX_METER_CHANNELS);
+
+        rt.prepare_meters(2);
+        rt.prepare_meters(crate::meter::MAX_METER_CHANNELS);
+        // Mais canais do que a capacidade: ignora em vez de estourar.
+        rt.prepare_meters(crate::meter::MAX_METER_CHANNELS + 10);
+
+        assert_eq!(rt.meter_peaks.len(), peaks);
+        assert_eq!(rt.meter_clips.len(), crate::meter::MAX_METER_CHANNELS);
+    }
+
+    #[test]
+    fn prepare_meters_clears_only_the_channels_in_use() {
+        let mut rt = RtState::new();
+        rt.meter_peaks[0] = 0.9;
+        rt.meter_peaks[4] = 0.9;
+        rt.meter_clips[1] = CLIP_L;
+
+        rt.prepare_meters(1);
+
+        assert_eq!(rt.meter_peaks[0], 0.0);
+        // Canal de fora do projeto em uso não é tocado — e, mais
+        // importante, o clip latch dele também não é limpo: a UI ainda
+        // pode estar mostrando aquela luz.
+        assert_eq!(rt.meter_peaks[4], 0.9);
+        assert_eq!(rt.meter_clips[1], CLIP_L);
     }
 
     #[test]
@@ -1057,6 +1286,10 @@ mod tests {
         // `add_clip_with_source`: clip de AUDIO no beat 0, comprimento 5
         // beats (cobre os 3s do arquivo), origem do arquivo no frame 0.
         project.add_clip_with_source(0, daw_core::ClipKind::Audio, "zero", 0.0, 5.0, 0.0, Some(path_str.clone()));
+        // Master em unidade: este teste é sobre QUANDO o clip começa, e
+        // o fader do master agora é real (o default 0.8 tiraria 2 dB e
+        // o limiar de 0.5 do assert mediria o master, não o clip).
+        project.master_mixer.volume = 1.0;
 
         let mut cache = BufferCache::new(rate);
         let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
@@ -1065,16 +1298,20 @@ mod tests {
 
         let mut rt = RtState::new();
         let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+        let meters = MeterBank::new();
+        meters.set_channel_count(project.tracks.len() + 1);
 
         let frames = 960usize;
         let mut early_max = 0.0f32;
         for _ in 0..4 {
             let mut out = vec![0.0f32; frames * 2];
-            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, rate);
+            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate);
             for i in 0..frames {
                 early_max = early_max.max(out[i * 2].abs()).max(out[i * 2 + 1].abs());
             }
         }
+        let track_reading = meters.read(0);
+        let master_reading = meters.read(project.tracks.len());
         std::fs::remove_file(&path).ok();
 
         assert!(
@@ -1082,6 +1319,98 @@ mod tests {
             "clip no beat 0 deve tocar o TOM do arquivo já nos primeiros buffers (max={})",
             early_max,
         );
+
+        // O VU tem que ver o MESMO sinal que a saída, na trilha E no
+        // master. Antes o meter era um PRNG na UI, então nada aqui
+        // falhava mesmo com o áudio certo.
+        assert!(
+            track_reading.peak_left > 0.5 && track_reading.peak_right > 0.5,
+            "medidor da trilha tem que acompanhar o áudio (l={} r={})",
+            track_reading.peak_left,
+            track_reading.peak_right,
+        );
+        assert!(
+            master_reading.peak_left > 0.5,
+            "medidor do master tem que acompanhar o áudio (l={})",
+            master_reading.peak_left,
+        );
+        assert!(
+            !track_reading.clipped_left && !master_reading.clipped_left,
+            "um tom em 0.8 não pode acender o clip",
+        );
+    }
+
+    /// O fader do master tem que MUDAR O ÁUDIO, e o medidor de cada
+    /// trilha tem que continuar mostrando o sinal da trilha — não o do
+    /// barramento. Antes o master não existia na engine (`rg master` em
+    /// `crates/daw-audio` não achava nada) e o VU era um PRNG.
+    #[test]
+    fn master_fader_attenua_e_a_trilha_nao_muda() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("ruana_master_fader_marker.wav");
+        write_marker_wav(&path);
+        let path_str = path.to_string_lossy().into_owned();
+
+        let rate = 48_000u32;
+        let frames = 960usize;
+
+        let render = |master: f32| -> (f32, MeterReading, MeterReading) {
+            let mut project = daw_core::Project::startup();
+            project.add_clip_with_source(
+                0,
+                daw_core::ClipKind::Audio,
+                "zero",
+                0.0,
+                5.0,
+                0.0,
+                Some(path_str.clone()),
+            );
+            project.master_mixer.volume = master;
+
+            let mut cache = BufferCache::new(rate);
+            let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+            let transport = Arc::new(Mutex::new(Transport::default()));
+            transport.lock().unwrap().playing = true;
+            let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+            let meters = MeterBank::new();
+            let master_channel = project.tracks.len();
+            meters.set_channel_count(master_channel + 1);
+
+            let mut rt = RtState::new();
+            let mut out = vec![0.0f32; frames * 2];
+            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate);
+            let peak = (0..frames)
+                .map(|i| out[i * 2].abs().max(out[i * 2 + 1].abs()))
+                .fold(0.0f32, f32::max);
+            (peak, meters.read(0), meters.read(master_channel))
+        };
+
+        let (unity_peak, unity_track, unity_master) = render(1.0);
+        let (half_peak, half_track, half_master) = render(0.5);
+
+        assert!(unity_peak > 0.5, "setup: o clip tem que soar (peak={})", unity_peak);
+        assert!(
+            (half_peak / unity_peak - 0.5).abs() < 0.05,
+            "master em 0.5 tem que cortar o áudio pela metade (unity={} half={})",
+            unity_peak,
+            half_peak,
+        );
+        // A trilha é medida ANTES do master: o fader do master muda o
+        // que se ouve, não o que a trilha entregou ao bus.
+        assert!(
+            (half_track.peak_left - unity_track.peak_left).abs() < 1e-4,
+            "medidor da trilha não pode depender do master (unity={} half={})",
+            unity_track.peak_left,
+            half_track.peak_left,
+        );
+        assert!(
+            half_master.peak_left < unity_master.peak_left * 0.75,
+            "medidor do master tem que cair junto com o áudio (unity={} half={})",
+            unity_master.peak_left,
+            half_master.peak_left,
+        );
+
+        std::fs::remove_file(&path).ok();
     }
 
     /// Grava um WAV s16le mono contínuo (seno puro) para cravar a
@@ -1172,6 +1501,8 @@ mod tests {
 
         let mut rt = RtState::new();
         let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+        let meters = MeterBank::new();
+        meters.set_channel_count(project.tracks.len() + 1);
 
         let mut out_all: Vec<f32> = Vec::new();
         let mut boundaries: Vec<usize> = Vec::new();
@@ -1180,7 +1511,7 @@ mod tests {
         for _ in 0..nbuffers {
             let pos_before = rt.pos_frames;
             let mut out = vec![0.0f32; buf_frames * 2];
-            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, rate);
+            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate);
             let wrapped = rt.pos_frames + 0.5 < pos_before + buf_frames as f64;
             for f in 0..buf_frames {
                 out_all.push(out[f * 2]);
@@ -1243,22 +1574,34 @@ mod tests {
 
         let mut rt = RtState::new();
         let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+        let meters = MeterBank::new();
+        meters.set_channel_count(project.tracks.len() + 1);
 
         let frames = 960usize;
         let mut max = 0.0f32;
         for _ in 0..4 {
             let mut out = vec![0.0f32; frames * 2];
-            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, rate);
+            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate);
             for i in 0..frames {
                 max = max.max(out[i * 2].abs()).max(out[i * 2 + 1].abs());
             }
         }
+        let reading = meters.read(0);
         std::fs::remove_file(&path).ok();
 
         assert!(
             max < 0.5,
             "clip a 1s do zero não pode soar nos primeiros 0.08s (max={})",
             max,
+        );
+        // Silêncio na saída é silêncio no VU. Um medidor que mostra
+        // nível com o transporte em silêncio no clip é pior que
+        // nenhum: faz o usuário caçar um phantom no gain.
+        assert!(
+            reading.peak_left == 0.0 && reading.peak_right == 0.0,
+            "medidor tem que estar em silêncio antes do clip começar (l={} r={})",
+            reading.peak_left,
+            reading.peak_right,
         );
     }
 }

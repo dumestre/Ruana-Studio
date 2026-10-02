@@ -1,0 +1,66 @@
+// ============================================================
+// ESCALA DE ÁUDIO COMPARTILHADA
+//
+// A MESMA curva existe em `app/src/meters.rs` (Rust), que normaliza a
+// barra do VU a partir da medição da engine, e aqui, que posiciona o
+// fader a partir do mouse. Não é duplicação acidental: se o Rust
+// publicasse a posição do fader, arrastar o triângulo passaria por um
+// modelo a cada pixel de mouse — latência no controle que precisa ser
+// o mais responsivo da tela.
+//
+// # Por que a divide é só de um lado
+//
+// Slint não tem logaritmo, então aqui só existe o caminho
+// posição -> ganho (`db-to-linear`, com `Math.pow`). A divisão
+// (amplitude -> dB) fica no Rust, e por isso não existe
+// `linear-to-db` neste arquivo: uma função que devolvesse o piso para
+// todo valor seria pior que nenhuma — pareceria correta e mentiria.
+//
+// Se mexer numa curva, mexer na outra: piso, teto e a forma da
+// normalização têm que continuar batendo. Os testes de `meters.rs`
+// cobrem o lado Rust.
+// ============================================================
+
+export global AudioScale {
+    // Piso e teto da escala, em dBFS.
+    //
+    // -60 dB é o piso padrão de VU: abaixo disso só existe ruído de
+    // fundo. O teto é 0 dB porque acima disso é clip, e o clip tem luz
+    // própria — esticar a barra para +6 dB só faria a luz parecer parte
+    // do medidor.
+    in-out property <float> db-floor: -60.0;
+    in-out property <float> db-ceiling: 0.0;
+
+    // dBFS -> ganho linear.
+    public pure function db-to-linear(db: float) -> float {
+        return Math.pow(10.0, db / 20.0);
+    }
+
+    // Posição do fader (0 = baixo, 1 = topo) -> ganho linear.
+    //
+    // Mesma curva do medidor, e por isso o topo do fader e a leitura de
+    // unity do VU são o MESMO lugar. É o que faz o par fader+meter ser
+    // legível de relance.
+    //
+    // O fundo é silêncio DE VERDADE, não -60 dB: um fader que não
+    // chega a zero obriga o usuário a mutar em outro botão para calar
+    // a faixa.
+    public pure function fader-pos-to-linear(pos: float) -> float {
+        let p = Math.max(0.0, Math.min(1.0, pos));
+        if p <= 0.0 {
+            return 0.0;
+        }
+        return root.db-to-linear(root.db-floor + p * (root.db-ceiling - root.db-floor));
+    }
+
+    // Posição do fader -> dBFS, para o LCD.
+    //
+    // Não pode passar por `linear-to-db(fader-pos-to-linear(pos))`:
+    // essa ida e volta custa uma exponencial por repintura e devolve o
+    // piso no fundo em vez de silêncio, porque o piso não é zero. A
+    // posição JÁ é uma reta no eixo dB — ler é só interpolar.
+    public pure function fader-pos-to-db(pos: float) -> float {
+        return root.db-floor
+            + Math.max(0.0, Math.min(1.0, pos)) * (root.db-ceiling - root.db-floor);
+    }
+}
