@@ -702,6 +702,10 @@ pub struct Handler {
     window_id: Option<WindowId>,
     state: Rc<RefCell<SharedState>>,
     drop_sink: Option<DropSink>,
+    /// `true` entre o press e o release de um clique cujo press foi
+    /// interceptado pelo paste (Shift+clique). O release correspondente é
+    /// engolido para não chegar ao Slint nem à engine como `up` sem `down`.
+    paste_click_active: bool,
 }
 
 impl Handler {
@@ -711,6 +715,7 @@ impl Handler {
             bridge: None,
             window: None,
             window_id: None,
+            paste_click_active: false,
             state: Rc::new(RefCell::new(SharedState {
                 scale: 1.0,
                 win_pos: (0.0, 0.0),
@@ -923,19 +928,32 @@ impl ApplicationHandler for Handler {
                         if shift && !ctrl && !alt && button == winit::event::MouseButton::Left {
                             let mut b = bridge.borrow_mut();
                             let engine = &mut b.engine;
-                            // Só cola se o clique estiver dentro da área da timeline
-                            // (abaixo da régua), não dentro de popups/knobs do Slint.
-                            if py >= engine.ruler_px {
-                                let beat = ((px + engine.scroll_x) / engine.px_per_beat.max(0.001)).max(0.0);
-                                let track = ((py - engine.ruler_px + engine.scroll_y)
-                                    / (64.0 * engine.zoom_y.max(0.001)))
-                                    .floor()
-                                    .max(0.0) as usize;
-                                engine.shift_pressed = true;
+                            // A engine trabalha em px FÍSICOS RELATIVOS AO QUAD da
+                            // timeline (`timeline_rect`), não em coordenadas de
+                            // janela. Sem esta conversão o beat/track saíam
+                            // deslocados pelo offset do painel/header e o clip
+                            // colado nascia fora da área visível.
+                            let (ox, oy, ow, oh) = engine.timeline_rect;
+                            let (qx, qy) = (px - ox, py - oy);
+                            // Só cola se o clique estiver DENTRO do quad da timeline,
+                            // abaixo da régua — não em popups/knobs do Slint nem no
+                            // painel de tracks à esquerda.
+                            if ow > 1.0
+                                && oh > 1.0
+                                && qx >= 0.0
+                                && qx < ow
+                                && qy >= engine.ruler_px
+                                && qy < oh
+                            {
+                                let (beat, track) = engine.cursor_to_snapped_beat_track((qx, qy));
                                 engine.paste_at_beat(beat, track);
                                 b.dirty = true;
                                 // Não despacha para o Slint também: o paste já
                                 // manipulou o clique, evitando duplo processamento.
+                                // O `Released` correspondente é engolido em
+                                // `paste_click_active` (um `up` sem `down`
+                                // confirmaria um arrasto fictício na engine).
+                                self.paste_click_active = true;
                                 return;
                             }
                         }
@@ -944,10 +962,17 @@ impl ApplicationHandler for Handler {
                             button: slint_button,
                         }
                     }
-                    ElementState::Released => slint::platform::WindowEvent::PointerReleased {
-                        position: logical_pos(px as f64, py as f64, scale),
-                        button: slint_button,
-                    },
+                    ElementState::Released => {
+                        // Fim do clique interceptado pelo paste: não gera evento.
+                        if self.paste_click_active {
+                            self.paste_click_active = false;
+                            return;
+                        }
+                        slint::platform::WindowEvent::PointerReleased {
+                            position: logical_pos(px as f64, py as f64, scale),
+                            button: slint_button,
+                        }
+                    }
                 };
                 overlay_dispatch(bridge, event);
             }
