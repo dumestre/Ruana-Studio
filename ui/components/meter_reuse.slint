@@ -1,21 +1,6 @@
 import { Theme } from "../theme.slint";
 
-// ============================================================
-// STEREO METER — somente a medição
-//
-// Duas barras finas com divisor central, pico e luz de clip.
-//
-// NÃO tem fader. O controle de volume mora em `meter.slint`, que
-// encapsula este componente. A separação existe para o caso do canal
-// estreito do mixer, onde o medidor precisa caber em 13px e o
-// triangle não cabe ao lado sem roubar largura do pan knob.
-// ============================================================
-
 export component StereoMeter inherits Rectangle {
-    // ========================================================
-    // PROPRIEDADES
-    // ========================================================
-
     in property <float> left-level: 0.0;
     in property <float> right-level: 0.0;
     in property <float> left-peak: 0.0;
@@ -27,151 +12,81 @@ export component StereoMeter inherits Rectangle {
     in property <length> channel-gap: 2px;
     in property <color> meter-background: #111111;
     in property <color> meter-border: transparent;
-
-    // ========================================================
-    // DIMENSÕES
-    // ========================================================
+    in property <bool> signal-fill-only: false;
 
     private property <length> meter-height: Math.max(1px, root.height);
     private property <length> channel-width: Math.max(2px, root.meter-width);
     private property <length> divider-width: 1px;
 
-    // Largura total = L + gap/2 + div + gap/2 + R = 5+1+1+1+5 = 13px
     width: root.channel-width * 2 + root.channel-gap + root.divider-width;
     background: transparent;
     border-radius: 15px;
 
-    // Os níveis já chegam normalizados em dB (ver `app/src/meters.rs`).
-    // Este clamp é só rede de segurança: um NaN vindo do core viraria
-    // geometria inválida e o Slint deixaria a barra inteira sumir.
     function level-clamped(value: float) -> float {
-        if value != value {
-            return 0.0;
-        }
+        if value != value { return 0.0; }
         return Math.max(0.0, Math.min(1.0, value));
     }
 
-    // ========================================================
-    // LAYOUT CENTRALIZADO
-    // ========================================================
-
     HorizontalLayout {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: parent.height;
+        x: 0; y: 0; width: parent.width; height: parent.height;
         alignment: center;
         spacing: root.channel-gap / 2;
 
-        // ----------------------------------------------------
         // CANAL L
-        // ----------------------------------------------------
         Rectangle {
-            width: root.channel-width;
-            height: root.meter-height;
+            width: root.channel-width; height: root.meter-height;
             background: root.meter-background;
-            border-width: 1px;
-            border-color: root.meter-border;
-            border-radius: 6px;
-            clip: true;
+            border-width: 1px; border-color: root.meter-border;
+            border-radius: 6px; clip: true;
 
-            // A barra cresce de baixo para cima. O truque é cobrir a
-            // parte de cima com a COR DO FUNDO do canal, deixando o
-            // gradiente visível só da altura do sinal para baixo.
-            //
-            // Dimensionar o gradiente direto (altura = nível) arredaria
-            // as pontas junto com o canal e a barra ficaria com as bordas
-            // tortas; e um retângulo "mascarador" SEM `background` não
-            // mascara nada — ele some e o gradiente aparece inteiro,
-            // com a barra travada no topo para sempre.
             Rectangle {
-                x: 0px;
-                y: 0px;
-                width: parent.width;
-                height: parent.height;
-                background: @linear-gradient(
-                    180deg,
-                    #FF3B30 0%, #FF3B30 10%,
-                    #FFCC00 10%, #FFCC00 25%,
-                    #00C853 25%, #00C853 100%);
+                x: 0px; y: 0px; width: parent.width; height: parent.height;
+                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
                 clip: true;
-
                 Rectangle {
-                    x: 0px;
-                    y: 0px;
-                    width: parent.width;
-                    height: parent.height
-                        * (1.0 - root.level-clamped(root.left-level));
+                    x: 0px; y: 0px; width: parent.width;
+                    height: parent.height * (1.0 - root.level-clamped(root.left-level));
                     background: root.meter-background;
+                    visible: !root.signal-fill-only || root.left-level > 0.001;
                 }
             }
-
-            // Pico: linha fina que fica para trás do nível, mostrando
-            // o máximo recente mesmo depois da barra ter decaído.
             Rectangle {
-                x: 0px;
-                y: parent.height - (root.level-clamped(root.left-peak) * parent.height) - 1px;
-                width: parent.width;
-                height: 2px;
+                x: 0px; y: parent.height - (root.level-clamped(root.left-peak) * parent.height) - 1px;
+                width: parent.width; height: 2px;
                 background: root.left-clipped ? #FF3030 : #FFFFFF;
-                // Também some no silêncio: um pixel branco no fundo
-                // parece uma leitura travada em -inf.
-                visible: root.left-peak > 0.001;
+                visible: root.left-peak > 0.001 && (!root.signal-fill-only || root.left-level > 0.001);
             }
         }
 
-        // ----------------------------------------------------
-        // DIVISOR CENTRAL
-        // ----------------------------------------------------
+        // DIVISOR
         Rectangle {
-            width: root.divider-width;
-            height: root.meter-height;
+            width: root.divider-width; height: root.meter-height;
             background: Theme.is-paper ? Theme.base.transparentize(0.6) : Theme.border;
         }
 
-        // ----------------------------------------------------
         // CANAL R
-        // ----------------------------------------------------
         Rectangle {
-            width: root.channel-width;
-            height: root.meter-height;
+            width: root.channel-width; height: root.meter-height;
             background: root.meter-background;
-            border-width: 1px;
-            border-color: root.meter-border;
-            border-radius: 6px;
-            clip: true;
+            border-width: 1px; border-color: root.meter-border;
+            border-radius: 6px; clip: true;
 
-            // Mesmo esquema do canal esquerdo: gradiente cheio por
-            // baixo, fundo por cima até a altura do sinal.
             Rectangle {
-                x: 0px;
-                y: 0px;
-                width: parent.width;
-                height: parent.height;
-                background: @linear-gradient(
-                    180deg,
-                    #FF3B30 0%, #FF3B30 10%,
-                    #FFCC00 10%, #FFCC00 25%,
-                    #00C853 25%, #00C853 100%);
+                x: 0px; y: 0px; width: parent.width; height: parent.height;
+                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
                 clip: true;
-
                 Rectangle {
-                    x: 0px;
-                    y: 0px;
-                    width: parent.width;
-                    height: parent.height
-                        * (1.0 - root.level-clamped(root.right-level));
+                    x: 0px; y: 0px; width: parent.width;
+                    height: parent.height * (1.0 - root.level-clamped(root.right-level));
                     background: root.meter-background;
+                    visible: !root.signal-fill-only || root.right-level > 0.001;
                 }
             }
-
             Rectangle {
-                x: 0px;
-                y: parent.height - (root.level-clamped(root.right-peak) * parent.height) - 1px;
-                width: parent.width;
-                height: 2px;
+                x: 0px; y: parent.height - (root.level-clamped(root.right-peak) * parent.height) - 1px;
+                width: parent.width; height: 2px;
                 background: root.right-clipped ? #FF3030 : #FFFFFF;
-                visible: root.right-peak > 0.001;
+                visible: root.right-peak > 0.001 && (!root.signal-fill-only || root.right-level > 0.001);
             }
         }
     }

@@ -518,6 +518,8 @@ Meter {
     // índice padrão e o clique na luz apagaria o latch de outro canal.
     channel-index: root.track-index;
 
+    signal-fill-only: true;
+
     volume <=> root.volume;
 
     volume-changed(v) => {

@@ -29,7 +29,8 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     in-out property <float> volume: 0.8;
-    in property <bool> show-volume-control: true;
+    in property <bool> signal-fill-only: false;
+    private property <bool> show-volume-control: !root.signal-fill-only;
 
     // ========================================================
     // CALLBACKS
