@@ -166,7 +166,8 @@ component ClipItem inherits ClipItemVisual {
         string,
         string,
         color,
-        bool
+        bool,
+        length
     );
 
     callback drag-moved(
@@ -361,7 +362,9 @@ component ClipItem inherits ClipItemVisual {
                             root.position,
                             root.duration,
                             root.clip-color,
-                            root.is-midi
+                            root.is-midi,
+                            self.mouse-x
+                                - self.press-x
                         );
                     }
                 }
@@ -418,7 +421,8 @@ export component ClipPool inherits Rectangle {
         string,
         string,
         color,
-        bool
+        bool,
+        length
     );
 
     callback clip-drag-moved(
@@ -634,7 +638,8 @@ export component ClipPool inherits Rectangle {
                     p,
                     d,
                     c,
-                    m
+                    m,
+                    initial-dx
                 ) => {
 
                     root.clip-drag-started(
@@ -642,7 +647,8 @@ export component ClipPool inherits Rectangle {
                         p,
                         d,
                         c,
-                        m
+                        m,
+                        initial-dx
                     );
                 }
 
@@ -817,7 +823,8 @@ export component ClipPool inherits Rectangle {
                     p,
                     d,
                     c,
-                    m
+                    m,
+                    initial-dx
                 ) => {
 
                     root.clip-drag-started(
@@ -825,7 +832,8 @@ export component ClipPool inherits Rectangle {
                         p,
                         d,
                         c,
-                        m
+                        m,
+                        initial-dx
                     );
                 }
 

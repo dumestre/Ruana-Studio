@@ -498,7 +498,8 @@ export component Workspace inherits Rectangle {
         string,
         string,
         color,
-        bool
+        bool,
+        length
     );
 
     callback drag-move(length, length);
@@ -724,7 +725,8 @@ export component Workspace inherits Rectangle {
                     position,
                     duration,
                     color,
-                    is-midi
+                    is-midi,
+                    initial-dx
                 ) => {
 
                     root.selected-clip =
@@ -736,7 +738,8 @@ export component Workspace inherits Rectangle {
                         position,
                         duration,
                         color,
-                        is-midi
+                        is-midi,
+                        initial-dx
                     );
                 }
 
@@ -971,7 +974,8 @@ export component Workspace inherits Rectangle {
                         position,
                         duration,
                         color,
-                        is-midi
+                        is-midi,
+                        initial-dx
                     ) => {
 
                         root.drag-begin(
@@ -980,7 +984,8 @@ export component Workspace inherits Rectangle {
                             position,
                             duration,
                             color,
-                            is-midi
+                            is-midi,
+                            initial-dx
                         );
                     }
 
@@ -2002,7 +2007,8 @@ export component Workspace inherits Rectangle {
                             "",
                             "",
                             color,
-                            is-midi
+                            is-midi,
+                            0px
                         );
                     }
 

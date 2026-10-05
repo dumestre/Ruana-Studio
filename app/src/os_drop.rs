@@ -81,6 +81,7 @@ pub fn install(
                             "".into(),
                             slint::Color::from_argb_encoded(0xFF00C853),
                             false,
+                            0.0,
                         );
                         // Pré-decode em background (cacheia).
                         clip_cache::spawn_prefetch(&sample_cache, &path, ui.get_bpm() as f32);

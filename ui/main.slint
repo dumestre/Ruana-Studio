@@ -478,9 +478,8 @@ export component MainWindow inherits Window {
     // =====================================================
     // DRAG & DROP (clip do ClipPool → timeline)
     //
-    // O ghost segue o mouse e "balança" como no FL Studio:
-    // a inclinação é proporcional à velocidade horizontal
-    // do arrasto e volta suavemente a 0 quando para.
+    // O ghost acompanha a direção do arrasto com resposta imediata
+    // e relaxa suavemente quando o ponteiro para.
     // =====================================================
 
     in-out property <bool> drag-active:
@@ -521,15 +520,7 @@ export component MainWindow inherits Window {
     private property <length> drag-last-x:
         0px;
 
-    // Estimativa de velocidade horizontal (px por evento),
-    // com suavização: sobe com o pico dos eventos e decai
-    // no timer drag_decay.
-    private property <float> drag-speed:
-        0.0;
-
-    // Valor que o ghost realmente renderiza: persegue o alvo
-    // drag-tilt no timer drag_decay (125Hz), dando movimento
-    // suave tanto no arrasto quanto na volta a zero.
+    // Valor exibido pelo ghost, suavizado pelo timer de animação.
     private property <angle> drag-tilt-display:
         0deg;
 
@@ -550,7 +541,7 @@ export component MainWindow inherits Window {
     // Assinatura: name, path, position, duration, color, is-midi
     // =====================================================
 
-    callback drag-begin(string, string, string, string, color, bool);
+    callback drag-begin(string, string, string, string, color, bool, length);
     callback drag-move(length, length);
     callback drag-end();
 
@@ -565,7 +556,8 @@ export component MainWindow inherits Window {
         position,
         duration,
         color,
-        is-midi
+        is-midi,
+        initial-dx
     ) => {
 
         root.drag-name = name;
@@ -576,9 +568,22 @@ export component MainWindow inherits Window {
         root.drag-is-midi = is-midi;
         root.drag-active = true;
         root.drag-inited = false;
-        root.drag-tilt = 0deg;
-        root.drag-tilt-display = 0deg;
-        root.drag-speed = 0.0;
+        let initial-speed =
+            (initial-dx < 0px ? -initial-dx : initial-dx)
+                / 1px;
+        let initial-direction =
+            initial-dx < 0px ? -1.0 : 1.0;
+        root.drag-tilt =
+            max(
+                min(
+                    initial-direction
+                        * initial-speed
+                        * 2.4deg,
+                    22deg
+                ),
+                -22deg
+            );
+        root.drag-tilt-display = root.drag-tilt;
     }
 
 
@@ -595,34 +600,20 @@ export component MainWindow inherits Window {
 
         if root.drag-inited {
 
-            // Inclinação proporcional à força do
-            // arrasto (velocidade entre eventos):
-            // mais rápido = mais inclinado, no
-            // sentido do movimento. O Timer
-            // drag_decay devolve a rotação a 0
-            // quando o mouse para.
+            // Cada movimento atualiza imediatamente o alvo da
+            // inclinação; a animação suaviza o ghost entre eventos.
             let dx = x - root.drag-last-x;
-            let dir = dx >= 0px ? 1.0 : -1.0;
             let instant = (dx < 0px ? -dx : dx) / 1px;
-
-            // Mantém o pico da velocidade (com
-            // decay no timer), para que um arrasto
-            // rápido e contínuo incline de verdade.
-            root.drag-speed =
-                max(
-                    instant,
-                    root.drag-speed * 0.8
-                );
-
+            let dir = dx < 0px ? -1.0 : 1.0;
             root.drag-tilt =
                 max(
                     min(
                         dir
-                            * root.drag-speed
-                            * 0.45deg,
-                        25deg
+                            * instant
+                            * 2.4deg,
+                        22deg
                     ),
-                    -25deg
+                    -22deg
                 );
         }
 
@@ -778,7 +769,6 @@ export component MainWindow inherits Window {
         root.drag-inited = false;
         root.drag-tilt = 0deg;
         root.drag-tilt-display = 0deg;
-        root.drag-speed = 0.0;
         root.drag-path = "";
     }
 
@@ -1018,7 +1008,7 @@ export component MainWindow inherits Window {
             tool-changed(tool) => { root.tool-changed(tool); }
             track-recolor-requested(track, color) => { root.track-recolor-requested(track, color); }
             timeline-bounds-changed(x, y, w, h) => { root.timeline-bounds-changed(x, y, w, h); }
-            drag-begin(name, path, position, duration, color, is-midi) => { root.drag-begin(name, path, position, duration, color, is-midi); }
+            drag-begin(name, path, position, duration, color, is-midi, initial-dx) => { root.drag-begin(name, path, position, duration, color, is-midi, initial-dx); }
             drag-move(x, y) => { root.drag-move(x, y); }
             drag-end() => { root.drag-end(); }
         }
@@ -1226,10 +1216,7 @@ export component MainWindow inherits Window {
 
 
     // =====================================================
-    // TIMER DO TILT (efeito ioiô)
-    //
-    // Enquanto o arrasto está ativo e o mouse parado, decai
-    // a inclinação continuamente até a rotação zerar.
+    // TIMER DO TILT: relaxa o ghost suavemente quando o ponteiro para.
     // =====================================================
 
     // =====================================================
@@ -1282,7 +1269,7 @@ export component MainWindow inherits Window {
 
     drag_decay := Timer {
 
-        interval: 8ms;
+        interval: 16ms;
 
         running:
             root.drag-active
@@ -1290,18 +1277,13 @@ export component MainWindow inherits Window {
 
         triggered() => {
 
-            // Decai o alvo mais rápido (0.8 em vez de 0.88).
             root.drag-tilt =
-                root.drag-tilt * 0.8;
+                root.drag-tilt * 0.45;
 
-            root.drag-speed =
-                root.drag-speed * 0.8;
-
-            // O exibido persegue o alvo mais agressivamente (0.7 em vez de 0.5).
             root.drag-tilt-display +=
                 (root.drag-tilt
                     - root.drag-tilt-display)
-                * 0.7;
+                * 0.55;
         }
     }
 }
