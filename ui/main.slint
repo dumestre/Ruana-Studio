@@ -485,16 +485,6 @@ export component MainWindow inherits Window {
     in-out property <length> drag-y:
         0px;
 
-    in-out property <angle> drag-tilt:
-        0deg;
-
-    private property <length> drag-last-x:
-        0px;
-
-    // Valor exibido pelo ghost, suavizado pelo timer de animação.
-    private property <angle> drag-tilt-display:
-        0deg;
-
     // Propriedades de drag computadas no Workspace e sincronizadas via binding
     property <bool> drag-over-timeline: false;
     property <bool> drag-over-sampler: false;
@@ -506,13 +496,13 @@ export component MainWindow inherits Window {
     // DRAG COMPARTILHADO (ClipPool + Explorer → timeline / beat)
     //
     // Callbacks alimentados pelo ClipPool e pelo Explorer de
-    // áudio. Ghost, tilt, snap e drop preview são os mesmos
+    // áudio. Ghost, snap e drop preview são os mesmos
     // para as duas origens.
     //
     // Assinatura: name, path, position, duration, color, is-midi
     // =====================================================
 
-    callback drag-begin(string, string, string, string, color, bool, length);
+    callback drag-begin(string, string, string, string, color, bool);
     callback drag-move(length, length);
     callback drag-end();
 
@@ -527,8 +517,7 @@ export component MainWindow inherits Window {
         position,
         duration,
         color,
-        is-midi,
-        initial-dx
+        is-midi
     ) => {
 
         root.drag-name = name;
@@ -539,22 +528,6 @@ export component MainWindow inherits Window {
         root.drag-is-midi = is-midi;
         root.drag-active = true;
         root.drag-inited = false;
-        let initial-speed =
-            (initial-dx < 0px ? -initial-dx : initial-dx)
-                / 1px;
-        let initial-direction =
-            initial-dx < 0px ? -1.0 : 1.0;
-        root.drag-tilt =
-            max(
-                min(
-                    initial-direction
-                        * initial-speed
-                        * 2.4deg,
-                    22deg
-                ),
-                -22deg
-            );
-        root.drag-tilt-display = root.drag-tilt;
     }
 
 
@@ -569,26 +542,6 @@ export component MainWindow inherits Window {
         root.drag-x = x;
         root.drag-y = y;
 
-        if root.drag-inited {
-
-            // Cada movimento atualiza imediatamente o alvo da
-            // inclinação; a animação suaviza o ghost entre eventos.
-            let dx = x - root.drag-last-x;
-            let instant = (dx < 0px ? -dx : dx) / 1px;
-            let dir = dx < 0px ? -1.0 : 1.0;
-            root.drag-tilt =
-                max(
-                    min(
-                        dir
-                            * instant
-                            * 2.4deg,
-                        22deg
-                    ),
-                    -22deg
-                );
-        }
-
-        root.drag-last-x = x;
         root.drag-inited = true;
 
 
@@ -738,8 +691,6 @@ export component MainWindow inherits Window {
 
         root.drag-active = false;
         root.drag-inited = false;
-        root.drag-tilt = 0deg;
-        root.drag-tilt-display = 0deg;
         root.drag-path = "";
     }
 
@@ -921,7 +872,6 @@ export component MainWindow inherits Window {
             drag-duration <=> root.drag-duration;
             drag-color <=> root.drag-color;
             drag-is-midi <=> root.drag-is-midi;
-            drag-tilt-display <=> root.drag-tilt-display;
             channel-meters <=> root.channel-meters;
             channel-clipped <=> root.channel-clipped;
             mixer-mutes <=> root.mixer-mutes;
@@ -979,7 +929,7 @@ export component MainWindow inherits Window {
             tool-changed(tool) => { root.tool-changed(tool); }
             track-recolor-requested(track, color) => { root.track-recolor-requested(track, color); }
             timeline-bounds-changed(x, y, w, h) => { root.timeline-bounds-changed(x, y, w, h); }
-            drag-begin(name, path, position, duration, color, is-midi, initial-dx) => { root.drag-begin(name, path, position, duration, color, is-midi, initial-dx); }
+            drag-begin(name, path, position, duration, color, is-midi) => { root.drag-begin(name, path, position, duration, color, is-midi); }
             drag-move(x, y) => { root.drag-move(x, y); }
             drag-end() => { root.drag-end(); }
         }
@@ -1170,10 +1120,6 @@ export component MainWindow inherits Window {
 
 
     // =====================================================
-    // TIMER DO TILT: relaxa o ghost suavemente quando o ponteiro para.
-    // =====================================================
-
-    // =====================================================
     // TIMER DO BEAT METRICS
     //
     // Publica a geometria do BeatPopup para o global
@@ -1221,23 +1167,4 @@ export component MainWindow inherits Window {
     }
 
 
-    drag_decay := Timer {
-
-        interval: 16ms;
-
-        running:
-            root.drag-active
-            && root.drag-inited;
-
-        triggered() => {
-
-            root.drag-tilt =
-                root.drag-tilt * 0.45;
-
-            root.drag-tilt-display +=
-                (root.drag-tilt
-                    - root.drag-tilt-display)
-                * 0.55;
-        }
-    }
 }

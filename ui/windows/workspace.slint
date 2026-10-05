@@ -204,8 +204,6 @@ export component Workspace inherits Rectangle {
 
     in-out property <bool> drag-is-midi: true;
 
-    in-out property <angle> drag-tilt-display: 0deg;
-
 
     // ========================================================
     // MIXER
@@ -498,8 +496,7 @@ export component Workspace inherits Rectangle {
         string,
         string,
         color,
-        bool,
-        length
+        bool
     );
 
     callback drag-move(length, length);
@@ -725,8 +722,7 @@ export component Workspace inherits Rectangle {
                     position,
                     duration,
                     color,
-                    is-midi,
-                    initial-dx
+                    is-midi
                 ) => {
 
                     root.selected-clip =
@@ -738,8 +734,7 @@ export component Workspace inherits Rectangle {
                         position,
                         duration,
                         color,
-                        is-midi,
-                        initial-dx
+                        is-midi
                     );
                 }
 
@@ -974,8 +969,7 @@ export component Workspace inherits Rectangle {
                         position,
                         duration,
                         color,
-                        is-midi,
-                        initial-dx
+                        is-midi
                     ) => {
 
                         root.drag-begin(
@@ -984,8 +978,7 @@ export component Workspace inherits Rectangle {
                             position,
                             duration,
                             color,
-                            is-midi,
-                            initial-dx
+                            is-midi
                         );
                     }
 
@@ -2007,8 +2000,7 @@ export component Workspace inherits Rectangle {
                             "",
                             "",
                             color,
-                            is-midi,
-                            0px
+                            is-midi
                         );
                     }
 
@@ -2078,8 +2070,7 @@ export component Workspace inherits Rectangle {
                 // =================================================
                 // POSIÇÃO DO GHOST
                 //
-                // Fora da timeline: o card segue o cursor livremente
-                // (centrado nele, com a inclinação da velocidade).
+                // Fora da timeline: o card segue o cursor livremente.
                 //
                 // Sobre a timeline: o card vira o PRÉVISO DO DROP —
                 // trava no beat e na LINHA onde o clip vai entrar.
@@ -2129,32 +2120,11 @@ export component Workspace inherits Rectangle {
                         - workspace.absolute-position.y
                         - 19px;
 
-                // Inclinação só faz sentido enquanto o card está
-                // sob o cursor. Preso ao grid da timeline ele já
-                // comunica a posição pelo snap; girar um retângulo
-                // que já está travado só embaralha a leitura.
-                transform-rotation:
-                    root.drag-over-timeline
-                        ? 0deg
-                        : root.drag-tilt-display;
-
                 width:
                     root.left-panel-width - 16px;
 
                 height:
                     38px;
-
-                transform-origin:
-                    {
-                        x:
-                            (
-                                root.left-panel-width
-                                - 16px
-                            ) / 2,
-
-                        y:
-                            19px
-                    };
 
                 z:
                     200;

@@ -166,8 +166,7 @@ component ClipItem inherits ClipItemVisual {
         string,
         string,
         color,
-        bool,
-        length
+        bool
     );
 
     callback drag-moved(
@@ -190,15 +189,7 @@ component ClipItem inherits ClipItemVisual {
     // VISUAL DRAG
     // ========================================================
 
-    opacity:
-        root.drag-active
-            ? 0.35
-            : 1.0;
-
-    animate opacity {
-        duration:
-            120ms;
-    }
+    opacity: root.drag-active ? 0.35 : 1.0;
 
 
     // ========================================================
@@ -362,9 +353,7 @@ component ClipItem inherits ClipItemVisual {
                             root.position,
                             root.duration,
                             root.clip-color,
-                            root.is-midi,
-                            self.mouse-x
-                                - self.press-x
+                            root.is-midi
                         );
                     }
                 }
@@ -421,8 +410,7 @@ export component ClipPool inherits Rectangle {
         string,
         string,
         color,
-        bool,
-        length
+        bool
     );
 
     callback clip-drag-moved(
@@ -638,8 +626,7 @@ export component ClipPool inherits Rectangle {
                     p,
                     d,
                     c,
-                    m,
-                    initial-dx
+                    m
                 ) => {
 
                     root.clip-drag-started(
@@ -647,8 +634,7 @@ export component ClipPool inherits Rectangle {
                         p,
                         d,
                         c,
-                        m,
-                        initial-dx
+                        m
                     );
                 }
 
@@ -823,8 +809,7 @@ export component ClipPool inherits Rectangle {
                     p,
                     d,
                     c,
-                    m,
-                    initial-dx
+                    m
                 ) => {
 
                     root.clip-drag-started(
@@ -832,8 +817,7 @@ export component ClipPool inherits Rectangle {
                         p,
                         d,
                         c,
-                        m,
-                        initial-dx
+                        m
                     );
                 }
 
