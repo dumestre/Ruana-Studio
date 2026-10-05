@@ -319,10 +319,15 @@ export component BeatHeader inherits Rectangle {
             width: 25px;
             height: 18px;
 
+            // Repouso em `surface-high` como todo widget dentro do
+            // painel; o estado ABERTO usa o par accent/on-accent,
+            // a mesma linguagem do `Button` quando está toggled.
+            // Antes o repouso era `base` — idêntico ao corpo do
+            // popup, então o botão só aparecia no hover.
             background:
                 root.grid-dropdown-open
-                ? Theme.surface-high
-                : Theme.base;
+                ? Theme.accent
+                : Theme.surface-high;
 
             border-radius: 4px;
 
@@ -341,7 +346,9 @@ export component BeatHeader inherits Rectangle {
                 height: 100%;
 
                 color:
-                    Theme.text-dim;
+                    root.grid-dropdown-open
+                    ? Theme.on-accent
+                    : Theme.text-dim;
 
                 font-size: 10px;
 
@@ -378,10 +385,11 @@ export component BeatHeader inherits Rectangle {
             width: 74px;
             height: 18px;
 
+            // Mesmo repouso do botão de resolução ao lado: `surface-high`
+            //fill, e o hover se anuncia no TEXTO (accent) — é o
+            // que a toolbar e a edit_toolbar já fazem.
             background:
-                touch.has-hover
-                ? Theme.surface-high
-                : Theme.base;
+                Theme.surface-high;
 
             border-radius: 4px;
 
@@ -391,7 +399,7 @@ export component BeatHeader inherits Rectangle {
                 Theme.border;
 
 
-            Text {
+            label := Text {
 
                 text:
                     "+ TRACK";
@@ -412,6 +420,13 @@ export component BeatHeader inherits Rectangle {
                 vertical-alignment:
                     TextVerticalAlignment.center;
             }
+
+
+            states [
+                hovered when touch.has-hover: {
+                    label.color: Theme.accent;
+                }
+            ]
 
 
             touch := TouchArea {
@@ -436,10 +451,15 @@ export component BeatHeader inherits Rectangle {
             width: 18px;
             height: 18px;
 
-            background:
-                Theme.base;
+            // `resting-bg` no lugar de `background`: sobrescrever
+            // `background` direto matava o estado toggled do
+            // componente, então o menu aberto não mudava de cor.
+            resting-bg: Theme.surface-high;
 
             border-radius: 12px;
+
+            toggled:
+                root.beat-menu-open;
 
             icon:
                 @image-url(
@@ -472,6 +492,10 @@ export component BeatHeader inherits Rectangle {
 
             width: 18px;
             height: 18px;
+
+            // Par do menu-button: dois botões redondos de 18px
+            // lado a lado não podem ter fundos diferentes.
+            resting-bg: Theme.surface-high;
 
             border-radius: 12px;
 

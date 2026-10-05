@@ -256,7 +256,23 @@ impl App {
                 vk,
                 Key::Named(NamedKey::Delete) | Key::Named(NamedKey::Backspace)
             ) {
-                self.delete_selected();
+                if self.show_piano_roll {
+                    let ids: Vec<i32> = self
+                        .piano_roll_inter
+                        .selected
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, selected)| *selected)
+                        .filter_map(|(index, _)| self.piano_roll_notes.get(index).map(|note| note.id))
+                        .collect();
+                    if !ids.is_empty() {
+                        self.note_editor.delete_many(&ids);
+                        self.sync_piano_roll_from_core();
+                        self.emit_piano_roll_write_back();
+                    }
+                } else {
+                    self.delete_selected();
+                }
                 self.request_redraw();
             }
         }
@@ -1733,6 +1749,7 @@ impl App {
                         if self.piano_roll_inter.is_dragging() {
                             self.piano_roll_inter.end_drag(&mut self.piano_roll_notes, &m);
                             self.sync_piano_roll_to_core();
+                            self.emit_piano_roll_write_back();
                         } else if self.piano_roll_inter.is_marqueeing() {
                             self.piano_roll_inter.end_marquee(&self.piano_roll_notes, &m);
                         }
@@ -1746,6 +1763,7 @@ impl App {
                                 }
                             }
                             self.sync_piano_roll_from_core();
+                            self.emit_piano_roll_write_back();
                         }
                     }
                     _ => {}
@@ -1754,4 +1772,3 @@ impl App {
         }
     }
 }
-

@@ -1,6 +1,5 @@
 import { Mixer } from "../mixer/mixer.slint";
 import { SamplerArea } from "../components/sampler_area.slint";
-import { PianoRollArea } from "../piano_roll/piano_roll.slint";
 import { Button } from "../components/button.slint";
 import { Theme } from "../theme.slint";
 import { SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
@@ -48,9 +47,7 @@ export component FloatPanel inherits Window {
     in-out property <bool> sampler-drop-hover: false;
 
     property <string> header-title:
-        root.tool-tab == 0 ? "Mixer"
-        : root.tool-tab == 1 ? "Sampler"
-        : "Piano Roll";
+        root.tool-tab == 0 ? "Mixer" : "Sampler";
 
     property <length> resize-corner: 16px;
 
@@ -150,12 +147,6 @@ export component FloatPanel inherits Window {
                 sample-duration <=> SamplerState.sample-duration;
             }
 
-            PianoRollArea {
-                width: 100%;
-                height: 100%;
-                visible: root.tool-tab == 2;
-                show-header: false;
-            }
         }
     }
 

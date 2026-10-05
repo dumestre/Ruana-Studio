@@ -12,7 +12,6 @@ import { Explorer } from "../explorer/explorer.slint";
 import { BrowserFileEntry } from "../explorer/file_browser.slint";
 import { Mixer } from "../mixer/mixer.slint";
 import { SamplerArea } from "../components/sampler_area.slint";
-import { PianoRollArea } from "../piano_roll/piano_roll.slint";
 import { BarProperties } from "../components/bar_properties.slint";
 import { VerticalBar } from "../components/vertical_bar.slint";
 
@@ -273,7 +272,7 @@ export component Workspace inherits Rectangle {
     in-out property <bool> native-overlay: false;
 
     in-out property <[bool]> floated:
-        [false, false, false];
+        [false, false];
 
     in-out property <int> selected-tab: -1;
 
@@ -436,7 +435,6 @@ export component Workspace inherits Rectangle {
 
     callback clip-copy-requested(int);
 
-    callback piano-roll-open-requested(int);
 
     callback clip-fade-committed(
         int,
@@ -1552,18 +1550,6 @@ export component Workspace inherits Rectangle {
 
 
                             // ---------------------------------
-                            // PIANO ROLL (clipe MIDI)
-                            // ---------------------------------
-
-                            piano-roll-open-requested(id) => {
-
-                                root.piano-roll-open-requested(
-                                    id
-                                );
-                            }
-
-
-                            // ---------------------------------
                             // FADE COMMIT
                             // ---------------------------------
 
@@ -1883,32 +1869,6 @@ export component Workspace inherits Rectangle {
                         float-toggle => {
                             root.float-toggle(
                                 1
-                            );
-                        }
-                    }
-
-
-                    // -----------------------------------------
-                    // PIANO ROLL
-                    // -----------------------------------------
-
-                    PianoRollArea {
-
-                        width:
-                            100%;
-
-                        height:
-                            100%;
-
-                        visible:
-                            bottom-panel.current-tab == 2;
-
-                        floating:
-                            root.floated[2];
-
-                        float-toggle => {
-                            root.float-toggle(
-                                2
                             );
                         }
                     }
@@ -2482,4 +2442,3 @@ export component Workspace inherits Rectangle {
         }
     }
 }
-

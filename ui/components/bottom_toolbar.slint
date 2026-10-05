@@ -25,7 +25,7 @@ export component BottomToolbar inherits Rectangle {
             text: "Sampler";
             corner-radius: 2px;
             height: 15px;
-            toggled: root.selected-tab == 1;
+            toggled: root.selected-tab == 1 && root.panel-visible;
             toggled-bg: Theme.accent;
             clicked => {
                 if root.selected-tab == 1 && root.panel-visible {
@@ -43,15 +43,15 @@ export component BottomToolbar inherits Rectangle {
             text: "TimeWarp";
             corner-radius: 2px;
             height: 15px;
-            toggled: root.selected-tab == 0;
+            toggled: root.selected-tab == 4 && !root.panel-visible;
             toggled-bg: Theme.accent;
             clicked => {
-                if root.selected-tab == 0 && root.panel-visible {
+                if root.selected-tab == 4 && !root.panel-visible {
                     root.panel-visible = false;
                     root.selected-tab = -1;
                 } else {
-                    root.selected-tab = 0;
-                    root.panel-visible = true;
+                    root.selected-tab = 4;
+                    root.panel-visible = false;
                 }
             }
         }
@@ -61,15 +61,15 @@ export component BottomToolbar inherits Rectangle {
             text: "Piano Roll";
             corner-radius: 2px;
             height: 15px;
-            toggled: root.selected-tab == 2;
+            toggled: root.selected-tab == 2 && !root.panel-visible;
             toggled-bg: Theme.accent;
             clicked => {
-                if root.selected-tab == 2 && root.panel-visible {
+                if root.selected-tab == 2 && !root.panel-visible {
                     root.panel-visible = false;
                     root.selected-tab = -1;
                 } else {
                     root.selected-tab = 2;
-                    root.panel-visible = true;
+                    root.panel-visible = false;
                 }
             }
         }
@@ -79,7 +79,7 @@ export component BottomToolbar inherits Rectangle {
             text: "Mixer";
             corner-radius: 2px;
             height: 15px;
-            toggled: root.selected-tab == 0;
+            toggled: root.selected-tab == 0 && root.panel-visible;
             toggled-bg: Theme.accent;
             clicked => {
                 if root.selected-tab == 0 && root.panel-visible {
@@ -97,14 +97,14 @@ export component BottomToolbar inherits Rectangle {
             text: "AI Assistant";
             corner-radius: 2px;
             height: 15px;
-            toggled: root.selected-tab == 2;
+            toggled: root.selected-tab == 3 && root.panel-visible;
             toggled-bg: Theme.accent;
             clicked => {
-                if root.selected-tab == 2 && root.panel-visible {
+                if root.selected-tab == 3 && root.panel-visible {
                     root.panel-visible = false;
                     root.selected-tab = -1;
                 } else {
-                    root.selected-tab = 2;
+                    root.selected-tab = 3;
                     root.panel-visible = true;
                 }
             }

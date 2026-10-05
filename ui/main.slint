@@ -5,12 +5,10 @@ import { BeatState } from "beat/beat_state.slint";
 import { Workspace } from "windows/workspace.slint";
 import { BrowserFileEntry } from "explorer/file_browser.slint";
 import { FloatPanel } from "windows/float_panel.slint";
-import { PianoRollData, PianoRollActions } from "piano_roll/piano_roll_state.slint";
 import { ContextMenu, ClipContextMenuState } from "components/context_menu.slint";
 import { TimelineMetrics, SamplerMetrics, BeatMetrics } from "timeline/clip_drag/clip_drag_state.slint";
 
 export { FloatPanel }
-export { PianoRollData, PianoRollActions }
 export { BrowserFileEntry }
 export { BeatState }
 export { TimelineMetrics }
@@ -213,7 +211,7 @@ export component MainWindow inherits Window {
         215px;
 
     in-out property <[bool]> floated:
-        [false, false, false];
+        [false, false];
 
     in-out property <length> left-panel-width:
         230px;
@@ -419,7 +417,6 @@ export component MainWindow inherits Window {
     callback clip-rename-requested(int, string);
     callback clip-color-cycle-requested(int);
     callback clip-copy-requested(int);
-    callback piano-roll-open-requested(int);
     callback clip-paste-requested(float, int);
     callback pencil-created(float, int, float);
     callback clip-fade-committed(int, float, float);
@@ -1000,7 +997,6 @@ export component MainWindow inherits Window {
             clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
             clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
             clip-copy-requested(id) => { root.clip-copy-requested(id); }
-            piano-roll-open-requested(id) => { root.piano-roll-open-requested(id); }
             clip-fade-committed(id, fi, fo) => { root.clip-fade-committed(id, fi, fo); }
             clip-gain-committed(id, db) => { root.clip-gain-committed(id, db); }
             clip-paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }

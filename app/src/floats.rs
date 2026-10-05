@@ -1,5 +1,4 @@
-//! Janelas flutuantes: mixer, sampler e piano roll desacoplam
-//! para a própria janela, várias ao mesmo tempo.
+//! Janelas flutuantes: mixer e sampler desacoplam para a própria janela.
 //!
 //! `install` cria os slots, espelha o estado `floated` e assina
 //! todos os handlers de cada painel flutuante.
@@ -13,10 +12,8 @@ use crate::FloatPanel;
 use crate::icon;
 use crate::importer::is_audio_path;
 use crate::mixer::{MixerModels, apply_mixer_models, mixer_inserts_state};
-use crate::piano_roll::wire_piano_roll;
 use daw_core::mixer::MixerParam;
 use daw_core::project::Project;
-use daw_midi::NoteEditor;
 
 pub struct FloatHandles {
     pub apply_mixer_state: Rc<dyn Fn()>,
@@ -30,9 +27,9 @@ pub fn install(
     meter_models: Rc<crate::meters::MeterModels>,
     audio: crate::audio_bridge::AudioBridge,
 ) -> FloatHandles {
-    // Slots das janelas flutuantes, um por tool (0=Mixer, 1=Sampler, 2=Piano Roll).
-    let float_panels: Rc<RefCell<[Option<FloatPanel>; 3]>> =
-        Rc::new(RefCell::new([None, None, None]));
+    // Slots das janelas flutuantes (0=Mixer, 1=Sampler).
+    let float_panels: Rc<RefCell<[Option<FloatPanel>; 2]>> =
+        Rc::new(RefCell::new([None, None]));
 
     // Espelha quais janelas estão abertas na propriedade `floated` da UI.
     let sync_floated = {
@@ -40,7 +37,7 @@ pub fn install(
         let panels = float_panels.clone();
         move || {
             let p = panels.borrow();
-            let arr: Vec<bool> = vec![p[0].is_some(), p[1].is_some(), p[2].is_some()];
+            let arr: Vec<bool> = vec![p[0].is_some(), p[1].is_some()];
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_floated(Rc::new(slint::VecModel::from(arr)).into());
             }
@@ -119,7 +116,7 @@ pub fn install(
                 None => return,
             };
             let idx = tab as usize;
-            if idx > 2 {
+            if idx > 1 {
                 return;
             }
 
@@ -149,16 +146,6 @@ pub fn install(
             // flutuante e a da timeline não podem divergir.
             p.set_channel_meters(meter_values_for_float.clone().into());
             p.set_channel_clipped(meter_clipped_for_float.clone().into());
-
-            // Piano roll próprio da janela flutuante.
-            // Janelas flutuantes são voltadas ao uso em múltiplas telas:
-            // mantêm um editor de notas local, não vinculado a clips.
-            let no_persist: Rc<dyn Fn()> = Rc::new(|| {});
-            wire_piano_roll(
-                &p,
-                Rc::new(RefCell::new(NoteEditor::new())),
-                &no_persist,
-            );
 
             // Fecha via botão da própria janela flutuante.
             {
@@ -407,7 +394,7 @@ pub fn install_no_floats(
         let ui_weak = ui.as_weak();
         move || {
             if let Some(ui) = ui_weak.upgrade() {
-                ui.set_floated(Rc::new(slint::VecModel::from(vec![false, false, false])).into());
+                ui.set_floated(Rc::new(slint::VecModel::from(vec![false, false])).into());
             }
         }
     };

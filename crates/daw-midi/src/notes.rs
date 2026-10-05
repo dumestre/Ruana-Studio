@@ -37,6 +37,19 @@ impl NoteEditor {
         &self.notes
     }
 
+    /// Replaces the editor contents while preserving the note IDs.
+    pub fn replace_notes(&mut self, notes: &[Note]) {
+        self.notes.clear();
+        self.notes.extend_from_slice(notes);
+        self.next_id = self
+            .notes
+            .iter()
+            .map(|note| i64::from(note.id) + 1)
+            .max()
+            .unwrap_or(1)
+            .max(1);
+    }
+
     /// Adiciona uma nota e retorna o novo id.
     pub fn add(&mut self, pitch: i32, start: f32, length: f32, velocity: i32) -> i32 {
         let id = self.next_id as i32;
@@ -55,6 +68,13 @@ impl NoteEditor {
     pub fn move_note(&mut self, id: i32, start: f32) {
         if let Some(n) = self.notes.iter_mut().find(|n| n.id == id) {
             n.start = start;
+        }
+    }
+
+    /// Changes a note's MIDI pitch.
+    pub fn change_note_pitch(&mut self, id: i32, pitch: i32) {
+        if let Some(n) = self.notes.iter_mut().find(|n| n.id == id) {
+            n.pitch = pitch.clamp(0, 127);
         }
     }
 
@@ -174,13 +194,49 @@ mod tests {
     }
 
     #[test]
+    fn replace_notes_preserves_ids_and_continues_id_sequence() {
+        let mut e = NoteEditor::new();
+        e.replace_notes(&[
+            Note {
+                id: 7,
+                pitch: 60,
+                start: 0.0,
+                length: 1.0,
+                velocity: 100,
+            },
+            Note {
+                id: 12,
+                pitch: 64,
+                start: 2.0,
+                length: 0.5,
+                velocity: 90,
+            },
+        ]);
+
+        assert_eq!(e.notes()[0].id, 7);
+        assert_eq!(e.notes()[1].id, 12);
+        assert_eq!(e.add(67, 3.0, 1.0, 80), 13);
+    }
+
+    #[test]
     fn move_and_resize_by_id() {
         let mut e = editor_with_notes();
         e.move_note(1, 3.5);
+        e.change_note_pitch(1, 72);
         e.resize_note(1, 2.0);
         let n = e.notes()[0];
         assert_eq!(n.start, 3.5);
+        assert_eq!(n.pitch, 72);
         assert_eq!(n.length, 2.0);
+    }
+
+    #[test]
+    fn pitch_is_clamped_to_midi_range() {
+        let mut e = editor_with_notes();
+        e.change_note_pitch(1, 140);
+        assert_eq!(e.notes()[0].pitch, 127);
+        e.change_note_pitch(1, -3);
+        assert_eq!(e.notes()[0].pitch, 0);
     }
 
     #[test]

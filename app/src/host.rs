@@ -104,6 +104,8 @@ pub struct EngineBridge {
     /// roda com o `bridge` emprestado durante o press, então ela só marca a
     /// flag; o `tick` (que tem o `ui`) despacha de fato.
     pub open_clip_flag: Rc<Cell<Option<u32>>>,
+    /// Clip MIDI atualmente carregado no piano roll da engine.
+    pub active_piano_clip_id: Rc<Cell<Option<u64>>>,
     /// Roteamento de "abrir clip", instalado pelo `setup` do app: só o app
     /// tem `AudioBridge`/`Project` para escolher e abrir o editor certo.
     pub open_clip_handler: Option<Rc<dyn Fn(u64)>>,
@@ -159,8 +161,20 @@ impl EngineBridge {
                     );
                 }));
         }
+        let active_piano_clip_id = Rc::new(Cell::new(None));
+        {
+            let project = project.clone();
+            let active_clip = active_piano_clip_id.clone();
+            engine.piano_roll_write_back = Some(Box::new(move |notes| {
+                if let Some(clip_id) = active_clip.get() {
+                    project
+                        .borrow_mut()
+                        .set_clip_notes(clip_id, notes.to_vec());
+                }
+            }));
+        }
         // Duplo clique num clip: a engine só marca o id (ela roda com o bridge
-        // emprestado). O tick resolve no Project e abre o editor.
+        // emprestado). O tick carrega o MIDI no piano roll ou roteia áudio.
         let open_clip_flag: Rc<Cell<Option<u32>>> = Rc::new(Cell::new(None));
         {
             let flag = open_clip_flag.clone();
@@ -181,6 +195,7 @@ impl EngineBridge {
             clips_flag,
             mirrored_clip_ids,
             open_clip_flag,
+            active_piano_clip_id,
             open_clip_handler: None,
             dirty: true,
             waveforms: None,
@@ -198,12 +213,45 @@ impl EngineBridge {
 
         // Duplo clique num clip → abre o editor correspondente. O id chega
         // pela flag porque a engine não pode chamar de volta enquanto o
-        // bridge está emprestado pelo callback de ponteiro do Slint; o
-        // roteamento (piano roll / sampler) é do app, instalado no setup.
+        // bridge está emprestado pelo callback de ponteiro do Slint.
         if let Some(id) = self.open_clip_flag.take() {
-            if let Some(handler) = self.open_clip_handler.clone() {
-                handler(id as u64);
+            let clip_id = id as u64;
+            let midi_notes = self
+                .project
+                .borrow()
+                .clip(clip_id)
+                .filter(|clip| clip.is_midi())
+                .map(|clip| clip.notes().to_vec());
+            if let Some(notes) = midi_notes {
+                self.active_piano_clip_id.set(Some(clip_id));
+                self.engine.note_editor.replace_notes(&notes);
+                self.engine.sync_piano_roll_from_core();
+                self.engine.show_timewarp = false;
+                self.engine.show_piano_roll = true;
+                ui.set_bottom_active_tab(2);
+                ui.set_bottom_panel_open(false);
+                self.dirty = true;
+            } else if let Some(handler) = self.open_clip_handler.clone() {
+                handler(clip_id);
             }
+        }
+
+        // Tabs 0/1/3 são painéis Slint dockados. Piano roll (2) e TimeWarp
+        // (4) são desenhados pela própria engine e não podem cobrir seu canvas
+        // com o painel inferior do Slint.
+        let active_tab = ui.get_bottom_active_tab();
+        let engine_piano_roll = active_tab == 2;
+        let engine_timewarp = active_tab == 4;
+        if self.engine.show_piano_roll != engine_piano_roll
+            || self.engine.show_timewarp != engine_timewarp
+        {
+            self.engine.show_piano_roll = engine_piano_roll;
+            self.engine.show_timewarp = engine_timewarp;
+            self.dirty = true;
+        }
+        let docked_panel_open = matches!(active_tab, 0 | 1 | 3);
+        if ui.get_bottom_panel_open() != docked_panel_open {
+            ui.set_bottom_panel_open(docked_panel_open);
         }
 
         // Snap do grid vem da edit toolbar do Slint (mesmo estado que o
@@ -1033,17 +1081,35 @@ impl ApplicationHandler for Handler {
                 // os dois botões de play ficam coerentes.
                 // Não vai para o Slint como tecla, nem acontece
                 // double-toggle — só o routed-toggle resolve.
-                let forward_to_slint = {
+                let (forward_to_slint, show_piano_roll, show_timewarp) = {
                     let mut b = bridge.borrow_mut();
-                    match b.engine.handle_key(&key) {
+                    let forward = match b.engine.handle_key(&key) {
                         timeline_render::app::KeyAction::TogglePlay => {
                             ui.invoke_toggle_play_routed();
                             false
                         }
                         timeline_render::app::KeyAction::ExitWindow
                         | timeline_render::app::KeyAction::None => true,
-                    }
+                    };
+                    (forward, b.engine.show_piano_roll, b.engine.show_timewarp)
                 };
+                if key.state == ElementState::Pressed
+                    && matches!(
+                        &key.logical_key,
+                        Key::Character(s)
+                            if s.eq_ignore_ascii_case("p") || s.eq_ignore_ascii_case("t")
+                    )
+                {
+                    let selected_tab = if show_piano_roll {
+                        2
+                    } else if show_timewarp {
+                        4
+                    } else {
+                        -1
+                    };
+                    ui.set_bottom_active_tab(selected_tab);
+                    ui.set_bottom_panel_open(false);
+                }
                 // Qualquer tecla válida marca o frame: o próximo `tick`
                 // re-renderiza a cena refletindo o atalho aplicado.
                 bridge.borrow_mut().dirty = true;

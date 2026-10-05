@@ -280,11 +280,6 @@ impl App {
         };
         let timeline_bottom = timeline_bottom.max(self.ruler_px + 4.0);
 
-        // Sincroniza notas MIDI do daw-core (fonte de verdade) para o cache do wgpu
-        if self.show_piano_roll {
-            self.sync_piano_roll_from_core();
-        }
-
         // Fundo geral - cobre desde a régua até o fim da timeline (não o piano roll)
         instances.push(RectInstance {
             x: 0.0, y: self.ruler_px,

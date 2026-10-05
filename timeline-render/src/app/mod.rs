@@ -181,10 +181,12 @@ pub struct App {
         // ------------------------------------------------------------
 
     /// ===== Piano roll (editor MIDI) =====
-    /// Editor de notas: fonte de verdade compartilhado com o Slint (daw-midi::NoteEditor).
+    /// Fonte de verdade das notas do clip MIDI ativo (`daw-midi::NoteEditor`).
     /// Quando `show_piano_roll` é verdadeiro, a área inferior da janela exibe
     /// o editor em grade em vez da time_ruler.
     pub note_editor: daw_midi::NoteEditor,
+    /// Persists piano-roll edits to the active MIDI clip in the host project.
+    pub piano_roll_write_back: Option<Box<dyn FnMut(&[daw_midi::Note])>>,
     pub piano_roll_notes: Vec<piano_roll::PianoRollNote>,
     pub piano_roll_inter: piano_roll::PianoRollInteraction,
     pub piano_roll_scroll_y: f32,
@@ -840,6 +842,7 @@ transport,
 
             // Piano roll: inicialmente oculto, com altura padrão.
             note_editor: daw_midi::NoteEditor::new(),
+            piano_roll_write_back: None,
             piano_roll_notes: Vec::new(),
             piano_roll_inter: piano_roll::PianoRollInteraction::new(),
             piano_roll_scroll_y: 0.0,
@@ -1320,10 +1323,7 @@ transport,
         }
     }
 
-    /// Sincroniza o estado de notas do `NoteEditor` (fonte de verdade do daw-midi)
-    /// para o cache local usado pela renderização do piano roll.
-    /// Esta função é chamada no início de `build_instances` para que o wgpu
-    /// reflita sempre as últimas edições feitas no Slint UI.
+    /// Sincroniza o estado de notas do `NoteEditor` para o cache local do wgpu.
     pub fn sync_piano_roll_from_core(&mut self) {
         self.piano_roll_notes.clear();
         for note in self.note_editor.notes() {
@@ -1336,22 +1336,28 @@ transport,
                 selected: false,
             });
         }
-        self.piano_roll_inter.sync_selection(self.piano_roll_notes.len());
+        self.piano_roll_inter.selected = vec![false; self.piano_roll_notes.len()];
     }
 
     /// Aplica as notas editadas no wgpu de volta ao `NoteEditor`.
     /// Chamar após movimento de nota ou criação via draw tool.
     pub fn sync_piano_roll_to_core(&mut self) {
         for note in &self.piano_roll_notes {
-            let core_note = self.note_editor.notes().iter().find(|n| n.id == note.id);
+            let core_note = self
+                .note_editor
+                .notes()
+                .iter()
+                .find(|core_note| core_note.id == note.id)
+                .copied();
             if let Some(core_note) = core_note {
-                let needs_move = (core_note.start - note.start).abs() > 0.001
-                    || core_note.pitch != note.pitch;
                 let needs_resize = (core_note.length - note.length).abs() > 0.001;
                 let needs_vel = core_note.velocity != note.velocity;
 
-                if needs_move {
+                if (core_note.start - note.start).abs() > 0.001 {
                     self.note_editor.move_note(note.id, note.start);
+                }
+                if core_note.pitch != note.pitch {
+                    self.note_editor.change_note_pitch(note.id, note.pitch);
                 }
                 if needs_resize {
                     self.note_editor.resize_note(note.id, note.length);
@@ -1360,6 +1366,13 @@ transport,
                     self.note_editor.change_note_velocity(note.id, note.velocity);
                 }
             }
+        }
+    }
+
+    pub fn emit_piano_roll_write_back(&mut self) {
+        let notes = self.note_editor.notes().to_vec();
+        if let Some(write_back) = &mut self.piano_roll_write_back {
+            write_back(&notes);
         }
     }
 
