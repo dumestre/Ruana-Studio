@@ -12,6 +12,31 @@
 //   [0] Studio Dark  = TEMA PADRÃO (default do app)
 //   [6] Paper        = TEMA CLARO (o que estamos ajustando)
 // A ordem de cada lista é: [0] [1] [2] [3] [4] [5] [6].
+//
+// ------------------------------------------------------------
+// REGRA DE USO (a escada) — não pular degrau.
+//
+//   base         → o FUNDO. A janela, o vazio atrás de tudo, e
+//                  os POÇOS/"inset": campo de texto, LCD, trilho
+//                  de medidor, slot vazio. Coisa que afunda.
+//   surface      → o PAINEL que senta em cima do fundo. Explorer,
+//                  canal do mixer, painel do beat, popup.
+//   surface-high → o WIDGET dentro do painel. Botão em repouso,
+//                  aba, item de lista, célula do grid.
+//
+//   surface-step / timeline-bg / grid-line / grid-sub
+//                → EXCLUSIVOS DA TIMELINE. Explorer, mixer e beat
+//                  não os tocam: eles usam só a escada de 3 degraus.
+//
+// Dois erros que a escada elimina:
+//   • painel com `surface-high` (vira widget) — some um degrau e
+//     o filho não contrasta com o pai;
+//   • botão com `base` (vira poço) — some um degrau para TRÁS e
+//     o botão fica mais escuro que o painel que o contém.
+//     Botão em repouso é SEMPRE `surface-high`.
+//
+// `on-accent` / `on-crimson` são a cor do TEXTO quando o fundo já
+// é `accent` / `crimson`. Nunca `text-primary` sobre accent.
 // ============================================================
 
 export global Theme {
@@ -251,25 +276,28 @@ export global Theme {
         #EFEFEF  // [6] PAPER (claro) ★
     ];
 
-    // TIMELINE BG — intermediário entre base e surface (mais claro que base, mais escuro que surface)
+    // TIMELINE BG — degrau próprio da timeline: mais claro que
+    // `base`, mais escuro que `surface-step`. Não usar fora dela.
     private property <[color]> timeline-bg-list: [
-        #696969, // [0] Studio Dark — entre #1E1E1E e #242424
-        #1E2C35, // [1] Midnight Blue — entre #161A21 e #1D242E
-        #1F1B28, // [2] Violeta Ruana — entre #191722 e #221E2E
-        #181B11, // [3] Volt — entre #14160E e #1C1F15
-        #252119, // [4] Sunset — entre #211A12 e #2A2117
-        #122628, // [5] Ocean Teal — entre #0F1E21 e #15262A
-        #797979  // [6] PAPER (claro) — entre #616161 e #919191
+        #696969, // [0] Studio Dark — entre base #313131 e surface #242424
+        #1E2C35, // [1] Midnight Blue — entre base #161A21 e surface #1D242E
+        #1F1B28, // [2] Violeta Ruana — entre base #191722 e surface #221E2E
+        #181B11, // [3] Volt — entre base #14160E e surface #1C1F15
+        #252119, // [4] Sunset — entre base #211A12 e surface #2A2117
+        #122628, // [5] Ocean Teal — entre base #0F1E21 e surface #15262A
+        #797979  // [6] PAPER (claro) — entre base #646464 e surface #919191
     ];
 
+    // SURFACE-STEP — um degrau acima de `surface`, o fundo do GRID
+    // da timeline. É o que `grid-line`/`grid-sub` precisam enxergar.
     private property <[color]> surface-step-list: [
-        #424242, // [0] Studio Dark — entre #242424 e #2E2E2E
+        #424242, // [0] Studio Dark — entre #242424 e #555555
         #232D38, // [1] Midnight Blue — entre #1D242E e #26303D
         #272334, // [2] Violeta Ruana — entre #221E2E e #2D2740
         #20231A, // [3] Volt — entre #1C1F15 e #262A1D
         #30261F, // [4] Sunset — entre #2A2117 e #362A1B
         #192C31, // [5] Ocean Teal — entre #15262A e #1E3035
-        #7A7A7A  // [6] PAPER (claro) — distinto de #919191, visível sobre #555555
+        #7A7A7A  // [6] PAPER (claro) — distinto de base #646464 e surface #919191
     ];
 
     private property <int> clamp: min(max(0, active), base-list.length - 1);

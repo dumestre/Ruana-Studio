@@ -425,7 +425,10 @@ export component BeatContent inherits Rectangle {
         // arrasto.
         // --------------------------------------------------------
 
-        border-color: Theme.surface;
+        // `surface` no lugar do `border` do painel apagava a borda —
+        // o `BeatTrackPanel` já tem `border-color: Theme.border`
+        // como padrão, então isto só sobrescrevia para nada.
+        border-color: Theme.border;
         drag-hover-track:
             root.drag-hover-track;
 

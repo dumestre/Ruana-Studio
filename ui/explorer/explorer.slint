@@ -36,7 +36,14 @@ export component Explorer inherits Rectangle {
     width: 300px;
     
 
-    background: Theme.surface-high;
+    // PAINEL: senta direto no fundo da janela, então é `surface`.
+    // Era `surface-high` — o mesmo tom dos itens da lista, que
+    // ficavam invisíveis dentro do próprio painel.
+    // Dentro dele: poços em `base` (busca, barra de navegação,
+    // cabeçalho da tabela, preview) e widgets em `surface-high`
+    // (itens, abas) — um degrau acima do painel, como manda a
+    // escada do theme.slint.
+    background: Theme.surface;
 
     border-radius: 6px;
 

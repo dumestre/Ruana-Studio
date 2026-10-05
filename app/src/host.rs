@@ -945,8 +945,19 @@ impl ApplicationHandler for Handler {
                                 && qy >= engine.ruler_px
                                 && qy < oh
                             {
-                                let (beat, track) = engine.cursor_to_snapped_beat_track((qx, qy));
-                                engine.paste_at_beat(beat, track);
+                                // Use the same window-to-timeline mapping as clip
+                                // drops. The Slint metrics are published from the
+                                // engine's current scroll/zoom values, so this
+                                // keeps the paste target aligned with the visible
+                                // cursor even when the timeline is offset in the
+                                // window or the display uses scaling.
+                                let logical = logical_pos(px as f64, py as f64, scale);
+                                let target = ui.invoke_map_window_coords_to_timeline(
+                                    logical.x,
+                                    logical.y,
+                                );
+                                engine.snap_enabled = ui.get_snap_enabled();
+                                engine.paste_at_beat(target.beat, target.track.max(0) as usize);
                                 b.dirty = true;
                                 // Não despacha para o Slint também: o paste já
                                 // manipulou o clique, evitando duplo processamento.

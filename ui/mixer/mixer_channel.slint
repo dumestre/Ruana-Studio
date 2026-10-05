@@ -165,7 +165,11 @@ export component MixerChannel inherits Rectangle {
             // MUTE
             Button {
                 width: 18px;
-                background: Theme.base;
+                // Botão em repouso é SEMPRE `surface-high` — o mesmo
+                // descanso da toolbar e da edit_toolbar. Era `base`,
+                // que é o POÇO: deixava o botão mais escuro que o
+                // painel que o contém (um degrau para trás).
+                resting-bg: Theme.surface-high;
                 corner-radius: 2px;
                 height: 18px;
 
@@ -177,7 +181,9 @@ export component MixerChannel inherits Rectangle {
                 text: "M";
 
                 toggled: root.muted;
-                toggled-bg: Theme.surface;
+                // Era `surface` — idêntico ao fundo do canal, então
+                // o mute ligado não mudava nada na tela.
+                toggled-bg: Theme.accent;
 
                 clicked => {
                     root.param-changed(
@@ -191,6 +197,7 @@ export component MixerChannel inherits Rectangle {
             // SOLO
             if !root.is-master: Button {
                 width: 18px;
+                resting-bg: Theme.surface-high;
                 corner-radius: 2px;
                 height: 18px;
                 drop-shadow-blur: 3px;
@@ -201,7 +208,7 @@ export component MixerChannel inherits Rectangle {
                 text: "S";
 
                 toggled: root.soloed;
-                toggled-bg: Theme.surface;
+                toggled-bg: Theme.accent;
 
                 clicked => {
                     root.param-changed(
@@ -215,6 +222,7 @@ export component MixerChannel inherits Rectangle {
             // RECORD
             if !root.is-master: Button {
                 width: 18px;
+                resting-bg: Theme.surface-high;
                 corner-radius: 2px;
                 height: 18px;
                 drop-shadow-blur: 3px;
@@ -279,6 +287,11 @@ export component MixerChannel inherits Rectangle {
                 height: 18px;
 
                 padding-x: 0px;
+
+                // O descanso herdado (`surface`) era idêntico ao fundo
+                // do canal — o "+" só aparecia quando o mouse passava
+                // em cima. Alinhado com o repouso do M/S/R acima.
+                resting-bg: Theme.surface-high;
 
                 corner-radius: 3px;
 
