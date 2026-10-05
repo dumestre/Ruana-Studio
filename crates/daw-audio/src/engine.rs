@@ -780,10 +780,9 @@ impl AudioEngine {
         // Feito ANTES do mix, com o offset exato de cada disparo
         // dentro deste buffer.
         //
-        // O pattern é EXCLUSIVO ao modo "só beat": tocando a timeline
-        // o sequenciador fica mudo, senão a bateria do canal rack
-        // duplica por cima da arranjo (ou vice-versa) — o usuário
-        // escolhe qual das duas está em cena pelo cursor.
+        // O pattern ativo em loop só toca no modo isolado do header. O
+        // play global usa os clips colocados na timeline, inclusive
+        // clips MIDI criados a partir de patterns.
         if beat_only && !snap.beat.rows.is_empty() && snap.beat.steps > 0 {
             let steps = snap.beat.steps as i64;
             let swing = snap.beat.swing as f64;
@@ -1309,6 +1308,7 @@ mod tests {
             for i in 0..frames {
                 early_max = early_max.max(out[i * 2].abs()).max(out[i * 2 + 1].abs());
             }
+
         }
         let track_reading = meters.read(0);
         let master_reading = meters.read(project.tracks.len());
@@ -1337,6 +1337,96 @@ mod tests {
         assert!(
             !track_reading.clipped_left && !master_reading.clipped_left,
             "um tom em 0.8 não pode acender o clip",
+        );
+    }
+
+    #[test]
+    fn pattern_toca_conforme_o_modo_e_a_presenca_na_timeline() {
+        use daw_midi::{BeatPatterns, DrumPattern};
+
+        let path = std::env::temp_dir().join("ruana_pool_pattern_mode.wav");
+        write_marker_wav(&path);
+        let path_str = path.to_string_lossy().into_owned();
+        let rate = 48_000u32;
+        let frames = 960usize;
+
+        let render_peak = |mode, put_midi_clip_on_timeline| {
+            let mut project = daw_core::Project::startup();
+            project.master_mixer.volume = 1.0;
+            let mut pattern = DrumPattern::new("POOL", 1, 16);
+            pattern.grid[0][0] = true;
+            pattern.track_params[0].sample_path = Some(path_str.clone());
+            project.beat_patterns = BeatPatterns {
+                patterns: vec![pattern],
+                current: 0,
+            };
+            if put_midi_clip_on_timeline {
+                let id = project
+                    .add_clip(0, daw_core::ClipKind::Midi, "POOL", 0.0, 4.0)
+                    .expect("cria clip MIDI na timeline");
+                project.set_clip_notes(
+                    id,
+                    vec![daw_midi::Note {
+                        id: 1,
+                        pitch: daw_midi::DRUM_PITCH_BASE,
+                        start: 0.0,
+                        length: 0.25,
+                        velocity: 127,
+                    }],
+                );
+            }
+
+            let mut cache = BufferCache::new(rate);
+            let snapshot =
+                Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+            let transport = Arc::new(Mutex::new(Transport::default()));
+            {
+                let mut t = transport.lock().unwrap();
+                t.playing = true;
+                t.mode = mode;
+            }
+            let mut rt = RtState::new();
+            let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+            let meters = MeterBank::new();
+            meters.set_channel_count(project.tracks.len() + 1);
+
+            let mut peak = 0.0f32;
+            for _ in 0..4 {
+                let mut out = vec![0.0f32; frames * 2];
+                AudioEngine::process(
+                    &mut out,
+                    2,
+                    &mut rt,
+                    &transport,
+                    &snapshot,
+                    &preview,
+                    &meters,
+                    rate,
+                );
+                peak = out
+                    .chunks_exact(2)
+                    .map(|frame| frame[0].abs().max(frame[1].abs()))
+                    .fold(peak, f32::max);
+            }
+            peak
+        };
+
+        let timeline_without_clip = render_peak(PlayMode::Timeline, false);
+        let timeline_with_clip = render_peak(PlayMode::Timeline, true);
+        let isolated_beat = render_peak(PlayMode::BeatOnly, false);
+        std::fs::remove_file(&path).ok();
+
+        assert!(
+            timeline_without_clip < 1e-6,
+            "o pattern selecionado no pool não pode tocar em loop sem um clip na timeline (peak={timeline_without_clip})"
+        );
+        assert!(
+            timeline_with_clip > 0.5,
+            "o play global deve reproduzir o clip MIDI de pattern que está na timeline (peak={timeline_with_clip})"
+        );
+        assert!(
+            isolated_beat > 0.5,
+            "o botão Play do header deve tocar o pattern isolado (peak={isolated_beat})"
         );
     }
 

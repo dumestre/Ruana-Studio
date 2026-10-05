@@ -6,7 +6,6 @@ use crate::{
     get_font,
     rgba,
     rgba_alpha,
-    srgb_to_linear,
     palette,
     RectInstance,
     build_text_instances_font,
@@ -1250,19 +1249,8 @@ fn push_clip(
             let vel = (note.velocity.clamp(0, 127) as f32) / 127.0;
             let th = (1.8 + 2.2 * vel).min(inner_h.max(1.0));
 
-            // A nota usa a cor base do clip (em linear), opaca.
-            // O corpo é `darker(base, 0.12)` com 50% alpha; a nota
-            // em `base` cheia aparece como uma barra mais viva sobre ele.
-            // Mesmo princípio do áudio: o conteúdo contrasta com o corpo.
-            let note_r = srgb_to_linear(base.0 as f32 / 255.0);
-            let note_g = srgb_to_linear(base.1 as f32 / 255.0);
-            let note_b = srgb_to_linear(base.2 as f32 / 255.0);
-            let note_col = [
-                (note_r * 255.0) as u8,
-                (note_g * 255.0) as u8,
-                (note_b * 255.0) as u8,
-                255,
-            ];
+            // Use the same near-black linear RGB as the waveform shader.
+            let note_col = [5, 5, 5, 255];
 
             instances.push(RectInstance {
                 x: nx,

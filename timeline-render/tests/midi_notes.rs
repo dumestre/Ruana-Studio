@@ -14,7 +14,6 @@ use timeline_render::clips::{
     ClipMetrics,
     ClipNote,
 };
-use timeline_render::srgb_to_linear;
 
 fn midi_clip(len: f32, notes: Vec<ClipNote>) -> ClipDemo {
     ClipDemo {
@@ -81,12 +80,10 @@ fn notas_midi_geram_mais_instancias_que_clip_vazio() {
 }
 
 #[test]
-fn nota_usa_a_cor_do_clip_nao_a_da_onda() {
+fn nota_usa_a_cor_escura_da_waveform() {
     let inter = ClipInteraction::new();
     let m = metrics();
 
-    // color = 0 -> usa CLIP_MIDI_DEFAULT[theme] = CLIP_MIDI_DEFAULT[0]
-    // = (0x6F, 0xA8, 0x6B) = (111, 168, 107) em sRGB.
     let clip = ClipDemo {
         id: 1,
         track_index: 0,
@@ -110,20 +107,11 @@ fn nota_usa_a_cor_do_clip_nao_a_da_onda() {
 
     let barras: Vec<_> = inst.iter().filter(|r| r.radius == 1.0).collect();
     assert_eq!(barras.len(), 1);
-
-    let c = barras[0].color;
-    // CLIP_MIDI_DEFAULT[0] = (0x6F, 0xA8, 0x6B) = (111, 168, 107) em sRGB.
-    // Pipeline converte para linear antes de ir pra GPU.
-    let expected_r = (srgb_to_linear(111.0 / 255.0) * 255.0).round() as u8;
-    let expected_g = (srgb_to_linear(168.0 / 255.0) * 255.0).round() as u8;
-    let expected_b = (srgb_to_linear(107.0 / 255.0) * 255.0).round() as u8;
-    // Tolerância de ±1 por diferenças de arredondamento FP.
-    let (dr, dg, db) = (c[0] as i16 - expected_r as i16, c[1] as i16 - expected_g as i16, c[2] as i16 - expected_b as i16);
-    assert!(
-        dr.abs() <= 1 && dg.abs() <= 1 && db.abs() <= 1,
-        "a nota deve usar a cor do clip em linear, veio {c:?}, esperado ~({expected_r}, {expected_g}, {expected_b})"
+    assert_eq!(
+        barras[0].color,
+        [5, 5, 5, 255],
+        "a nota usa a mesma cor escura da waveform"
     );
-    assert_eq!(c[3], 255, "a nota é opaca");
 }
 
 #[test]

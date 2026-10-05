@@ -135,36 +135,7 @@ export component MainWindow inherits Window {
     in-out property <bool> beat-playing:
         false;
 
-    // =====================================================
-    // CONTEXTO DO PONTEIRO (rota do play)
-    // =====================================================
-    //
-    // O gesto de play (espaço ou o botão do header do beat) tem que
-    // saber em qual superfície o cursor está: sobre a popup do beat
-    // ele comanda o sequenciador; em qualquer outro lugar comanda a
-    // timeline. Os dois nunca tocam juntos.
-    //
-    // Calculado no Rust (dono do CursorMoved do winit) contra a
-    // geometria da popup — o Slint não tem um "ponteiro global", e um
-    // TouchArea de hover por baixo do conteúdo do popup nunca receberia
-    // o evento (o hit-test do Slint entrega só ao item de cima).
-    in-out property <bool> pointer-over-beat:
-        false;
-
-    // Geometria da popup do beat em px lógicos de janela — só leitura
-    // para o Rust (hit-test do ponteiro).
-    out property <length> beat-popup-x:
-        beat_popup.content-x;
-    out property <length> beat-popup-y:
-        beat_popup.content-y;
-    out property <length> beat-popup-w:
-        beat_popup.content-w;
-    out property <length> beat-popup-h:
-        beat_popup.content-h;
-
-    // play roteado: o botão/atalho manda para a superfície sob o
-    // cursor. É o ÚNICO ponto de decisão — a tecla espaço (Slint) e o
-    // atalho do winit (Rust) chamam exatamente isto.
+    // O atalho de play controla sempre o transporte global da timeline.
     callback toggle-play-routed();
 
     // Aba ativa do bottom panel (0 mixer, 1 sampler, ...), exposta
@@ -1019,28 +990,11 @@ export component MainWindow inherits Window {
     }
 
     // =====================================================
-    // PLAY ROTEADO PELO CONTEXTO DO PONTEIRO
+    // PLAY GLOBAL DA TIMELINE
     // =====================================================
-    //
-    // Regra única de todo o play da DAW:
-    //   • cursor sobre a popup do beat ABERTA → comanda o sequenciador
-    //     (PlayMode::BeatOnly: o pattern soa, a timeline fica parada);
-    //   • em qualquer outro lugar → comanda a timeline
-    //     (PlayMode::Timeline: clips + playhead andam, o sequenciencer
-    //     fica mudo).
-    //
-    // O Rust confirma o estado real logo em seguida
-    // (`set_playing`/`set_beat_playing` em playback.rs), então os dois
-    // botões de play ficam coerentes mesmo quando o play trocou de
-    // modo — não é preciso casar os dois toggles aqui.
     toggle-play-routed => {
-        if root.pointer-over-beat {
-            root.beat-playing = !root.beat-playing;
-            root.beat-play-state-changed(root.beat-playing);
-        } else {
-            root.playing = !root.playing;
-            root.play-state-changed(root.playing);
-        }
+        root.playing = !root.playing;
+        root.play-state-changed(root.playing);
     }
 
     map-window-coords-to-timeline(wx, wy) => {

@@ -144,16 +144,17 @@ pub fn install(
 
     // ---- PLAY / STOP ------------------------------------------------
     //
-    // Um único controlador serve aos DOIS gatilhos de play, e o QUE
-    // toca é decidido pela UI pelo contexto do ponteiro:
-    //  • play do transporte/timeline (`play-state-changed`) →
+    // Um único controlador serve aos DOIS gatilhos de play:
+    //  • play global (`play-state-changed`) →
     //    `PlayMode::Timeline`: clips de áudio e MIDI tocam, o playhead
     //    anda e o step sequencer fica MUDO.
     //  • play do beat (`beat-play-state-changed`) → `PlayMode::BeatOnly`:
     //    o pattern soa e o grid acende, mas a timeline fica parada
     //    (nenhum clip toca e o playhead não anda).
     //
-    // Os modos são EXCLUSIVOS e o motor de áudio tem UM transporte só:
+    // O play isolado do beat vem do botão no header; o play global
+    // reproduz os clips da timeline. Os modos são EXCLUSIVOS e o
+    // motor de áudio tem UM transporte só:
     // pedir play no outro modo enquanto este toca é uma TROCA (stop +
     // start), nunca uma sobreposição. Por isso o estado local é
     // `Option<PlayMode>` e não um booleano.

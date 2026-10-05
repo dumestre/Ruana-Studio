@@ -83,13 +83,7 @@ export component BeatPopup inherits Rectangle {
     // GEOMETRIA DO POPUP
     // ============================================================
     //
-    // Não existe mais um `mouse-over` aqui por TouchArea: o hit-test
-    // do Slint entrega o ponteiro só ao item de TOPO, e todo o
-    // conteúdo (title-bar, header, grid, trilhas) fica acima de um
-    // probe de hover — ele nunca veria `has-hover == true`, e a rota
-    // do play por contexto morria calada. Quem decide é o Rust, com
-    // a posição do cursor e estes retângulos (ver `pointer-over-beat`
-    // em main.slint e `update_pointer_context` em host.rs).
+    // Geometria usada pelos hit-tests de drop e métricas do sequenciador.
 
     out property <length> content-x:
         beat_content.absolute-position.x;

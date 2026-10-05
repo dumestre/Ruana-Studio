@@ -6,9 +6,8 @@
 
 /// O que o transporte está tocando.
 ///
-/// A UI decide o modo pelo contexto do ponteiro: com o cursor sobre a
-/// popup do beat o play é do step sequencer; sobre a timeline é da
-/// timeline. Os dois são EXCLUSIVOS — nunca tocam juntos.
+/// O play global reproduz a timeline; o botão do header do beat toca só
+/// o pattern ativo. Os dois modos são exclusivos.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlayMode {
     /// Reprodução da timeline: os clips (áudio e MIDI) tocam e o

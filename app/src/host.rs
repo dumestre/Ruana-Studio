@@ -48,32 +48,6 @@ pub struct SharedState {
     pub shift: bool,
 }
 
-/// Publica no Slint em qual superfície o ponteiro está, para o play ser
-/// roteado pelo contexto (espaço / botão de play do header do beat).
-///
-/// Feito aqui porque o Rust é o dono do `CursorMoved` do winit e o Slint
-/// não expõe um ponteiro global. Um `TouchArea.has-hover` dentro da
-/// popup não serviria: o hit-test do Slint entrega o ponteiro só ao item
-/// de cima, e todo o conteúdo (header, grid, trilhas) fica ACIMA de um
-/// probe de hover — ele nunca veria `has-hover == true`.
-///
-/// `x`/`y` em px LÓGICOS de janela (o mesmo espaço de
-/// `beat-popup-x`… e de `timeline-canvas-abs-x`).
-fn update_pointer_context(ui: &MainWindow, x: f32, y: f32) {
-    let w = ui.get_beat_popup_w();
-    let h = ui.get_beat_popup_h();
-    let over_beat = ui.get_beat_open()
-        && w > 0.0
-        && h > 0.0
-        && x >= ui.get_beat_popup_x()
-        && x < ui.get_beat_popup_x() + w
-        && y >= ui.get_beat_popup_y()
-        && y < ui.get_beat_popup_y() + h;
-    if ui.get_pointer_over_beat() != over_beat {
-        ui.set_pointer_over_beat(over_beat);
-    }
-}
-
 /// Ponte da engine wgpu para o app hosted: transições de estado a cada frame.
 pub struct EngineBridge {
     pub engine: TimelineEngine,
@@ -90,10 +64,6 @@ pub struct EngineBridge {
     /// `Moved`; usado para converter a posição GLOBAL do cursor (GetCursorPos)
     /// em coordenadas da janela durante drags do SO.
     pub win_pos: (f64, f64),
-    /// Posição do cursor em px LÓGICOS relativos à janela (último
-    /// `CursorMoved`). Usada pela rota do play por contexto — o Slint
-    /// não tem um "ponteiro global" para consultar.
-    pub cursor_logical: (f32, f32),
     /// O projeto mudou → o espelho de clips precisa de rebuild.
     pub clips_flag: Rc<Cell<bool>>,
     /// Ids que o espelho já carregou no engine (tick). Guarda do write-back
@@ -191,7 +161,6 @@ impl EngineBridge {
             audio_engine: None,
             audio_sync_timer: None,
             win_pos,
-            cursor_logical: (0.0, 0.0),
             clips_flag,
             mirrored_clip_ids,
             open_clip_flag,
@@ -324,15 +293,6 @@ impl EngineBridge {
             m.set_scroll_x(self.engine.scroll_x / ls);
             m.set_scroll_y(self.engine.scroll_y / ls);
             m.set_snap_beat_step(self.engine.grid_beat_step().max(1e-4));
-        }
-
-        // Refresca a rota do play por contexto. O `CursorMoved` já faz
-        // isso a cada movimento, mas a popup do beat é ARRASTÁVEL: sem
-        // esta passada, mover a janela do beat com o cursor por cima
-        // deixaria `pointer-over-beat` preso no valor antigo.
-        {
-            let (cx, cy) = self.cursor_logical;
-            update_pointer_context(ui, cx, cy);
         }
 
         // A engine é a fonte da verdade da área de exibição: P/T abertos
@@ -727,9 +687,8 @@ pub fn install_engine_callbacks(
     // ---- TECLADO -----------------------------------------------------
     // Espaço = play/pause. NÃO é tratado aqui: o atalho vive no
     // `undo-scope` do main.slint e no `KeyAction::TogglePlay` do winit,
-    // e os dois chamam o MESMO `toggle-play-routed`, que decide pelo
-    // contexto do ponteiro (`pointer-over-beat`). Tratar aqui também
-    // causaria double-toggle.
+    // e os dois chamam o MESMO `toggle-play-routed` do transporte global.
+    // Tratar aqui também causaria double-toggle.
     {
         ui.on_engine_key_event(move |_text, _ctrl, _shift, _alt| {});
     }
@@ -939,18 +898,11 @@ impl ApplicationHandler for Handler {
             WindowEvent::CursorMoved { position, .. } => {
                 self.state.borrow_mut().last_cursor = (position.x as f32, position.y as f32);
                 let logical = logical_pos(position.x, position.y, scale);
-                bridge.borrow_mut().cursor_logical = (logical.x, logical.y);
-                // Rota do play por contexto: com o cursor sobre a popup
-                // do beat o espaço comanda o sequenciencer, não a timeline.
-                update_pointer_context(ui, logical.x, logical.y);
                 overlay_dispatch(bridge, slint::platform::WindowEvent::PointerMoved {
                     position: logical,
                 });
             }
             WindowEvent::CursorLeft { .. } => {
-                // Saiu da janela: nada está "sobre" a popup, então o
-                // play volta a ser o da timeline.
-                ui.set_pointer_over_beat(false);
                 overlay_dispatch(bridge, slint::platform::WindowEvent::PointerExited);
             }
             WindowEvent::MouseInput { state, button, .. } => {
