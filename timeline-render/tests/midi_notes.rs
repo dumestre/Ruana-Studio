@@ -155,3 +155,29 @@ fn nota_que_atravessa_a_borda_da_janela_e_cortada() {    let inter = ClipInterac
         );
     }
 }
+
+#[test]
+fn selecao_de_clip_usa_contorno_e_sombra_compativeis_com_o_tema() {
+    let mut inter = ClipInteraction::new();
+    inter.selected = vec![true];
+    let clip = midi_clip(4.0, Vec::new());
+
+    let mut paper = metrics();
+    paper.theme = 6;
+    let paper_instances = build_clip_instances(&[clip.clone()], &inter, &paper, 900.0);
+    assert!(paper_instances.iter().any(|rect| rect.color == [0x26, 0x26, 0x26, 255]));
+    assert!(!paper_instances.iter().any(|rect| rect.color == [0x00, 0xC8, 0x53, 88]));
+
+    let mut dark = metrics();
+    dark.theme = 0;
+    let dark_instances = build_clip_instances(&[clip], &inter, &dark, 900.0);
+    assert!(dark_instances.iter().any(|rect| rect.color == [0x00, 0xC8, 0x53, 255]));
+    assert_eq!(
+        dark_instances
+            .iter()
+            .filter(|rect| rect.color == [0x00, 0xC8, 0x53, 88])
+            .count(),
+        4,
+        "temas escuros usam sombra externa com a cor accent"
+    );
+}

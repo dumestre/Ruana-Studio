@@ -220,62 +220,7 @@ pub fn build_clip_instances(
                 && inter.selected[idx]
                 || in_marquee)
         {
-            let ac =
-                [0x26, 0x26, 0x26, 255];
-
-            let thin = 2.0;
-
-            instances.push(RectInstance {
-                x,
-                y,
-                w,
-                h: thin,
-                color: ac,
-                wave_offset: 0,
-                wave_count: 0,
-                clip_w: 0.0,
-                clip_h: 0.0,
-                radius: 3.0,
-            });
-
-            instances.push(RectInstance {
-                x,
-                y: y + m.row_height - thin,
-                w,
-                h: thin,
-                color: ac,
-                wave_offset: 0,
-                wave_count: 0,
-                clip_w: 0.0,
-                clip_h: 0.0,
-                radius: 3.0,
-            });
-
-            instances.push(RectInstance {
-                x,
-                y,
-                w: thin,
-                h: m.row_height,
-                color: ac,
-                wave_offset: 0,
-                wave_count: 0,
-                clip_w: 0.0,
-                clip_h: 0.0,
-                radius: 0.0,
-            });
-
-            instances.push(RectInstance {
-                x: x + w - thin,
-                y,
-                w: thin,
-                h: m.row_height,
-                color: ac,
-                wave_offset: 0,
-                wave_count: 0,
-                clip_w: 0.0,
-                clip_h: 0.0,
-                radius: 0.0,
-            });
+            push_clip_selection_outline(&mut instances, x, y, draw_w, m.row_height, t);
         }
 
         // Seam.
@@ -471,82 +416,14 @@ pub fn build_clip_instances(
                     bw,
                 );
 
-                let border_col =
-                    (0x26, 0x26, 0x26);
-
-                let th = 2.0;
-
-                instances.push(RectInstance {
+                push_clip_selection_outline(
+                    &mut instances,
                     x,
                     y,
-                    w: draw_w,
-                    h: th,
-                    color: [
-                        border_col.0,
-                        border_col.1,
-                        border_col.2,
-                        255,
-                    ],
-                    wave_offset: 0,
-                    wave_count: 0,
-                    clip_w: 0.0,
-                    clip_h: 0.0,
-                    radius: 3.0,
-                });
-
-                instances.push(RectInstance {
-                    x,
-                    y: y + m.row_height - th,
-                    w: draw_w,
-                    h: th,
-                    color: [
-                        border_col.0,
-                        border_col.1,
-                        border_col.2,
-                        255,
-                    ],
-                    wave_offset: 0,
-                    wave_count: 0,
-                    clip_w: 0.0,
-                    clip_h: 0.0,
-                    radius: 0.0,
-                });
-
-                instances.push(RectInstance {
-                    x,
-                    y,
-                    w: th,
-                    h: m.row_height,
-                    color: [
-                        border_col.0,
-                        border_col.1,
-                        border_col.2,
-                        255,
-                    ],
-                    wave_offset: 0,
-                    wave_count: 0,
-                    clip_w: 0.0,
-                    clip_h: 0.0,
-                    radius: 0.0,
-                });
-
-                instances.push(RectInstance {
-                    x: x + draw_w - th,
-                    y,
-                    w: th,
-                    h: m.row_height,
-                    color: [
-                        border_col.0,
-                        border_col.1,
-                        border_col.2,
-                        255,
-                    ],
-                    wave_offset: 0,
-                    wave_count: 0,
-                    clip_w: 0.0,
-                    clip_h: 0.0,
-                    radius: 0.0,
-                });
+                    draw_w,
+                    m.row_height,
+                    t,
+                );
             }
         }
 
@@ -683,29 +560,13 @@ pub fn build_clip_instances(
                             bw,
                         );
 
-                        let border_col =
-                            (0x26, 0x26, 0x26);
-
-                        let th = 2.0;
-
-                        instances.push(
-                            RectInstance {
-                                x,
-                                y,
-                                w: draw_w,
-                                h: th,
-                                color: [
-                                    border_col.0,
-                                    border_col.1,
-                                    border_col.2,
-                                    255,
-                                ],
-                                wave_offset: 0,
-                                wave_count: 0,
-                                clip_w: 0.0,
-                                clip_h: 0.0,
-                                radius: 3.0,
-                            },
+                        push_clip_selection_outline(
+                            &mut instances,
+                            x,
+                            y,
+                            draw_w,
+                            m.row_height,
+                            t,
                         );
                     }
                 }
@@ -807,18 +668,19 @@ pub fn build_clip_instances(
             inter.marquee_rect();
 
         if mw > 0.0 && mh > 0.0 {
+            let marquee_color = selection_color(t);
+            let marquee_fill = if t == 6 {
+                [0x26, 0x26, 0x26, 60]
+            } else {
+                [marquee_color.0, marquee_color.1, marquee_color.2, 45]
+            };
             instances.push(
                 RectInstance {
                     x: mx,
                     y: my,
                     w: mw,
                     h: mh,
-                    color: [
-                        0x26,
-                        0x26,
-                        0x26,
-                        60,
-                    ],
+                    color: marquee_fill,
                     wave_offset: 0,
                     wave_count: 0,
                     clip_w: 0.0,
@@ -835,12 +697,7 @@ pub fn build_clip_instances(
                     y: my,
                     w: mw,
                     h: thin,
-                    color: [
-                        0x26,
-                        0x26,
-                        0x26,
-                        255,
-                    ],
+                    color: [marquee_color.0, marquee_color.1, marquee_color.2, 255],
                     wave_offset: 0,
                     wave_count: 0,
                     clip_w: 0.0,
@@ -855,12 +712,7 @@ pub fn build_clip_instances(
                     y: my + mh - thin,
                     w: mw,
                     h: thin,
-                    color: [
-                        0x26,
-                        0x26,
-                        0x26,
-                        255,
-                    ],
+                    color: [marquee_color.0, marquee_color.1, marquee_color.2, 255],
                     wave_offset: 0,
                     wave_count: 0,
                     clip_w: 0.0,
@@ -875,12 +727,7 @@ pub fn build_clip_instances(
                     y: my,
                     w: thin,
                     h: mh,
-                    color: [
-                        0x26,
-                        0x26,
-                        0x26,
-                        255,
-                    ],
+                    color: [marquee_color.0, marquee_color.1, marquee_color.2, 255],
                     wave_offset: 0,
                     wave_count: 0,
                     clip_w: 0.0,
@@ -895,12 +742,7 @@ pub fn build_clip_instances(
                     y: my,
                     w: thin,
                     h: mh,
-                    color: [
-                        0x26,
-                        0x26,
-                        0x26,
-                        255,
-                    ],
+                    color: [marquee_color.0, marquee_color.1, marquee_color.2, 255],
                     wave_offset: 0,
                     wave_count: 0,
                     clip_w: 0.0,
@@ -961,6 +803,137 @@ pub fn build_clip_instances(
     }
 
     instances
+}
+
+fn selection_color(theme: usize) -> palette::Rgb {
+    if theme == 6 {
+        (0x26, 0x26, 0x26)
+    } else {
+        palette::ACCENT[theme.clamp(0, 6)]
+    }
+}
+
+fn push_clip_selection_outline(
+    instances: &mut Vec<RectInstance>,
+    x: f32,
+    y: f32,
+    visible_w: f32,
+    h: f32,
+    theme: usize,
+) {
+    let (r, g, b) = selection_color(theme);
+    let thin = 2.0;
+
+    // An accent-tinted outer shadow keeps the selection legible on dark
+    // themes; Paper retains its existing dark outline without a glow.
+    if theme != 6 {
+        let shadow = [r, g, b, 88];
+        let spread = 2.0;
+        let shadow_rects = [
+            RectInstance {
+                x: x - spread,
+                y: y - spread,
+                w: visible_w + spread * 2.0,
+                h: spread,
+                color: shadow,
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 3.0,
+            },
+            RectInstance {
+                x: x - spread,
+                y: y + h,
+                w: visible_w + spread * 2.0,
+                h: spread,
+                color: shadow,
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 3.0,
+            },
+            RectInstance {
+                x: x - spread,
+                y,
+                w: spread,
+                h,
+                color: shadow,
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
+            },
+            RectInstance {
+                x: x + visible_w,
+                y,
+                w: spread,
+                h,
+                color: shadow,
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
+            },
+        ];
+        instances.extend(shadow_rects);
+    }
+
+    let outline = [r, g, b, 255];
+    let outline_rects = [
+        RectInstance {
+            x,
+            y,
+            w: visible_w,
+            h: thin,
+            color: outline,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 3.0,
+        },
+        RectInstance {
+            x,
+            y: y + h - thin,
+            w: visible_w,
+            h: thin,
+            color: outline,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 3.0,
+        },
+        RectInstance {
+            x,
+            y,
+            w: thin,
+            h,
+            color: outline,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        },
+        RectInstance {
+            x: x + visible_w - thin,
+            y,
+            w: thin,
+            h,
+            color: outline,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        },
+    ];
+    instances.extend(outline_rects);
 }
 
 fn clip_color(
