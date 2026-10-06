@@ -318,8 +318,15 @@ pub fn setup(
         let pool: Vec<crate::ClipData> = (0..clips_model.row_count())
             .filter_map(|i| clips_model.row_data(i))
             .collect();
+        let pattern_names: Vec<String> = project
+            .borrow()
+            .beat_patterns
+            .patterns
+            .iter()
+            .map(|pattern| pattern.name.clone())
+            .collect();
         let pool_model = Rc::new(slint::VecModel::from(
-            crate::models::build_pool_clips(&pool),
+            crate::models::build_pool_clips(&pool, &pattern_names),
         ));
         ui.set_pool_clips(pool_model.clone().into());
         pool_model

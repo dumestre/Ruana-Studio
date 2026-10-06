@@ -385,6 +385,8 @@ export component ClipPool inherits Rectangle {
 
     clip: true;
 
+    in-out property <int> selected-tab: 0;
+
     // ========================================================
     // DADOS
     //
@@ -545,17 +547,70 @@ export component ClipPool inherits Rectangle {
                         1;
                 }
             }
-        
+
+            HorizontalLayout {
+
+                alignment:
+                    LayoutAlignment.center;
+
+                cross-axis-alignment:
+                    CrossAxisAlignment.center;
+
+                spacing:
+                    4px;
+
+                Button {
+                    text: "Audio";
+                    width: 58px;
+                    height: 22px;
+                    padding-x: 2px;
+                    corner-radius: 3px;
+                    toggled: root.selected-tab == 0;
+
+                    clicked => {
+                        root.selected-tab = 0;
+                    }
+                }
+
+                Button {
+                    text: "MIDI";
+                    width: 54px;
+                    height: 22px;
+                    padding-x: 2px;
+                    corner-radius: 3px;
+                    toggled: root.selected-tab == 1;
+
+                    clicked => {
+                        root.selected-tab = 1;
+                    }
+                }
+
+                Button {
+                    text: "Beat Seq.";
+                    width: 76px;
+                    height: 22px;
+                    padding-x: 2px;
+                    corner-radius: 3px;
+                    toggled: root.selected-tab == 2;
+
+                    clicked => {
+                        root.selected-tab = 2;
+                    }
+                }
+            }
 
 
-        // ====================================================
-        // LISTA — TODOS OS CLIPS (audio + MIDI, sem filtro)
-        // ====================================================
+            // ====================================================
+            // LISTA — CLIPS DE ÁUDIO OU MIDI
+            // ====================================================
 
-        clips-list := VerticalLayout {
+            clips-list := VerticalLayout {
 
-            spacing:
-                4px;
+                visible:
+                    root.selected-tab != 2;
+
+                spacing:
+                    4px;
 
 
             for clip[i] in root.clips: ClipItem {
@@ -576,6 +631,11 @@ export component ClipPool inherits Rectangle {
                     Math.round(
                         clip.len * 10
                     ) / 10;
+
+                visible:
+                    root.selected-tab == 0
+                        ? !clip.is-midi
+                        : clip.is-midi;
 
 
                 // ============================================
@@ -668,38 +728,22 @@ export component ClipPool inherits Rectangle {
 
 
         // ====================================================
-        // SEÇÃO — BEAT PATTERNS
+        // BEAT SEQUENCER PATTERNS
         // ====================================================
 
         HorizontalLayout {
 
-            spacing: 6px;
+            visible:
+                root.selected-tab == 2;
 
-            cross-axis-alignment: CrossAxisAlignment.center;
+            alignment:
+                LayoutAlignment.center;
 
-            Text {
-
-                text:
-                    "BEAT PATTERNS";
-
-                visible:
-                    BeatState.pattern-names.length > 0;
-
-                color:
-                    Theme.text-dim;
-
-                font-size:
-                    9px;
-
-                font-weight:
-                    700;
-
-                horizontal-stretch:
-                    1;
-            }
+            cross-axis-alignment:
+                CrossAxisAlignment.center;
 
             // ----------------------------------------------------
-            // "+" — CRIAR NOVO PADRÃO
+            // CRIAR NOVO PADRÃO
             //
             // Cria um padrão vazio no core (BeatState.create-pattern)
             // e o popup do beat se abre (o handler do Rust re-projeta
@@ -707,36 +751,12 @@ export component ClipPool inherits Rectangle {
             // ----------------------------------------------------
 
             Button {
-
-                Image {
-                    image-fit: ImageFit.fill;
-                    source: @image-url(                             "icons/add.svg"                         );
-                    width: 18px;
-                    height: 18px;
-                }
-
-                // Sempre visível: serve para criar o PRIMEIRO pattern
-                // quando o pool está vazio.
-                visible:
-                    true;
-                width: 18px;
-
-                toggled:
-                    false;
-
-                padding-x:
-                    2px;
-                preferred-width: 0px;
-
-                icon-size:
-                    22px;
-
-                text-color:
-                    Theme.text-dim;
-
-                height: 18px;
-                hover-text-color:
-                    Theme.accent;
+                text: "+ Add Pattern";
+                width: 112px;
+                height: 24px;
+                padding-x: 6px;
+                corner-radius: 3px;
+                text-color: Theme.text-primary;
 
                 clicked => {
                     BeatState.create-pattern();
@@ -746,6 +766,9 @@ export component ClipPool inherits Rectangle {
 
 
         beats-list := VerticalLayout {
+
+            visible:
+                root.selected-tab == 2;
 
             spacing:
                 4px;

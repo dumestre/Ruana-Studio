@@ -13,7 +13,7 @@ use crate::waveform::{WaveformCache, to_clip_data};
 use daw_core::clip::Clip;
 use daw_core::project::{ChangeKind, DocumentEvent, Project};
 use daw_media::filesystem::default_samples_dir;
-use slint::Model;
+use slint::{Global, Model};
 use std::path::PathBuf;
 
 /// Compassos necessários para caber até `end_beat`: teto em
@@ -43,10 +43,16 @@ fn pool_entry_key(c: &ClipData) -> String {
 
 /// Entradas da biblioteca global do ClipPool: uma por material real,
 /// na ordem de primeiro uso na timeline.
-pub fn build_pool_clips(clips: &[ClipData]) -> Vec<ClipData> {
+pub fn build_pool_clips(clips: &[ClipData], beat_pattern_names: &[String]) -> Vec<ClipData> {
     let mut seen = HashSet::new();
     clips
         .iter()
+        .filter(|c| {
+            !c.is_midi
+                || !beat_pattern_names
+                    .iter()
+                    .any(|pattern_name| pattern_name == c.name.as_str())
+        })
         .filter(|c| seen.insert(pool_entry_key(c)))
         .cloned()
         .collect()
@@ -300,7 +306,17 @@ pub fn bind_document_events(
         let pool: Vec<ClipData> = (0..clips_model.row_count())
             .filter_map(|i| clips_model.row_data(i))
             .collect();
-        pool_clips_model.set_vec(build_pool_clips(&pool));
+        let pattern_names = ui
+            .upgrade()
+            .map(|ui| {
+                crate::BeatState::get(&ui)
+                    .get_pattern_names()
+                    .iter()
+                    .map(|name| name.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        pool_clips_model.set_vec(build_pool_clips(&pool, &pattern_names));
         // Cresce a timeline se o clip passou do fim atual.
         if let Some(end) = event_max_end_beat(event) {
             if let Some(ui) = ui.upgrade() {
@@ -365,7 +381,7 @@ mod tests {
             audio(2, "C:/samples/kick.wav", 0.0, 0.0),
             audio(3, "c:\\samples\\KICK.wav", 0.0, 0.0),
         ];
-        let pool = build_pool_clips(&clips);
+        let pool = build_pool_clips(&clips, &[]);
         assert_eq!(pool.len(), 1);
         assert_eq!(pool[0].id, 1);
     }
@@ -377,7 +393,7 @@ mod tests {
             audio(2, "C:/samples/kick.wav", 0.0, -6.0),
             audio(3, "C:/samples/kick.wav", 2.0, 0.0),
         ];
-        let pool = build_pool_clips(&clips);
+        let pool = build_pool_clips(&clips, &[]);
         assert_eq!(pool.len(), 3);
     }
 
@@ -388,7 +404,20 @@ mod tests {
             midi(2, "0,60,100,100;"),
             midi(3, "0,64,100,100;"),
         ];
-        let pool = build_pool_clips(&clips);
+        let pool = build_pool_clips(&clips, &[]);
         assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn beat_pattern_timeline_clips_are_not_listed_as_midi_pool_items() {
+        let mut beat_clip = midi(1, "0,60,100,100;");
+        beat_clip.name = SharedString::from("Beat 1");
+        let pattern_names = vec!["Beat 1".to_string()];
+        let other_clip = midi(2, "0,64,100,100;");
+
+        let pool = build_pool_clips(&[beat_clip, other_clip], &pattern_names);
+
+        assert_eq!(pool.len(), 1);
+        assert_eq!(pool[0].id, 2);
     }
 }
