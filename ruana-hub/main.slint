@@ -1,0 +1,84 @@
+import { HubTheme } from "ui/theme.slint";
+import { HubVersion, VersionsPage } from "ui/modules/versions.slint";
+
+export component HubWindow inherits Window {
+    title: "Ruana Hub";
+    preferred-width: 820px;
+    preferred-height: 560px;
+    min-width: 680px;
+    min-height: 460px;
+    background: HubTheme.background;
+
+    in property <[HubVersion]> versions: [];
+    in-out property <string> status: "Pronto";
+    in-out property <bool> busy: false;
+
+    callback install-test-version-requested();
+    callback update-test-version-requested(string);
+    callback launch-version-requested(string);
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: 74px;
+            background: HubTheme.surface;
+
+            HorizontalLayout {
+                padding-left: 24px;
+                padding-right: 24px;
+                spacing: 12px;
+
+                Image {
+                    source: @image-url("../app/assets/RuanaStudio.svg");
+                    width: 42px;
+                    height: 42px;
+                    image-fit: contain;
+                }
+
+                VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: "Ruana Hub";
+                        color: HubTheme.text-primary;
+                        font-size: 18px;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: "Versões de teste do Ruana Studio";
+                        color: HubTheme.text-dim;
+                        font-size: 11px;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 2px;
+            background: HubTheme.accent;
+        }
+
+        VersionsPage {
+            versions: root.versions;
+            busy <=> root.busy;
+            install-version => { root.install-test-version-requested(); }
+            update-version(path) => { root.update-test-version-requested(path); }
+            launch-version(path) => { root.launch-version-requested(path); }
+        }
+
+        Rectangle {
+            height: 30px;
+            background: HubTheme.surface;
+            Text {
+                x: 14px;
+                width: parent.width - 28px;
+                height: parent.height;
+                text: root.status;
+                color: HubTheme.text-dim;
+                font-size: 10px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}

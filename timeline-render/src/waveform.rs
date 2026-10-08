@@ -265,6 +265,10 @@ pub fn build_wave_bars_and_segments(
                 px_per_beat,
             );
 
+        // Nº real de canais lido do arquivo (quando há decode real).
+        let mut file_channels: Option<u16> =
+            None;
+
         let wave: Vec<f32> =
             if let Some(ref path) =
                 clip.file_path
@@ -276,14 +280,28 @@ pub fn build_wave_bars_and_segments(
                     clip.source_length_beats,
                     bpm,
                 ) {
-                    Ok(w) => w,
+                    Ok((
+                        w,
+                        channels,
+                    )) => {
+                        file_channels =
+                            Some(channels);
 
-                    Err(_) =>
+                        w
+                    }
+
+                    Err(err) => {
+                        warn_procedural_fallback(
+                            path,
+                            &*err,
+                        );
+
                         generate_procedural_wave(
                             clip,
                             n_cols,
                             audio_idx,
-                        ),
+                        )
+                    }
                 }
             } else {
                 let style =
@@ -351,6 +369,18 @@ pub fn build_wave_bars_and_segments(
             )
         );
 
+        // O nº de canais REAL do arquivo substitui o palpite do
+        // chamador: o espelho do app marcava TODO clip de áudio como
+        // estéreo, o que desenhava DUAS faixas (L/R) para um arquivo
+        // mono — cada faixa lendo metade das colunas (par/ímpar), ou
+        // seja, uma versão decimada da onda do arquivo.
+        if let Some(channels) =
+            file_channels
+        {
+            clip.channels =
+                channels;
+        }
+
         // A wave armazenada no clip é a fonte da verdade.
         clip.wave =
             wave;
@@ -380,7 +410,10 @@ pub(crate) fn decode_real_wave(
     source_length_beats: f32,
     bpm: f32,
 ) -> Result<
-    Vec<f32>,
+    (
+        Vec<f32>,
+        u16,
+    ),
     Box<dyn std::error::Error>,
 > {
     let data =
@@ -388,20 +421,35 @@ pub(crate) fn decode_real_wave(
             Path::new(path)
         )?;
 
+    // ================================================================
+    // LAYOUT DAS AMOSTRAS
+    //
+    // `WaveformData::samples` é o DOWNMIX MONO do arquivo; o layout
+    // ORIGINAL intercalado (com `channels` canais) vive em
+    // `interleaved` (daw-media/src/waveform.rs:32-58).
+    //
+    // Ler o downmix como se fosse intercalado cortava a duração pela
+    // METADE (`total_frames = len / channels`) e fazia cada canal ler
+    // amostras alternadas do mono: a onda desenhada não era a do
+    // arquivo — ficava mais curta e decimada em relação à original.
+    // ================================================================
+
     let samples =
-        &data.samples;
+        &data.interleaved;
 
     if samples.is_empty() ||
        n_cols == 0
     {
-        return Ok(
+        // SEMPRE 2 floats por coluna (L/R): é o layout que
+        // `concat_wave_data`, `apply_fade_envelope` e o par lido pelo
+        // shader assumem em todo o resto do pipeline.
+        return Ok((
             vec![
                 0.0;
-                n_cols as usize *
-                data.channels.max(1)
-                    as usize
-            ]
-        );
+                n_cols as usize * 2
+            ],
+            data.channels.max(1),
+        ));
     }
 
     let channels =
@@ -411,8 +459,7 @@ pub(crate) fn decode_real_wave(
 
     let mut wave =
         Vec::with_capacity(
-            n_cols as usize *
-            channels
+            n_cols as usize * 2
         );
 
     let total_frames =
@@ -515,8 +562,9 @@ pub(crate) fn decode_real_wave(
         if frame_start >=
            frame_end
         {
+            // L + R (2 floats por coluna).
             for _ in
-                0..channels
+                0..2
             {
                 wave.push(0.0);
             }
@@ -551,23 +599,35 @@ pub(crate) fn decode_real_wave(
                     }
                 });
 
-            wave.push(
+            // Mono ocupa o MESMO par L/R da coluna. Sem repetir o
+            // valor o buffer ficaria com 1 float por coluna e todos os
+            // consumidores leriam par/ímpar — cada faixa passaria a
+            // mostrar metade das colunas, isto é, uma versão decimada
+            // da onda do arquivo.
+            let v =
                 if peak.is_finite() {
                     peak
                 } else {
                     0.0
-                }
-            );
+                };
+
+            wave.push(v);
+            wave.push(v);
 
             continue;
         }
 
         // ================================================================
         // STEREO / MULTICANAL
+        //
+        // O buffer tem SEMPRE 2 floats por coluna (L/R). Arquivos com mais
+        // de 2 canais contribuem apenas com os dois primeiros — o `step`
+        // continua sendo o número REAL de canais, senão os canais seriam
+        // lidos fora de fase.
         // ================================================================
 
         for ch in
-            0..channels
+            0..channels.min(2)
         {
             let start_sample =
                 frame_start *
@@ -614,7 +674,47 @@ pub(crate) fn decode_real_wave(
         }
     }
 
-    Ok(wave)
+    // Devolve também o nº REAL de canais do arquivo: é o que decide
+    // entre a faixa única (mono, `clip_w = -6`) e as duas faixas L/R no
+    // renderer (`clips/render.rs`), e o que garante que o par L/R lido
+    // pelo shader corresponde ao conteúdo.
+    Ok((
+        wave,
+        channels as u16,
+    ))
+}
+
+/// Avisa UMA vez por arquivo que a waveform real não pôde ser lida e o
+/// desenho caiu no gerador procedural.
+///
+/// O fallback era silencioso: um clip com `file_path` presente porém
+/// inválido (arquivo movido/renomeado, extensão não suportada) ficava com
+/// a mesma aparência de placeholder de um clip sem áudio nenhum, sem
+/// nenhuma pista no console.
+fn warn_procedural_fallback(
+    path: &str,
+    err: &dyn std::error::Error,
+) {
+    use std::cell::RefCell;
+    use std::collections::HashSet;
+
+    thread_local! {
+        static WARNED:
+            RefCell<HashSet<String>> =
+            RefCell::new(HashSet::new());
+    }
+
+    WARNED.with(|warned| {
+        if warned
+            .borrow_mut()
+            .insert(path.to_string())
+        {
+            eprintln!(
+                "[waveform] wave real indisponivel para {path}: {err} \
+                 — desenhando placeholder procedural"
+            );
+        }
+    });
 }
 
 /// Gera waveform procedural para um clip.

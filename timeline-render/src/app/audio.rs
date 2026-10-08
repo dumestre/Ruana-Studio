@@ -134,7 +134,10 @@ impl App {
                 clip.source_length_beats,
                 bpm,
             ) {
-                Ok(w) => w,
+                Ok((
+                    w,
+                    _channels,
+                )) => w,
                 Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
             };
 
@@ -216,7 +219,7 @@ impl App {
                     clip.source_length_beats,
                     bpm,
                 ) {
-                    Ok(w) => w,
+                    Ok((w, _)) => w,
                     Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
                 };
                 // Insere o clip

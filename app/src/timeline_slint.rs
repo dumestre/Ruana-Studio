@@ -78,6 +78,10 @@ pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
             file_path: c.file_path.clone(),
             source_start_beats: c.source_start_beats,
             source_length_beats: c.length_beats,
+            // Palpite inicial. O nº REAL de canais do arquivo substitui
+            // este valor em `build_wave_bars_and_segments` assim que o
+            // áudio é decodificado — senão um arquivo mono era desenhado
+            // como duas faixas L/R, cada uma com metade das colunas.
             channels: if c.is_midi() { 1 } else { 2 },
         })
         .collect()
@@ -149,8 +153,30 @@ pub fn sync_clips_from_project(engine: &mut TimelineEngine, proj: &Project, bpm:
     // `bpm` converte os beats de origem (`source_start_beats`, trim do
     // importer) para frames do arquivo — o mesmo mapeamento que o motor
     // de áudio usa para tocar, mantendo a wave alinhada com o som.
-    let (bars, segments) =
-        timeline_render::waveform::build_wave_bars_and_segments(&mut engine.clips, engine.px_per_beat, bpm);
+    //
+    // A RESOLUÇÃO É FIXA (`WAVE_PPB`), NUNCA o zoom vivo.
+    //
+    // Aqui passava `engine.px_per_beat` (8..640). Duas consequências ruins:
+    //
+    //   1. o número de colunas — e portanto o tamanho do bucket de cada
+    //      coluna — mudava a cada rebuild, então o MESMO áudio era
+    //      reamostrado com buckets de tamanhos diferentes. Como cada
+    //      coluna guarda o pico do seu bucket, o envelope desenhado
+    //      mudava de AMPLITUDE conforme o zoom/criação. Era isto que
+    //      fazia duas cópias do mesmo arquivo parecerem diferentes e o
+    //      nível da onda "pular" ao dar zoom;
+    //   2. o binário standalone (`timeline-render`) sempre gerou o buffer
+    //      nesta referência fixa — é o contrato de `WAVE_PPB` — então o
+    //      app renderizava diferente do próprio renderer.
+    //
+    // Com a referência fixa, o desenho da onda passa a depender só do
+    // arquivo e da região de origem: idêntico em qualquer zoom e entre
+    // cópias, e o shader escolhe envelope × curva apenas pelo zoom.
+    let (bars, segments) = timeline_render::waveform::build_wave_bars_and_segments(
+        &mut engine.clips,
+        timeline_render::app::WAVE_PPB,
+        bpm,
+    );
     engine.wave_bars = bars;
     engine.wave_segments = segments;
 }

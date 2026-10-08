@@ -1,0 +1,41 @@
+import { HubTheme } from "../theme.slint";
+
+export component ActionButton inherits Rectangle {
+    in property <string> label: "";
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 36px;
+    min-width: 100px;
+    background: root.enabled
+        ? (root.primary ? HubTheme.accent : HubTheme.surface-high)
+        : HubTheme.border;
+    border-radius: 6px;
+
+    Text {
+        x: 12px;
+        width: parent.width - 24px;
+        height: parent.height;
+        text: root.label;
+        color: root.enabled
+            ? (root.primary ? HubTheme.on-accent : HubTheme.text-primary)
+            : HubTheme.text-dim;
+        font-size: 12px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    states [
+        hover when root.enabled && touch.has-hover: {
+            background: root.primary ? HubTheme.accent-hover : HubTheme.border;
+        }
+    ]
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

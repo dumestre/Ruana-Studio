@@ -31,6 +31,13 @@ export component ClipItemVisual inherits Rectangle {
     in property <bool> is-midi:
         true;
 
+    // Arquivo de áudio de origem (vazio em MIDI / padrões do beat).
+    //
+    // PRECISA chegar até o `clip-dropped`: é o que faz o drop na
+    // timeline criar um clip COM `file_path` — e portanto com a
+    // waveform REAL decodificada — em vez do bloco procedural.
+    in property <string> path: "";
+
 
     // ========================================================
     // VISUAL
@@ -166,7 +173,8 @@ component ClipItem inherits ClipItemVisual {
         string,
         string,
         color,
-        bool
+        bool,
+        string
     );
 
     callback drag-moved(
@@ -353,7 +361,8 @@ component ClipItem inherits ClipItemVisual {
                             root.position,
                             root.duration,
                             root.clip-color,
-                            root.is-midi
+                            root.is-midi,
+                            root.path
                         );
                     }
                 }
@@ -412,7 +421,8 @@ export component ClipPool inherits Rectangle {
         string,
         string,
         color,
-        bool
+        bool,
+        string
     );
 
     callback clip-drag-moved(
@@ -664,6 +674,11 @@ export component ClipPool inherits Rectangle {
                 is-midi:
                     clip.is-midi;
 
+                // Arquivo de origem: sem isto o drop vira "sem arquivo"
+                // e a timeline cai na waveform procedural (placeholder).
+                path:
+                    clip.file-path;
+
 
                 // ============================================
                 // CLIQUE
@@ -686,7 +701,8 @@ export component ClipPool inherits Rectangle {
                     p,
                     d,
                     c,
-                    m
+                    m,
+                    path
                 ) => {
 
                     root.clip-drag-started(
@@ -694,7 +710,8 @@ export component ClipPool inherits Rectangle {
                         p,
                         d,
                         c,
-                        m
+                        m,
+                        path
                     );
                 }
 
@@ -786,6 +803,10 @@ export component ClipPool inherits Rectangle {
                 is-midi:
                     true;
 
+                // Padrão do beat sequencer não tem arquivo próprio.
+                path:
+                    "";
+
                 border-width: 0px;
                 clip-color:
                     Theme.accent;
@@ -832,7 +853,8 @@ export component ClipPool inherits Rectangle {
                     p,
                     d,
                     c,
-                    m
+                    m,
+                    path
                 ) => {
 
                     root.clip-drag-started(
@@ -840,7 +862,8 @@ export component ClipPool inherits Rectangle {
                         p,
                         d,
                         c,
-                        m
+                        m,
+                        path
                     );
                 }
 

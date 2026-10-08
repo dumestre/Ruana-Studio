@@ -722,7 +722,8 @@ export component Workspace inherits Rectangle {
                     position,
                     duration,
                     color,
-                    is-midi
+                    is-midi,
+                    path
                 ) => {
 
                     root.selected-clip =
@@ -730,7 +731,7 @@ export component Workspace inherits Rectangle {
 
                     root.drag-begin(
                         name,
-                        "",
+                        path,
                         position,
                         duration,
                         color,
@@ -969,12 +970,13 @@ export component Workspace inherits Rectangle {
                         position,
                         duration,
                         color,
-                        is-midi
+                        is-midi,
+                        path
                     ) => {
 
                         root.drag-begin(
                             name,
-                            "",
+                            path,
                             position,
                             duration,
                             color,

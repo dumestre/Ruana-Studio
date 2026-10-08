@@ -88,6 +88,25 @@ export global Theme {
         #D2D2D2  // [6] PAPER (claro) ★
     ];
 
+    // DROP SHADOW (drop-shadow-color dos widgets elevados: botões,
+    // LCD do transport, knobs, bar_properties).
+    //
+    // REGRA: a sombra tem de ser SEMPRE mais escura que o fundo onde
+    // ela cai. No Paper (fundo claro) `#2f2f2f` entrega isso de graça.
+    // Nos temas escuros o mesmo `#2f2f2f` fica MAIS CLARO que o painel
+    // (`surface` #242424, `base` #313131), virando halo em vez de
+    // sombra — por isso cada tema escuro tem o seu quase-preto, tingido
+    // com o matiz da própria paleta para a elevação ler igual ao Paper.
+    private property <[color]> shadow-list: [
+        #0F0F0F, // [0] Studio Dark — quase-preto sobre surface #242424
+        #06090D, // [1] Midnight Blue — quase-preto azulado
+        #09070E, // [2] Violeta Ruana — quase-preto violeta
+        #060802, // [3] Volt — quase-preto esverdeado
+        #0B0804, // [4] Sunset — quase-preto âmbar
+        #030A0B, // [5] Ocean Teal — quase-preto ciano
+        #2F2F2F  // [6] PAPER (claro) ★ — aprovado, NÃO MEXER
+    ];
+
     // COR DE DESTAQUE (accent). Verde padrão no Studio e no Paper.
     private property <[color]> accent-list: [
         #00C853, // [0] Studio Dark (PADRÃO)
@@ -307,6 +326,7 @@ export global Theme {
     in property <color> surface: surface-list[clamp];
     in property <color> surface-high: surface-high-list[clamp];
     in property <color> border: border-list[clamp];
+    in property <color> shadow: shadow-list[clamp];
     in property <color> accent: accent-list[clamp];
     in property <color> accent-hover: accent-hover-list[clamp];
     in property <color> on-accent: on-accent-list[clamp];
