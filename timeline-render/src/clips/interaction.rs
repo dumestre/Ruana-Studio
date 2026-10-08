@@ -710,6 +710,7 @@ impl ClipInteraction {
                     source_start_beats: 0.0,
                     source_length_beats: 0.0,
                     channels: 1,
+                    warp_markers: Vec::new(),
                 };
 
                 clips.push(clip.clone());

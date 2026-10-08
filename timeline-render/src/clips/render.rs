@@ -327,6 +327,8 @@ pub fn build_clip_instances(
                             clip.source_length_beats,
                         channels:
                             clip.channels,
+                        warp_markers:
+                            clip.warp_markers.clone(),
                     }
                 } else {
                     ClipDemo {
@@ -361,6 +363,8 @@ pub fn build_clip_instances(
                             clip.source_length_beats,
                         channels:
                             clip.channels,
+                        warp_markers:
+                            clip.warp_markers.clone(),
                     }
                 };
 
@@ -504,6 +508,8 @@ pub fn build_clip_instances(
                             clip.source_length_beats,
                         channels:
                             clip.channels,
+                        warp_markers:
+                            clip.warp_markers.clone(),
                     };
 
                     let (x, y, w, _h) =
@@ -617,6 +623,7 @@ pub fn build_clip_instances(
                 source_start_beats: 0.0,
                 source_length_beats: 0.0,
                 channels: 1,
+                warp_markers: Vec::new(),
             };
 
             let (x, y, w, _h) =

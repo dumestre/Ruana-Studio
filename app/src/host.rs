@@ -113,6 +113,17 @@ impl EngineBridge {
                 project.borrow_mut().tempo_map = map.clone();
             }));
         }
+        // Timewarp → COMMIT (fim do gesto): aqui o mapa entra no documento
+        // como UMA operação de undo e o evento do documento sai — é ele que
+        // faz o motor de áudio republicar o snapshot e os clips musicais
+        // serem reesticados para o tempo novo. O write-back acima é só o
+        // preview ao vivo (não pode gravar histórico a cada movimento).
+        {
+            let project = project.clone();
+            engine.tempo_commit = Some(Box::new(move |map: &TempoMap| {
+                project.borrow_mut().set_tempo_map(map.clone());
+            }));
+        }
         let mirrored_clip_ids = Rc::new(RefCell::new(Vec::<u64>::new()));
         // Clips → write-back: toda edição estrutural na engine (mover, deletar,
         // colar, duplicar, desenhar, fatiar) entrega a lista completa de clips.
@@ -575,7 +586,12 @@ pub fn install_engine_callbacks(
             match button {
                 0 => {
                     // Clique na régua = seek no Transport compartilhado.
-                    if py <= engine.ruler_px {
+                    //
+                    // Com ALT não: o Alt+arrasto na régua é a ferramenta
+                    // Time Warp (o gesto move a POSIÇÃO MUSICAL, não a
+                    // playhead), então o seek sairia atrapalhando o gesto —
+                    // quem cuida dele é o `handle_ruler_click` da engine.
+                    if py <= engine.ruler_px && !alt {
                         let beat =
                             ((px + engine.scroll_x) / engine.px_per_beat.max(0.001)).max(0.0);
                         ui.invoke_seek_to(beat);

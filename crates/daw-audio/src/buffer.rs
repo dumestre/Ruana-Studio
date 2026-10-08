@@ -153,6 +153,16 @@ impl BufferCache {
         self.cache.remove(path);
     }
 
+    /// Insere um buffer JÁ PRONTO sob uma chave própria.
+    ///
+    /// É como o worker de timewarp publica o resultado do stretch: a chave é
+    /// a assinatura do alvo ([`crate::stretch::StretchTarget::key`]), que o
+    /// snapshot consulta antes de cair no buffer original. Diferente de
+    /// [`Self::load`], não decodifica nada — o buffer vem pronto do worker.
+    pub fn insert(&mut self, key: impl Into<String>, buffer: AudioBufferKind) {
+        self.cache.insert(key.into(), Some(buffer));
+    }
+
     pub fn clear(&mut self) {
         self.cache.clear();
     }

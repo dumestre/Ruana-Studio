@@ -33,6 +33,7 @@ fn midi_clip(len: f32, notes: Vec<ClipNote>) -> ClipDemo {
         source_start_beats: 0.0,
         source_length_beats: len,
         channels: 1,
+        warp_markers: Vec::new(),
     }
 }
 
@@ -101,6 +102,7 @@ fn nota_usa_a_cor_escura_da_waveform() {
         source_start_beats: 0.0,
         source_length_beats: 4.0,
         channels: 1,
+        warp_markers: Vec::new(),
     };
 
     let inst = build_clip_instances(&[clip], &inter, &m, 900.0);

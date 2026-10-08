@@ -1,4 +1,4 @@
-﻿//! InteraÃ§Ã£o: mouse, scroll, ferramentas, clipboard, loop, foco e edge-scroll.
+//! InteraÃ§Ã£o: mouse, scroll, ferramentas, clipboard, loop, foco e edge-scroll.
 
 use crate::app::{ButtonState, KeyAction, LoopDrag, App};
 use crate::clips;
@@ -460,6 +460,51 @@ impl App {
     /// Enquanto arrasta, `handle_cursor_moved` chama `set_playhead_from_x` em
     /// tempo real para seguir o cursor.
     pub fn handle_ruler_click(&mut self, state: ButtonState, pos: (f32, f32), _ruler_px: f32) {
+        // ================================================================
+        // TIME WARP (Cubase): Alt + arrastar na régua
+        //
+        // Em vez de mover a playhead, move a POSIÇÃO MUSICAL: a linha de
+        // compasso/batida agarrada no ponto inicial passa a soar onde o
+        // usuário soltar. O mapa de tempo ganha a rampa que faz isso
+        // (`TempoMap::warp_beat_to_target`) e o COMMIT grava no documento,
+        // com undo — é o gesto que existe para encaixar a grade num evento
+        // do áudio.
+        //
+        // O ponto agarrado vem do grid visual (o usuário pega uma linha); o
+        // ALVO não é arredondado, porque o evento do áudio está onde está.
+        // ================================================================
+        if self.alt_pressed {
+            match state {
+                ButtonState::Pressed => {
+                    self.timewarp_drag = Some(timeline_warp_beat(
+                        pos.0,
+                        self.scroll_x,
+                        self.px_per_beat,
+                        self.grid_beat_step(),
+                    ));
+                    self.request_redraw();
+                }
+                ButtonState::Released => {
+                    if let Some(musical) = self.timewarp_drag.take() {
+                        let target = timeline_beat_at_x(pos.0, self.scroll_x, self.px_per_beat);
+
+                        if self.tempo_map.warp_beat_to_target(musical, target) {
+                            self.tw_commit();
+                        } else {
+                            // Recusado (BPM fora da faixa, ou alvo antes do
+                            // ponto de tempo anterior): documento intacto.
+                            eprintln!(
+                                "[timewarp] gesto recusado: beat {musical} -> alvo {target}"
+                            );
+                            self.request_redraw();
+                        }
+                    }
+                }
+            }
+
+            return;
+        }
+
         match state {
             ButtonState::Pressed => {
                 self.scrubbing = true;
@@ -467,6 +512,10 @@ impl App {
             }
             ButtonState::Released => {
                 self.scrubbing = false;
+                // Um gesto de Time Warp que perdeu o ALT no meio (o key event
+                // atualiza o modificador) não pode ficar pendurado: se o
+                // release caiu aqui, o warp foi cancelado.
+                self.timewarp_drag = None;
             }
         }
     }
@@ -755,6 +804,7 @@ impl App {
             source_start_beats: 0.0,
             source_length_beats: 0.0,
             channels: 1,
+            warp_markers: Vec::new(),
         });
         self.clip_interaction.sync_selection(self.clips.len());
         self.rebuild_wave_data();
@@ -1042,8 +1092,14 @@ self.play_start_seconds = self.transport_seconds;
         match state {
             ButtonState::Pressed => {
                 if pos.1 < self.ruler_px {
-                    // RÃ©gua â†’ loop drag ou scrub (funciona em qualquer ferramenta)
-                    if !self.begin_loop_drag(pos.0) {
+                    // Régua → loop drag ou scrub (funciona em qualquer ferramenta).
+                    //
+                    // Com ALT a régua é a ferramenta TIME WARP: o gesto não
+                    // pode ser capturado pelo arrasto da região de loop, senão
+                    // quem tem loop ligado nunca consegue warpar o tempo.
+                    if self.alt_pressed {
+                        self.handle_ruler_click(state, pos, self.ruler_px);
+                    } else if !self.begin_loop_drag(pos.0) {
                         self.handle_ruler_click(state, pos, self.ruler_px);
                     }
                 } else {
@@ -1202,7 +1258,11 @@ self.play_start_seconds = self.transport_seconds;
                     self.clip_interaction.marquee_move(pos);
                     let cm = self.clip_metrics();
                     self.clip_interaction.end_marquee(&self.clips, &cm);
-                } else if self.scrubbing {
+                } else if self.scrubbing || self.timewarp_drag.is_some() {
+                    // O release do scrub E o do gesto de Time Warp terminam
+                    // aqui: no warp o `scrubbing` nunca foi ligado (o gesto
+                    // não move a playhead), então a condição inclui o
+                    // `timewarp_drag` — sem isso o commit nunca aconteceria.
                     self.handle_ruler_click(state, pos, self.ruler_px);
                 }
             }
@@ -1600,11 +1660,23 @@ impl App {
             self.tempo_map.set_change(p.beat, p.bpm);
         }
         self.tw_write_back();
+        // Fim de gesto: é aqui que o documento recebe o mapa (undo + o evento
+        // que faz o áudio re-sincronizar). O write-back acima é só o preview
+        // ao vivo da engine.
+        self.tw_commit();
     }
 
     /// Dispara o callback de write-back (host grava no projeto) e re-renderiza.
     fn tw_write_back(&mut self) {
         if let Some(cb) = &self.tempo_write_back {
+            cb(&self.tempo_map);
+        }
+        self.request_redraw();
+    }
+
+    /// Fim de um gesto de tempo: o host grava o mapa no documento (undo).
+    fn tw_commit(&mut self) {
+        if let Some(cb) = &self.tempo_commit {
             cb(&self.tempo_map);
         }
         self.request_redraw();
@@ -1770,5 +1842,64 @@ impl App {
                 }
             }
         }
+    }
+}
+
+// ============================================================================
+// TIME WARP: geometria da régua
+//
+// Funções livres (não métodos de `App`) de propósito: são a única parte do
+// gesto que dá para testar sem uma GPU, e é onde mora a conta que decide QUAL
+// linha da grade o usuário agarrou.
+// ============================================================================
+
+/// Beat sob uma coordenada X da timeline (sem snap).
+pub fn timeline_beat_at_x(x: f32, scroll_x: f32, px_per_beat: f32) -> f32 {
+    ((x + scroll_x) / px_per_beat.max(0.001)).max(0.0)
+}
+
+/// Beat do grid visual mais próximo de X — a linha que o usuário "agarra" com
+/// a ferramenta Time Warp.
+///
+/// `step` é o passo do grid naquele zoom (`App::grid_beat_step`), o mesmo que
+/// o renderer desenha: o gesto pega a linha que está na tela.
+pub fn timeline_warp_beat(x: f32, scroll_x: f32, px_per_beat: f32, step: f32) -> f32 {
+    let beat = timeline_beat_at_x(x, scroll_x, px_per_beat);
+    let step = if step.is_finite() && step > 0.0 {
+        step
+    } else {
+        1.0
+    };
+
+    ((beat / step).round() * step).max(0.0)
+}
+
+#[cfg(test)]
+mod timewarp_ruler_tests {
+    use super::*;
+
+    #[test]
+    fn beat_sob_a_coordenada() {
+        // 40 px por beat, sem scroll: x=100 -> beat 2.5.
+        assert!((timeline_beat_at_x(100.0, 0.0, 40.0) - 2.5).abs() < 1e-5);
+        // Com scroll de 200 px, x=0 -> beat 5.
+        assert!((timeline_beat_at_x(0.0, 200.0, 40.0) - 5.0).abs() < 1e-5);
+        // Antes do inicio do conteudo clampa em 0.
+        assert_eq!(timeline_beat_at_x(-500.0, 0.0, 40.0), 0.0);
+        // px_per_beat degenerado nao divide por zero.
+        assert!(timeline_beat_at_x(100.0, 0.0, 0.0).is_finite());
+    }
+
+    #[test]
+    fn ponto_agarrado_vem_do_grid_visual() {
+        // Grid de 1 beat: x=100 (beat 2.5) -> a linha mais proxima e a 3.
+        assert!((timeline_warp_beat(100.0, 0.0, 40.0, 1.0) - 3.0).abs() < 1e-5);
+        // Grid de 1/4: 2.5 ja e uma linha do grid, fecha nela mesma.
+        assert!((timeline_warp_beat(100.0, 0.0, 40.0, 0.25) - 2.5).abs() < 1e-5);
+        // Grid de compasso (4 beats): 2.5 -> 4 (inicio do compasso seguinte).
+        assert!((timeline_warp_beat(100.0, 0.0, 40.0, 4.0) - 4.0).abs() < 1e-5);
+        // Step invalido nao pode zerar o gesto: cai em 1 beat.
+        assert!((timeline_warp_beat(100.0, 0.0, 40.0, 0.0) - 3.0).abs() < 1e-5);
+        assert!((timeline_warp_beat(100.0, 0.0, 40.0, f32::NAN) - 3.0).abs() < 1e-5);
     }
 }

@@ -10,7 +10,7 @@
 
 use std::cell::RefCell;
 
-use crate::clip::{Clip, ClipKind};
+use crate::clip::{normalize_warp_markers, Clip, ClipKind, TimeMode, WarpMarker};
 use crate::history::History;
 use crate::mixer::{MixerChannel, MixerParam};
 use crate::timeline::TempoMap;
@@ -84,6 +84,13 @@ pub enum DocumentEvent {
     },
     /// Mudança de notas MIDI do clip (piano roll).
     ClipNotesChanged {
+        old: Clip,
+        new: Clip,
+    },
+    /// Mudança de timewarp do clip: musical × linear (`time_mode`) e/ou
+    /// marcadores de AudioWarp. Os dois andam juntos porque mudam a MESMA
+    /// coisa — quanto o áudio é esticado para casar com a grade.
+    ClipTimewarpChanged {
         old: Clip,
         new: Clip,
     },
@@ -299,6 +306,11 @@ impl Project {
                     *existing = new.clone();
                 }
             }
+            DocumentEvent::ClipTimewarpChanged { new, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == new.id) {
+                    *existing = new.clone();
+                }
+            }
             DocumentEvent::TempoChanged { new, .. } => {
                 self.tempo_map = (*new).clone();
             }
@@ -367,6 +379,11 @@ impl Project {
                 }
             }
             DocumentEvent::ClipNotesChanged { old, .. } => {
+                if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
+                    *existing = old.clone();
+                }
+            }
+            DocumentEvent::ClipTimewarpChanged { old, .. } => {
                 if let Some(existing) = self.clips.iter_mut().find(|c| c.id == old.id) {
                     *existing = old.clone();
                 }
@@ -601,6 +618,12 @@ impl Project {
         if let Some(path) = clip.file_path.as_deref() {
             clip.color = crate::clip::sample_color(path);
             clip.color_override = false;
+            // Clipe de áudio com arquivo nasce MUSICAL, como no Cubase: o
+            // conteúdo acompanha o tempo do projeto (esticado com pitch
+            // preservado). O usuário desliga pelo toggle do clip quando
+            // quer o sample em tempo absoluto — e o default de `Clip::new`
+            // segue LINEAR para todo caminho que não passa por aqui.
+            clip.time_mode = TimeMode::Musical;
         }
         self.clips.push(clip.clone());
 
@@ -913,6 +936,65 @@ impl Project {
         true
     }
 
+    /// Define o modo musical × linear do clip (timewarp estilo Cubase).
+    ///
+    /// Em MUSICAL o áudio passa a acompanhar o mapa de tempo (esticado,
+    /// preservando o pitch); em LINEAR volta ao tempo absoluto, que é o
+    /// comportamento histórico do motor. Clips MIDI são ignorados: o
+    /// conteúdo deles já é musical.
+    ///
+    /// Retorna `false` se o clip não existe, é MIDI, ou já está no modo.
+    pub fn set_clip_time_mode(&mut self, clip_id: u64, mode: TimeMode) -> bool {
+        let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
+            return false;
+        };
+        if self.clips[index].is_midi() || self.clips[index].time_mode == mode {
+            return false;
+        }
+        let old = self.clips[index].clone();
+        self.clips[index].time_mode = mode;
+        let new = self.clips[index].clone();
+
+        self.record_clip_timewarp(old, new)
+    }
+
+    /// Substitui os marcadores de AudioWarp do clip (free warp).
+    ///
+    /// Os marcadores passam por [`normalize_warp_markers`] (ordenados pela
+    /// posição na fonte, sem duplicatas) — o mapa de warp exige monotonía
+    /// nos dois eixos. Clips MIDI não têm warp.
+    ///
+    /// Retorna `false` se o clip não existe, é MIDI, ou a lista é igual.
+    pub fn set_clip_warp_markers(&mut self, clip_id: u64, markers: Vec<WarpMarker>) -> bool {
+        let Some(index) = self.clips.iter().position(|c| c.id == clip_id) else {
+            return false;
+        };
+        if self.clips[index].is_midi() {
+            return false;
+        }
+
+        let markers = normalize_warp_markers(markers);
+        let old = self.clips[index].clone();
+
+        if old.warp_markers == markers {
+            return false;
+        }
+
+        self.clips[index].warp_markers = markers;
+        let new = self.clips[index].clone();
+
+        self.record_clip_timewarp(old, new)
+    }
+
+    /// Emite e registra no histórico uma mudança de timewarp do clip
+    /// (modo musical e/ou marcadores) como UMA operação de undo.
+    fn record_clip_timewarp(&mut self, old: Clip, new: Clip) -> bool {
+        let event = DocumentEvent::ClipTimewarpChanged { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
     /// Substitui as notas MIDI de um clip (edição no piano roll),
     /// com undo unitário via histórico do core.
     pub fn set_clip_notes(&mut self, clip_id: u64, notes: Vec<daw_midi::Note>) -> bool {
@@ -951,6 +1033,53 @@ impl Project {
         if !self.tempo_map.remove_change(beat) {
             return false;
         }
+        let new = self.tempo_map.clone();
+        let event = DocumentEvent::TempoChanged { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// Substitui o mapa de tempo inteiro — commit de uma edição de tempo.
+    ///
+    /// O editor de tempo da engine (e a ferramenta Time Warp) mexe no mapa
+    /// AO VIVO durante o gesto e só chama isto ao SOLTAR. É o que dá:
+    ///
+    /// - **um gesto = um `Ctrl+Z`** (o write-back contínuo não grava nada);
+    /// - o evento `TempoChanged`, que faz o motor de áudio republicar o
+    ///   snapshot e os clips musicais serem reesticados para o novo tempo.
+    ///
+    /// Retorna `false` se o mapa é igual (nada a gravar).
+    pub fn set_tempo_map(&mut self, map: TempoMap) -> bool {
+        if self.tempo_map == map {
+            return false;
+        }
+
+        let old = self.tempo_map.clone();
+        self.tempo_map = map;
+
+        let new = self.tempo_map.clone();
+        let event = DocumentEvent::TempoChanged { old, new };
+        self.emit(&event, ChangeKind::Apply);
+        self.history.record(event);
+        true
+    }
+
+    /// TIME WARP (Cubase): faz a posição musical `musical_beat` soar no
+    /// instante em que HOJE soa `target_beat`.
+    ///
+    /// É o gesto da ferramenta Time Warp na régua: arrastar uma linha de
+    /// compasso até um evento do áudio. O que muda é o TEMPO (uma rampa no
+    /// mapa); os clips em modo musical acompanham porque são reesticados
+    /// para o novo span. Uma operação de undo. Ver
+    /// [`TempoMap::warp_beat_to_target`] para as regras e recusas.
+    pub fn warp_tempo(&mut self, musical_beat: f32, target_beat: f32) -> bool {
+        let old = self.tempo_map.clone();
+
+        if !self.tempo_map.warp_beat_to_target(musical_beat, target_beat) {
+            return false;
+        }
+
         let new = self.tempo_map.clone();
         let event = DocumentEvent::TempoChanged { old, new };
         self.emit(&event, ChangeKind::Apply);

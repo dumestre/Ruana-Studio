@@ -1,4 +1,4 @@
-﻿//! RuanaStudio — entrypoint.
+//! RuanaStudio — entrypoint.
 //!
 //! Arquitetura do AGENTS.md: o app é dono do loop winit e do wgpu.
 //! O `main` apenas sobe o event loop do winit (`host::run`); o `setup`
@@ -41,6 +41,7 @@ mod models;
 mod os_drop;
 mod playback;
 mod slint_host;
+mod stretch_worker;
 mod theme;
 
 mod timeline;

@@ -85,6 +85,15 @@ struct ClipSlot {
     fade_out_beats: f64,
     /// Ganho do clip em linear (10^(dB/20)). 1.0 = 0 dB.
     gain_linear: f32,
+    /// TIMEWARP: frames da fonte consumidos por frame de saída.
+    ///
+    /// `1.0` = tempo absoluto (clip LINEAR, ou buffer já esticado no alvo).
+    /// `< 1.0` = a fonte avança mais devagar que o transporte (conteúdo
+    /// esticado); `> 1.0` = mais rápido. Vem PRONTO do snapshot
+    /// ([`crate::stretch::source_rate`]) para a thread RT só multiplicar —
+    /// a conta depende apenas de campos já resolvidos, então recalculá-la
+    /// por clip por frame seria desperdício no caminho mais quente.
+    read_rate: f64,
 }
 
 /// Nota MIDI de um clip da timeline (somente os campos que a thread RT
@@ -197,6 +206,41 @@ impl ProjectSnapshot {
             .filter_map(|c| {
                 let path = c.file_path.as_deref()?;
                 let buffer = cache.load(path)?;
+
+                // TIMEWARP: o clip é musical (acompanha o tempo)?
+                //
+                // O comprimento NATURAL da região vem do próprio buffer (que
+                // já está na taxa de saída): é a régua para saber quanto o
+                // conteúdo precisa ser esticado para caber no span, e é o
+                // que permite ao motor acompanhar o tempo sem depender de
+                // nenhum campo derivado do documento.
+                let output_rate = cache.output_sample_rate().max(1) as f64;
+                let natural_seconds = buffer.frames() as f64 / output_rate;
+                let target =
+                    crate::stretch::stretch_target_for(c, &project.tempo_map, natural_seconds);
+
+                // Já existe render do alvo ATUAL no cache? Então é ele que
+                // toca (keylock, leitura 1:1). Se não, toca o ORIGINAL em
+                // varispeed: o áudio acompanha o tempo já no primeiro frame
+                // e o worker entrega a versão com pitch preservado logo.
+                let (buffer, musical, source_seconds, span_seconds, rendered_ratio) = match &target
+                {
+                    Some(t) => match cache.get(&t.key()) {
+                        Some(stretched) => {
+                            (stretched, true, t.source_seconds, t.span_seconds, t.ratio)
+                        }
+                        None => (buffer, true, t.source_seconds, t.span_seconds, 1.0),
+                    },
+                    None => (buffer, false, 0.0, 0.0, 1.0),
+                };
+
+                let read_rate = crate::stretch::source_rate(
+                    musical,
+                    source_seconds,
+                    span_seconds,
+                    rendered_ratio,
+                );
+
                 Some(ClipSlot {
                     track_id: c.track_id,
                     start_beat: c.start_beat as f64,
@@ -206,6 +250,7 @@ impl ProjectSnapshot {
                     fade_in_beats: c.fade_in_beats as f64,
                     fade_out_beats: c.fade_out_beats as f64,
                     gain_linear: 10f32.powf(c.gain_db / 20.0),
+                    read_rate,
                 })
             })
             .collect();
@@ -341,6 +386,53 @@ impl EngineHandle {
         if let Ok(mut slot) = self.snapshot.lock() {
             *slot = built;
         }
+    }
+
+    /// Guarda no cache um buffer JÁ RENDERIZADO (timewarp) sob a chave do
+    /// seu alvo — [`crate::stretch::StretchTarget::key`].
+    ///
+    /// NÃO publica o snapshot: chame [`Self::sync_project`] em seguida para
+    /// a thread RT passar a enxergar o buffer. Os dois passos são separados
+    /// de propósito (o worker pode inserir vários renders e publicar uma
+    /// vez), e a publicação em si é só uma troca de `Arc` — a RT nunca vê
+    /// estado parcial.
+    ///
+    /// Retorna `false` se o lock do cache estiver indisponível.
+    pub fn insert_buffer(&self, key: &str, buffer: crate::mapped_buffer::AudioBufferKind) -> bool {
+        let Ok(mut cache) = self.cache.lock() else {
+            return false;
+        };
+        cache.insert(key, buffer);
+        true
+    }
+
+    /// Já existe um buffer publicado sob esta chave?
+    ///
+    /// O worker de timewarp usa para não renderizar duas vezes o mesmo alvo.
+    pub fn has_buffer(&self, key: &str) -> bool {
+        let Ok(cache) = self.cache.lock() else {
+            return false;
+        };
+        cache.get(key).is_some()
+    }
+
+    /// Esquece um buffer do cache (chave sintética de render, ao evictar o
+    /// render mais antigo).
+    pub fn evict_buffer(&self, key: &str) {
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.evict(key);
+        }
+    }
+
+    /// Buffer decodificado de um arquivo (carrega se ainda não estiver).
+    ///
+    /// O worker de timewarp renderiza a partir do MESMO buffer que a RT lê:
+    /// sem reabrir o arquivo e sem decodificar de novo.
+    pub fn buffer_for(&self, path: &str) -> Option<crate::mapped_buffer::AudioBufferKind> {
+        let Ok(mut cache) = self.cache.lock() else {
+            return None;
+        };
+        cache.load(path)
     }
 
     /// Toca um sample imediatamente, fora do transporte.
@@ -940,8 +1032,14 @@ impl AudioEngine {
                         // O clip pode ser um trecho fatiado do arquivo. A
                         // leitura precisa começar no offset de origem, não
                         // no frame zero do buffer compartilhado.
-                        let source_offset =
-                            (clip.source_start_beats * frames_per_beat + offset).max(0.0);
+                        //
+                        // `read_rate` é o timewarp: em modo musical a fonte
+                        // avança em ritmo diferente do transporte (ou o
+                        // buffer já é a versão esticada, e o rate é 1.0).
+                        // Em modo linear é 1.0, exatamente como antes.
+                        let source_offset = (clip.source_start_beats * frames_per_beat
+                            + offset * clip.read_rate)
+                            .max(0.0);
                         let (sl, sr) = clip.buffer.read(source_offset);
 
                         // Rampa nas bordas: cortar o clip no meio de
@@ -1269,6 +1367,95 @@ mod tests {
         std::fs::write(path, wav).expect("grava wav de teste");
     }
 
+    /// TIMEWARP ponta a ponta, ate onde da para verificar sem placa de som:
+    /// o clip musical tem de sair do snapshot lendo a fonte em ritmo
+    /// diferente do transporte (varispeed), e quando o render do worker
+    /// entra no cache o snapshot passa a ler o buffer esticado 1:1.
+    #[test]
+    fn timewarp_musical_varispeed_e_depois_buffer_pronto() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("ruana_timewarp_tone.wav");
+        // 3 s mono a 48 kHz.
+        write_sine_wav(&path, 440.0, 0.5);
+        let path_str = path.to_string_lossy().into_owned();
+
+        let rate = 48_000u32;
+        let natural_seconds = 3.0;
+
+        let mut project = daw_core::Project::startup();
+        // 8 beats a 120 BPM = 4.0 s de span para 3.0 s de fonte: o conteudo
+        // precisa ficar 4/3 mais longo.
+        project.add_clip_with_source(
+            0,
+            daw_core::ClipKind::Audio,
+            "tone",
+            0.0,
+            8.0,
+            0.0,
+            Some(path_str.clone()),
+        );
+
+        let mut cache = BufferCache::new(rate);
+
+        // 1) Sem render: varispeed. O rate e o INVERSO do ratio pedido, e o
+        // audio acompanha o tempo no primeiro frame (pitch acompanha).
+        let snapshot = ProjectSnapshot::build(&project, &mut cache);
+        assert_eq!(snapshot.clips.len(), 1);
+
+        let needed = 4.0 / natural_seconds;
+        let expected_varispeed = 1.0 / needed;
+
+        assert!(
+            (snapshot.clips[0].read_rate - expected_varispeed).abs() < 1e-3,
+            "varispeed: read_rate {} != {expected_varispeed}",
+            snapshot.clips[0].read_rate
+        );
+
+        // 2) Modo LINEAR volta a ser 1:1 (o comportamento historico).
+        project.clips[0].time_mode = daw_core::TimeMode::Linear;
+        let linear = ProjectSnapshot::build(&project, &mut cache);
+
+        assert!(
+            (linear.clips[0].read_rate - 1.0).abs() < 1e-9,
+            "linear: read_rate {}",
+            linear.clips[0].read_rate
+        );
+
+        project.clips[0].time_mode = daw_core::TimeMode::Musical;
+
+        // 3) O worker renderiza o alvo e publica o buffer esticado.
+        let clip = project.clips[0].clone();
+        let target = crate::stretch::stretch_target_for(&clip, &project.tempo_map, natural_seconds)
+            .expect("alvo de stretch");
+
+        assert!(target.needs_render(), "ratio {}", target.ratio);
+
+        let source = cache.load(&path_str).expect("buffer da fonte");
+        let stretched = crate::stretch::render_stretch(&source, &target).expect("render");
+
+        assert_eq!(
+            stretched.frames(),
+            target.frames_out(rate),
+            "o buffer pronto tem de ter exatamente o span do clip"
+        );
+
+        cache.insert(
+            target.key(),
+            crate::mapped_buffer::AudioBufferKind::Memory(std::sync::Arc::new(stretched)),
+        );
+
+        // 4) Com o render pronto o snapshot le 1:1 - sem reamostragem.
+        let ready = ProjectSnapshot::build(&project, &mut cache);
+
+        assert!(
+            (ready.clips[0].read_rate - 1.0).abs() < 1e-3,
+            "buffer pronto: read_rate {}",
+            ready.clips[0].read_rate
+        );
+
+        std::fs::remove_file(&path).ok();
+    }
+
     /// Clip COLADO NO ZERO da timeline: o começo do arquivo precisa sair
     /// nos primeiros buffers. Foi o sintoma relatado — clip em `start_beat=0`
     /// "não reproduz o começo".
@@ -1565,6 +1752,14 @@ mod tests {
             0.0,
             Some(path_str.clone()),
         );
+        // Este teste mede a DESCONTINUIDADE DO WRAP do loop, e para isso
+        // pressupõe leitura 1:1 da fonte (frame de saída = frame da fonte).
+        // Clip de áudio com arquivo nasce MUSICAL (timewarp), o que mudaria
+        // a velocidade de leitura e deslocaria a fronteira medida — então o
+        // tempo absoluto é fixado aqui de propósito.
+        if let Some(clip) = project.clips.first_mut() {
+            clip.time_mode = daw_core::TimeMode::Linear;
+        }
 
         let mut cache = BufferCache::new(rate);
         let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));

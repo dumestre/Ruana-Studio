@@ -275,6 +275,12 @@ pub fn apply_change(
                 clips_model.set_row_data(i, to_clip_data(data, waveforms));
             }
         }
+        DocumentEvent::ClipTimewarpChanged { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
         DocumentEvent::TempoChanged { .. } => {
             // Tempo-warp não altera metadados de clips — apenas o mapa
             // de tempo. A UI re-renderiza a régua/playhead separadamente.

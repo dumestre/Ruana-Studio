@@ -77,12 +77,22 @@ pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
 
             file_path: c.file_path.clone(),
             source_start_beats: c.source_start_beats,
-            source_length_beats: c.length_beats,
+            // Clip MUSICAL: a onda tem de cobrir a FONTE INTEIRA a partir do
+            // trim (é o conteúdo que será esticado para caber no span), e
+            // `0` é como o `ClipDemo` pede "até o fim do arquivo" — ver a
+            // regra de região em `timeline-render/src/waveform.rs`. Num clip
+            // de 2 beats esticado 2x, passar `length_beats` desenharia só
+            // metade do conteúdo e silêncio no resto.
+            //
+            // Clip LINEAR continua com o trecho de duração conhecida: nele o
+            // span do clip é que decide quanto do arquivo é ouvido.
+            source_length_beats: if c.is_musical() { 0.0 } else { c.length_beats },
             // Palpite inicial. O nº REAL de canais do arquivo substitui
             // este valor em `build_wave_bars_and_segments` assim que o
             // áudio é decodificado — senão um arquivo mono era desenhado
             // como duas faixas L/R, cada uma com metade das colunas.
             channels: if c.is_midi() { 1 } else { 2 },
+            warp_markers: c.warp_markers.clone(),
         })
         .collect()
 }

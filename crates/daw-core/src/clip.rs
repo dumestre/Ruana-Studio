@@ -54,6 +54,59 @@ pub enum ClipKind {
     Midi,
 }
 
+/// Como o clip reage ao tempo do projeto (Cubase: Musical × Linear).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TimeMode {
+    /// MUSICAL (musical mode / timewarp): o conteúdo é esticado para caber
+    /// no span do clip, preservando o pitch. Mudar o BPM (ou um ponto de
+    /// tempo, ou um marcador de AudioWarp) muda a duração do áudio e ele
+    /// continua casando com a grade.
+    Musical,
+    /// LINEAR (tempo absoluto): o áudio toca na velocidade natural, 1
+    /// frame da fonte por frame de saída. O span do clip no projeto decide
+    /// apenas QUANTO da fonte é ouvido. É o comportamento histórico do
+    /// motor — e o default, para que ligar o musical mode seja sempre uma
+    /// decisão explícita (o importer liga).
+    #[default]
+    Linear,
+}
+
+/// Marcador de AudioWarp ("free warp"): prende uma posição da FONTE a uma
+/// posição do PROJETO, e os trechos entre marcadores ganham ratios próprios.
+///
+/// As duas coordenadas são LOCAIS ao clip, de propósito:
+/// `source_seconds` conta a partir de onde o clip começa a ler o arquivo
+/// (não do início do arquivo) e `project_offset_beats` a partir do início
+/// do clip. Assim mover o clip na timeline não deforma o warp, e trim/offset
+/// de origem não precisam de conversão de BPM para posicionar marcadores.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WarpMarker {
+    /// Offset dentro da região da fonte, em segundos (0 = início do clip).
+    pub source_seconds: f32,
+    /// Onde esse ponto deve soar, em beats locais ao clip (0 = início).
+    pub project_offset_beats: f32,
+}
+
+impl WarpMarker {
+    pub fn new(source_seconds: f32, project_offset_beats: f32) -> Self {
+        Self {
+            source_seconds: source_seconds.max(0.0),
+            project_offset_beats: project_offset_beats.max(0.0),
+        }
+    }
+}
+
+/// Ordena e saneia marcadores (invariante do documento: sempre crescentes
+/// em `source_seconds`, sem duplicatas exatas).
+pub fn normalize_warp_markers(mut markers: Vec<WarpMarker>) -> Vec<WarpMarker> {
+    markers.retain(|m| {
+        m.source_seconds.is_finite() && m.project_offset_beats.is_finite()
+    });
+    markers.sort_by(|a, b| a.source_seconds.total_cmp(&b.source_seconds));
+    markers.dedup_by(|a, b| (a.source_seconds - b.source_seconds).abs() < 1e-4);
+    markers
+}
+
 /// Um clip posicionado na timeline.
 #[derive(Debug, Clone)]
 pub struct Clip {
@@ -92,6 +145,11 @@ pub struct Clip {
     /// Controlado pela barrinha central do clip e pelo campo GAIN do
     /// BarProperties quando o clip está selecionado.
     pub gain_db: f32,
+    /// Musical × Linear (timewarp estilo Cubase). Clips MIDI ignoram.
+    pub time_mode: TimeMode,
+    /// Marcadores de AudioWarp (free warp), sempre ordenados por
+    /// `source_seconds` — ver [`normalize_warp_markers`].
+    pub warp_markers: Vec<WarpMarker>,
     /// Notas MIDI do clip (apenas clips MIDI). Vazio = clip sem conteúdo.
     pub notes: Vec<daw_midi::Note>,
 }
@@ -120,6 +178,8 @@ impl Clip {
             fade_in_beats: 0.0,
             fade_out_beats: 0.0,
             gain_db: 0.0,
+            time_mode: TimeMode::Linear,
+            warp_markers: Vec::new(),
             notes: Vec::new(),
         }
     }
@@ -177,6 +237,14 @@ impl Clip {
     /// True se o clip é MIDI.
     pub fn is_midi(&self) -> bool {
         self.kind == ClipKind::Midi
+    }
+
+    /// True se o áudio do clip acompanha o tempo (musical mode).
+    ///
+    /// MIDI nunca é "esticado" (o conteúdo já é musical): o modo só vale
+    /// para áudio.
+    pub fn is_musical(&self) -> bool {
+        !self.is_midi() && self.time_mode == TimeMode::Musical
     }
 
     /// Define o caminho do arquivo de áudio (builder pattern).

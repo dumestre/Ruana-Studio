@@ -10,7 +10,7 @@ use crate::MainWindow;
 use crate::importer::{import_audio_file_async, is_audio_path};
 use crate::models::clip_row;
 use crate::waveform::WaveformCache;
-use daw_core::clip::{Clip, ClipKind, pattern_color};
+use daw_core::clip::{Clip, ClipKind, TimeMode, pattern_color};
 use daw_core::project::Project;
 use daw_core::track::TrackKind;
 use slint::ComponentHandle;
@@ -394,6 +394,32 @@ pub fn install(
                 (current + 1) % 20
             };
             project.borrow_mut().set_clip_color(id as u64, new_color);
+        });
+    }
+
+    // Musical/Linear do clip (Ctrl+M) → core, com undo unitário.
+    //
+    // Timewarp estilo Cubase: em MUSICAL o áudio acompanha o tempo do
+    // projeto (o motor lê a fonte em varispeed e o worker entrega a versão
+    // com pitch preservado); em LINEAR volta ao tempo absoluto, com o span
+    // do clip decidindo quanto do arquivo é ouvido. O documento é a única
+    // fonte: o evento `ClipTimewarpChanged` re-sincroniza o modelo da UI, o
+    // motor de áudio (via snapshot) e o desenho da onda.
+    {
+        let project = project.clone();
+        ui.on_clip_time_mode_toggle_requested(move |id| {
+            let id = id.max(0) as u64;
+
+            let next = {
+                let proj = project.borrow();
+                match proj.clip(id).map(|c| c.time_mode) {
+                    Some(TimeMode::Musical) => TimeMode::Linear,
+                    Some(TimeMode::Linear) => TimeMode::Musical,
+                    None => return,
+                }
+            };
+
+            project.borrow_mut().set_clip_time_mode(id, next);
         });
     }
 

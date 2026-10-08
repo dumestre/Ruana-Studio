@@ -99,6 +99,7 @@ fn clip_for(path: &PathBuf, len_beats: f32) -> ClipDemo {
         source_length_beats: 0.0,
         // Palpite do chamador, como faz o espelho do app.
         channels: 2,
+        warp_markers: Vec::new(),
     }
 }
 
@@ -250,4 +251,56 @@ fn nivel_do_envelope_nao_cai_com_a_resolucao() {
             "ppb {ppb}: nivel do envelope caiu para {level}"
         );
     }
+}
+#[test]
+fn regiao_musical_vai_do_trim_ate_o_fim_do_arquivo() {
+    // Clip MUSICAL: `source_length_beats = 0` com offset > 0 pede a fonte
+    // INTEIRA a partir do trim (e o que sera esticado para o span).
+    //
+    // O arquivo tem a primeira metade muda e depois um trecho em +-1 que
+    // comeca EM 5000 (1000 frames depois da metade). O offset do clip e 1
+    // beat = 4000 frames. Sem a regra "ate o fim", a regiao degenerava para
+    // 1 frame e a unica amostra lida era a do frame 4000 - silencio, ou
+    // seja a onda sumia.
+    let n = FRAMES;
+    let mut l = vec![0.0f32; n];
+    let mut r = vec![0.0f32; n];
+
+    for i in 0..n {
+        if i >= n / 2 + 1000 {
+            let v = if i % 2 == 0 { 1.0 } else { -1.0 };
+            l[i] = v;
+            r[i] = -v;
+        }
+    }
+
+    let path = write_wav("musical_ate_o_fim.wav", 2, [&l, &r]);
+
+    let mut clip = clip_for(&path, LEN_BEATS);
+    // 1 beat a 120 BPM = 0.5 s = 4000 frames.
+    clip.source_start_beats = 1.0;
+    clip.source_length_beats = 0.0;
+
+    let mut clips = vec![clip];
+    let (_, segments) = build_wave_bars_and_segments(&mut clips, PPB, BPM);
+
+    let cols = segments[0].1 as usize;
+    let wave = &clips[0].wave;
+
+    assert_eq!(wave.len(), cols * 2, "2 floats por coluna (L/R)");
+
+    let level = max_abs(wave);
+    assert!(
+        level > 0.9,
+        "a onda do clip musical nao apareceu (nivel {level})"
+    );
+
+    let first = wave[0].abs();
+    assert!(
+        first < 0.05 || cols < 8,
+        "a coluna inicial deveria ser o silencio logo apos o trim, veio {first}"
+    );
+
+    let last = wave[wave.len() - 2].abs();
+    assert!(last > 0.9, "a coluna final deveria estar no trecho que soa");
 }

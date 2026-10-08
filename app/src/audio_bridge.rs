@@ -56,13 +56,22 @@ impl AudioBridge {
 
     /// Publica o snapshot agora, se estiver sujo.
     pub fn flush(&self, project: &Project) {
-        if !self.dirty.get() {
-            return;
-        }
         let Some(handle) = self.handle.as_ref() else {
             self.dirty.set(false);
             return;
         };
+
+        // TIMEWARP: antes de publicar, entrega os renders de keylock que o
+        // worker terminou e pede os que faltam para o tempo atual. O render
+        // recém-chegado já vale neste publish; o que ainda não chegou toca
+        // em varispeed (o motor nunca fica esperando).
+        crate::stretch_worker::publish_ready(handle, project);
+        crate::stretch_worker::request_missing(handle, project);
+
+        if !self.dirty.get() {
+            return;
+        }
+
         self.dirty.set(false);
         handle.sync_project(project);
     }

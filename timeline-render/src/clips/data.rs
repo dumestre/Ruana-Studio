@@ -51,10 +51,28 @@ pub struct ClipDemo {
     pub source_start_beats: f32,
 
     /// Duração do arquivo original em beats (antes de qualquer corte/trim).
+    ///
+    /// `0.0` com `source_start_beats > 0` é o pedido explícito de
+    /// "DO OFFSET ATÉ O FIM do arquivo" — é assim que o clip MUSICAL se
+    /// identifica para a geração da onda (o conteúdo é a fonte inteira a
+    /// partir do trim, esticada para o span). A regra de região está em
+    /// `waveform.rs::decode_real_wave`.
     pub source_length_beats: f32,
 
     /// Número de canais de áudio: 1 = mono, 2 = stereo.
     pub channels: u16,
+
+    /// Marcadores de AudioWarp do clip (free warp), ordenados por
+    /// `source_seconds`. Vazio = clip sem warp.
+    ///
+    /// Vive DENTRO do `ClipDemo` de propósito: é estado do clip, então tem de
+    /// viajar com ele em slice/glue/paste/duplicar/undo — uma lista paralela
+    /// (como `fades`) se dessincronizaria em qualquer edição estrutural.
+    ///
+    /// As coordenadas são locais ao clip e relativas à REGIÃO da fonte
+    /// (`source_seconds` conta de onde o clip começa a ler o arquivo) — ver
+    /// `daw_core::WarpMarker`.
+    pub warp_markers: Vec<daw_core::WarpMarker>,
 }
 
 /// Métricas de conversão cursor ↔ conteúdo, espelhadas do App.

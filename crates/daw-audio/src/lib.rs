@@ -10,6 +10,7 @@ pub mod engine;
 pub mod meter;
 pub mod mixer;
 pub mod resample;
+pub mod stretch;
 
 #[cfg(feature = "cpal-out")]
 pub use backend::{AudioConfig, AudioError, CpalBackend};
@@ -24,3 +25,4 @@ pub use mixer::{
     stereo_gains_bipolar, track_is_active,
 };
 pub use resample::{resample_linear, resample_sinc};
+pub use stretch::{clamp_ratio, frames_of, is_identity, stretch_interleaved};

@@ -8,11 +8,13 @@ pub mod project;
 pub mod timeline;
 pub mod track;
 pub mod transport;
+pub mod warp;
 
-pub use clip::{Clip, ClipKind};
+pub use clip::{normalize_warp_markers, Clip, ClipKind, TimeMode, WarpMarker};
 pub use history::History;
 pub use mixer::{MixerChannel, MixerParam};
 pub use project::{ChangeKind, DocumentEvent, Project};
 pub use timeline::{Grid, RulerTick, TempoChange, TempoMap};
 pub use track::{Track, TrackKind};
 pub use transport::{PlayMode, Transport};
+pub use warp::{plan_for_clip, WarpPlan, WarpSegment};

@@ -119,6 +119,94 @@ impl TempoMap {
             false
         }
     }
+
+    /// Faixa de BPM que o timewarp aceita (a mesma do campo de BPM da UI).
+    ///
+    /// Fora dela a rampa exigida seria absurda (ou infinita) — melhor recusar
+    /// o gesto do que gravar um tempo impraticável no documento.
+    pub const BPM_MIN: f32 = 20.0;
+    pub const BPM_MAX: f32 = 300.0;
+
+    /// TIME WARP (Cubase): faz a posição musical `musical_beat` soar no
+    /// instante em que HOJE soa a posição `target_beat`.
+    ///
+    /// É o gesto da ferramenta Time Warp: você arrasta a linha do compasso 5
+    /// até um evento do áudio e o Cubase descobre o BPM que faz o compasso 5
+    /// cair exatamente ali. O que muda é o TEMPO, não o áudio: os clips em
+    /// modo musical (ver `TimeMode`) acompanham, porque são reesticados para
+    /// o novo span.
+    ///
+    /// Como funciona:
+    ///
+    /// - `t_target` = `beats_to_seconds(target_beat)` no mapa ATUAL — o
+    ///   instante em que o alvo soa agora;
+    /// - o trecho afetado é `[prev, musical_beat]`, onde `prev` é a última
+    ///   mudança de tempo ANTES do ponto arrastado (`prev` continua soando no
+    ///   mesmo instante: nada antes dele é tocado);
+    /// - o BPM desse trecho passa a ser o que faz `musical_beat` cair em
+    ///   `t_target`;
+    /// - uma mudança no próprio `musical_beat` preserva o BPM que existia
+    ///   depois dele — o tempo da música da frente não muda.
+    ///
+    /// Recusa (devolve `false`) quando:
+    ///
+    /// - o alvo não é posterior a `prev` (não existe BPM finito para isso);
+    /// - o BPM necessário sai de [`Self::BPM_MIN`]..=[`Self::BPM_MAX`].
+    ///
+    /// Nenhuma outra mudança de tempo corre risco: por construção `prev` é a
+    /// ÚLTIMA antes do ponto arrastado, então tudo o que o usuário já tinha
+    /// ficou ANTES do trecho reescalado e não se move.
+    pub fn warp_beat_to_target(&mut self, musical_beat: f32, target_beat: f32) -> bool {
+        if !musical_beat.is_finite() || !target_beat.is_finite() {
+            return false;
+        }
+
+        if musical_beat <= 0.001 {
+            return false;
+        }
+
+        // A mudança que governa o trecho que termina em `musical_beat`.
+        let prev_index = self
+            .changes
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.beat < musical_beat - 0.001)
+            .map(|(i, _)| i)
+            .next_back();
+
+        let (prev_beat, prev_bpm_after) = match prev_index {
+            Some(i) => (self.changes[i].beat, self.bpm_at(musical_beat)),
+            // Sem nenhuma mudança antes do ponto: a rampa começa no zero.
+            None => (0.0, self.bpm_at(musical_beat)),
+        };
+
+        let t_prev = self.beats_to_seconds(prev_beat);
+        let t_target = self.beats_to_seconds(target_beat);
+        let seconds = t_target - t_prev;
+
+        if !seconds.is_finite() || seconds <= 1e-6 {
+            return false;
+        }
+
+        let beats = (musical_beat - prev_beat) as f64;
+
+        if beats <= 0.0 {
+            return false;
+        }
+
+        let bpm = (beats * 60.0 / seconds) as f32;
+
+        if !bpm.is_finite() || !(Self::BPM_MIN..=Self::BPM_MAX).contains(&bpm) {
+            return false;
+        }
+
+        // O BPM que valia DEPOIS do ponto arrastado é preservado: só o trecho
+        // que termina nele é reescalado.
+        self.set_change(prev_beat, bpm);
+        self.set_change(musical_beat, prev_bpm_after);
+
+        true
+    }
 }
 
 
@@ -256,5 +344,176 @@ mod tests {
         assert_eq!(tm.changes.len(), 1);
         // Não remove o beat 0
         assert!(!tm.remove_change(0.0));
+    }
+}
+#[cfg(test)]
+mod timewarp_tool_tests {
+    use super::*;
+
+    const EPS: f64 = 1e-3;
+
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() < EPS
+    }
+
+    #[test]
+    fn esticar_compasso_para_um_evento_mais_a_frente() {
+        // 120 BPM constante. Arrastar o beat 4 ate onde HOJE soa o beat 6
+        // (3.0 s): o trecho 0..4 passa a durar 3.0 s -> 80 BPM.
+        let mut map = TempoMap::from_bpm(120.0);
+
+        assert!(close(map.beats_to_seconds(6.0), 3.0));
+
+        assert!(map.warp_beat_to_target(4.0, 6.0));
+
+        // INVARIANTE: o beat arrastado soa exatamente onde o alvo soava.
+        assert!(
+            close(map.beats_to_seconds(4.0), 3.0),
+            "beat 4 em {} s",
+            map.beats_to_seconds(4.0)
+        );
+
+        assert!(close(map.bpm_at(0.0) as f64, 80.0), "bpm {}", map.bpm_at(0.0));
+
+        // O tempo DEPOIS do ponto arrastado nao muda: 2 beats a 120 BPM.
+        assert!(
+            close(map.beats_to_seconds(6.0) - map.beats_to_seconds(4.0), 1.0),
+            "depois do warp: {} s",
+            map.beats_to_seconds(6.0) - map.beats_to_seconds(4.0)
+        );
+    }
+
+    #[test]
+    fn comprimir_arrastando_para_tras() {
+        // Arrastar o beat 8 para onde hoje soa o beat 4 (2.0 s): o trecho
+        // 0..8 passa a durar 2.0 s -> 240 BPM.
+        let mut map = TempoMap::from_bpm(120.0);
+
+        assert!(map.warp_beat_to_target(8.0, 4.0));
+
+        assert!(close(map.beats_to_seconds(8.0), 2.0), "{}", map.beats_to_seconds(8.0));
+        assert!(close(map.bpm_at(0.0) as f64, 240.0), "bpm {}", map.bpm_at(0.0));
+    }
+
+    #[test]
+    fn rampa_usa_o_ponto_de_tempo_anterior() {
+        // Tempo: 120 BPM ate o beat 8, 60 BPM depois. Arrastar o beat 12
+        // (que hoje soa em 4.0 + 4*1.0 = ... ver abaixo) para o beat 10.
+        let mut map = TempoMap::from_bpm(120.0);
+        map.set_change(8.0, 60.0);
+
+        // t(8) = 4.0 s (8 beats a 120) ; t(10) = 4.0 + 2 beats a 60 = 6.0 s.
+        assert!(close(map.beats_to_seconds(8.0), 4.0));
+        assert!(close(map.beats_to_seconds(10.0), 6.0));
+
+        // Arrastar o beat 12 ate onde o beat 10 soa hoje (6.0 s).
+        assert!(map.warp_beat_to_target(12.0, 10.0));
+
+        assert!(close(map.beats_to_seconds(12.0), 6.0), "{}", map.beats_to_seconds(12.0));
+
+        // O trecho afetado e [8, 12]: 4 beats em 2.0 s -> 120 BPM de novo.
+        assert!(close(map.bpm_at(8.0) as f64, 120.0), "bpm {}", map.bpm_at(8.0));
+
+        // O que vinha ANTES do ponto anterior nao se move.
+        assert!(close(map.beats_to_seconds(8.0), 4.0));
+
+        // E o tempo DEPOIS do ponto arrastado e o que ja valia ali (60 BPM):
+        // 4 beats = 4.0 s. O ajuste nao vaza para a musica da frente.
+        assert!(
+            close(map.beats_to_seconds(16.0) - map.beats_to_seconds(12.0), 4.0),
+            "depois: {}",
+            map.beats_to_seconds(16.0) - map.beats_to_seconds(12.0)
+        );
+        assert!(close(map.bpm_at(12.0) as f64, 60.0), "bpm em 12: {}", map.bpm_at(12.0));
+    }
+
+    #[test]
+    fn recusa_bpm_fora_da_faixa() {
+        let mut map = TempoMap::from_bpm(120.0);
+
+        // Trazer o beat 40 para 1 s exigiria 2400 BPM.
+        assert!(!map.warp_beat_to_target(40.0, 2.0));
+        // Estado intacto.
+        assert!(close(map.beats_to_seconds(40.0), 20.0));
+
+        // Empurrar o beat 4 para 100 s exigiria ~1.9 BPM.
+        assert!(!map.warp_beat_to_target(4.0, 400.0));
+        assert!(close(map.beats_to_seconds(4.0), 2.0));
+    }
+
+    #[test]
+    fn recusa_alvo_antes_do_ponto_anterior() {
+        let mut map = TempoMap::from_bpm(120.0);
+        map.set_change(8.0, 120.0);
+
+        // Alvo (beat 2 = 1.0 s) e ANTERIOR ao ponto anterior (beat 8 = 4.0 s):
+        // nao existe BPM que faca o beat 12 soar antes do beat 8.
+        assert!(!map.warp_beat_to_target(12.0, 2.0));
+    }
+
+    #[test]
+    fn pontos_de_tempo_anteriores_a_prev_sobrevivem() {
+        // Tres pontos: 120 em 0, 90 em 4 e 100 em 8. Arrastando o beat 12,
+        // `prev` e o ponto de beat 8 - SO ele vira a rampa. O ponto de beat 4
+        // (anterior a prev) e o trecho ate ele tem de sair intactos.
+        let mut map = TempoMap::from_bpm(120.0);
+        map.set_change(4.0, 90.0);
+        map.set_change(8.0, 100.0);
+
+        let antes_4 = map.beats_to_seconds(4.0);
+        let antes_10 = map.beats_to_seconds(10.0);
+
+        assert!(close(antes_4, 2.0), "t(4) {}", antes_4);
+
+        // Arrastar o beat 12 ate onde o beat 10 soa hoje.
+        assert!(map.warp_beat_to_target(12.0, 10.0), "gesto devia ser aceito");
+
+        // INVARIANTE do gesto.
+        assert!(
+            close(map.beats_to_seconds(12.0), antes_10),
+            "beat 12 em {} s, alvo era {} s",
+            map.beats_to_seconds(12.0),
+            antes_10
+        );
+
+        // O que estava ANTES de prev nao se moveu.
+        assert!(close(map.bpm_at(4.0) as f64, 90.0), "bpm em 4: {}", map.bpm_at(4.0));
+        assert!(close(map.beats_to_seconds(4.0), antes_4), "o trecho antes de prev se moveu");
+
+        // O trecho reescalado e [8, 12]: 4 beats em 1.2 s -> 200 BPM.
+        assert!(close(map.bpm_at(8.0) as f64, 200.0), "bpm em 8: {}", map.bpm_at(8.0));
+
+        // E o tempo depois do ponto arrastado continua o de antes (100 BPM).
+        assert!(close(map.bpm_at(12.0) as f64, 100.0), "bpm em 12: {}", map.bpm_at(12.0));
+    }
+
+    #[test]
+    fn recusa_entradas_degeneradas() {
+        let mut map = TempoMap::from_bpm(120.0);
+
+        assert!(!map.warp_beat_to_target(0.0, 4.0));
+        assert!(!map.warp_beat_to_target(-2.0, 4.0));
+        assert!(!map.warp_beat_to_target(f32::NAN, 4.0));
+        assert!(!map.warp_beat_to_target(4.0, f32::NAN));
+        // Alvo no mesmo instante do ponto anterior.
+        assert!(!map.warp_beat_to_target(4.0, 0.0));
+    }
+
+    #[test]
+    fn warps_sucessivos_continuam_batendo() {
+        // Dois gestos encadeados: cada um tem de manter a invariante.
+        let mut map = TempoMap::from_bpm(120.0);
+
+        assert!(map.warp_beat_to_target(4.0, 6.0));
+        let t4 = map.beats_to_seconds(4.0);
+        assert!(close(t4, 3.0));
+
+        // Agora arrasta o beat 8 ate onde o beat 6 soa hoje.
+        let t6 = map.beats_to_seconds(6.0);
+        assert!(map.warp_beat_to_target(8.0, 6.0));
+
+        assert!(close(map.beats_to_seconds(8.0), t6), "{}", map.beats_to_seconds(8.0));
+        // E o beat 4 nao se moveu no segundo gesto.
+        assert!(close(map.beats_to_seconds(4.0), t4));
     }
 }

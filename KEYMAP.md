@@ -15,6 +15,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 | --- | --- |
 | `Ctrl+C` | Copia o clip selecionado para o **clipboard interno** (não é o clipboard do SO). Sustenta colar múltiplas vezes com `Shift+clique`. |
 | `Ctrl+D` | Duplica o clip selecionado (cópia imediatamente à frente, herdando cor/override e audio). |
+| `Ctrl+M` | **Alterna Musical/Linear** do clip selecionado (timewarp). Em *Musical* o áudio acompanha o tempo do projeto — esticado com pitch preservado (o motor toca em varispeed enquanto o render com keylock não chega e depois troca para o buffer pronto). Em *Linear* o áudio volta ao tempo absoluto e o span do clip decide quanto do arquivo é ouvido. Clips de áudio importados nascem **Musical**. Um `Ctrl+Z` desfaz. |
 | `Ctrl+Z` | Desfaz (undo). `Shift+Ctrl+Z`/`Ctrl+Y` refaz (redo). |
 | `Delete` / `Backspace` | Apaga o clip selecionado; com multi-seleção (marquee), apaga todos os selecionados. |
 | `Ctrl+Y` | Refaz (redo). |
@@ -25,6 +26,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 | --- | --- |
 | `Shift + clique` (em área vazia) | **Cola** o conteúdo do clipboard na posição clicada (track + beat). |
 | `Ctrl + clique-arraste` | **Marquee / lasso**: seleção múltipla. Funciona começando em cima de um clip ou em área vazia. |
+| `Alt + arraste` (na régua) | **Time Warp** (estilo Cubase): agarra a linha de compasso/batida mais próxima e a move para onde você soltar. O projeto ganha a rampa de tempo que faz aquela posição musical soar no ponto escolhido — os clips em modo musical são reesticados e continuam casando com a grade. O alvo não é arredondado (o gesto serve para encaixar a grade num evento do áudio). Um gesto = um `Ctrl+Z`. |
 | Clique em área vazia | Deseleciona a seleção única (qualquer ferramenta). |
 | Arraste de clip (mouse) | Move o clip; arrastar pela borda redimensiona. |
 | Slice/Glue/faca | Ferramentas que dividem (`/`) ou unem (`U`) clips adjacentes (via barra de ferramentas). |
@@ -54,6 +56,7 @@ Referência dos atalhos atuais da DAW. Os atalhos **globais** vivem no
 | --- | --- |
 | `Ctrl+C` | Copiar clip |
 | `Ctrl+D` | Duplicar clip |
+| `Ctrl+M` | Alternar Musical/Linear do clip (timewarp) |
 | `Ctrl+Z` / `Ctrl+Y` / `Ctrl+Shift+Z` | Undo / Redo |
 | `Delete` / `Backspace` | Apagar clip(s) |
 | `Space` | Play/Stop (roteado pelo cursor: popup do beat → sequenciencer; resto → timeline) |

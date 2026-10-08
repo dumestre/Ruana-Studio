@@ -397,6 +397,12 @@ export component MainWindow inherits Window {
 
     callback theme-selected(int);
 
+    // Alterna Musical/Linear do clip (timewarp estilo Cubase). Musical: o
+    // áudio acompanha o tempo do projeto (esticado, pitch preservado);
+    // Linear: tempo absoluto, com o span do clip decidindo quanto do
+    // arquivo é ouvido.
+    callback clip-time-mode-toggle-requested(int);
+
     // Tema ativo: ponte Rust ↔ Theme (o Rust não gera acessor do
     // global `Theme`; `changed` faz o set no global toda troca).
     in-out property <int> theme-index: Theme.active;
@@ -753,6 +759,20 @@ export component MainWindow inherits Window {
                 // do menu de contexto).
                 if root.selected-clip != -1 {
                     root.clip-duplicate-requested(root.selected-clip);
+                    accept
+                } else {
+                    reject
+                }
+
+            } else if event.modifiers.control
+                && !event.modifiers.shift
+                && (event.text == "m" || event.text == "M") {
+
+                // Ctrl+M = alterna Musical/Linear do clip selecionado
+                // (timewarp). Em Musical o áudio acompanha o tempo do
+                // projeto; em Linear ele volta ao tempo absoluto.
+                if root.selected-clip != -1 {
+                    root.clip-time-mode-toggle-requested(root.selected-clip);
                     accept
                 } else {
                     reject

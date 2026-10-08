@@ -479,8 +479,20 @@ pub(crate) fn decode_real_wave(
     // soaria à frente da waveform. Aqui mapeamos as colunas para a MESMA
     // região temporal que o motor de áudio lê (`source_start*fpb + offset`).
     //
-    // `source_start_beats == 0` e `source_length_beats == 0` (clips criados
-    // sem import, ex.: `add_clip_with_path`) = sem trim → arquivo inteiro.
+    // Três casos:
+    //
+    // - `source_start == 0` e `source_length == 0` (clips criados sem
+    //   import, ex.: `add_clip_with_path`) = sem trim -> arquivo inteiro;
+    // - `source_length > 0` = trecho com duração conhecida (clip LINEAR:
+    //   quanto do arquivo é ouvido é decidido pelo span do clip);
+    // - `source_length <= 0` COM offset > 0 = DO OFFSET ATÉ O FIM do
+    //   arquivo. É a região de um clip MUSICAL: o conteúdo é a fonte
+    //   inteira a partir do trim, esticada para caber no span. Sem esta
+    //   regra o caso degenerava para 1 frame e a onda do clip musical não
+    //   aparecia (ou aparecia como silêncio).
+    //
+    // O `ClipDemo` sinaliza o musical justamente assim: `source_length_beats
+    // = 0` (ver `build_clip_demos` no app).
     // ==================================================================
     let frames_per_beat =
         data.sample_rate.max(1) as f64 *
@@ -511,10 +523,15 @@ pub(crate) fn decode_real_wave(
                 );
 
             let region =
-                len.max(1).min(
+                if len >= 1 {
+                    len.min(
+                        total_frames as i64
+                        - start,
+                    )
+                } else {
                     total_frames as i64
-                    - start,
-                );
+                    - start
+                };
 
             if region >= 1 {
                 (start as usize, region as usize)

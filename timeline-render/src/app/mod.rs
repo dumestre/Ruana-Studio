@@ -243,6 +243,15 @@ pub struct App {
     /// edição de tempo na engine. O host aplica no `Project::tempo_map`.
     /// Roda sempre na thread da engine (não precisa ser `Send`/`Sync`).
     pub tempo_write_back: Option<Box<dyn Fn(&daw_core::timeline::TempoMap)>>,
+    /// Callback de COMMIT de tempo: disparado no FIM de um gesto de tempo
+    /// (soltar o arrasto da ferramenta Time Warp ou de um ponto do editor de
+    /// tempo). O host grava no `Project` por aqui — é o ponto que registra o
+    /// undo (um gesto = um Ctrl+Z) e que emite o evento do documento, sem o
+    /// qual o motor de áudio não re-sincroniza. `None` = standalone.
+    pub tempo_commit: Option<Box<dyn Fn(&daw_core::timeline::TempoMap)>>,
+    /// Ferramenta Time Warp em andamento: beat MUSICAL sendo arrastado
+    /// (a linha de compasso/batida que o usuário agarrou na régua).
+    pub timewarp_drag: Option<f32>,
     /// Callback de write-back de CLIPS: invocado com a lista completa de clips
     /// da engine após QUALQUER edição estrutural (mover, redimensionar,
     /// desenhar, deletar, desfazer/refazer...). O host reconciliam com
@@ -886,6 +895,8 @@ transport,
             tw_scrubbing: false,
             tw_playhead_beat: 0.0,
             tempo_write_back: None,
+            tempo_commit: None,
+            timewarp_drag: None,
             clip_write_back: None,
             clip_open_request: None,
             last_press: None,

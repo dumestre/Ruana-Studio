@@ -1,7 +1,7 @@
 //! Áudio: carregamento de arquivos, construção do `Project` e sincronização
 //! com o motor de áudio.
 
-use daw_core::{Clip as CoreClip, ClipKind, Project};
+use daw_core::{Clip as CoreClip, ClipKind, Project, TimeMode};
 use std::path::Path;
 
 use crate::app::{WAVE_PPB, App};
@@ -48,6 +48,12 @@ impl App {
                 fade_in_beats: self.fades.get(idx).map(|f| f.in_len).unwrap_or(0.0),
                 fade_out_beats: self.fades.get(idx).map(|f| f.out_len).unwrap_or(0.0),
                 gain_db: self.fades.get(idx).map(|f| f.gain_db).unwrap_or(0.0),
+                // O `ClipDemo` da engine ainda não carrega estado de
+                // timewarp (musical/linear + marcadores de AudioWarp);
+                // enquanto isso o projeto espelhado fica em tempo absoluto,
+                // que é o comportamento histórico do motor.
+                time_mode: TimeMode::Linear,
+                warp_markers: Vec::new(),
                 notes: Vec::new(),
             };
             clips.push(core_clip);
@@ -123,6 +129,7 @@ impl App {
                 source_start_beats: 0.0,
                 source_length_beats,
                 channels: data.channels,
+                warp_markers: Vec::new(),
             };
 
             // Gera a waveform (real ou procedural)
@@ -209,6 +216,7 @@ impl App {
                     source_start_beats: 0.0,
                     source_length_beats,
                     channels,
+                    warp_markers: Vec::new(),
                 };
                 // Gera a waveform (real ou procedural)
                 let n_cols = waveform::wave_cols(clip.len, WAVE_PPB);
