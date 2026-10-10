@@ -345,10 +345,11 @@ impl App {
         if with_ctrl && dy.abs() >= 1.0 {
             let old_px = px_per_beat;
             let new_px = (old_px + dy * 0.05).clamp(8.0, 640.0);
-            let beat_under = (mx + scroll_x) / old_px.max(0.01);
+            let anchor_x = if in_tw_area { mx - super::timewarp::BPM_LABEL_W } else { mx };
+            let beat_under = (anchor_x + scroll_x) / old_px.max(0.01);
             if in_tw_area {
                 self.timewarp_px_per_beat = new_px;
-                self.timewarp_scroll_x = (beat_under * new_px - mx).max(0.0);
+                self.timewarp_scroll_x = (beat_under * new_px - anchor_x).max(0.0);
             } else if in_pr_area {
                 self.piano_roll_px_per_beat = new_px;
                 self.piano_roll_scroll_x = (beat_under * new_px - mx).max(0.0);
@@ -381,6 +382,7 @@ impl App {
             }
         }
         self.clamp_scroll_y(self.input_view_size().1);
+        self.request_redraw();
         eprintln!(
             "[dbg-scroll] ctrl={with_ctrl} alt={with_alt} dx={dx} dy={dy} -> scroll_x={} scroll_y={} pps={}",
             self.scroll_x, self.scroll_y, self.px_per_beat,
@@ -1304,6 +1306,7 @@ pub fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
                 let len = self.tw_warp_clip_data().map(|c| c.len).unwrap_or(0.0);
                 if len > 0.0 {
                     self.timewarp_inter.warp_drag_move(pos, &m, snap, len);
+                    self.tw_warp_preview_marker();
                 }
                 self.request_redraw();
             } else if self.timewarp_inter.is_dragging() {
@@ -1751,6 +1754,7 @@ impl App {
                     if let Some((idx, live)) = self.timewarp_inter.warp_end_drag() {
                         self.tw_warp_move_marker(idx, live);
                     }
+                    self.timewarp_preview_marker = None;
                 }
             }
             self.request_redraw();
@@ -1894,6 +1898,16 @@ impl App {
         self.tw_warp_set_markers(idx, markers);
     }
 
+    /// Preview efêmero do marcador durante o gesto. Atualiza o cache visual
+    /// do clip para que timeline e Timewarp mostrem o mesmo stretch a cada frame.
+    fn tw_warp_preview_marker(&mut self) {
+        let Some(marker_idx) = self.timewarp_inter.warp_drag else { return; };
+        let offset = self.timewarp_inter.warp_drag_live;
+        let Some(idx) = self.tw_warp_clip() else { return; };
+        self.timewarp_preview_marker = Some((idx, marker_idx, offset));
+        self.request_redraw();
+    }
+
     /// Grava os marcadores de warp no clip (engine) e persiste no documento.
     fn tw_warp_set_markers(&mut self, clip_idx: usize, mut markers: Vec<WarpMarker>) {
         markers = daw_core::clip::normalize_warp_markers(markers);
@@ -1901,6 +1915,10 @@ impl App {
             clip.warp_markers = markers;
         }
         self.emit_clip_write_back();
+        #[cfg(feature = "audio")]
+        if self.playing {
+            self.sync_audio_engine();
+        }
         self.request_redraw();
     }
 }

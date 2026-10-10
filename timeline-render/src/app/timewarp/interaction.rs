@@ -184,6 +184,10 @@ impl TimewarpInteraction {
         self.warp_drag.is_some()
     }
 
+    pub fn warp_moved_live(&self) -> bool {
+        self.warp_drag.is_some() && self.warp_drag_moved
+    }
+
     /// X de janela de um marcador de warp (offset LOCAL ao clip).
     fn warp_marker_x(offset: f32, clip_beat: f32, m: &TimewarpMetrics) -> f32 {
         m.beat_to_x(clip_beat + offset)

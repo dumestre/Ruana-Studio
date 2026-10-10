@@ -225,23 +225,6 @@ pub fn build_timewarp_warp_instances(
     let band_top = body_top + body_h * 0.16;
     let band_h = (body_h * 0.68).max(8.0);
 
-    let band_x0 = clip_x0.max(BPM_LABEL_W);
-    let band_x1 = clip_x1.min(width);
-    if band_x1 > band_x0 {
-        instances.push(RectInstance {
-            x: band_x0,
-            y: band_top,
-            w: band_x1 - band_x0,
-            h: band_h,
-            color: [120, 120, 128, 255],
-            wave_offset: 0,
-            wave_count: 0,
-            clip_w: 0.0,
-            clip_h: 0.0,
-            radius: 0.0,
-        });
-    }
-
     // ===== Âncoras (offset no clip em beats → fração da fonte) =====
     // Sem região decodificada ou sem colunas, cai num único trecho linear.
     let mut anchors: Vec<(f32, f32)> = Vec::with_capacity(markers.len() + 2);
@@ -265,9 +248,25 @@ pub fn build_timewarp_warp_instances(
 
     let n_last = (seg_count.saturating_sub(1)) as f32;
 
-    for pair in wave_band.windows(2) {
-        let (b0, f0) = pair[0];
-        let (b1, f1) = pair[1];
+    for (pair_idx, pair) in wave_band.windows(2).enumerate() {
+        let (mut b0, mut f0) = pair[0];
+        let (mut b1, mut f1) = pair[1];
+        // Enquanto o marcador é arrastado, a forma de onda acompanha o
+        // preview ao vivo. O documento só recebe o valor final no release.
+        if inter.warp_drag == Some(pair_idx) {
+            b1 = inter.warp_drag_live;
+            f1 = (markers.get(pair_idx)
+                .map(|marker| marker.source_seconds as f64 / region_seconds)
+                .unwrap_or(f1 as f64)
+                .clamp(0.0, 1.0)) as f32;
+        }
+        if pair_idx > 0 && inter.warp_drag == Some(pair_idx - 1) {
+            b0 = inter.warp_drag_live;
+            f0 = (markers.get(pair_idx - 1)
+                .map(|marker| marker.source_seconds as f64 / region_seconds)
+                .unwrap_or(f0 as f64)
+                .clamp(0.0, 1.0)) as f32;
+        }
         if b1 <= b0 + 1e-6 || f1 <= f0 + 1e-6 {
             continue;
         }

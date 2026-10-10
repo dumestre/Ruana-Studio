@@ -136,6 +136,8 @@ pub struct App {
     pub wave_bars: Vec<f32>,
     /// (offset, count) fixos por id de clip no buffer `wave_bars`.
     pub wave_segments: Vec<(u32, u32)>,
+    /// Marcador visual provisório enquanto um warp está sendo arrastado.
+    pub timewarp_preview_marker: Option<(usize, usize, f32)>,
     pub clips: Vec<clips::ClipDemo>,
     pub clip_interaction: clips::ClipInteraction,
     pub fades: Vec<fades::ClipFade>,
@@ -819,6 +821,7 @@ transport,
 
             wave_bars,
             wave_segments,
+            timewarp_preview_marker: None,
             clips,
             clip_interaction: clips::ClipInteraction::new(),
             fades,
@@ -1732,6 +1735,14 @@ transport,
         match target.filter(|i| !self.clips[*i].is_midi) {
             Some(idx) => {
                 let clip = &self.clips[idx];
+                let mut visual_markers = clip.warp_markers.clone();
+                if let Some((target_idx, marker_idx, offset)) = self.timewarp_preview_marker {
+                    if target_idx == idx {
+                        if let Some(marker) = visual_markers.get_mut(marker_idx) {
+                            marker.project_offset_beats = offset;
+                        }
+                    }
+                }
                 instances.extend(m.build_body_instances(width));
                 instances.extend(m.build_warp_gutter_instances());
                 let (seg_off, seg_cnt) = self
@@ -1746,7 +1757,7 @@ transport,
                     clip.channels,
                     seg_off,
                     seg_cnt,
-                    &clip.warp_markers,
+                    &visual_markers,
                     &self.timewarp_inter,
                     &m,
                     width,

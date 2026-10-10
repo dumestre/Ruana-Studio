@@ -431,7 +431,9 @@ if app.is_dragging_file {
                     // moved e a playhead/loop do PR parece "travada" (só
                     // atualiza no clique/release).
                     || app.pr_loop_drag.is_some()
-                    || app.pr_scrubbing {
+                    || app.pr_scrubbing
+                    || (app.show_timewarp
+                        && (app.tw_scrubbing || app.timewarp_inter.warp_is_dragging())) {
                     app.request_redraw();
                 }
                 }

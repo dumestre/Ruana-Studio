@@ -442,22 +442,83 @@ impl App {
         let ruler_h = self.ruler_px;
 
         // Clips (hover/drag/fantasma + overlay) — módulo clips
+        let timewarp_clip_view = self.show_timewarp && self.timewarp_target.is_some();
+        let view_px_per_beat = if timewarp_clip_view { self.timewarp_px_per_beat } else { self.px_per_beat };
+        let view_scroll_x = if timewarp_clip_view { self.timewarp_scroll_x } else { self.scroll_x };
         let cm = clips::ClipMetrics {
-            px_per_beat: self.px_per_beat,
+            px_per_beat: view_px_per_beat,
             wave_segments: self.wave_segments.clone(),
             row_height,
-            scroll_x: self.scroll_x,
+            scroll_x: view_scroll_x,
             scroll_y: self.scroll_y,
             ruler_px: self.ruler_px,
             theme: t,
             max_track: self.clips.iter().map(|c| c.track_index).max().unwrap_or(0),
         };
-        instances.extend(clips::build_clip_instances(
-            &self.clips,
+        let mut display_clips = self.clips.clone();
+        if let Some((clip_idx, marker_idx, offset)) = self.timewarp_preview_marker {
+            if let Some(marker) = display_clips
+                .get_mut(clip_idx)
+                .and_then(|clip| clip.warp_markers.get_mut(marker_idx))
+            {
+                marker.project_offset_beats = offset;
+            }
+        }
+        let mut clip_instances = clips::build_clip_instances(
+            &display_clips,
             &self.clip_interaction,
             &cm,
             width,
-        ));
+        );
+        if let Some((clip_idx, marker_idx, offset)) = self.timewarp_preview_marker {
+            if let Some(clip) = self.clips.get(clip_idx) {
+                let anchors = std::iter::once((0.0f32, 0.0f32))
+                    .chain(clip.warp_markers.iter().enumerate().map(|(i, marker)| {
+                        let beat = if i == marker_idx { offset } else { marker.project_offset_beats };
+                        (beat, (marker.source_seconds as f64 / clip.region_seconds.max(1e-9)) as f32)
+                    }))
+                    .chain(std::iter::once((clip.len, 1.0)))
+                    .collect::<Vec<_>>();
+                let Some((seg_offset, seg_count)) = self.wave_segments.get(clip_idx).copied() else {
+                    instances.extend(clip_instances);
+                    return instances;
+                };
+                let n_last = seg_count.saturating_sub(1);
+                let (cx, cy, _cw, ch) = clips::clip_rect(clip, &cm);
+                let top = cy + 16.0;
+                let wave_h = ch - 16.0;
+                let active_marker = marker_idx.min(anchors.len().saturating_sub(2));
+                let active_marker_x = cx + offset * view_px_per_beat;
+                for (segment_idx, pair) in anchors.windows(2).enumerate() {
+                    let (b0, f0) = pair[0];
+                    let (b1, f1) = pair[1];
+                    if b1 <= b0 || f1 <= f0 { continue; }
+                    let x0 = (cx + b0 * view_px_per_beat).max(0.0);
+                    let x1 = (cx + b1 * view_px_per_beat).min(width);
+                    let (draw_x0, draw_x1, draw_f0, draw_f1) = if segment_idx == active_marker {
+                        let live_f = anchors[active_marker + 1].1;
+                        (x0, active_marker_x.min(x1), f0, live_f)
+                    } else if segment_idx == active_marker + 1 {
+                        let live_f = anchors[active_marker + 1].1;
+                        (active_marker_x.max(x0), x1, live_f, f1)
+                    } else {
+                        (x0, x1, f0, f1)
+                    };
+                    if draw_x1 <= draw_x0 || draw_f1 <= draw_f0 { continue; }
+                    let draw_c0 = (draw_f0 * n_last as f32).floor() as u32;
+                    let draw_c1 = (draw_f1 * n_last as f32).ceil() as u32;
+                    if draw_c1 <= draw_c0 { continue; }
+                    clip_instances.push(RectInstance {
+                        x: draw_x0, y: top, w: draw_x1 - draw_x0, h: wave_h,
+                        color: [0, 0, 0, 255],
+                        wave_offset: seg_offset + draw_c0,
+                        wave_count: draw_c1 - draw_c0 + 1,
+                        clip_w: -6.0, clip_h: wave_h, radius: 0.0,
+                    });
+                }
+            }
+        }
+        instances.extend(clip_instances);
 
         // Renderiza preview de áudio arrastado (se houver)
         if let Some(preview) = &self.drop_preview {
