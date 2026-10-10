@@ -15,6 +15,8 @@ export component MixerChannel inherits Rectangle {
     in property <color> channel-color: Theme.accent;
     in property <bool> is-master: false;
     in property <int> channel-index: 0;
+    in property <bool> selected: false;
+    callback select-requested(int);
 
     in property <length> available-height: 200px;
 
@@ -103,6 +105,14 @@ export component MixerChannel inherits Rectangle {
         height: parent.height;
 
         background: Theme.border;
+    }
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 3px;
+        background: root.selected ? root.channel-color : transparent;
     }
 
     // ==========================================
@@ -355,7 +365,7 @@ export component MixerChannel inherits Rectangle {
             // duplicação que fazia o número do LCD e o desenho do
             // controle discordarem.
             Meter {
-                horizontal-stretch: 0;
+                horizontal-stretch: 1;
                 vertical-stretch: 1;
 
                 // Sem isto a luz de clip devolveria o índice padrão (0)
@@ -409,5 +419,16 @@ export component MixerChannel inherits Rectangle {
                 }
             }
         }
+    }
+
+    // Clique no cabeçalho seleciona o canal sem interceptar os controles.
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 30px;
+        mouse-cursor: pointer;
+        clicked => { root.select-requested(root.channel-index); }
+        z: 100;
     }
 }

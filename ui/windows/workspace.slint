@@ -240,6 +240,8 @@ export component Workspace inherits Rectangle {
     in-out property <int> mixer-max-inserts:
         8;
 
+    in-out property <int> mixer-selected-channel: 0;
+
 
     // ========================================================
     // EXPLORER
@@ -477,6 +479,10 @@ export component Workspace inherits Rectangle {
     callback mixer-insert-removed(int, int);
 
     callback mixer-insert-toggled(int, int);
+    callback mixer-copy-slots(int);
+    callback mixer-paste-slots(int);
+    callback mixer-undo-requested();
+    callback mixer-redo-requested();
 
     callback explorer-path-changed(string);
 
@@ -1779,6 +1785,13 @@ export component Workspace inherits Rectangle {
 
                         max-inserts:
                             root.mixer-max-inserts;
+
+                        track-colors: root.track-colors;
+                        selected-channel <=> root.mixer-selected-channel;
+                        copy-inserts(ch) => { root.mixer-copy-slots(ch); }
+                        paste-inserts(ch) => { root.mixer-paste-slots(ch); }
+                        undo-requested => { root.mixer-undo-requested(); }
+                        redo-requested => { root.mixer-redo-requested(); }
 
 
                         channel-param-changed(

@@ -12,7 +12,7 @@ use std::cell::RefCell;
 
 use crate::clip::{normalize_warp_markers, Clip, ClipKind, TimeMode, WarpMarker};
 use crate::history::History;
-use crate::mixer::{MixerChannel, MixerParam};
+use crate::mixer::{InsertSlot, MixerChannel, MixerParam};
 use crate::timeline::TempoMap;
 use crate::track::{Track, TrackKind};
 use daw_midi::{BeatPatterns, DrumPattern, DrumTrackParams};
@@ -98,6 +98,12 @@ pub enum DocumentEvent {
     TempoChanged {
         old: TempoMap,
         new: TempoMap,
+    },
+    /// Cadeia de inserts de um canal do mixer.
+    MixerInsertsChanged {
+        channel: usize,
+        old: Vec<InsertSlot>,
+        new: Vec<InsertSlot>,
     },
 }
 
@@ -314,6 +320,11 @@ impl Project {
             DocumentEvent::TempoChanged { new, .. } => {
                 self.tempo_map = (*new).clone();
             }
+            DocumentEvent::MixerInsertsChanged { channel, new, .. } => {
+                if let Some(mixer) = self.mixer_channel_mut(*channel) {
+                    mixer.inserts = new.clone();
+                }
+            }
         }
         self.emit(event, ChangeKind::Apply);
     }
@@ -390,6 +401,11 @@ impl Project {
             }
             DocumentEvent::TempoChanged { old, .. } => {
                 self.tempo_map = (*old).clone();
+            }
+            DocumentEvent::MixerInsertsChanged { channel, old, .. } => {
+                if let Some(mixer) = self.mixer_channel_mut(*channel) {
+                    mixer.inserts = old.clone();
+                }
             }
         }
         self.emit(event, ChangeKind::Undo);
@@ -1107,46 +1123,72 @@ impl Project {
         true
     }
 
+    fn mixer_channel(&self, channel: usize) -> Option<&MixerChannel> {
+        if channel < self.tracks.len() {
+            Some(&self.tracks[channel].mixer)
+        } else if channel == self.tracks.len() {
+            Some(&self.master_mixer)
+        } else {
+            None
+        }
+    }
+
+    fn mixer_channel_mut(&mut self, channel: usize) -> Option<&mut MixerChannel> {
+        if channel < self.tracks.len() {
+            Some(&mut self.tracks[channel].mixer)
+        } else if channel == self.tracks.len() {
+            Some(&mut self.master_mixer)
+        } else {
+            None
+        }
+    }
+
+    /// Substitui a cadeia de inserts e registra a ação no histórico.
+    pub fn set_mixer_inserts(&mut self, channel: usize, inserts: Vec<InsertSlot>) -> bool {
+        let Some(old) = self.mixer_channel(channel).map(|m| m.inserts.clone()) else {
+            return false;
+        };
+        if old == inserts {
+            return false;
+        }
+        let event = DocumentEvent::MixerInsertsChanged { channel, old, new: inserts };
+        self.apply_event(&event);
+        self.history.record(event);
+        true
+    }
+
     /// Adiciona um insert ao canal do mixer.
     ///
     /// Endereçamento igual a [`set_mixer_param`]. Retorna `false` se o
     /// canal não existe.
     pub fn add_mixer_insert(&mut self, channel: usize) -> bool {
-        let target: &mut MixerChannel = if channel < self.tracks.len() {
-            &mut self.tracks[channel].mixer
-        } else if channel == self.tracks.len() {
-            &mut self.master_mixer
-        } else {
+        let Some(mut inserts) = self.mixer_channel(channel).map(|m| m.inserts.clone()) else {
             return false;
         };
-        target.add_insert(format!("Insert {}", target.inserts.len() + 1));
-        true
+        inserts.push(InsertSlot::new(format!("Insert {}", inserts.len() + 1)));
+        self.set_mixer_inserts(channel, inserts)
     }
 
     /// Remove um insert do canal do mixer. Retorna `false` se o canal ou
     /// o slot não existem.
     pub fn remove_mixer_insert(&mut self, channel: usize, index: usize) -> bool {
-        let target: &mut MixerChannel = if channel < self.tracks.len() {
-            &mut self.tracks[channel].mixer
-        } else if channel == self.tracks.len() {
-            &mut self.master_mixer
-        } else {
+        let Some(mut inserts) = self.mixer_channel(channel).map(|m| m.inserts.clone()) else {
             return false;
         };
-        target.remove_insert(index)
+        if index >= inserts.len() { return false; }
+        inserts.remove(index);
+        self.set_mixer_inserts(channel, inserts)
     }
 
     /// Alterna o bypass de um insert. Retorna `false` se o canal ou o slot
     /// não existem.
     pub fn toggle_mixer_insert(&mut self, channel: usize, index: usize) -> bool {
-        let target: &mut MixerChannel = if channel < self.tracks.len() {
-            &mut self.tracks[channel].mixer
-        } else if channel == self.tracks.len() {
-            &mut self.master_mixer
-        } else {
+        let Some(mut inserts) = self.mixer_channel(channel).map(|m| m.inserts.clone()) else {
             return false;
         };
-        target.toggle_insert(index)
+        let Some(slot) = inserts.get_mut(index) else { return false; };
+        slot.enabled = !slot.enabled;
+        self.set_mixer_inserts(channel, inserts)
     }
 
     // =====================================================

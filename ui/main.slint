@@ -231,6 +231,8 @@ export component MainWindow inherits Window {
         [];
     in-out property <int> mixer-max-inserts:
         8;
+
+    in-out property <int> mixer-selected-channel: 0;
         
     in-out property <int> selected-clip <=> workspace.selected-clip;
     in-out property <length> timeline-scroll-x <=> workspace.timeline-scroll-x;
@@ -428,6 +430,10 @@ export component MainWindow inherits Window {
     callback mixer-insert-added(int);
     callback mixer-insert-removed(int, int);
     callback mixer-insert-toggled(int, int);
+    callback mixer-copy-slots(int);
+    callback mixer-paste-slots(int);
+    callback mixer-undo-requested();
+    callback mixer-redo-requested();
 
     callback explorer-path-changed(string);
     callback explorer-directory-entered(string);
@@ -903,6 +909,7 @@ export component MainWindow inherits Window {
             mixer-insert-names <=> root.mixer-insert-names;
             mixer-insert-enabled <=> root.mixer-insert-enabled;
             mixer-max-inserts <=> root.mixer-max-inserts;
+            mixer-selected-channel <=> root.mixer-selected-channel;
             explorer-current-path <=> root.explorer-current-path;
             explorer-path-history <=> root.explorer-path-history;
             explorer-history-index <=> root.explorer-history-index;
@@ -939,6 +946,10 @@ export component MainWindow inherits Window {
             mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
             mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
             mixer-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }
+            mixer-copy-slots(ch) => { root.mixer-copy-slots(ch); }
+            mixer-paste-slots(ch) => { root.mixer-paste-slots(ch); }
+            mixer-undo-requested() => { root.mixer-undo-requested(); }
+            mixer-redo-requested() => { root.mixer-redo-requested(); }
             explorer-path-changed(path) => { root.explorer-path-changed(path); }
             explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
             explorer-go-up() => { root.explorer-go-up(); }

@@ -596,6 +596,56 @@ pub fn setup(
         });
     }
 
+    // Copiar/colar a cadeia de inserts do canal selecionado no mixer.
+    {
+        let clipboard: Rc<RefCell<Option<Vec<daw_core::mixer::InsertSlot>>>> =
+            Rc::new(RefCell::new(None));
+        let copy_clipboard = clipboard.clone();
+        let project_copy = project.clone();
+        ui.on_mixer_copy_slots(move |channel| {
+            let channel = channel.max(0) as usize;
+            let inserts = {
+                let project = project_copy.borrow();
+                if channel < project.tracks.len() {
+                    Some(project.tracks[channel].mixer.inserts.clone())
+                } else if channel == project.tracks.len() {
+                    Some(project.master_mixer.inserts.clone())
+                } else {
+                    None
+                }
+            };
+            *copy_clipboard.borrow_mut() = inserts;
+        });
+
+        let paste_clipboard = clipboard;
+        let project_paste = project.clone();
+        let apply_mixer = handles.apply_mixer_state.clone();
+        ui.on_mixer_paste_slots(move |channel| {
+            let Some(inserts) = paste_clipboard.borrow().clone() else { return; };
+            if project_paste.borrow_mut().set_mixer_inserts(channel.max(0) as usize, inserts) {
+                apply_mixer();
+            }
+        });
+    }
+
+    // O histórico do projeto também controla as mudanças nos slots do mixer.
+    {
+        let project_undo = project.clone();
+        let apply_mixer = handles.apply_mixer_state.clone();
+        ui.on_mixer_undo_requested(move || {
+            if project_undo.borrow_mut().undo() {
+                apply_mixer();
+            }
+        });
+        let project_redo = project.clone();
+        let apply_mixer = handles.apply_mixer_state.clone();
+        ui.on_mixer_redo_requested(move || {
+            if project_redo.borrow_mut().redo() {
+                apply_mixer();
+            }
+        });
+    }
+
     {
         let transport = transport.clone();
         ui.on_metronome_state_changed(move |enabled| {

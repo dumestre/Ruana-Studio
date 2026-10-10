@@ -47,10 +47,11 @@ export component Meter inherits Rectangle {
     private property <length> clip-light-height: 6px;
     private property <length> triangle-width: 14px;
     private property <length> meter-width: 13px;
-    private property <length> db-width: 23px;
+    private property <length> db-width: 19px;
     private property <length> gap: 2px;
+    private property <length> meter-x: (root.width - root.meter-width) / 2;
 
-    width: show-volume-control ? 56px : 13px;
+    width: show-volume-control ? 90px : 13px;
     min-height: 40px;
 
     // ========================================================
@@ -58,7 +59,7 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     if root.show-volume-control : Rectangle {
-        x: 0px;
+        x: root.meter-x - root.gap - root.db-width - root.gap - root.triangle-width;
         y: 0px;
         width: root.triangle-width;
         height: parent.height;
@@ -113,7 +114,7 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     Rectangle {
-        x: root.show-volume-control ? root.triangle-width + root.gap : 0px;
+        x: root.show-volume-control ? root.meter-x : 0px;
         y: 0px;
         width: root.meter-width;
         height: parent.height;
@@ -186,7 +187,7 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     if root.show-volume-control : Rectangle {
-        x: root.triangle-width + root.gap + root.meter-width + root.gap;
+        x: root.meter-x - root.gap - root.db-width;
         y: 0px;
         width: root.db-width;
         height: parent.height;

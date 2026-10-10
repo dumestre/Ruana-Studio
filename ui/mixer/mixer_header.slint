@@ -3,15 +3,21 @@ import { Button } from "../components/button.slint";
 
 export component MixerHeader inherits Rectangle {
     in-out property <bool> floating: false;
+    in property <int> selected-channel: 0;
     callback float-toggle();
+    callback copy-slots();
+    callback paste-slots();
+    callback undo();
+    callback redo();
 
-    height: 26px;
+    height: 30px;
     background: Theme.surface;
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        alignment: LayoutAlignment.space-between;
+        padding-left: 8px;
+        padding-right: 6px;
+        spacing: 5px;
+        alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
         height: 100%;
 
@@ -21,6 +27,43 @@ export component MixerHeader inherits Rectangle {
             font-size: 10px;
             font-weight: 600;
         }
+
+        Rectangle { width: 1px; height: 16px; background: Theme.border; }
+
+        Button {
+            text: "Copiar slots";
+            height: 21px;
+            padding-x: 6px;
+            corner-radius: 3px;
+            resting-bg: Theme.surface-high;
+            clicked => { root.copy-slots(); }
+        }
+        Button {
+            text: "Colar";
+            height: 21px;
+            padding-x: 6px;
+            corner-radius: 3px;
+            resting-bg: Theme.surface-high;
+            clicked => { root.paste-slots(); }
+        }
+        Button {
+            width: 23px;
+            height: 21px;
+            icon: @image-url("../icons/undo.svg");
+            icon-size: 13px;
+            borderless: true;
+            clicked => { root.undo(); }
+        }
+        Button {
+            width: 23px;
+            height: 21px;
+            icon: @image-url("../icons/redo.svg");
+            icon-size: 13px;
+            borderless: true;
+            clicked => { root.redo(); }
+        }
+
+        Rectangle { horizontal-stretch: 1; background: transparent; }
 
         Button {
             width: 22px;
