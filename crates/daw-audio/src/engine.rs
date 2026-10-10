@@ -934,6 +934,18 @@ impl AudioEngine {
 
         // ---- mix -----------------------------------------------
         let any_soloed = snap.tracks.iter().any(|t| t.soloed);
+        let mut track_clips: Vec<Vec<&ClipSlot>> = (0..snap.tracks.len()).map(|_| Vec::new()).collect();
+        let mut track_midi_clips: Vec<Vec<&MidiClipSlot>> = (0..snap.tracks.len()).map(|_| Vec::new()).collect();
+        for clip in &snap.clips {
+            if let Some(track_idx) = snap.tracks.iter().position(|track| track.id == clip.track_id) {
+                track_clips[track_idx].push(clip);
+            }
+        }
+        for clip in &snap.midi_clips {
+            if let Some(track_idx) = snap.tracks.iter().position(|track| track.id == clip.track_id) {
+                track_midi_clips[track_idx].push(clip);
+            }
+        }
 
         // Canais medidos: uma entrada por trilha + o master no fim.
         // É a MESMA ordem de `mixer_state()` no app, para o índice do
@@ -950,51 +962,38 @@ impl AudioEngine {
         // vezes o da linha vezes a velocidade da nota.
         if playing && mode == PlayMode::Timeline {
             let end_frames = start_frames + frames as f64;
-            for clip in snap.midi_clips.iter() {
-                let Some(track) = snap.tracks.iter().find(|t| t.id == clip.track_id) else {
-                    continue;
-                };
+            for (track_idx, track) in snap.tracks.iter().enumerate() {
                 if !track_is_active(track.muted, track.soloed, any_soloed) {
                     continue;
                 }
                 let (tg_l, tg_r) = stereo_gains(track.volume, track.pan);
-                for note in clip.notes.iter() {
-                    let onset = (clip.start_beat + note.start_beat) * frames_per_beat;
-                    if onset < start_frames || onset >= end_frames {
-                        continue;
+                for clip in track_midi_clips[track_idx].iter().copied() {
+                    for note in clip.notes.iter() {
+                        let onset = (clip.start_beat + note.start_beat) * frames_per_beat;
+                        if onset < start_frames || onset >= end_frames {
+                            continue;
+                        }
+                        let row_idx = (note.pitch - daw_midi::DRUM_PITCH_BASE) as usize;
+                        let Some(row) = snap.beat.rows.get(row_idx) else {
+                            continue;
+                        };
+                        if !track_is_active(!row.active, row.solo, snap.beat.any_solo) {
+                            continue;
+                        }
+                        let Some(buffer) = row.buffer.clone() else {
+                            continue;
+                        };
+                        let vel = (note.velocity as f32 / 127.0).clamp(0.0, 1.0);
+                        let rg = row.volume * vel;
+                        let (rg_l, rg_r) = if row.pan == 0.0 {
+                            (rg, rg)
+                        } else {
+                            let (rl, rr) = stereo_gains_bipolar(1.0, row.pan);
+                            (rg * rl, rg * rr)
+                        };
+                        let delay = (onset - start_frames).max(0.0) as u32;
+                        rt.trigger(buffer, tg_l * rg_l, tg_r * rg_r, delay.min(frames as u32));
                     }
-                    let row_idx = (note.pitch - daw_midi::DRUM_PITCH_BASE) as usize;
-                    let Some(row) = snap.beat.rows.get(row_idx) else {
-                        continue;
-                    };
-                    if !track_is_active(!row.active, row.solo, snap.beat.any_solo) {
-                        continue;
-                    }
-                    let Some(buffer) = row.buffer.clone() else {
-                        continue;
-                    };
-                    // Velocidade 0..127 → fator de ganho linear (MIDI típico 100/127).
-                    let vel = (note.velocity as f32 / 127.0).clamp(0.0, 1.0);
-                    // Volume da row como ganho linear (sem equal-power de pan:
-                    // o pan já foi aplicado por `tg` acima; aplicar de novo
-                    // (stereo_gains_bipolar) corta -6dB no centro, fazendo o
-                    // beat sair bem mais baixo na timeline do que no popup
-                    // — que usa só um pan). A row.pan, se diferente de 0, ajusta
-                    // o L/R como um desvio adicional, não um redirecionamento.
-                    let rg = row.volume * vel;
-                    let (rg_l, rg_r) = if row.pan == 0.0 {
-                        (rg, rg)
-                    } else {
-                        let (rl, rr) = stereo_gains_bipolar(1.0, row.pan);
-                        (rg * rl, rg * rr)
-                    };
-                    let delay = (onset - start_frames).max(0.0) as u32;
-                    rt.trigger(
-                        buffer,
-                        tg_l * rg_l,
-                        tg_r * rg_r,
-                        delay.min(frames as u32),
-                    );
                 }
             }
         }
@@ -1021,7 +1020,7 @@ impl AudioEngine {
                     let mut track_l = 0.0f32;
                     let mut track_r = 0.0f32;
 
-                    for clip in snap.clips.iter().filter(|c| c.track_id == track.id) {
+                    for clip in track_clips[track_idx].iter().copied() {
                         let clip_start = clip.start_beat * frames_per_beat;
                         let clip_len = clip.length_beats * frames_per_beat;
                         let offset = pos - clip_start;

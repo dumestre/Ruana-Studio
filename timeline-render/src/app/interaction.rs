@@ -1915,10 +1915,6 @@ impl App {
             clip.warp_markers = markers;
         }
         self.emit_clip_write_back();
-        #[cfg(feature = "audio")]
-        if self.playing {
-            self.sync_audio_engine();
-        }
         self.request_redraw();
     }
 }

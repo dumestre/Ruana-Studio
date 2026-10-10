@@ -442,14 +442,11 @@ impl App {
         let ruler_h = self.ruler_px;
 
         // Clips (hover/drag/fantasma + overlay) — módulo clips
-        let timewarp_clip_view = self.show_timewarp && self.timewarp_target.is_some();
-        let view_px_per_beat = if timewarp_clip_view { self.timewarp_px_per_beat } else { self.px_per_beat };
-        let view_scroll_x = if timewarp_clip_view { self.timewarp_scroll_x } else { self.scroll_x };
         let cm = clips::ClipMetrics {
-            px_per_beat: view_px_per_beat,
+            px_per_beat: self.px_per_beat,
             wave_segments: self.wave_segments.clone(),
             row_height,
-            scroll_x: view_scroll_x,
+            scroll_x: self.scroll_x,
             scroll_y: self.scroll_y,
             ruler_px: self.ruler_px,
             theme: t,
@@ -488,14 +485,14 @@ impl App {
                 let top = cy + 16.0;
                 let wave_h = ch - 16.0;
                 let active_marker = marker_idx.min(anchors.len().saturating_sub(2));
-                let active_marker_x = cx + offset * view_px_per_beat;
+                let active_marker_x = cx + offset * self.px_per_beat;
                 for (segment_idx, pair) in anchors.windows(2).enumerate() {
                     let (b0, f0) = pair[0];
                     let (b1, f1) = pair[1];
                     if b1 <= b0 || f1 <= f0 { continue; }
-                    let x0 = (cx + b0 * view_px_per_beat).max(0.0);
-                    let x1 = (cx + b1 * view_px_per_beat).min(width);
-                    let (draw_x0, draw_x1, draw_f0, draw_f1) = if segment_idx == active_marker {
+                    let x0 = (cx + b0 * self.px_per_beat).max(0.0);
+                    let x1 = (cx + b1 * self.px_per_beat).min(width);
+                    let (base_x0, base_x1, draw_f0, draw_f1) = if segment_idx == active_marker {
                         let live_f = anchors[active_marker + 1].1;
                         (x0, active_marker_x.min(x1), f0, live_f)
                     } else if segment_idx == active_marker + 1 {
@@ -504,10 +501,24 @@ impl App {
                     } else {
                         (x0, x1, f0, f1)
                     };
-                    if draw_x1 <= draw_x0 || draw_f1 <= draw_f0 { continue; }
+                    if base_x1 <= base_x0 || draw_f1 <= draw_f0 { continue; }
                     let draw_c0 = (draw_f0 * n_last as f32).floor() as u32;
                     let draw_c1 = (draw_f1 * n_last as f32).ceil() as u32;
                     if draw_c1 <= draw_c0 { continue; }
+                    // Durante a edição, o trecho editado recebe o zoom e o
+                    // offset independentes do Timewarp na janela do editor.
+                    let preview_visible = self.show_timewarp
+                        && self.timewarp_target == Some(clip_idx);
+                    let (draw_x0, draw_x1) = if preview_visible {
+                        let tw_offset = self.timewarp_scroll_x - self.scroll_x;
+                        let tw_x0 = base_x0 + tw_offset;
+                        let tw_x1 = base_x1 + tw_offset;
+                        let zoom = self.timewarp_px_per_beat / self.px_per_beat.max(0.001);
+                        (tw_x0 * zoom, tw_x1 * zoom)
+                    } else {
+                        (base_x0, base_x1)
+                    };
+                    if draw_x1 <= draw_x0 { continue; }
                     clip_instances.push(RectInstance {
                         x: draw_x0, y: top, w: draw_x1 - draw_x0, h: wave_h,
                         color: [0, 0, 0, 255],

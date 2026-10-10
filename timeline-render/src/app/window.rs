@@ -266,7 +266,9 @@ WindowEvent::Resized(size) => {
                 if app.show_piano_roll && (app.pr_loop_drag.is_some() || app.pr_scrubbing) {
                     app.request_redraw();
                 }
-                if app.show_timewarp && app.tw_scrubbing {
+                if app.show_timewarp
+                    && (app.tw_scrubbing || app.timewarp_inter.warp_is_dragging())
+                {
                     app.request_redraw();
                 }
                 // Se um arquivo estiver sendo arrastado, atualiza a posição do preview

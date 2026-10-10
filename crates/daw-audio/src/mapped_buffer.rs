@@ -41,6 +41,10 @@ pub struct MappedAudioBuffer {
     src_sample_rate: u32,
     dst_sample_rate: u32,
     needs_resample: bool,
+    /// Frames de origem prontos para ler, guardados em memória contígua.
+    /// Fazer resampling por sinc dentro do callback de áudio causava picos
+    /// de CPU e page faults em WAVs com taxa diferente da saída.
+    resampled: Option<Arc<AudioBuffer>>,
 
     #[allow(dead_code)]
     tail_fade_applied: bool,
@@ -101,6 +105,22 @@ impl MappedAudioBuffer {
         };
 
         let needs_resample = spec.sample_rate != output_sample_rate;
+        let resampled = if needs_resample {
+            let mut left = Vec::with_capacity(total_frames);
+            let mut right = Vec::with_capacity(total_frames);
+            for frame in 0..total_frames {
+                let Some((l, r)) = Self::read_raw_frame_from(&mmap, data_offset, data_size, total_frames, channels, bits_per_sample, sample_format, frame) else {
+                    return None;
+                };
+                left.push(l);
+                right.push(r);
+            }
+            let out_l = resample_sinc(&left, spec.sample_rate, output_sample_rate);
+            let out_r = resample_sinc(&right, spec.sample_rate, output_sample_rate);
+            Some(Arc::new(AudioBuffer { left: out_l, right: out_r, sample_rate: output_sample_rate }))
+        } else {
+            None
+        };
 
         Some(Arc::new(Self {
             mmap,
@@ -114,8 +134,40 @@ impl MappedAudioBuffer {
             src_sample_rate: spec.sample_rate,
             dst_sample_rate: output_sample_rate,
             needs_resample,
+            resampled,
             tail_fade_applied: false,
         }))
+    }
+
+    #[cfg(unix)]
+    fn read_raw_frame_from(
+        mmap: &[u8], data_offset: usize, _data_size: usize, total_frames: usize,
+        channels: u16, bits_per_sample: u16, sample_format: SampleFormat, frame: usize,
+    ) -> Option<(f32, f32)> {
+        if frame >= total_frames { return None; }
+        let bytes_per_sample = if sample_format == SampleFormat::Float { 4 } else { bits_per_sample as usize / 8 };
+        let bytes_per_frame = channels as usize * bytes_per_sample;
+        let start = data_offset.checked_add(frame.checked_mul(bytes_per_frame)?)?;
+        let bytes = mmap.get(start..start.checked_add(bytes_per_frame)?)?;
+        let sample = |channel: usize| -> Option<f32> {
+            let at = channel * bytes_per_sample;
+            let value = match (sample_format, bits_per_sample) {
+                (SampleFormat::Float, 32) => f32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?),
+                (SampleFormat::Int, 16) => i16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?) as f32 / i16::MAX as f32,
+                (SampleFormat::Int, 24) => {
+                    let b = bytes.get(at..at + 3)?;
+                    let raw = (b[0] as i32) | ((b[1] as i32) << 8) | ((b[2] as i32) << 16);
+                    let signed = if raw & 0x800000 != 0 { raw | !0xFFFFFF } else { raw };
+                    signed as f32 / 8_388_607.0
+                }
+                (SampleFormat::Int, 32) => i32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?) as f32 / i32::MAX as f32,
+                _ => return None,
+            };
+            Some(value.clamp(-1.0, 1.0))
+        };
+        let left = sample(0)?;
+        let right = if channels > 1 { sample(1)? } else { left };
+        Some((left, right))
     }
 
     /// Encontra o chunk "data" no arquivo WAV.
@@ -253,6 +305,9 @@ impl MappedAudioBuffer {
     /// `pos` é em frames na taxa de SAÍDA (já resampleado).
     #[inline]
     pub fn read(&self, pos: f64) -> (f32, f32) {
+        if let Some(buffer) = &self.resampled {
+            return buffer.read(pos);
+        }
         if pos < 0.0 {
             return (0.0, 0.0);
         }
@@ -298,6 +353,9 @@ impl MappedAudioBuffer {
 
     #[inline]
     pub fn frames(&self) -> usize {
+        if let Some(buffer) = &self.resampled {
+            return buffer.frames();
+        }
         if self.needs_resample {
             (self.total_frames as f64 * self.dst_sample_rate as f64 / self.src_sample_rate as f64) as usize
         } else {
