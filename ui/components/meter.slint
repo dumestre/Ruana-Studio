@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { StereoMeter } from "meter_reuse.slint";
+import { AudioScale } from "audio_scale.slint";
 
 // ============================================================
 // METER — estilo Ableton Live
@@ -46,13 +47,10 @@ export component Meter inherits Rectangle {
     private property <length> clip-light-height: 6px;
     private property <length> triangle-width: 14px;
     private property <length> meter-width: 13px;
-    private property <length> db-width: 16px;
+    private property <length> db-width: 23px;
     private property <length> gap: 2px;
 
-    // Nível de dB para display (pico mais alto dos dois canais)
-    private property <float> db-level: Math.max(root.left-level, root.right-level);
-
-    width: show-volume-control ? 45px : 13px;
+    width: show-volume-control ? 56px : 13px;
     min-height: 40px;
 
     // ========================================================
@@ -193,21 +191,16 @@ export component Meter inherits Rectangle {
         width: root.db-width;
         height: parent.height;
 
-        Text {
-            text: root.db-level > 0.001
-                ? (root.db-level * 100).to-fixed(0)
-                : "-inf";
-
+        for db in [-60.0, -36.0, -24.0, -18.0, -12.0, -6.0, 0.0] : Text {
+            property <float> position: (db - AudioScale.db-floor) / (AudioScale.db-ceiling - AudioScale.db-floor);
+            text: db.to-fixed(0);
             color: Theme.text-dim;
             font-size: 7px;
-            font-weight: 600;
-
-            horizontal-alignment: center;
-            vertical-alignment: bottom;
-
-            width: 100%;
-            height: 100%;
-            y: parent.height - 12px;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            width: parent.width;
+            height: 6px;
+            y: root.clip-light-height + (parent.height - root.clip-light-height) * (1.0 - self.position) - 2px;
         }
     }
 }

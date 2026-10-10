@@ -102,7 +102,7 @@ export component Mixer inherits Rectangle {
                     right-peak: root.meter-at(i, 3);
                     left-clipped: root.clip-at(i, 0);
                     right-clipped: root.clip-at(i, 1);
-                    available-height: 300px;
+                    available-height: flickable.height;
 
                     insert-count: root.insert-counts[i];
                     insert-names: root.insert-names;
