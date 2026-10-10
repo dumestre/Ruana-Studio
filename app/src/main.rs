@@ -674,12 +674,18 @@ pub fn setup(
     // Undo / redo (Ctrl+Z / Ctrl+Y) → histórico do core.
     {
         let p = project.clone();
+        let apply_mixer = handles.apply_mixer_state.clone();
         ui.on_undo_requested(move || {
-            p.borrow_mut().undo();
+            if p.borrow_mut().undo() {
+                apply_mixer();
+            }
         });
         let p = project.clone();
+        let apply_mixer = handles.apply_mixer_state.clone();
         ui.on_redo_requested(move || {
-            p.borrow_mut().redo();
+            if p.borrow_mut().redo() {
+                apply_mixer();
+            }
         });
     }
 

@@ -91,7 +91,6 @@ export component Mixer inherits Rectangle {
 
         HorizontalLayout {
             width: 100%;
-            height: 100%;
             vertical-stretch: 1;
             spacing: 0;
             alignment: LayoutAlignment.stretch;
@@ -99,7 +98,7 @@ export component Mixer inherits Rectangle {
 
             flickable := Flickable {
                 horizontal-stretch: 1;
-                height: 100%;
+                vertical-stretch: 1;
                 content-width: max((root.mutes.length - 1) * 100px, self.width);
                 content-height: self.height;
                 interactive: true;
@@ -179,4 +178,5 @@ export component Mixer inherits Rectangle {
             }
         }
     }
+
 }

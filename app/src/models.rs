@@ -285,6 +285,9 @@ pub fn apply_change(
             // Tempo-warp não altera metadados de clips — apenas o mapa
             // de tempo. A UI re-renderiza a régua/playhead separadamente.
         }
+        DocumentEvent::MixerInsertsChanged { .. } => {
+            // O modelo visual dos inserts é reprojetado pelo estado do mixer.
+        }
     }
 }
 

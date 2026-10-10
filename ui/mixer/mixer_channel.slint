@@ -100,19 +100,43 @@ export component MixerChannel inherits Rectangle {
     // ==========================================
 
     Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 22px;
+        background: root.channel-color;
+
+        Text {
+            text: root.name;
+            color: #17191d;
+            font-size: 10px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: 100%;
+            height: 100%;
+            overflow: elide;
+        }
+    }
+
+    Rectangle {
         x: parent.width - 1px;
+        y: 0px;
         width: 1px;
         height: parent.height;
-
         background: Theme.border;
+        z: 2;
     }
 
     Rectangle {
         x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: 3px;
-        background: root.selected ? root.channel-color : transparent;
+        y: 22px;
+        width: parent.width - 1px;
+        height: parent.height - 22px;
+        background: transparent;
+        border-width: root.selected ? 1px : 0px;
+        border-color: root.channel-color;
+        z: 1;
     }
 
     // ==========================================
@@ -130,34 +154,9 @@ export component MixerChannel inherits Rectangle {
         // HEADER
         // ======================================
 
-        VerticalLayout {
+        Rectangle {
             height: 22px;
-
-            spacing: 2px;
-            alignment: LayoutAlignment.center;
-            cross-axis-alignment: CrossAxisAlignment.center;
-
-            Text {
-                text: root.name;
-
-                color: Theme.text-primary;
-
-                font-size: 10px;
-                font-weight: 700;
-
-                horizontal-alignment: center;
-                vertical-alignment: center;
-
-                height: 15px;
-            }
-
-            Rectangle {
-                width: 100%;
-                height: 2px;
-
-                background: root.channel-color;
-                border-radius: 1px;
-            }
+            background: transparent;
         }
 
         // ======================================
@@ -421,14 +420,14 @@ export component MixerChannel inherits Rectangle {
         }
     }
 
-    // Clique no cabeçalho seleciona o canal sem interceptar os controles.
+    // Fundo do canal seleciona a faixa; os controles interativos ficam acima.
     TouchArea {
         x: 0px;
         y: 0px;
         width: parent.width;
-        height: 30px;
+        height: parent.height;
         mouse-cursor: pointer;
         clicked => { root.select-requested(root.channel-index); }
-        z: 100;
+        z: -1;
     }
 }

@@ -49,6 +49,7 @@ export component Meter inherits Rectangle {
     private property <length> meter-width: 13px;
     private property <length> db-width: 19px;
     private property <length> gap: 2px;
+    private property <length> fader-gap: -2px;
     private property <length> meter-x: (root.width - root.meter-width) / 2;
 
     width: show-volume-control ? 90px : 13px;
@@ -59,7 +60,7 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     if root.show-volume-control : Rectangle {
-        x: root.meter-x - root.gap - root.db-width - root.gap - root.triangle-width;
+        x: root.meter-x - root.gap - root.db-width - root.fader-gap - root.triangle-width;
         y: 0px;
         width: root.triangle-width;
         height: parent.height;
@@ -88,8 +89,8 @@ export component Meter inherits Rectangle {
         Image {
             source: @image-url("../icons/play.svg");
 
-            width: 12px;
-            height: 12px;
+            width: 14px;
+            height: 14px;
 
             // Centralizado verticalmente na posição do volume
             x: (parent.width - self.width) / 2;
@@ -192,7 +193,7 @@ export component Meter inherits Rectangle {
         width: root.db-width;
         height: parent.height;
 
-        for db in [-60.0, -36.0, -24.0, -18.0, -12.0, -6.0, 0.0] : Text {
+        for db in [-60.0, -36.0, -24.0, -12.0, 0.0] : Text {
             property <float> position: (db - AudioScale.db-floor) / (AudioScale.db-ceiling - AudioScale.db-floor);
             text: db.to-fixed(0);
             color: Theme.text-dim;
@@ -201,7 +202,7 @@ export component Meter inherits Rectangle {
             vertical-alignment: center;
             width: parent.width;
             height: 6px;
-            y: root.clip-light-height + (parent.height - root.clip-light-height) * (1.0 - self.position) - 2px;
+            y: root.clip-light-height + (parent.height - root.clip-light-height) * (1.0 - self.position) - 3px;
         }
     }
 }
