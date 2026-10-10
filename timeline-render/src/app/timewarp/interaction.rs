@@ -1,7 +1,17 @@
 //! Estado e lógica de interação do timewarp: hover, arrasto/edição de pontos
 //! de tempo (BPM), adição via ferramenta Draw e remoção via Erase/Delete.
 
+use std::time::Instant;
+
+use daw_core::WarpMarker;
+
 use super::{TimewarpMetrics, TempoPoint};
+
+/// Distância (px) para o cursor "agarrar" um marcador de warp (no eixo X).
+const WARP_GRAB_PX: f32 = 6.0;
+
+/// Janela (ms) para um segundo clique contar como duplo clique.
+const WARP_DOUBLE_MS: u128 = 350;
 
 /// Estado de interação do timewarp (hover + arrasto + scrub).
 #[derive(Clone, Debug)]
@@ -16,6 +26,21 @@ pub struct TimewarpInteraction {
     pub drag_moved: bool,
     /// True enquanto o usuário arrasta o cursor na RÉGUA do timewarp.
     pub scrubbing: bool,
+
+    /// ===== Editor de WARP (waveform do clip de áudio) =====
+    /// Índice do marcador de AudioWarp sob o cursor.
+    pub warp_hover: Option<usize>,
+    /// Índice do marcador de AudioWarp em arrasto.
+    pub warp_drag: Option<usize>,
+    /// Offset de projeto ORIGINAL do marcador arrastado (beats locais).
+    pub warp_drag_orig: f32,
+    /// Offset de projeto ao vivo durante o arrasto (beats locais).
+    pub warp_drag_live: f32,
+    /// X inicial do cursor no arrasto (margem de "moved").
+    pub warp_drag_start_x: f32,
+    pub warp_drag_moved: bool,
+    /// Último clique no corpo do warp: (instante, x) — duplo clique.
+    pub warp_last_press: Option<(Instant, f32)>,
 }
 
 impl Default for TimewarpInteraction {
@@ -36,6 +61,14 @@ impl TimewarpInteraction {
             drag_live_bpm: 120.0,
             drag_moved: false,
             scrubbing: false,
+
+            warp_hover: None,
+            warp_drag: None,
+            warp_drag_orig: 0.0,
+            warp_drag_live: 0.0,
+            warp_drag_start_x: 0.0,
+            warp_drag_moved: false,
+            warp_last_press: None,
         }
     }
 
@@ -143,5 +176,118 @@ impl TimewarpInteraction {
         }
         self.drag_idx = None;
         self.drag_moved = false;
+    }
+
+    // ================= Editor de WARP (waveform) =================
+
+    pub fn warp_is_dragging(&self) -> bool {
+        self.warp_drag.is_some()
+    }
+
+    /// X de janela de um marcador de warp (offset LOCAL ao clip).
+    fn warp_marker_x(offset: f32, clip_beat: f32, m: &TimewarpMetrics) -> f32 {
+        m.beat_to_x(clip_beat + offset)
+    }
+
+    /// Hit-test do marcador de warp sob o cursor (só no eixo X, dentro do corpo).
+    pub fn warp_hit_test(
+        &self,
+        markers: &[WarpMarker],
+        clip_beat: f32,
+        cursor: (f32, f32),
+        m: &TimewarpMetrics,
+    ) -> Option<usize> {
+        if cursor.1 < m.body_top - 4.0 || cursor.1 > m.body_top + m.body_h + 4.0 {
+            return None;
+        }
+        for (i, mk) in markers.iter().enumerate() {
+            let x = Self::warp_marker_x(mk.project_offset_beats, clip_beat, m);
+            if (cursor.0 - x).abs() <= WARP_GRAB_PX {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn warp_update_hover(
+        &mut self,
+        markers: &[WarpMarker],
+        clip_beat: f32,
+        cursor: (f32, f32),
+        m: &TimewarpMetrics,
+    ) {
+        if self.warp_is_dragging() {
+            return;
+        }
+        self.warp_hover = self.warp_hit_test(markers, clip_beat, cursor, m);
+    }
+
+    /// Inicia o arrasto de um marcador de warp sob o cursor. Devolve `true`
+    /// se agarrou algum marcador.
+    pub fn warp_begin_drag(
+        &mut self,
+        markers: &[WarpMarker],
+        clip_beat: f32,
+        cursor: (f32, f32),
+        m: &TimewarpMetrics,
+    ) -> bool {
+        if let Some(idx) = self.warp_hit_test(markers, clip_beat, cursor, m) {
+            let orig = markers[idx].project_offset_beats.max(0.0);
+            self.warp_drag = Some(idx);
+            self.warp_drag_orig = orig;
+            self.warp_drag_live = orig;
+            self.warp_drag_start_x = cursor.0;
+            self.warp_drag_moved = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Move o marcador em arrasto (snap opcional ao grid musical de 1/16).
+    pub fn warp_drag_move(&mut self, cursor: (f32, f32), m: &TimewarpMetrics, snap: bool, clip_len: f32) {
+        if self.warp_drag.is_none() {
+            return;
+        }
+        let dx = cursor.0 - self.warp_drag_start_x;
+        if !self.warp_drag_moved && dx.abs() <= 3.0 {
+            return;
+        }
+        self.warp_drag_moved = true;
+
+        let mut offset = self.warp_drag_orig + dx / m.px_per_beat.max(0.001);
+        if snap {
+            offset = (offset * 4.0).round() / 4.0;
+        }
+        // Mantém o marcador DENTRO do clip, com folga para não colapsar.
+        let hi = (clip_len - 1e-3).max(1e-3);
+        self.warp_drag_live = offset.clamp(1e-3, hi);
+    }
+
+    /// Finaliza o arrasto do marcador; devolve `(índice, offset_live)` quando
+    /// houve movimento real.
+    pub fn warp_end_drag(&mut self) -> Option<(usize, f32)> {
+        let result = match (self.warp_drag, self.warp_drag_moved) {
+            (Some(idx), true) => Some((idx, self.warp_drag_live)),
+            _ => None,
+        };
+        self.warp_drag = None;
+        self.warp_drag_moved = false;
+        result
+    }
+
+    /// Registra um clique no corpo do warp e devolve `true` quando é um
+    /// DUPLO clique na mesma região (para criar um marcador).
+    pub fn warp_register_press(&mut self, x: f32) -> bool {
+        let now = Instant::now();
+        let is_double = match self.warp_last_press {
+            Some((t, last_x)) => {
+                now.duration_since(t).as_millis() <= WARP_DOUBLE_MS
+                    && (x - last_x).abs() <= 8.0
+            }
+            None => false,
+        };
+        self.warp_last_press = if is_double { None } else { Some((now, x)) };
+        is_double
     }
 }

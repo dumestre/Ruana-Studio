@@ -3,6 +3,7 @@
 //! eventos) e marcadores de evento estilo Cubase.
 
 use daw_core::timeline::TempoMap;
+use daw_core::WarpMarker;
 
 use crate::app::piano_roll::build_bottom_ruler_instances;
 use crate::{palette, RectInstance};
@@ -187,4 +188,190 @@ fn push_point_marker(
         x: x + 9.0, y, w: 1.0, h: 10.0, color: border_col,
         wave_offset: 0, wave_count: 0, clip_w: 0.0, clip_h: 0.0, radius: 0.0,
     });
+}
+
+/// Instâncias do editor de WARP: waveform do clip alvo (esticada conforme os
+/// marcadores de AudioWarp) + os marcadores verticais arrastáveis.
+///
+/// A onda é desenhada em TRECHOS: cada segmento entre dois marcadores vira um
+/// `RectInstance` de waveform cujo par (offset, count) recorta as colunas da
+/// fonte e cuja largura em px é o trecho homólogo no projeto. Como o shader
+/// estica as colunas por toda a largura do rect (`clip_w < 0`), a onda
+/// acompanha o stretch sem reamostrar no CPU.
+#[allow(clippy::too_many_arguments)]
+pub fn build_timewarp_warp_instances(
+    clip_beat: f32,
+    clip_len: f32,
+    region_seconds: f64,
+    _channels: u16,
+    seg_offset: u32,
+    seg_count: u32,
+    markers: &[WarpMarker],
+    inter: &TimewarpInteraction,
+    m: &TimewarpMetrics,
+    width: f32,
+) -> Vec<RectInstance> {
+    let t = m.theme.clamp(0, 6);
+    let mut instances = Vec::new();
+
+    let body_top = m.body_top;
+    let body_h = m.body_h.max(0.0);
+    let body_bottom = body_top + body_h;
+
+    let clip_x0 = m.beat_to_x(clip_beat);
+    let clip_x1 = m.beat_to_x(clip_beat + clip_len);
+
+    // ===== Fundo do clip (faixa clara onde o traço escuro da onda aparece) =====
+    let band_top = body_top + body_h * 0.16;
+    let band_h = (body_h * 0.68).max(8.0);
+
+    let band_x0 = clip_x0.max(BPM_LABEL_W);
+    let band_x1 = clip_x1.min(width);
+    if band_x1 > band_x0 {
+        instances.push(RectInstance {
+            x: band_x0,
+            y: band_top,
+            w: band_x1 - band_x0,
+            h: band_h,
+            color: [120, 120, 128, 255],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+    }
+
+    // ===== Âncoras (offset no clip em beats → fração da fonte) =====
+    // Sem região decodificada ou sem colunas, cai num único trecho linear.
+    let mut anchors: Vec<(f32, f32)> = Vec::with_capacity(markers.len() + 2);
+    anchors.push((0.0, 0.0));
+    if region_seconds > 1e-6 && seg_count >= 2 {
+        for mk in markers {
+            let proj = mk.project_offset_beats.clamp(0.0, clip_len);
+            let frac = (mk.source_seconds as f64 / region_seconds).clamp(0.0, 1.0) as f32;
+            anchors.push((proj, frac));
+        }
+    }
+    anchors.push((clip_len.max(1e-3), 1.0));
+    anchors.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let wave_band = if region_seconds > 1e-6 && seg_count >= 2 && !markers.is_empty() {
+        anchors
+    } else {
+        // Linear: um único trecho cobrindo o clip inteiro.
+        vec![(0.0, 0.0), (clip_len.max(1e-3), 1.0)]
+    };
+
+    let n_last = (seg_count.saturating_sub(1)) as f32;
+
+    for pair in wave_band.windows(2) {
+        let (b0, f0) = pair[0];
+        let (b1, f1) = pair[1];
+        if b1 <= b0 + 1e-6 || f1 <= f0 + 1e-6 {
+            continue;
+        }
+        if m.beat_to_x(clip_beat + b1) < BPM_LABEL_W || m.beat_to_x(clip_beat + b0) > width {
+            continue;
+        }
+
+        let x0 = m.beat_to_x(clip_beat + b0).max(BPM_LABEL_W);
+        let x1 = m.beat_to_x(clip_beat + b1).min(width);
+        if x1 <= x0 {
+            continue;
+        }
+
+        let col0 = (f0 * n_last).floor() as u32;
+        let col1 = (f1 * n_last).ceil() as u32;
+        let col0 = col0.min(seg_count - 1);
+        let col1 = col1.min(seg_count - 1);
+        if col1 <= col0 {
+            continue;
+        }
+        let count = col1 - col0 + 1;
+        if count < 2 {
+            continue;
+        }
+
+        instances.push(RectInstance {
+            x: x0,
+            y: band_top,
+            w: x1 - x0,
+            h: band_h,
+            color: [0, 0, 0, 255],
+            wave_offset: seg_offset + col0,
+            wave_count: count,
+            // -6 = onda mono centralizada, esticada por toda a largura do rect.
+            clip_w: -6.0,
+            clip_h: band_h,
+            radius: 0.0,
+        });
+    }
+
+    // ===== Marcadores de warp (linhas verticais arrastáveis) =====
+    let accent = palette::ACCENT[t];
+    for (i, mk) in markers.iter().enumerate() {
+        let dragging = inter.warp_drag == Some(i);
+        let offset = if dragging { inter.warp_drag_live } else { mk.project_offset_beats };
+        let x = m.beat_to_x(clip_beat + offset);
+        if x < BPM_LABEL_W - 2.0 || x > width + 2.0 {
+            continue;
+        }
+
+        let hovered = inter.warp_hover == Some(i) || dragging;
+        let col = if hovered {
+            [0xFF, 0xFF, 0xFF, 255]
+        } else {
+            [accent.0, accent.1, accent.2, 230]
+        };
+
+        // Linha vertical por todo o corpo.
+        instances.push(RectInstance {
+            x: x - 1.0,
+            y: body_top,
+            w: 2.0,
+            h: (body_bottom - body_top).max(0.0),
+            color: col,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+
+        // Alça no topo (triângulo aproximado por um quadradinho).
+        let hx = x - 4.0;
+        instances.push(RectInstance {
+            x: hx,
+            y: body_top,
+            w: 8.0,
+            h: 10.0,
+            color: col,
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 2.0,
+        });
+    }
+
+    // ===== Bordas do clip =====
+    for bx in [clip_x0, clip_x1] {
+        if bx >= BPM_LABEL_W && bx <= width {
+            instances.push(RectInstance {
+                x: bx - 1.0,
+                y: body_top,
+                w: 1.0,
+                h: (body_bottom - body_top).max(0.0),
+                color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
+            });
+        }
+    }
+
+    instances
 }

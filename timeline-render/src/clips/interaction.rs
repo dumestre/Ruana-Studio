@@ -710,6 +710,7 @@ impl ClipInteraction {
                     source_start_beats: 0.0,
                     source_length_beats: 0.0,
                     channels: 1,
+                    region_seconds: 0.0,
                     warp_markers: Vec::new(),
                 };
 

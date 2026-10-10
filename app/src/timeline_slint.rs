@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 
 use slint::{ComponentHandle, SharedPixelBuffer, Timer, TimerMode};
 
-use daw_core::clip::{beats_eq, Clip, ClipKind};
+use daw_core::clip::{beats_eq, Clip, ClipKind, TimeMode};
 use daw_core::track::{Track, TrackKind};
 use daw_core::transport::Transport;
 use daw_core::Project;
@@ -92,6 +92,8 @@ pub fn build_clip_demos(proj: &Project) -> Vec<ClipDemo> {
             // áudio é decodificado — senão um arquivo mono era desenhado
             // como duas faixas L/R, cada uma com metade das colunas.
             channels: if c.is_midi() { 1 } else { 2 },
+            // Preenchido pelo decode da onda na engine (`build_wave_bars_and_segments`).
+            region_seconds: 0.0,
             warp_markers: c.warp_markers.clone(),
         })
         .collect()
@@ -242,13 +244,30 @@ pub fn reconcile_engine_clips_to_project(
         let Some(core) = project.clips.iter().find(|c| c.id == clip.id as u64) else {
             continue;
         };
-        let (core_id, core_track, core_beat, core_len) =
-            (core.id, core.track_id, core.start_beat, core.length_beats);
+        let (core_id, core_track, core_beat, core_len, core_warp, core_mode) = (
+            core.id,
+            core.track_id,
+            core.start_beat,
+            core.length_beats,
+            core.warp_markers.clone(),
+            core.time_mode,
+        );
         if core_track != track_id || !beats_eq(core_beat, clip.beat) {
             project.move_clip(core_id, track_id, clip.beat);
         }
         if !beats_eq(core_len, clip.len) && clip.len > 0.0 {
             let _ = project.resize_clip(core_id, clip.beat, clip.len);
+        }
+
+        // 2b) Timewarp do clip (free warp): sincroniza os marcadores de
+        //     AudioWarp editados na engine. Um clip com marcadores vira
+        //     MUSICAL — é o modo em que o motor reestica por trecho; sem isso
+        //     os marcadores seriam gravados mas ignorados no playback.
+        if core_warp != clip.warp_markers {
+            if !clip.warp_markers.is_empty() && core_mode != TimeMode::Musical {
+                project.set_clip_time_mode(core_id, TimeMode::Musical);
+            }
+            project.set_clip_warp_markers(core_id, clip.warp_markers.clone());
         }
     }
 

@@ -15,4 +15,6 @@ pub use data::{
     TimewarpMetrics, TempoPoint, BPM_LABEL_W, BPM_MAX, BPM_MIN, TIMEWARP_RULER_H,
 };
 pub use interaction::TimewarpInteraction;
-pub use render::{build_timewarp_instances, build_timewarp_ruler_instances};
+pub use render::{
+    build_timewarp_instances, build_timewarp_ruler_instances, build_timewarp_warp_instances,
+};

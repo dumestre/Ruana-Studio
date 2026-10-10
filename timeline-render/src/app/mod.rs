@@ -234,6 +234,10 @@ pub struct App {
     pub show_timewarp: bool,
     /// Estado de interação (arrasto de pontos, scrub).
     pub timewarp_inter: timewarp::TimewarpInteraction,
+    /// Clip de áudio ALVO do editor de warp (aberto com T). `Some(idx)` =
+    /// desenha a waveform do clip e habilita marcadores de AudioWarp;
+    /// `None` = cai no editor de tempo/BPM (curva) original.
+    pub timewarp_target: Option<usize>,
     /// Scrubbing na régua do timewarp (playhead próprio).
     pub tw_scrubbing: bool,
     /// Playhead INDEPENDENTE do timewarp (em beats). Durante playback sem
@@ -892,6 +896,7 @@ transport,
             timewarp_scroll_x: 0.0,
             show_timewarp: false,
             timewarp_inter: timewarp::TimewarpInteraction::new(),
+            timewarp_target: None,
             tw_scrubbing: false,
             tw_playhead_beat: 0.0,
             tempo_write_back: None,
@@ -1504,6 +1509,33 @@ transport,
     pub fn toggle_timewarp(&mut self) {
         self.show_piano_roll = false;
         self.show_timewarp = !self.show_timewarp;
+        // Ao abrir, captura o clip de áudio selecionado (ou o primeiro de
+        // áudio) para o editor de warp. Sem clip de áudio, cai no editor de
+        // tempo/BPM (curva) de sempre.
+        if self.show_timewarp {
+            self.timewarp_target = self.timewarp_selected_clip();
+        }
+    }
+
+    /// Índice do clip de áudio que o timewarp deve editar: o primeiro
+    /// SELECIONADO na timeline; se nenhum estiver selecionado, o primeiro de
+    /// áudio. `None` quando não há clip de áudio.
+    pub fn timewarp_selected_clip(&self) -> Option<usize> {
+        let selected = self
+            .clips
+            .iter()
+            .enumerate()
+            .find(|(i, c)| {
+                !c.is_midi
+                    && self
+                        .clip_interaction
+                        .selected
+                        .get(*i)
+                        .copied()
+                        .unwrap_or(false)
+            })
+            .map(|(i, _)| i);
+        selected.or_else(|| self.clips.iter().position(|c| !c.is_midi))
     }
 
     /// Começa o arrasto da splitter entre timeline e área inferior.
@@ -1694,13 +1726,42 @@ transport,
             body_h,
             self.pr_follow_playhead,
         );
-        instances.extend(timewarp::build_timewarp_instances(
-            &self.tempo_map,
-            &self.timewarp_inter,
-            &m,
-            width,
-            height,
-        ));
+        // Corpo: no MODO WARP (clip de áudio alvo) desenha a waveform do clip
+        // + marcadores; sem alvo, cai no editor de tempo/BPM (curva) original.
+        let target = self.timewarp_target.filter(|i| *i < self.clips.len());
+        match target.filter(|i| !self.clips[*i].is_midi) {
+            Some(idx) => {
+                let clip = &self.clips[idx];
+                instances.extend(m.build_body_instances(width));
+                instances.extend(m.build_warp_gutter_instances());
+                let (seg_off, seg_cnt) = self
+                    .wave_segments
+                    .get(idx)
+                    .copied()
+                    .unwrap_or((0, 0));
+                instances.extend(timewarp::build_timewarp_warp_instances(
+                    clip.beat,
+                    clip.len,
+                    clip.region_seconds,
+                    clip.channels,
+                    seg_off,
+                    seg_cnt,
+                    &clip.warp_markers,
+                    &self.timewarp_inter,
+                    &m,
+                    width,
+                ));
+            }
+            None => {
+                instances.extend(timewarp::build_timewarp_instances(
+                    &self.tempo_map,
+                    &self.timewarp_inter,
+                    &m,
+                    width,
+                    height,
+                ));
+            }
+        }
 
         // Splitter (mesma do piano roll — a área expandida é exclusiva).
         let splitter_hovered = self.splitter_hit_test(self.last_cursor.1, height);

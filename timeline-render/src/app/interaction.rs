@@ -4,6 +4,7 @@ use crate::app::{ButtonState, KeyAction, LoopDrag, App};
 use crate::clips;
 use crate::fades;
 use crate::tools::{current_tool, set_cursor_override, set_gain_override, set_hand_override, set_vresize_override, set_tool, Tool};
+use daw_core::WarpMarker;
 use std::time::Instant;
 
 #[cfg(test)]
@@ -804,6 +805,7 @@ impl App {
             source_start_beats: 0.0,
             source_length_beats: 0.0,
             channels: 1,
+            region_seconds: 0.0,
             warp_markers: Vec::new(),
         });
         self.clip_interaction.sync_selection(self.clips.len());
@@ -1291,16 +1293,31 @@ pub fn handle_cursor_moved(&mut self, pos: (f32, f32)) {
             }
         }
 
-        // ====== Timewarp: scrub na régua / arrasto/roving de pontos ======
+        // ====== Timewarp: scrub na régua / arrasto de marcadores de warp ======
         if self.show_timewarp {
             if self.tw_scrubbing {
                 self.tw_set_scrub_beat(pos.0);
+                self.request_redraw();
+            } else if self.timewarp_inter.warp_is_dragging() {
+                let m = self.timewarp_metrics();
+                let snap = self.snap_enabled && !self.alt_pressed;
+                let len = self.tw_warp_clip_data().map(|c| c.len).unwrap_or(0.0);
+                if len > 0.0 {
+                    self.timewarp_inter.warp_drag_move(pos, &m, snap, len);
+                }
                 self.request_redraw();
             } else if self.timewarp_inter.is_dragging() {
                 let m = self.timewarp_metrics();
                 // Segurar Alt desliga o snap (beat/BPM livre).
                 self.timewarp_inter.drag_move(pos, &m, !self.alt_pressed);
                 self.request_redraw();
+            } else if self.tw_warp_clip().is_some() {
+                let m = self.timewarp_metrics();
+                if let Some(clip) = self.tw_warp_clip_data() {
+                    let markers = clip.warp_markers.clone();
+                    let beat = clip.beat;
+                    self.timewarp_inter.warp_update_hover(&markers, beat, pos, &m);
+                }
             } else {
                 let m = self.timewarp_metrics();
                 let points = self.tw_points();
@@ -1698,11 +1715,49 @@ impl App {
     }
 
     /// Clique no corpo do timewarp: edição de pontos de tempo
-    /// (Select = mover, Draw = adicionar, Erase = remover).
+    /// (Select = mover, Draw = adicionar, Erase = remover) OU edição de
+    /// marcadores de AudioWarp (duplo clique cria, arrasto estica).
     pub fn handle_timewarp_click(&mut self, state: ButtonState, pos: (f32, f32)) {
         let m = self.timewarp_metrics();
         let tool = current_tool();
 
+        // ===== MODO WARP: clip de áudio alvo do editor de waveform =====
+        if self.tw_warp_clip().is_some() {
+            match state {
+                ButtonState::Pressed => {
+                    if self.splitter_hit_test(pos.1, self.size.1 as f32) {
+                        self.splitter_drag = true;
+                        return;
+                    }
+                    let (clip_beat, markers) = match self.tw_warp_clip_data() {
+                        Some(c) => (c.beat, c.warp_markers.clone()),
+                        None => return,
+                    };
+                    if self.timewarp_inter.warp_begin_drag(&markers, clip_beat, pos, &m) {
+                        self.request_redraw();
+                        return;
+                    }
+                    // Não agarrou marcador: um duplo clique cria um novo.
+                    if self.timewarp_inter.warp_register_press(pos.0) {
+                        let offset = m.x_to_beat(pos.0) - clip_beat;
+                        self.tw_warp_add_marker_at(clip_beat, offset);
+                    }
+                }
+                ButtonState::Released => {
+                    if self.splitter_drag {
+                        self.end_splitter_drag();
+                        return;
+                    }
+                    if let Some((idx, live)) = self.timewarp_inter.warp_end_drag() {
+                        self.tw_warp_move_marker(idx, live);
+                    }
+                }
+            }
+            self.request_redraw();
+            return;
+        }
+
+        // ===== MODO TEMPO/BPM (sem clip de áudio alvo) =====
         match state {
             ButtonState::Pressed => {
                 if self.splitter_hit_test(pos.1, self.size.1 as f32) {
@@ -1754,6 +1809,98 @@ impl App {
                 }
             }
         }
+        self.request_redraw();
+    }
+
+    /// Índice do clip de áudio VÁLIDO alvo do editor de warp.
+    pub(crate) fn tw_warp_clip(&self) -> Option<usize> {
+        self.timewarp_target
+            .filter(|i| *i < self.clips.len())
+            .filter(|i| !self.clips[*i].is_midi)
+    }
+
+    fn tw_warp_clip_data(&self) -> Option<&clips::ClipDemo> {
+        self.tw_warp_clip().and_then(|i| self.clips.get(i))
+    }
+
+    /// Segundos que o clip ocupa no projeto (span), pelo mapa de tempo.
+    fn tw_clip_span_seconds(&self, clip: &clips::ClipDemo) -> f64 {
+        let a = self.tempo_map.beats_to_seconds(clip.beat) as f64;
+        let b = self.tempo_map.beats_to_seconds(clip.beat + clip.len) as f64;
+        (b - a).max(1e-6)
+    }
+
+    /// Região natural da fonte em segundos. Cai no span quando o arquivo
+    /// ainda não foi decodificado (region_seconds == 0).
+    fn tw_clip_region_seconds(&self, clip: &clips::ClipDemo) -> f64 {
+        if clip.region_seconds > 1e-6 {
+            clip.region_seconds
+        } else {
+            self.tw_clip_span_seconds(clip)
+        }
+    }
+
+    /// `source_seconds` que mantém a proporção atual no offset pedido
+    /// (interpola entre as âncoras: começo, marcadores, fim). Assim criar um
+    /// marcador NÃO muda o som até o usuário arrastá-lo.
+    fn tw_warp_source_for_offset(
+        &self,
+        clip: &clips::ClipDemo,
+        offset: f32,
+    ) -> f32 {
+        let region = self.tw_clip_region_seconds(clip);
+        let mut anchors: Vec<(f32, f64)> = Vec::with_capacity(clip.warp_markers.len() + 2);
+        anchors.push((0.0, 0.0));
+        for mk in &clip.warp_markers {
+            anchors.push((mk.project_offset_beats, mk.source_seconds as f64));
+        }
+        anchors.push((clip.len.max(1e-3), region));
+        anchors.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        let offset = offset.clamp(0.0, clip.len.max(1e-3));
+        let mut src = 0.0f64;
+        for pair in anchors.windows(2) {
+            let (b0, s0) = pair[0];
+            let (b1, s1) = pair[1];
+            if offset <= b1 || (b1 - b0).abs() < 1e-6 {
+                let f = if b1 > b0 { ((offset - b0) / (b1 - b0)).clamp(0.0, 1.0) } else { 0.0 };
+                src = s0 + (s1 - s0) * f as f64;
+                break;
+            }
+        }
+        (src.clamp(0.0, region)) as f32
+    }
+
+    /// Adiciona um marcador de AudioWarp no offset (beats locais) do clip alvo
+    /// e escreve de volta no documento.
+    fn tw_warp_add_marker_at(&mut self, clip_beat: f32, offset: f32) {
+        let Some(idx) = self.tw_warp_clip() else { return; };
+        let clip = &self.clips[idx];
+        let offset = offset.clamp(1e-3, (clip.len - 1e-3).max(1e-3));
+        let source = self.tw_warp_source_for_offset(clip, offset);
+        let _ = clip_beat;
+        let mut markers = self.clips[idx].warp_markers.clone();
+        markers.push(WarpMarker::new(source, offset));
+        self.tw_warp_set_markers(idx, markers);
+    }
+
+    /// Move um marcador de warp para o novo offset (beats locais) e escreve.
+    fn tw_warp_move_marker(&mut self, marker_idx: usize, offset: f32) {
+        let Some(idx) = self.tw_warp_clip() else { return; };
+        let mut markers = self.clips[idx].warp_markers.clone();
+        if let Some(mk) = markers.get_mut(marker_idx) {
+            mk.project_offset_beats = offset.max(0.0);
+        }
+        self.tw_warp_set_markers(idx, markers);
+    }
+
+    /// Grava os marcadores de warp no clip (engine) e persiste no documento.
+    fn tw_warp_set_markers(&mut self, clip_idx: usize, mut markers: Vec<WarpMarker>) {
+        markers = daw_core::clip::normalize_warp_markers(markers);
+        if let Some(clip) = self.clips.get_mut(clip_idx) {
+            clip.warp_markers = markers;
+        }
+        self.emit_clip_write_back();
         self.request_redraw();
     }
 }

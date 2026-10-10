@@ -62,6 +62,16 @@ pub struct ClipDemo {
     /// Número de canais de áudio: 1 = mono, 2 = stereo.
     pub channels: u16,
 
+    /// Duração NATURAL da região da fonte, em segundos. É o comprimento do
+    /// trecho do arquivo que o clip lê (do início ao fim da região de trim),
+    /// conhecido só após decodificar o arquivo — por isso é preenchido em
+    /// `build_wave_bars_and_segments` (e vale `0.0` enquanto não há decode).
+    ///
+    /// É o `region_len_seconds` que `daw_core::warp::plan_for_clip` exige: sem
+    /// ele não dá para converter `source_seconds` ↔ fração da onda nem
+    /// posicionar marcadores de AudioWarp sem deformar o áudio.
+    pub region_seconds: f64,
+
     /// Marcadores de AudioWarp do clip (free warp), ordenados por
     /// `source_seconds`. Vazio = clip sem warp.
     ///

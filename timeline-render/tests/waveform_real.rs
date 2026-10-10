@@ -99,6 +99,7 @@ fn clip_for(path: &PathBuf, len_beats: f32) -> ClipDemo {
         source_length_beats: 0.0,
         // Palpite do chamador, como faz o espelho do app.
         channels: 2,
+        region_seconds: 0.0,
         warp_markers: Vec::new(),
     }
 }

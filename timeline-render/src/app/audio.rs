@@ -129,6 +129,7 @@ impl App {
                 source_start_beats: 0.0,
                 source_length_beats,
                 channels: data.channels,
+                region_seconds: 0.0,
                 warp_markers: Vec::new(),
             };
 
@@ -144,7 +145,11 @@ impl App {
                 Ok((
                     w,
                     _channels,
-                )) => w,
+                    region_seconds,
+                )) => {
+                    clip.region_seconds = region_seconds;
+                    w
+                }
                 Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
             };
 
@@ -216,6 +221,7 @@ impl App {
                     source_start_beats: 0.0,
                     source_length_beats,
                     channels,
+                    region_seconds: 0.0,
                     warp_markers: Vec::new(),
                 };
                 // Gera a waveform (real ou procedural)
@@ -227,7 +233,10 @@ impl App {
                     clip.source_length_beats,
                     bpm,
                 ) {
-                    Ok((w, _)) => w,
+                    Ok((w, _, region_seconds)) => {
+                        clip.region_seconds = region_seconds;
+                        w
+                    }
                     Err(_) => waveform::generate_procedural_wave(&clip, n_cols, self.clips.len() as u64),
                 };
                 // Insere o clip

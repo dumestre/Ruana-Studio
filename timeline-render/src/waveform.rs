@@ -283,9 +283,13 @@ pub fn build_wave_bars_and_segments(
                     Ok((
                         w,
                         channels,
+                        region_seconds,
                     )) => {
                         file_channels =
                             Some(channels);
+
+                        clip.region_seconds =
+                            region_seconds;
 
                         w
                     }
@@ -413,6 +417,7 @@ pub(crate) fn decode_real_wave(
     (
         Vec<f32>,
         u16,
+        f64,
     ),
     Box<dyn std::error::Error>,
 > {
@@ -449,6 +454,7 @@ pub(crate) fn decode_real_wave(
                 n_cols as usize * 2
             ],
             data.channels.max(1),
+            0.0,
         ));
     }
 
@@ -695,9 +701,18 @@ pub(crate) fn decode_real_wave(
     // entre a faixa única (mono, `clip_w = -6`) e as duas faixas L/R no
     // renderer (`clips/render.rs`), e o que garante que o par L/R lido
     // pelo shader corresponde ao conteúdo.
+    //
+    // E a duração NATURAL da região em segundos (`region_len_seconds`), que
+    // o core exige para o plano de warp: `region_len` está em frames, então
+    // divide pela taxa de amostragem.
+    let region_seconds =
+        region_len as f64
+        / data.sample_rate.max(1) as f64;
+
     Ok((
         wave,
         channels as u16,
+        region_seconds,
     ))
 }
 

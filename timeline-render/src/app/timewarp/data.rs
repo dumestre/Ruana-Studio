@@ -261,4 +261,42 @@ impl TimewarpMetrics {
         let _ = height;
         instances
     }
+
+    /// Instâncias do gutter esquerdo no MODO WARP: fundo escuro (no lugar dos
+    /// valores de BPM, que não fazem sentido no editor de warp).
+    pub fn build_warp_gutter_instances(&self) -> Vec<RectInstance> {
+        let t = self.theme.clamp(0, 6);
+        let mut instances = Vec::new();
+        let body_top = self.body_top;
+        let body_h = self.body_h.max(0.0);
+
+        instances.push(RectInstance {
+            x: 0.0,
+            y: body_top,
+            w: BPM_LABEL_W,
+            h: body_h,
+            color: rgba(palette::BASE[t], 255),
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+
+        // Borda direita do gutter.
+        instances.push(RectInstance {
+            x: BPM_LABEL_W - 1.0,
+            y: body_top,
+            w: 1.0,
+            h: body_h,
+            color: [palette::BASE[t].0, palette::BASE[t].1, palette::BASE[t].2, 255],
+            wave_offset: 0,
+            wave_count: 0,
+            clip_w: 0.0,
+            clip_h: 0.0,
+            radius: 0.0,
+        });
+
+        instances
+    }
 }

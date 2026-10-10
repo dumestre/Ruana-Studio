@@ -327,6 +327,8 @@ pub fn build_clip_instances(
                             clip.source_length_beats,
                         channels:
                             clip.channels,
+                        region_seconds:
+                            clip.region_seconds,
                         warp_markers:
                             clip.warp_markers.clone(),
                     }
@@ -363,6 +365,8 @@ pub fn build_clip_instances(
                             clip.source_length_beats,
                         channels:
                             clip.channels,
+                        region_seconds:
+                            clip.region_seconds,
                         warp_markers:
                             clip.warp_markers.clone(),
                     }
@@ -508,6 +512,8 @@ pub fn build_clip_instances(
                             clip.source_length_beats,
                         channels:
                             clip.channels,
+                        region_seconds:
+                            clip.region_seconds,
                         warp_markers:
                             clip.warp_markers.clone(),
                     };
@@ -623,6 +629,7 @@ pub fn build_clip_instances(
                 source_start_beats: 0.0,
                 source_length_beats: 0.0,
                 channels: 1,
+                region_seconds: 0.0,
                 warp_markers: Vec::new(),
             };
 
