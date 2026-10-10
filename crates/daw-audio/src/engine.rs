@@ -223,15 +223,17 @@ impl ProjectSnapshot {
                 // toca (keylock, leitura 1:1). Se não, toca o ORIGINAL em
                 // varispeed: o áudio acompanha o tempo já no primeiro frame
                 // e o worker entrega a versão com pitch preservado logo.
-                let (buffer, musical, source_seconds, span_seconds, rendered_ratio) = match &target
-                {
+                let (buffer, musical, source_seconds, span_seconds, rendered_ratio, source_start_beats) = match &target {
                     Some(t) => match cache.get(&t.key()) {
                         Some(stretched) => {
-                            (stretched, true, t.source_seconds, t.span_seconds, t.ratio)
+                            // O buffer renderizado começa no início do trecho
+                            // selecionado; aplicar o offset original de novo
+                            // faria a reprodução saltar para o meio do render.
+                            (stretched, true, t.source_seconds, t.span_seconds, t.ratio, 0.0)
                         }
-                        None => (buffer, true, t.source_seconds, t.span_seconds, 1.0),
+                        None => (buffer, true, t.source_seconds, t.span_seconds, 1.0, c.source_start_beats as f64),
                     },
-                    None => (buffer, false, 0.0, 0.0, 1.0),
+                    None => (buffer, false, 0.0, 0.0, 1.0, c.source_start_beats as f64),
                 };
 
                 let read_rate = crate::stretch::source_rate(
@@ -245,7 +247,7 @@ impl ProjectSnapshot {
                     track_id: c.track_id,
                     start_beat: c.start_beat as f64,
                     length_beats: c.length_beats as f64,
-                    source_start_beats: c.source_start_beats as f64,
+                    source_start_beats,
                     buffer,
                     fade_in_beats: c.fade_in_beats as f64,
                     fade_out_beats: c.fade_out_beats as f64,
@@ -934,18 +936,6 @@ impl AudioEngine {
 
         // ---- mix -----------------------------------------------
         let any_soloed = snap.tracks.iter().any(|t| t.soloed);
-        let mut track_clips: Vec<Vec<&ClipSlot>> = (0..snap.tracks.len()).map(|_| Vec::new()).collect();
-        let mut track_midi_clips: Vec<Vec<&MidiClipSlot>> = (0..snap.tracks.len()).map(|_| Vec::new()).collect();
-        for clip in &snap.clips {
-            if let Some(track_idx) = snap.tracks.iter().position(|track| track.id == clip.track_id) {
-                track_clips[track_idx].push(clip);
-            }
-        }
-        for clip in &snap.midi_clips {
-            if let Some(track_idx) = snap.tracks.iter().position(|track| track.id == clip.track_id) {
-                track_midi_clips[track_idx].push(clip);
-            }
-        }
 
         // Canais medidos: uma entrada por trilha + o master no fim.
         // É a MESMA ordem de `mixer_state()` no app, para o índice do
@@ -962,38 +952,39 @@ impl AudioEngine {
         // vezes o da linha vezes a velocidade da nota.
         if playing && mode == PlayMode::Timeline {
             let end_frames = start_frames + frames as f64;
-            for (track_idx, track) in snap.tracks.iter().enumerate() {
+            for clip in snap.midi_clips.iter() {
+                let Some(track) = snap.tracks.iter().find(|t| t.id == clip.track_id) else {
+                    continue;
+                };
                 if !track_is_active(track.muted, track.soloed, any_soloed) {
                     continue;
                 }
                 let (tg_l, tg_r) = stereo_gains(track.volume, track.pan);
-                for clip in track_midi_clips[track_idx].iter().copied() {
-                    for note in clip.notes.iter() {
-                        let onset = (clip.start_beat + note.start_beat) * frames_per_beat;
-                        if onset < start_frames || onset >= end_frames {
-                            continue;
-                        }
-                        let row_idx = (note.pitch - daw_midi::DRUM_PITCH_BASE) as usize;
-                        let Some(row) = snap.beat.rows.get(row_idx) else {
-                            continue;
-                        };
-                        if !track_is_active(!row.active, row.solo, snap.beat.any_solo) {
-                            continue;
-                        }
-                        let Some(buffer) = row.buffer.clone() else {
-                            continue;
-                        };
-                        let vel = (note.velocity as f32 / 127.0).clamp(0.0, 1.0);
-                        let rg = row.volume * vel;
-                        let (rg_l, rg_r) = if row.pan == 0.0 {
-                            (rg, rg)
-                        } else {
-                            let (rl, rr) = stereo_gains_bipolar(1.0, row.pan);
-                            (rg * rl, rg * rr)
-                        };
-                        let delay = (onset - start_frames).max(0.0) as u32;
-                        rt.trigger(buffer, tg_l * rg_l, tg_r * rg_r, delay.min(frames as u32));
+                for note in clip.notes.iter() {
+                    let onset = (clip.start_beat + note.start_beat) * frames_per_beat;
+                    if onset < start_frames || onset >= end_frames {
+                        continue;
                     }
+                    let row_idx = (note.pitch - daw_midi::DRUM_PITCH_BASE) as usize;
+                    let Some(row) = snap.beat.rows.get(row_idx) else {
+                        continue;
+                    };
+                    if !track_is_active(!row.active, row.solo, snap.beat.any_solo) {
+                        continue;
+                    }
+                    let Some(buffer) = row.buffer.clone() else {
+                        continue;
+                    };
+                    let vel = (note.velocity as f32 / 127.0).clamp(0.0, 1.0);
+                    let rg = row.volume * vel;
+                    let (rg_l, rg_r) = if row.pan == 0.0 {
+                        (rg, rg)
+                    } else {
+                        let (rl, rr) = stereo_gains_bipolar(1.0, row.pan);
+                        (rg * rl, rg * rr)
+                    };
+                    let delay = (onset - start_frames).max(0.0) as u32;
+                    rt.trigger(buffer, tg_l * rg_l, tg_r * rg_r, delay.min(frames as u32));
                 }
             }
         }
@@ -1020,7 +1011,7 @@ impl AudioEngine {
                     let mut track_l = 0.0f32;
                     let mut track_r = 0.0f32;
 
-                    for clip in track_clips[track_idx].iter().copied() {
+                    for clip in snap.clips.iter().filter(|c| c.track_id == track.id) {
                         let clip_start = clip.start_beat * frames_per_beat;
                         let clip_len = clip.length_beats * frames_per_beat;
                         let offset = pos - clip_start;
