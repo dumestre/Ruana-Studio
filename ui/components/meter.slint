@@ -44,7 +44,6 @@ export component Meter inherits Rectangle {
     // GEOMETRIA
     // ========================================================
 
-    private property <length> clip-light-height: 6px;
     private property <length> triangle-width: 14px;
     private property <length> meter-width: 13px;
     private property <length> db-width: 19px;
@@ -134,52 +133,20 @@ export component Meter inherits Rectangle {
             right-clipped: root.right-clipped;
 
             meter-width: 5px;
-            channel-gap: 2px;
+            channel-gap: 1px;
             meter-background: Theme.surface-high;
             meter-border: Theme.border;
         }
 
         // ================================================
-        // LUZ DE CLIP (topo do meter)
+        // A barra permanece limpa no topo; o clip segue indicado pela
+        // cor vermelha do pico e pode ser limpo clicando na barra.
         // ================================================
 
-        Rectangle {
-            x: 0px;
-            y: 0px;
-            width: parent.width;
-            height: root.clip-light-height;
-
-            background: Theme.base;
-            border-radius: 2px;
-            border-width: 1px;
-            border-color: Theme.border;
-
-            clip := TouchArea {
-                width: 100%;
-                height: 100%;
-
-                clicked => {
-                    root.clip-cleared(root.channel-index);
-                }
-            }
-
-            Rectangle {
-                x: 1px;
-                y: 1px;
-                width: 5px;
-                height: parent.height - 2px;
-                background: root.left-clipped ? #FF3030 : Theme.surface-high;
-            }
-
-            Rectangle {
-                x: 7px;
-                y: 1px;
-                width: 5px;
-                height: parent.height - 2px;
-                background: root.right-clipped ? #FF3030 : Theme.surface-high;
-            }
-
-            z: 20;
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => { root.clip-cleared(root.channel-index); }
         }
     }
 
@@ -193,7 +160,7 @@ export component Meter inherits Rectangle {
         width: root.db-width;
         height: parent.height;
 
-        for db in [-60.0, -36.0, -24.0, -12.0, 0.0] : Text {
+        for db in [-60.0, -36.0, -24.0, -12.0, 0.0, 6.0] : Text {
             property <float> position: (db - AudioScale.db-floor) / (AudioScale.db-ceiling - AudioScale.db-floor);
             text: db.to-fixed(0);
             color: Theme.text-dim;
@@ -202,7 +169,7 @@ export component Meter inherits Rectangle {
             vertical-alignment: center;
             width: parent.width;
             height: 6px;
-            y: root.clip-light-height + (parent.height - root.clip-light-height) * (1.0 - self.position) - 3px;
+            y: parent.height * (1.0 - self.position) - 3px;
         }
     }
 }

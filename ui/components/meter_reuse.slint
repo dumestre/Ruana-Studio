@@ -9,14 +9,14 @@ export component StereoMeter inherits Rectangle {
     in property <bool> right-clipped: false;
 
     in property <length> meter-width: 5px;
-    in property <length> channel-gap: 2px;
+    in property <length> channel-gap: 1px;
     in property <color> meter-background: #111111;
     in property <color> meter-border: transparent;
     in property <bool> signal-fill-only: false;
 
     private property <length> meter-height: Math.max(1px, root.height);
     private property <length> channel-width: Math.max(2px, root.meter-width);
-    private property <length> divider-width: 1px;
+    private property <length> divider-width: 0.5px;
 
     width: root.channel-width * 2 + root.channel-gap + root.divider-width;
     background: transparent;
@@ -41,7 +41,8 @@ export component StereoMeter inherits Rectangle {
 
             Rectangle {
                 x: 0px; y: 0px; width: parent.width; height: parent.height;
-                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
+                // +6 dB fica na borda superior; 0 dB em 9% da altura.
+                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 8%, #FFCC00 8%, #FFCC00 18%, #00C853 18%, #00C853 100%);
                 clip: true;
                 Rectangle {
                     x: 0px; y: 0px; width: parent.width;
@@ -73,7 +74,7 @@ export component StereoMeter inherits Rectangle {
 
             Rectangle {
                 x: 0px; y: 0px; width: parent.width; height: parent.height;
-                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 10%, #FFCC00 10%, #FFCC00 25%, #00C853 25%, #00C853 100%);
+                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 8%, #FFCC00 8%, #FFCC00 18%, #00C853 18%, #00C853 100%);
                 clip: true;
                 Rectangle {
                     x: 0px; y: 0px; width: parent.width;

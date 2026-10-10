@@ -24,12 +24,10 @@
 export global AudioScale {
     // Piso e teto da escala, em dBFS.
     //
-    // -60 dB é o piso padrão de VU: abaixo disso só existe ruído de
-    // fundo. O teto é 0 dB porque acima disso é clip, e o clip tem luz
-    // própria — esticar a barra para +6 dB só faria a luz parecer parte
-    // do medidor.
+    // O medidor reserva 6 dB acima de zero, como meters de console/Daw,
+    // para mostrar margem antes do clip. O fader continua indo até unity.
     in-out property <float> db-floor: -60.0;
-    in-out property <float> db-ceiling: 0.0;
+    in-out property <float> db-ceiling: 6.0;
 
     // dBFS -> ganho linear.
     public pure function db-to-linear(db: float) -> float {
@@ -38,9 +36,7 @@ export global AudioScale {
 
     // Posição do fader (0 = baixo, 1 = topo) -> ganho linear.
     //
-    // Mesma curva do medidor, e por isso o topo do fader e a leitura de
-    // unity do VU são o MESMO lugar. É o que faz o par fader+meter ser
-    // legível de relance.
+    // O fader termina em unity (0 dB); o medidor reserva margem até +6.
     //
     // O fundo é silêncio DE VERDADE, não -60 dB: um fader que não
     // chega a zero obriga o usuário a mutar em outro botão para calar
@@ -50,7 +46,7 @@ export global AudioScale {
         if p <= 0.0 {
             return 0.0;
         }
-        return root.db-to-linear(root.db-floor + p * (root.db-ceiling - root.db-floor));
+        return root.db-to-linear(root.fader-pos-to-db(p));
     }
 
     // Posição do fader -> dBFS, para o LCD.
@@ -61,6 +57,6 @@ export global AudioScale {
     // posição JÁ é uma reta no eixo dB — ler é só interpolar.
     public pure function fader-pos-to-db(pos: float) -> float {
         return root.db-floor
-            + Math.max(0.0, Math.min(1.0, pos)) * (root.db-ceiling - root.db-floor);
+            + Math.max(0.0, Math.min(1.0, pos)) * (0.0 - root.db-floor);
     }
 }
