@@ -25,6 +25,7 @@ export component Meter inherits Rectangle {
 
     in property <int> channel-index: 0;
     in property <color> fader-color: Theme.text-primary;
+    in property <color> empty-meter-color: #B8B8B8;
 
     // ========================================================
     // VOLUME
@@ -143,7 +144,7 @@ export component Meter inherits Rectangle {
 
             meter-width: 6.5px;
             channel-gap: 0px;
-            meter-background: #B8B8B8;
+            meter-background: root.empty-meter-color;
             meter-border: transparent;
         }
 

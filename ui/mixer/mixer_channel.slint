@@ -381,6 +381,9 @@ export component MixerChannel inherits Rectangle {
                 // e o clique no canal 5 apagaria o latch do canal 0.
                 channel-index: root.channel-index;
                 fader-color: root.channel-color;
+                empty-meter-color: Theme.is-paper
+                    ? Theme.surface.darker(0.2)
+                    : Theme.surface.brighter(0.65);
 
                 left-level: root.left-level;
                 right-level: root.right-level;
