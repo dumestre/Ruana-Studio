@@ -58,4 +58,10 @@ export global AudioScale {
         return root.db-floor
             + Math.max(0.0, Math.min(1.0, pos)) * (0.0 - root.db-floor);
     }
+
+    // dB digitado no visor -> posição do fader, limitado ao curso -60..0 dB.
+    public pure function db-to-fader-pos(db: float) -> float {
+        return Math.max(0.0, Math.min(1.0,
+            (db - root.db-floor) / (0.0 - root.db-floor)));
+    }
 }

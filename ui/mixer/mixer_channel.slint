@@ -84,9 +84,7 @@ export component MixerChannel inherits Rectangle {
     // linear`), então "-60.0 dB" mentiria ali: o ganho é zero. O piso
     // da escala é onde a barra para de descer, não onde a faixa cala.
     property <string> vol-display:
-        root.volume <= 0.0
-            ? "-inf dB"
-            : AudioScale.fader-pos-to-db(root.volume).to-fixed(1) + " dB";
+        AudioScale.fader-pos-to-db(root.volume).to-fixed(1);
 
     // ==========================================
     // CHANNEL
@@ -94,6 +92,18 @@ export component MixerChannel inherits Rectangle {
 
     width: 100px;
     background: Theme.surface;
+
+    // Seleciona ao clicar em áreas livres; o editor de dB, em z superior,
+    // encaminha seus próprios cliques para o campo de texto.
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.select-requested(root.channel-index); }
+        z: -1;
+    }
 
     // ==========================================
     // DIVISÓRIA
@@ -403,32 +413,58 @@ export component MixerChannel inherits Rectangle {
                 border-width: 1px;
                 border-color: Theme.border;
 
-                Text {
-                    text: root.vol-display;
-
+                HorizontalLayout {
+                    padding-left: 2px;
+                    padding-right: 2px;
+                    spacing: 1px;
+                    alignment: LayoutAlignment.center;
+                    cross-axis-alignment: CrossAxisAlignment.center;
                     width: 100%;
                     height: 100%;
 
-                    color: Theme.text-primary;
+                    db-value-input := TextInput {
+                        text: root.vol-display;
+                        // Decimal aceita sinal negativo e separador decimal.
+                        input-type: decimal;
+                        horizontal-stretch: 1;
+                        height: 100%;
+                        color: Theme.text-primary;
+                        font-size: 9px;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
 
-                    font-size: 8px;
-                    font-weight: 600;
+                        accepted => {
+                            root.volume = AudioScale.db-to-fader-pos(self.text.to-float());
+                            root.param-changed(root.channel-index, "volume", root.volume);
+                            self.clear-focus();
+                        }
+                    }
 
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    Text {
+                        text: "dB";
+                        width: 12px;
+                        height: 100%;
+                        color: Theme.text-dim;
+                        font-size: 8px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // A caixa inteira edita o valor. Isso também encaminha
+                // cliques no sufixo dB ao campo sem selecionar o canal.
+                TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: text;
+                    clicked => {
+                        db-value-input.focus();
+                        db-value-input.select-all();
+                    }
+                    z: 10;
                 }
             }
         }
     }
 
-    // Fundo do canal seleciona a faixa; os controles interativos ficam acima.
-    TouchArea {
-        x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: parent.height;
-        mouse-cursor: pointer;
-        clicked => { root.select-requested(root.channel-index); }
-        z: -1;
-    }
 }

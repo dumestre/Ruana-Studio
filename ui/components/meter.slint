@@ -47,7 +47,7 @@ export component Meter inherits Rectangle {
 
     private property <length> triangle-width: 14px;
     private property <length> meter-width: 14px;
-    private property <length> db-width: 20px;
+    private property <length> db-width: 24px;
     private property <length> tick-width: 3px;
     private property <length> tick-gap: 3px;
     private property <length> gap: 2px;
@@ -173,7 +173,7 @@ export component Meter inherits Rectangle {
             property <float> position: (db - AudioScale.db-floor) / (AudioScale.db-ceiling - AudioScale.db-floor);
             text: db.to-fixed(0);
             color: Theme.text-primary;
-            font-size: 7px;
+            font-size: 9px;
             horizontal-alignment: left;
             vertical-alignment: center;
             width: parent.width;
