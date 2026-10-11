@@ -10,17 +10,17 @@ export component StereoMeter inherits Rectangle {
 
     in property <length> meter-width: 5px;
     in property <length> channel-gap: 1px;
-    in property <color> meter-background: #111111;
+    in property <color> meter-background: #B8B8B8;
     in property <color> meter-border: transparent;
     in property <bool> signal-fill-only: false;
 
     private property <length> meter-height: Math.max(1px, root.height);
     private property <length> channel-width: Math.max(2px, root.meter-width);
-    private property <length> divider-width: 0.5px;
+    private property <length> divider-width: 0px;
 
     width: root.channel-width * 2 + root.channel-gap + root.divider-width;
     background: transparent;
-    border-radius: 15px;
+    border-radius: 0px;
 
     function level-clamped(value: float) -> float {
         if value != value { return 0.0; }
@@ -36,13 +36,14 @@ export component StereoMeter inherits Rectangle {
         Rectangle {
             width: root.channel-width; height: root.meter-height;
             background: root.meter-background;
-            border-width: 1px; border-color: root.meter-border;
-            border-radius: 6px; clip: true;
+            border-width: 0px; border-color: root.meter-border;
+            border-radius: 0px; clip: true;
 
             Rectangle {
                 x: 0px; y: 0px; width: parent.width; height: parent.height;
-                // +6 dB fica na borda superior; 0 dB em 9% da altura.
-                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 8%, #FFCC00 8%, #FFCC00 18%, #00C853 18%, #00C853 100%);
+                // Indicador contínuo verde; a zona superior muda para
+                // amarelo e vermelho, como na escala de referência.
+                background: @linear-gradient(180deg, #E34236 0%, #E34236 3%, #E8A52B 3%, #E8A52B 10%, #00C853 10%, #00C853 100%);
                 clip: true;
                 Rectangle {
                     x: 0px; y: 0px; width: parent.width;
@@ -51,30 +52,18 @@ export component StereoMeter inherits Rectangle {
                     visible: !root.signal-fill-only || root.left-level > 0.001;
                 }
             }
-            Rectangle {
-                x: 0px; y: parent.height - (root.level-clamped(root.left-peak) * parent.height) - 1px;
-                width: parent.width; height: 2px;
-                background: root.left-clipped ? #FF3030 : #FFFFFF;
-                visible: root.left-peak > 0.001 && (!root.signal-fill-only || root.left-level > 0.001);
-            }
-        }
-
-        // DIVISOR
-        Rectangle {
-            width: root.divider-width; height: root.meter-height;
-            background: Theme.is-paper ? Theme.base.transparentize(0.6) : Theme.border;
         }
 
         // CANAL R
         Rectangle {
             width: root.channel-width; height: root.meter-height;
             background: root.meter-background;
-            border-width: 1px; border-color: root.meter-border;
-            border-radius: 6px; clip: true;
+            border-width: 0px; border-color: root.meter-border;
+            border-radius: 0px; clip: true;
 
             Rectangle {
                 x: 0px; y: 0px; width: parent.width; height: parent.height;
-                background: @linear-gradient(180deg, #FF3B30 0%, #FF3B30 8%, #FFCC00 8%, #FFCC00 18%, #00C853 18%, #00C853 100%);
+                background: @linear-gradient(180deg, #E34236 0%, #E34236 3%, #E8A52B 3%, #E8A52B 10%, #00C853 10%, #00C853 100%);
                 clip: true;
                 Rectangle {
                     x: 0px; y: 0px; width: parent.width;
@@ -82,12 +71,6 @@ export component StereoMeter inherits Rectangle {
                     background: root.meter-background;
                     visible: !root.signal-fill-only || root.right-level > 0.001;
                 }
-            }
-            Rectangle {
-                x: 0px; y: parent.height - (root.level-clamped(root.right-peak) * parent.height) - 1px;
-                width: parent.width; height: 2px;
-                background: root.right-clipped ? #FF3030 : #FFFFFF;
-                visible: root.right-peak > 0.001 && (!root.signal-fill-only || root.right-level > 0.001);
             }
         }
     }

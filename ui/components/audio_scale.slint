@@ -24,10 +24,10 @@
 export global AudioScale {
     // Piso e teto da escala, em dBFS.
     //
-    // O medidor reserva 6 dB acima de zero, como meters de console/Daw,
-    // para mostrar margem antes do clip. O fader continua indo até unity.
+    // Escala de meter no estilo da referência: 0 dB no topo da faixa
+    // verde, escala até -60 dB no fundo. Vermelho indica sobrecarga.
     in-out property <float> db-floor: -60.0;
-    in-out property <float> db-ceiling: 6.0;
+    in-out property <float> db-ceiling: 0.0;
 
     // dBFS -> ganho linear.
     public pure function db-to-linear(db: float) -> float {

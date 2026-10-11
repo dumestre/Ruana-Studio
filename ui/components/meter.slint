@@ -45,13 +45,19 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     private property <length> triangle-width: 14px;
-    private property <length> meter-width: 13px;
-    private property <length> db-width: 19px;
+    private property <length> meter-width: 14px;
+    private property <length> db-width: 20px;
+    private property <length> tick-width: 3px;
+    private property <length> tick-gap: 3px;
     private property <length> gap: 2px;
-    private property <length> fader-gap: -2px;
-    private property <length> meter-x: (root.width - root.meter-width) / 2;
+    private property <length> fader-gap: 5px;
+    private property <length> strip-width: root.triangle-width + root.fader-gap + root.tick-width + root.tick-gap + root.meter-width + root.gap + root.db-width;
+    private property <length> strip-x: (root.width - root.strip-width) / 2;
+    private property <length> tick-x: root.strip-x + root.triangle-width + root.fader-gap;
+    private property <length> meter-x: root.tick-x + root.tick-width + root.tick-gap;
+    private property <[float]> scale-db: [0.0, -6.0, -12.0, -18.0, -24.0, -30.0, -36.0, -42.0, -48.0, -54.0, -60.0];
 
-    width: show-volume-control ? 90px : 13px;
+    width: show-volume-control ? 90px : 8px;
     min-height: 40px;
 
     // ========================================================
@@ -59,7 +65,7 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     if root.show-volume-control : Rectangle {
-        x: root.meter-x - root.gap - root.db-width - root.fader-gap - root.triangle-width;
+        x: root.strip-x;
         y: 0px;
         width: root.triangle-width;
         height: parent.height;
@@ -93,7 +99,8 @@ export component Meter inherits Rectangle {
 
             // Centralizado verticalmente na posição do volume
             x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) * (1.0 - root.volume);
+            y: Math.max(0px, Math.min(parent.height - self.height,
+                parent.height * (1.0 - root.volume) - self.height / 2));
 
             horizontal-tiling: ImageTiling.none;
             image-fit: ImageFit.contain;
@@ -132,10 +139,10 @@ export component Meter inherits Rectangle {
             left-clipped: root.left-clipped;
             right-clipped: root.right-clipped;
 
-            meter-width: 5px;
-            channel-gap: 1px;
-            meter-background: Theme.surface-high;
-            meter-border: Theme.border;
+            meter-width: 6.5px;
+            channel-gap: 0px;
+            meter-background: #B8B8B8;
+            meter-border: transparent;
         }
 
         // ================================================
@@ -155,21 +162,41 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     if root.show-volume-control : Rectangle {
-        x: root.meter-x - root.gap - root.db-width;
+        x: root.meter-x + root.meter-width + root.gap;
         y: 0px;
         width: root.db-width;
         height: parent.height;
 
-        for db in [-60.0, -36.0, -24.0, -12.0, 0.0, 6.0] : Text {
+        for db in root.scale-db : Text {
             property <float> position: (db - AudioScale.db-floor) / (AudioScale.db-ceiling - AudioScale.db-floor);
             text: db.to-fixed(0);
-            color: Theme.text-dim;
+            color: Theme.text-primary;
             font-size: 7px;
-            horizontal-alignment: right;
+            horizontal-alignment: left;
             vertical-alignment: center;
             width: parent.width;
-            height: 6px;
-            y: parent.height * (1.0 - self.position) - 3px;
+            height: 7px;
+            y: Math.max(0px, Math.min(parent.height - self.height,
+                parent.height * (1.0 - self.position) - self.height / 2));
+        }
+    }
+
+    // Marcas da escala ficam entre o fader e a barra, alinhadas aos
+    // números da direita na mesma posição vertical em dB.
+    if root.show-volume-control: Rectangle {
+        x: root.tick-x;
+        width: root.tick-width;
+        height: parent.height;
+        background: transparent;
+
+        for db in root.scale-db : Rectangle {
+            property <float> position: (db - AudioScale.db-floor) / (AudioScale.db-ceiling - AudioScale.db-floor);
+            x: 0px;
+            y: Math.max(0px, Math.min(parent.height - self.height,
+                parent.height * (1.0 - self.position) - self.height / 2));
+            width: parent.width;
+            height: 1px;
+            background: Theme.text-primary;
         }
     }
 }
