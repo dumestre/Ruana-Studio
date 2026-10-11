@@ -16,7 +16,7 @@ export component StereoMeter inherits Rectangle {
 
     private property <length> meter-height: Math.max(1px, root.height);
     private property <length> channel-width: Math.max(2px, root.meter-width);
-    private property <length> divider-width: 0px;
+    private property <length> divider-width: 1px;
 
     width: root.channel-width * 2 + root.channel-gap + root.divider-width;
     background: transparent;
@@ -41,9 +41,7 @@ export component StereoMeter inherits Rectangle {
 
             Rectangle {
                 x: 0px; y: 0px; width: parent.width; height: parent.height;
-                // Vermelho no headroom alto, amarelo logo acima de 0 dB,
-                // verde abaixo do zero, em correspondência com os ticks.
-                background: @linear-gradient(180deg, #E34236 0%, #E34236 3%, #E8A52B 3%, #E8A52B 9.1%, #00C853 9.1%, #00C853 100%);
+                background: #00C853;
                 clip: true;
                 Rectangle {
                     x: 0px; y: 0px; width: parent.width;
@@ -54,6 +52,10 @@ export component StereoMeter inherits Rectangle {
             }
         }
 
+        Rectangle {
+            width: root.divider-width; height: root.meter-height;
+            background: #000000;
+        }
         // CANAL R
         Rectangle {
             width: root.channel-width; height: root.meter-height;
@@ -63,7 +65,7 @@ export component StereoMeter inherits Rectangle {
 
             Rectangle {
                 x: 0px; y: 0px; width: parent.width; height: parent.height;
-                background: @linear-gradient(180deg, #E34236 0%, #E34236 3%, #E8A52B 3%, #E8A52B 9.1%, #00C853 9.1%, #00C853 100%);
+                background: #00C853;
                 clip: true;
                 Rectangle {
                     x: 0px; y: 0px; width: parent.width;
