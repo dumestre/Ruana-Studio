@@ -56,12 +56,12 @@ export global AudioScale {
     // posição JÁ é uma reta no eixo dB — ler é só interpolar.
     public pure function fader-pos-to-db(pos: float) -> float {
         return root.db-floor
-            + Math.max(0.0, Math.min(1.0, pos)) * (0.0 - root.db-floor);
+            + Math.max(0.0, Math.min(1.0, pos)) * (root.db-ceiling - root.db-floor);
     }
 
-    // dB digitado no visor -> posição do fader, limitado ao curso -60..0 dB.
+    // dB digitado no visor -> posição do fader, limitado ao curso -60..6 dB.
     public pure function db-to-fader-pos(db: float) -> float {
         return Math.max(0.0, Math.min(1.0,
-            (db - root.db-floor) / (0.0 - root.db-floor)));
+            (db - root.db-floor) / (root.db-ceiling - root.db-floor)));
     }
 }
