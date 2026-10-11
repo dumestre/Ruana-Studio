@@ -3,7 +3,16 @@ import { Theme } from "../theme.slint";
 export component PanControl inherits Rectangle {
     in-out property <float> value: 0.5;
     callback changed(float);
+
     private property <bool> dragging: false;
+
+    private property <string> pan-display:
+        root.value == 0.5 ? "C" :
+        root.value < 0.5
+            ? "L" + (Math.abs(root.value - 0.5) * 200.0).to-fixed(0)
+            : "R" + (Math.abs(root.value - 0.5) * 200.0).to-fixed(0);
+
+    private property <string> edit-text: "";
 
     width: 82px;
     height: 36px;
@@ -32,15 +41,18 @@ export component PanControl inherits Rectangle {
                 x: (parent.width - self.width) / 2;
                 y: 3px;
                 width: 1px;
-                height: 14px;
+                height: 12px;
                 background: Theme.text-dim;
             }
 
             Rectangle {
                 property <float> amount: Math.abs(root.value - 0.5) * 2.0;
+
                 width: Math.max(3px, parent.width * 0.5 * self.amount);
-                height: 4px + self.amount * 10px;
-                x: root.value < 0.5 ? parent.width / 2 - self.width : parent.width / 2;
+                height: 14px;
+                x: root.value < 0.5
+                    ? parent.width / 2 - self.width
+                    : parent.width / 2;
                 y: (parent.height - self.height) / 2;
                 background: Theme.accent;
                 border-radius: 1px;
@@ -54,14 +66,21 @@ export component PanControl inherits Rectangle {
                 pointer-event(event) => {
                     let cursor-x = self.absolute-position.x + self.mouse-x;
                     let graph-x = pan-graph.absolute-position.x;
+
                     if event.kind == PointerEventKind.down
                         && event.button == PointerEventButton.left {
                         root.dragging = true;
-                        root.value = Math.max(0.0, Math.min(1.0, (cursor-x - graph-x) / pan-graph.width));
+                        root.value = Math.max(
+                            0.0,
+                            Math.min(1.0, (cursor-x - graph-x) / pan-graph.width)
+                        );
                         root.changed(root.value);
                     } else if root.dragging
                         && event.kind == PointerEventKind.move {
-                        root.value = Math.max(0.0, Math.min(1.0, (cursor-x - graph-x) / pan-graph.width));
+                        root.value = Math.max(
+                            0.0,
+                            Math.min(1.0, (cursor-x - graph-x) / pan-graph.width)
+                        );
                         root.changed(root.value);
                     } else if root.dragging
                         && event.kind == PointerEventKind.up {
@@ -71,55 +90,71 @@ export component PanControl inherits Rectangle {
             }
         }
 
-        HorizontalLayout {
+        pan-input := TextInput {
             x: 3px;
             y: 18px;
             width: parent.width - 6px;
             height: 14px;
-            padding-left: 3px;
-            padding-right: 3px;
-            spacing: 2px;
-            alignment: LayoutAlignment.center;
-            cross-axis-alignment: CrossAxisAlignment.center;
 
-            pan-value-input := TextInput {
-                text: ((root.value - 0.5) * 200.0).to-fixed(0);
-                input-type: decimal;
-                horizontal-stretch: 1;
-                height: 100%;
-                color: Theme.text-primary;
-                font-size: 9px;
-                font-weight: 600;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            text: root.pan-display.to-uppercase();
 
-                accepted => {
-                    let pan-percent = Math.max(-100.0, Math.min(100.0, self.text.to-float()));
-                    root.value = 0.5 + pan-percent / 200.0;
-                    root.changed(root.value);
-                    self.clear-focus();
-                }
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            input-type: InputType.text;
+            color: Theme.text-primary;
+            font-size: 9px;
+            font-weight: 600;
+
+            edited => {
+                self.text = self.text.to-uppercase();
             }
 
-            Text {
-                text: "%";
-                width: 8px;
-                height: 100%;
-                color: Theme.text-dim;
-                font-size: 8px;
-                vertical-alignment: center;
+            accepted => {
+                let input = self.text.to-uppercase().replace-all(" ", "");
+
+                if input == "C" {
+                    root.value = 0.5;
+                    root.changed(root.value);
+                } else if input.starts-with("L") {
+                    let amount-text = input.replace-all("L", "");
+
+                    if amount-text.is-float() {
+                        let amount = Math.max(
+                            0.0,
+                            Math.min(100.0, amount-text.to-float())
+                        );
+
+                        root.value = 0.5 - amount / 200.0;
+                        root.changed(root.value);
+                    }
+                } else if input.starts-with("R") {
+                    let amount-text = input.replace-all("R", "");
+
+                    if amount-text.is-float() {
+                        let amount = Math.max(
+                            0.0,
+                            Math.min(100.0, amount-text.to-float())
+                        );
+
+                        root.value = 0.5 + amount / 200.0;
+                        root.changed(root.value);
+                    }
+                }
+
+                self.clear-focus();
             }
         }
 
         TouchArea {
             x: 0px;
-            y: 24px;
+            y: 18px;
             width: 100%;
-            height: 14px;
+            height: 16px;
             mouse-cursor: text;
+
             clicked => {
-                pan-value-input.focus();
-                pan-value-input.select-all();
+                pan-input.focus();
+                pan-input.select-all();
             }
         }
     }
