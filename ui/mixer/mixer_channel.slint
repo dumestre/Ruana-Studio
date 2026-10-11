@@ -370,6 +370,7 @@ export component MixerChannel inherits Rectangle {
                 // Sem isto a luz de clip devolveria o índice padrão (0)
                 // e o clique no canal 5 apagaria o latch do canal 0.
                 channel-index: root.channel-index;
+                fader-color: root.channel-color;
 
                 left-level: root.left-level;
                 right-level: root.right-level;

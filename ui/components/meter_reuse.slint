@@ -41,9 +41,9 @@ export component StereoMeter inherits Rectangle {
 
             Rectangle {
                 x: 0px; y: 0px; width: parent.width; height: parent.height;
-                // Indicador contínuo verde; a zona superior muda para
-                // amarelo e vermelho, como na escala de referência.
-                background: @linear-gradient(180deg, #E34236 0%, #E34236 3%, #E8A52B 3%, #E8A52B 10%, #00C853 10%, #00C853 100%);
+                // Vermelho no headroom alto, amarelo logo acima de 0 dB,
+                // verde abaixo do zero, em correspondência com os ticks.
+                background: @linear-gradient(180deg, #E34236 0%, #E34236 3%, #E8A52B 3%, #E8A52B 9.1%, #00C853 9.1%, #00C853 100%);
                 clip: true;
                 Rectangle {
                     x: 0px; y: 0px; width: parent.width;
@@ -63,7 +63,7 @@ export component StereoMeter inherits Rectangle {
 
             Rectangle {
                 x: 0px; y: 0px; width: parent.width; height: parent.height;
-                background: @linear-gradient(180deg, #E34236 0%, #E34236 3%, #E8A52B 3%, #E8A52B 10%, #00C853 10%, #00C853 100%);
+                background: @linear-gradient(180deg, #E34236 0%, #E34236 3%, #E8A52B 3%, #E8A52B 9.1%, #00C853 9.1%, #00C853 100%);
                 clip: true;
                 Rectangle {
                     x: 0px; y: 0px; width: parent.width;

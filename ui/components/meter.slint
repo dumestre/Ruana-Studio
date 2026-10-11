@@ -24,6 +24,7 @@ export component Meter inherits Rectangle {
     in property <bool> right-clipped: false;
 
     in property <int> channel-index: 0;
+    in property <color> fader-color: Theme.text-primary;
 
     // ========================================================
     // VOLUME
@@ -51,11 +52,11 @@ export component Meter inherits Rectangle {
     private property <length> tick-gap: 3px;
     private property <length> gap: 2px;
     private property <length> fader-gap: 5px;
-    private property <length> strip-width: root.triangle-width + root.fader-gap + root.tick-width + root.tick-gap + root.meter-width + root.gap + root.db-width;
-    private property <length> strip-x: (root.width - root.strip-width) / 2;
-    private property <length> tick-x: root.strip-x + root.triangle-width + root.fader-gap;
-    private property <length> meter-x: root.tick-x + root.tick-width + root.tick-gap;
-    private property <[float]> scale-db: [0.0, -6.0, -12.0, -18.0, -24.0, -30.0, -36.0, -42.0, -48.0, -54.0, -60.0];
+    // Centraliza a barra no canal; os demais elementos são ancorados nela.
+    private property <length> meter-x: (root.width - root.meter-width) / 2;
+    private property <length> tick-x: root.meter-x - root.tick-gap - root.tick-width;
+    private property <length> fader-x: root.tick-x - root.fader-gap - root.triangle-width;
+    private property <[float]> scale-db: [6.0, 0.0, -6.0, -12.0, -18.0, -24.0, -30.0, -36.0, -42.0, -48.0, -54.0, -60.0];
 
     width: show-volume-control ? 90px : 8px;
     min-height: 40px;
@@ -65,7 +66,7 @@ export component Meter inherits Rectangle {
     // ========================================================
 
     if root.show-volume-control : Rectangle {
-        x: root.strip-x;
+        x: root.fader-x;
         y: 0px;
         width: root.triangle-width;
         height: parent.height;
@@ -80,13 +81,17 @@ export component Meter inherits Rectangle {
 
             moved => {
                 root.volume = Math.max(0.0, Math.min(1.0,
-                    1.0 - (self.mouse-y / self.height)));
+                    (1.0 - (self.mouse-y / self.height))
+                    * (AudioScale.db-ceiling - AudioScale.db-floor)
+                    / (0.0 - AudioScale.db-floor)));
                 root.volume-changed(root.volume);
             }
 
             clicked => {
                 root.volume = Math.max(0.0, Math.min(1.0,
-                    1.0 - (self.mouse-y / self.height)));
+                    (1.0 - (self.mouse-y / self.height))
+                    * (AudioScale.db-ceiling - AudioScale.db-floor)
+                    / (0.0 - AudioScale.db-floor)));
                 root.volume-changed(root.volume);
             }
         }
@@ -94,23 +99,20 @@ export component Meter inherits Rectangle {
         Image {
             source: @image-url("../icons/play.svg");
 
-            width: 14px;
-            height: 14px;
+            width: 16px;
+            height: 16px;
 
             // Centralizado verticalmente na posição do volume
             x: (parent.width - self.width) / 2;
             y: Math.max(0px, Math.min(parent.height - self.height,
-                parent.height * (1.0 - root.volume) - self.height / 2));
+                parent.height * (1.0 - root.volume * (0.0 - AudioScale.db-floor)
+                    / (AudioScale.db-ceiling - AudioScale.db-floor)) - self.height / 2));
 
             horizontal-tiling: ImageTiling.none;
             image-fit: ImageFit.contain;
             image-rendering: ImageRendering.smooth;
 
-            colorize: touch.pressed
-                ? Theme.accent
-                : (root.volume > 0.999
-                    ? Theme.text-dim
-                    : Theme.text-primary.transparentize(0.15));
+            colorize: root.fader-color;
 
             z: 10;
         }

@@ -71,8 +71,12 @@ pub const PUMP_INTERVAL: Duration = Duration::from_millis(33);
 /// sistema.
 pub const DB_FLOOR: f32 = -60.0;
 
-/// Teto da escala do meter: 0 dBFS fica no topo da faixa verde.
-pub const DB_CEILING: f32 = 0.0;
+/// Teto do meter: +6 dBFS deixa margem acima de unity para visualizar
+/// transientes acima de 0 dB, como em DAWs comuns.
+pub const DB_CEILING: f32 = 6.0;
+
+/// O fader continua terminando em unity (0 dBFS).
+const FADER_DB_CEILING: f32 = 0.0;
 
 /// Amplitude -> dBFS.
 ///
@@ -99,7 +103,7 @@ pub fn meter_norm(peak_linear: f32) -> f32 {
 
 /// Posição do fader (0 = baixo, 1 = topo) -> ganho linear.
 ///
-/// O fader termina em unity (0 dB), alinhado ao topo do meter.
+/// O fader termina em unity (0 dB); o meter tem +6 dB de headroom.
 ///
 /// O fundo é SILÊNCIO de verdade, não -60 dB: um fader que não chega
 /// a zero é um fader que obriga o usuário a mutar em outro botão para
@@ -109,12 +113,12 @@ pub fn fader_pos_to_linear(pos: f32) -> f32 {
     if pos <= 0.0 {
         return 0.0;
     }
-    db_to_linear(DB_FLOOR + pos * (DB_CEILING - DB_FLOOR))
+    db_to_linear(DB_FLOOR + pos * (FADER_DB_CEILING - DB_FLOOR))
 }
 
 /// Ganho linear -> posição do fader.
 pub fn linear_to_fader_pos(linear: f32) -> f32 {
-    ((linear_to_db(linear) - DB_FLOOR) / (DB_CEILING - DB_FLOOR)).clamp(0.0, 1.0)
+    ((linear_to_db(linear) - DB_FLOOR) / (FADER_DB_CEILING - DB_FLOOR)).clamp(0.0, 1.0)
 }
 
 /// Decaimento da barra por tick a 30 Hz.
@@ -355,7 +359,7 @@ mod tests {
 
     #[test]
     fn unity_sits_at_the_top_of_the_meter() {
-        assert_eq!(meter_norm(1.0), 1.0);
+        assert!((meter_norm(1.0) - 60.0 / 66.0).abs() < 1e-5);
     }
 
     #[test]
