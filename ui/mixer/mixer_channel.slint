@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Button } from "../components/button.slint";
-import { PanKnob } from "../components/knob.slint";
+import { PanControl } from "pan_control.slint";
 import { Meter } from "../components/meter.slint";
 import { InsertSlot } from "insert_slot.slint";
 import { AudioScale } from "../components/audio_scale.slint";
@@ -31,7 +31,7 @@ export component MixerChannel inherits Rectangle {
     // Mudado para 'in-out' para podermos alterar visualmente ao arrastar!
     in-out property <float> volume: 0.8;
     
-    in property <float> pan: 0.5;
+    in-out property <float> pan: 0.5;
 
     // Medição real, em dB normalizado (0..1). Quem popula é o
     // `MeterPump` a partir do pico que a engine publica — não existe
@@ -69,12 +69,6 @@ export component MixerChannel inherits Rectangle {
     // DISPLAY
     // ==========================================
 
-    property <string> pan-display:
-        root.pan < 0.45
-            ? "L" + ((0.5 - root.pan) * 100).to-fixed(0)
-            : root.pan > 0.55
-                ? "R" + ((root.pan - 0.5) * 100).to-fixed(0)
-                : "C";
 
     // O LCD passa a ler a curva oficial em vez de repetir a fórmula
     // `-60 + pos*60` aqui. As duas versões divergiram uma vez e o
@@ -326,34 +320,11 @@ export component MixerChannel inherits Rectangle {
         // PAN
         // ======================================
 
-        VerticalLayout {
-            HorizontalLayout {
-                height: 38px;
-
-                spacing: 0px;
-
-                alignment: LayoutAlignment.center;
-                cross-axis-alignment: CrossAxisAlignment.stretch;
-
-                vertical-stretch: 0;
-
-                PanKnob {
-                    width: 38px;
-                    height: 38px;
-
-                    caption: "";
-
-                    value: root.pan;
-                    display-value: root.pan-display;
-
-                    changed(v) => {
-                        root.param-changed(
-                            root.channel-index,
-                            "pan",
-                            v
-                        );
-                    }
-                }
+        PanControl {
+            horizontal-stretch: 1;
+            value <=> root.pan;
+            changed(v) => {
+                root.param-changed(root.channel-index, "pan", v);
             }
         }
 
