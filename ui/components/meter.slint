@@ -191,7 +191,7 @@ export component Meter inherits Rectangle {
         x: root.meter-x + root.meter-width + root.gap;
         y: root.vertical-padding;
 
-        width: root.db-width;
+        width: 20px;
         height: root.meter-height;
 
         background: transparent;
@@ -204,13 +204,13 @@ export component Meter inherits Rectangle {
             text: db.to-fixed(0);
 
             color: Theme.text-primary;
-            font-size: 9px;
+            font-size: 10px;
 
-            horizontal-alignment: left;
+            horizontal-alignment: center;
             vertical-alignment: center;
 
             width: parent.width;
-            height: 7px;
+            height: 10px;
 
             y: Math.max(0px, Math.min(
                 parent.height - self.height,

@@ -151,6 +151,7 @@ export component MixerChannel inherits Rectangle {
     VerticalLayout {
         padding: 5px;
         spacing: 4px;
+        vertical-stretch: 1;
 
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
@@ -179,14 +180,14 @@ export component MixerChannel inherits Rectangle {
             // MUTE
             Button {
                 width: 18px;
+                height: 16px;
                 // Botão em repouso é SEMPRE `surface-high` — o mesmo
                 // descanso da toolbar e da edit_toolbar. Era `base`,
                 // que é o POÇO: deixava o botão mais escuro que o
                 // painel que o contém (um degrau para trás).
                 resting-bg: Theme.surface-high;
                 corner-radius: 2px;
-                height: 18px;
-
+                
                 drop-shadow-blur: 3px;
                 drop-shadow-color: Theme.shadow;
                 drop-shadow-offset-y: 3px;
@@ -210,10 +211,10 @@ export component MixerChannel inherits Rectangle {
 
             // SOLO
             if !root.is-master: Button {
-                width: 18px;
+                width: 16px;
+                height: 16px;
                 resting-bg: Theme.surface-high;
                 corner-radius: 2px;
-                height: 18px;
                 drop-shadow-blur: 3px;
                 drop-shadow-color: Theme.shadow;
                 drop-shadow-offset-y: 3px;
@@ -235,10 +236,10 @@ export component MixerChannel inherits Rectangle {
 
             // RECORD
             if !root.is-master: Button {
-                width: 18px;
+                width: 16px;
+                height: 16px;
                 resting-bg: Theme.surface-high;
                 corner-radius: 2px;
-                height: 18px;
                 drop-shadow-blur: 3px;
                 drop-shadow-color: Theme.shadow;
                 drop-shadow-offset-y: 3px;
@@ -267,16 +268,21 @@ export component MixerChannel inherits Rectangle {
             spacing: 2px;
 
             alignment: LayoutAlignment.stretch;
-            cross-axis-alignment: CrossAxisAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
+            horizontal-stretch: 0;
 
             vertical-stretch: 1;
 
             // Scrollable area for insert slots
             ScrollView {
+                width: 100%;
                 vertical-stretch: 1;
 
                 VerticalLayout {
+                    cross-axis-alignment: CrossAxisAlignment.center;
+                    horizontal-stretch: 1;
                     spacing: 2px;
+                    width: 100%;
 
                     for j in [0, 1, 2, 3, 4, 5, 6, 7]: InsertSlot {
                         visible: j < root.insert-count;
@@ -306,11 +312,13 @@ export component MixerChannel inherits Rectangle {
             Button {
                 text: "+";
 
-                width: 100%;
+                width: 18px;
                 height: 18px;
 
                 padding-x: 0px;
+            
 
+                preferred-width: 0px;
                 // O descanso herdado (`surface`) era idêntico ao fundo
                 // do canal — o "+" só aparecia quando o mouse passava
                 // em cima. Alinhado com o repouso do M/S/R acima.
@@ -326,7 +334,7 @@ export component MixerChannel inherits Rectangle {
             }
         }
 
-        // ======================================
+            // ======================================
         // PAN
         // ======================================
 
@@ -338,25 +346,33 @@ export component MixerChannel inherits Rectangle {
             }
         }
 
+        
+
         // ======================================
         // FADER + METER + DB DISPLAY
         // ======================================
 
         VerticalLayout {
-            height: 61px;
+            height: 200px;
             spacing: 5px;
-            alignment: LayoutAlignment.stretch;
+            alignment: LayoutAlignment.start;
             cross-axis-alignment: CrossAxisAlignment.center;
             vertical-stretch: 0; // Explicitly prevent vertical stretching
+
+        
+
+            VerticalLayout {
+                cross-axis-alignment: CrossAxisAlignment.center;
+                height: 100%;
 
             // O medidor e o fader são o MESMO componente agora: o
             // triângulo vive sobre a própria barra. Tira exatamente a
             // duplicação que fazia o número do LCD e o desenho do
             // controle discordarem.
             Meter {
-                height: 40px;
-                horizontal-stretch: 1;
-                vertical-stretch: 0; // Explicitly prevent vertical stretching
+               
+                horizontal-stretch: 0;
+                vertical-stretch: 1; // Explicitly prevent vertical stretching
 
                 // Sem isto a luz de clip devolveria o índice padrão (0)
                 // e o clique no canal 5 apagaria o latch do canal 0.
@@ -369,6 +385,7 @@ export component MixerChannel inherits Rectangle {
                 left-level: root.left-level;
                 right-level: root.right-level;
                 left-peak: root.left-peak;
+                min-height: 110px;
                 right-peak: root.right-peak;
                 left-clipped: root.left-clipped;
                 right-clipped: root.right-clipped;
@@ -449,6 +466,7 @@ export component MixerChannel inherits Rectangle {
                     z: 10;
                 }
             }
+        }
         }
     }
 }
