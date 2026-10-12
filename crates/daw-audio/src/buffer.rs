@@ -21,7 +21,7 @@ use std::path::Path;
 #[cfg(test)]
 use std::sync::Arc;
 
-use crate::mapped_buffer::{load_audio_buffer, AudioBufferKind};
+use crate::mapped_buffer::{AudioBufferKind, load_audio_buffer};
 
 /// Buffer stereo já no sample rate de saída.
 #[derive(Clone)]
@@ -91,7 +91,7 @@ impl AudioBuffer {
 ///
 /// Guarda também as falhas (`None`): sem isso, um path inválido
 /// tentaria decodificar de novo a cada sincronização de snapshot.
-/// 
+///
 /// Agora suporta tanto buffers em memória quanto memory-mapped (WAV PCM).
 pub struct BufferCache {
     cache: HashMap<String, Option<AudioBufferKind>>,
@@ -235,9 +235,10 @@ mod tests {
     #[test]
     fn rate_change_invalidates() {
         let mut cache = BufferCache::new(48000);
-        cache
-            .cache
-            .insert("x.wav".into(), Some(AudioBufferKind::Memory(Arc::new(buf(vec![0.0], vec![0.0])))));
+        cache.cache.insert(
+            "x.wav".into(),
+            Some(AudioBufferKind::Memory(Arc::new(buf(vec![0.0], vec![0.0])))),
+        );
         assert_eq!(cache.len(), 1);
         cache.set_output_sample_rate(44100);
         assert_eq!(cache.len(), 0);

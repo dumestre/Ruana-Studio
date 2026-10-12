@@ -13,9 +13,9 @@ use std::sync::Arc;
 #[cfg(unix)]
 use memmap2::Mmap;
 
+use crate::resample::resample_sinc;
 #[cfg(unix)]
 use hound;
-use crate::resample::resample_sinc;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -84,11 +84,7 @@ impl MappedAudioBuffer {
     }
 
     #[cfg(unix)]
-    fn from_mmap(
-        mmap: Mmap,
-        spec: hound::WavSpec,
-        output_sample_rate: u32,
-    ) -> Option<Arc<Self>> {
+    fn from_mmap(mmap: Mmap, spec: hound::WavSpec, output_sample_rate: u32) -> Option<Arc<Self>> {
         let data_offset = Self::find_data_chunk(&mmap)?;
         let data_size = mmap.len() - data_offset;
 
@@ -109,7 +105,16 @@ impl MappedAudioBuffer {
             let mut left = Vec::with_capacity(total_frames);
             let mut right = Vec::with_capacity(total_frames);
             for frame in 0..total_frames {
-                let Some((l, r)) = Self::read_raw_frame_from(&mmap, data_offset, data_size, total_frames, channels, bits_per_sample, sample_format, frame) else {
+                let Some((l, r)) = Self::read_raw_frame_from(
+                    &mmap,
+                    data_offset,
+                    data_size,
+                    total_frames,
+                    channels,
+                    bits_per_sample,
+                    sample_format,
+                    frame,
+                ) else {
                     return None;
                 };
                 left.push(l);
@@ -117,7 +122,11 @@ impl MappedAudioBuffer {
             }
             let out_l = resample_sinc(&left, spec.sample_rate, output_sample_rate);
             let out_r = resample_sinc(&right, spec.sample_rate, output_sample_rate);
-            Some(Arc::new(AudioBuffer { left: out_l, right: out_r, sample_rate: output_sample_rate }))
+            Some(Arc::new(AudioBuffer {
+                left: out_l,
+                right: out_r,
+                sample_rate: output_sample_rate,
+            }))
         } else {
             None
         };
@@ -141,26 +150,50 @@ impl MappedAudioBuffer {
 
     #[cfg(unix)]
     fn read_raw_frame_from(
-        mmap: &[u8], data_offset: usize, _data_size: usize, total_frames: usize,
-        channels: u16, bits_per_sample: u16, sample_format: SampleFormat, frame: usize,
+        mmap: &[u8],
+        data_offset: usize,
+        _data_size: usize,
+        total_frames: usize,
+        channels: u16,
+        bits_per_sample: u16,
+        sample_format: SampleFormat,
+        frame: usize,
     ) -> Option<(f32, f32)> {
-        if frame >= total_frames { return None; }
-        let bytes_per_sample = if sample_format == SampleFormat::Float { 4 } else { bits_per_sample as usize / 8 };
+        if frame >= total_frames {
+            return None;
+        }
+        let bytes_per_sample = if sample_format == SampleFormat::Float {
+            4
+        } else {
+            bits_per_sample as usize / 8
+        };
         let bytes_per_frame = channels as usize * bytes_per_sample;
         let start = data_offset.checked_add(frame.checked_mul(bytes_per_frame)?)?;
         let bytes = mmap.get(start..start.checked_add(bytes_per_frame)?)?;
         let sample = |channel: usize| -> Option<f32> {
             let at = channel * bytes_per_sample;
             let value = match (sample_format, bits_per_sample) {
-                (SampleFormat::Float, 32) => f32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?),
-                (SampleFormat::Int, 16) => i16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?) as f32 / i16::MAX as f32,
+                (SampleFormat::Float, 32) => {
+                    f32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?)
+                }
+                (SampleFormat::Int, 16) => {
+                    i16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?) as f32
+                        / i16::MAX as f32
+                }
                 (SampleFormat::Int, 24) => {
                     let b = bytes.get(at..at + 3)?;
                     let raw = (b[0] as i32) | ((b[1] as i32) << 8) | ((b[2] as i32) << 16);
-                    let signed = if raw & 0x800000 != 0 { raw | !0xFFFFFF } else { raw };
+                    let signed = if raw & 0x800000 != 0 {
+                        raw | !0xFFFFFF
+                    } else {
+                        raw
+                    };
                     signed as f32 / 8_388_607.0
                 }
-                (SampleFormat::Int, 32) => i32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?) as f32 / i32::MAX as f32,
+                (SampleFormat::Int, 32) => {
+                    i32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?) as f32
+                        / i32::MAX as f32
+                }
                 _ => return None,
             };
             Some(value.clamp(-1.0, 1.0))
@@ -225,9 +258,7 @@ impl MappedAudioBuffer {
                 let bytes_per_frame = (self.channels as usize * self.bits_per_sample as usize) / 8;
                 frame_index * bytes_per_frame
             }
-            SampleFormat::Float => {
-                frame_index * (self.channels as usize * 4)
-            }
+            SampleFormat::Float => frame_index * (self.channels as usize * 4),
         };
 
         if frame_offset + (self.channels as usize * 4) > self.data_size {
@@ -252,9 +283,7 @@ impl MappedAudioBuffer {
                 let bytes_per_sample = self.bits_per_sample as usize / 8;
                 channel * bytes_per_sample
             }
-            SampleFormat::Float => {
-                channel * 4
-            }
+            SampleFormat::Float => channel * 4,
         };
 
         if offset + 4 > frame_data.len() {
@@ -288,14 +317,12 @@ impl MappedAudioBuffer {
                     _ => return None,
                 }
             }
-            SampleFormat::Float => {
-                f32::from_le_bytes([
-                    frame_data[offset],
-                    frame_data[offset + 1],
-                    frame_data[offset + 2],
-                    frame_data[offset + 3],
-                ])
-            }
+            SampleFormat::Float => f32::from_le_bytes([
+                frame_data[offset],
+                frame_data[offset + 1],
+                frame_data[offset + 2],
+                frame_data[offset + 3],
+            ]),
         };
         Some(sample.clamp(-1.0, 1.0))
     }
@@ -357,7 +384,8 @@ impl MappedAudioBuffer {
             return buffer.frames();
         }
         if self.needs_resample {
-            (self.total_frames as f64 * self.dst_sample_rate as f64 / self.src_sample_rate as f64) as usize
+            (self.total_frames as f64 * self.dst_sample_rate as f64 / self.src_sample_rate as f64)
+                as usize
         } else {
             self.total_frames
         }
@@ -384,10 +412,7 @@ impl Drop for MappedAudioBuffer {
 // ============================================================
 
 /// Tenta carregar como MappedAudioBuffer (WAV PCM no Unix), senão cai no fallback em memória.
-pub fn load_audio_buffer(
-    path: &Path,
-    output_sample_rate: u32,
-) -> Option<AudioBufferKind> {
+pub fn load_audio_buffer(path: &Path, output_sample_rate: u32) -> Option<AudioBufferKind> {
     // Tenta memory mapping primeiro (só WAV PCM no Unix)
     if let Some(mapped) = MappedAudioBuffer::try_open(path, output_sample_rate) {
         return Some(AudioBufferKind::Mapped(mapped));

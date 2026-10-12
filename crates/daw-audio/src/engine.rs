@@ -35,10 +35,10 @@ use daw_core::{PlayMode, Transport};
 
 use crate::backend::{AudioConfig, AudioError, CpalBackend};
 use crate::meter::{CLIP_L, CLIP_R, MeterBank};
-use crate::{AudioBufferKind, buffer::BufferCache};
 use crate::mixer::{
     limit_stereo, mix_stereo_source, soft_clip, stereo_gains, stereo_gains_bipolar, track_is_active,
 };
+use crate::{AudioBufferKind, buffer::BufferCache};
 
 /// Logs de diagnóstico do engine — só com `RUANA_LOG` definido.
 fn verbose_log() -> bool {
@@ -223,15 +223,36 @@ impl ProjectSnapshot {
                 // toca (keylock, leitura 1:1). Se não, toca o ORIGINAL em
                 // varispeed: o áudio acompanha o tempo já no primeiro frame
                 // e o worker entrega a versão com pitch preservado logo.
-                let (buffer, musical, source_seconds, span_seconds, rendered_ratio, source_start_beats) = match &target {
+                let (
+                    buffer,
+                    musical,
+                    source_seconds,
+                    span_seconds,
+                    rendered_ratio,
+                    source_start_beats,
+                ) = match &target {
                     Some(t) => match cache.get(&t.key()) {
                         Some(stretched) => {
                             // O buffer renderizado começa no início do trecho
                             // selecionado; aplicar o offset original de novo
                             // faria a reprodução saltar para o meio do render.
-                            (stretched, true, t.source_seconds, t.span_seconds, t.ratio, 0.0)
+                            (
+                                stretched,
+                                true,
+                                t.source_seconds,
+                                t.span_seconds,
+                                t.ratio,
+                                0.0,
+                            )
                         }
-                        None => (buffer, true, t.source_seconds, t.span_seconds, 1.0, c.source_start_beats as f64),
+                        None => (
+                            buffer,
+                            true,
+                            t.source_seconds,
+                            t.span_seconds,
+                            1.0,
+                            c.source_start_beats as f64,
+                        ),
                     },
                     None => (buffer, false, 0.0, 0.0, 1.0, c.source_start_beats as f64),
                 };
@@ -576,7 +597,10 @@ impl RtState {
             // alocação — a versão anterior crescia o `Vec` no callback,
             // e um `resize` na RT durante uma criação de faixa é uma
             // queda de áudio justamente no gesto que a causou.
-            meter_peaks: vec![0.0; crate::meter::MAX_METER_CHANNELS * crate::meter::FLOATS_PER_CHANNEL],
+            meter_peaks: vec![
+                0.0;
+                crate::meter::MAX_METER_CHANNELS * crate::meter::FLOATS_PER_CHANNEL
+            ],
             meter_clips: vec![0u32; crate::meter::MAX_METER_CHANNELS],
         }
     }
@@ -856,7 +880,13 @@ impl AudioEngine {
 
         let (metronome_enabled, metronome_sound, metronome_volume) = transport
             .try_lock()
-            .map(|t| (t.metronome_enabled, t.metronome_sound.min(4), t.metronome_volume.clamp(0.0, 1.0)))
+            .map(|t| {
+                (
+                    t.metronome_enabled,
+                    t.metronome_sound.min(4),
+                    t.metronome_volume.clamp(0.0, 1.0),
+                )
+            })
             .unwrap_or((false, 0, 0.7));
         // Modo "só beat": o metrônomo não toca — só o pattern.
         if playing && mode == PlayMode::Timeline && metronome_enabled {
@@ -1112,10 +1142,8 @@ impl AudioEngine {
                 let t = rt.metronome_phase / sample_rate as f32;
                 let duration = (sample_rate as f32 / 12.0).max(1.0);
                 let envelope = rt.metronome_remaining as f32 / duration;
-                let click = (t * freq * std::f32::consts::TAU).sin()
-                    * envelope
-                    * metronome_volume
-                    * 0.18;
+                let click =
+                    (t * freq * std::f32::consts::TAU).sin() * envelope * metronome_volume * 0.18;
                 left += click;
                 right += click;
                 rt.metronome_phase += 1.0;
@@ -1200,10 +1228,15 @@ impl AudioEngine {
             let ticks_per_frame = bpm * ppq / (60.0 * sample_rate as f64);
             let ticks = (rt.pos_frames * ticks_per_frame).max(0.0) as u64;
             if let Ok(mut t) = transport.try_lock() {
-                let written_ticks = if t.loop_enabled && t.loop_end_ticks > t.loop_start_ticks && ticks >= t.loop_end_ticks {
+                let written_ticks = if t.loop_enabled
+                    && t.loop_end_ticks > t.loop_start_ticks
+                    && ticks >= t.loop_end_ticks
+                {
                     let span = t.loop_end_ticks - t.loop_start_ticks;
                     t.loop_start_ticks + (ticks - t.loop_start_ticks) % span
-                } else { ticks };
+                } else {
+                    ticks
+                };
                 t.position_ticks = written_ticks;
                 rt.ticks_written = written_ticks;
                 if written_ticks != ticks {
@@ -1217,7 +1250,8 @@ impl AudioEngine {
                     // reiniciado: loops menores que 1 buffer voltam a
                     // cruzar antes de ~2 ms e dispensam duas rampas.
                     if rt.xfade_remaining == 0 {
-                        let span_frames = (t.loop_end_ticks - t.loop_start_ticks) as f64 / ticks_per_frame;
+                        let span_frames =
+                            (t.loop_end_ticks - t.loop_start_ticks) as f64 / ticks_per_frame;
                         let len = LOOP_XFADE_FRAMES
                             .min((span_frames * 0.5).floor().max(1.0) as usize)
                             .min(rt.loop_tail.len())
@@ -1331,8 +1365,9 @@ mod tests {
         let mut samples = Vec::with_capacity(total);
         for i in 0..total {
             let v = if i < marker {
-                let s = (0.9 * ((i as f32) * std::f32::consts::TAU * 1000.0 / sample_rate as f32).sin())
-                    .clamp(-1.0, 1.0);
+                let s = (0.9
+                    * ((i as f32) * std::f32::consts::TAU * 1000.0 / sample_rate as f32).sin())
+                .clamp(-1.0, 1.0);
                 ((s * 32767.0).round() as i16).to_le_bytes()
             } else {
                 0i16.to_le_bytes()
@@ -1461,14 +1496,24 @@ mod tests {
         let mut project = daw_core::Project::startup();
         // `add_clip_with_source`: clip de AUDIO no beat 0, comprimento 5
         // beats (cobre os 3s do arquivo), origem do arquivo no frame 0.
-        project.add_clip_with_source(0, daw_core::ClipKind::Audio, "zero", 0.0, 5.0, 0.0, Some(path_str.clone()));
+        project.add_clip_with_source(
+            0,
+            daw_core::ClipKind::Audio,
+            "zero",
+            0.0,
+            5.0,
+            0.0,
+            Some(path_str.clone()),
+        );
         // Master em unidade: este teste é sobre QUANDO o clip começa, e
         // o fader do master agora é real (o default 0.8 tiraria 2 dB e
         // o limiar de 0.5 do assert mediria o master, não o clip).
         project.master_mixer.volume = 1.0;
 
         let mut cache = BufferCache::new(rate);
-        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(
+            &project, &mut cache,
+        ))));
         let transport = Arc::new(Mutex::new(Transport::default()));
         transport.lock().unwrap().playing = true; // play do zero
 
@@ -1481,11 +1526,12 @@ mod tests {
         let mut early_max = 0.0f32;
         for _ in 0..4 {
             let mut out = vec![0.0f32; frames * 2];
-            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate);
+            AudioEngine::process(
+                &mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
+            );
             for i in 0..frames {
                 early_max = early_max.max(out[i * 2].abs()).max(out[i * 2 + 1].abs());
             }
-
         }
         let track_reading = meters.read(0);
         let master_reading = meters.read(project.tracks.len());
@@ -1554,8 +1600,9 @@ mod tests {
             }
 
             let mut cache = BufferCache::new(rate);
-            let snapshot =
-                Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+            let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(
+                &project, &mut cache,
+            ))));
             let transport = Arc::new(Mutex::new(Transport::default()));
             {
                 let mut t = transport.lock().unwrap();
@@ -1571,14 +1618,7 @@ mod tests {
             for _ in 0..4 {
                 let mut out = vec![0.0f32; frames * 2];
                 AudioEngine::process(
-                    &mut out,
-                    2,
-                    &mut rt,
-                    &transport,
-                    &snapshot,
-                    &preview,
-                    &meters,
-                    rate,
+                    &mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
                 );
                 peak = out
                     .chunks_exact(2)
@@ -1635,7 +1675,9 @@ mod tests {
             project.master_mixer.volume = master;
 
             let mut cache = BufferCache::new(rate);
-            let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+            let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(
+                &project, &mut cache,
+            ))));
             let transport = Arc::new(Mutex::new(Transport::default()));
             transport.lock().unwrap().playing = true;
             let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
@@ -1645,7 +1687,9 @@ mod tests {
 
             let mut rt = RtState::new();
             let mut out = vec![0.0f32; frames * 2];
-            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate);
+            AudioEngine::process(
+                &mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
+            );
             let peak = (0..frames)
                 .map(|i| out[i * 2].abs().max(out[i * 2 + 1].abs()))
                 .fold(0.0f32, f32::max);
@@ -1655,7 +1699,11 @@ mod tests {
         let (unity_peak, unity_track, unity_master) = render(1.0);
         let (half_peak, half_track, half_master) = render(0.5);
 
-        assert!(unity_peak > 0.5, "setup: o clip tem que soar (peak={})", unity_peak);
+        assert!(
+            unity_peak > 0.5,
+            "setup: o clip tem que soar (peak={})",
+            unity_peak
+        );
         assert!(
             (half_peak / unity_peak - 0.5).abs() < 0.05,
             "master em 0.5 tem que cortar o áudio pela metade (unity={} half={})",
@@ -1729,8 +1777,11 @@ mod tests {
         // para o primeiro wrap chegar rápido depois da cauda encher.
         let loop_start_ticks = 1_000u64; // frame 25_000
         let loop_end_ticks = 3_000u64; // frame 75_000
-        assert!(((loop_end_ticks - loop_start_ticks) as f64 * frames_per_tick) > buf_frames as f64 * 4.0,
-            "loop longo o bastante para o crossfade inteiro caber num buffer");
+        assert!(
+            ((loop_end_ticks - loop_start_ticks) as f64 * frames_per_tick)
+                > buf_frames as f64 * 4.0,
+            "loop longo o bastante para o crossfade inteiro caber num buffer"
+        );
 
         let mut project = daw_core::Project::startup();
         project.add_clip_with_source(
@@ -1752,7 +1803,9 @@ mod tests {
         }
 
         let mut cache = BufferCache::new(rate);
-        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(
+            &project, &mut cache,
+        ))));
         let transport = Arc::new(Mutex::new(Transport::default()));
         {
             let mut t = transport.lock().unwrap();
@@ -1772,7 +1825,11 @@ mod tests {
         let raw_jump = (0..buf_frames)
             .map(|k| (buffer.read(end_f + k as f64).0 - buffer.read(start_f).0).abs())
             .fold(0.0f32, f32::max);
-        assert!(raw_jump > 0.5, "setup do teste: o loop tem que ter degrau real (raw_jump={})", raw_jump);
+        assert!(
+            raw_jump > 0.5,
+            "setup do teste: o loop tem que ter degrau real (raw_jump={})",
+            raw_jump
+        );
 
         let mut rt = RtState::new();
         let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
@@ -1786,7 +1843,9 @@ mod tests {
         for _ in 0..nbuffers {
             let pos_before = rt.pos_frames;
             let mut out = vec![0.0f32; buf_frames * 2];
-            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate);
+            AudioEngine::process(
+                &mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
+            );
             let wrapped = rt.pos_frames + 0.5 < pos_before + buf_frames as f64;
             for f in 0..buf_frames {
                 out_all.push(out[f * 2]);
@@ -1799,7 +1858,11 @@ mod tests {
         }
         std::fs::remove_file(&path).ok();
 
-        assert!(boundaries.len() >= 3, "esperado várias voltas de loop (wraps={})", boundaries.len());
+        assert!(
+            boundaries.len() >= 3,
+            "esperado várias voltas de loop (wraps={})",
+            boundaries.len()
+        );
 
         let max_dy_window = boundaries
             .iter()
@@ -1810,7 +1873,10 @@ mod tests {
                     .fold(0.0f32, f32::max)
             })
             .fold(0.0f32, f32::max);
-        let max_dy_global = out_all.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0f32, f32::max);
+        let max_dy_global = out_all
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(0.0f32, f32::max);
 
         // ~1 kHz / 48 kHz com amp 0.5: passo natural do seno ≈ 0.065.
         // O crossfade empurra o degrau do wrap pra baixo de um quarto
@@ -1840,10 +1906,20 @@ mod tests {
 
         let mut project = daw_core::Project::startup();
         // Clip a 2 beats (1s) do zero; 3s de arquivo = ~6 beats.
-        project.add_clip_with_source(0, daw_core::ClipKind::Audio, "zero", 2.0, 6.0, 0.0, Some(path_str.clone()));
+        project.add_clip_with_source(
+            0,
+            daw_core::ClipKind::Audio,
+            "zero",
+            2.0,
+            6.0,
+            0.0,
+            Some(path_str.clone()),
+        );
 
         let mut cache = BufferCache::new(rate);
-        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(&project, &mut cache))));
+        let snapshot = Arc::new(Mutex::new(Arc::new(ProjectSnapshot::build(
+            &project, &mut cache,
+        ))));
         let transport = Arc::new(Mutex::new(Transport::default()));
         transport.lock().unwrap().playing = true;
 
@@ -1856,7 +1932,9 @@ mod tests {
         let mut max = 0.0f32;
         for _ in 0..4 {
             let mut out = vec![0.0f32; frames * 2];
-            AudioEngine::process(&mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate);
+            AudioEngine::process(
+                &mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
+            );
             for i in 0..frames {
                 max = max.max(out[i * 2].abs()).max(out[i * 2 + 1].abs());
             }

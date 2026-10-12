@@ -341,8 +341,7 @@ pub fn render_stretch(
 
     for seg in &target.plan.segments {
         let frames = (seg.source_seconds * rate as f64).round().max(1.0) as usize;
-        let start_frame =
-            (target.source_start_seconds + seg.source_offset_seconds) * rate as f64;
+        let start_frame = (target.source_start_seconds + seg.source_offset_seconds) * rate as f64;
 
         let interleaved = read_interleaved(buffer, start_frame, frames);
 
@@ -372,9 +371,7 @@ mod tests {
         let n = (RATE as f64 * seconds) as usize;
 
         (0..n)
-            .map(|i| {
-                (2.0 * std::f64::consts::PI * freq * i as f64 / RATE as f64).sin() as f32
-            })
+            .map(|i| (2.0 * std::f64::consts::PI * freq * i as f64 / RATE as f64).sin() as f32)
             .collect()
     }
 
@@ -513,7 +510,7 @@ mod tests {
 #[cfg(test)]
 mod timewarp_tests {
     use super::*;
-    use daw_core::{Clip, TimeMode, TempoMap, WarpMarker};
+    use daw_core::{Clip, TempoMap, TimeMode, WarpMarker};
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-6
@@ -568,7 +565,10 @@ mod timewarp_tests {
         ] {
             let rate = source_rate(true, src, span, rendered);
 
-            assert!(close(rate, 1.0), "src {src} span {span} rendered {rendered} -> {rate}");
+            assert!(
+                close(rate, 1.0),
+                "src {src} span {span} rendered {rendered} -> {rate}"
+            );
         }
     }
 
@@ -603,7 +603,11 @@ mod timewarp_tests {
         let clip = musical_clip(2.0, 0.0);
         let target = stretch_target_for(&clip, &map, 0.5).expect("alvo");
 
-        assert!(close(target.span_seconds, 1.0), "span {}", target.span_seconds);
+        assert!(
+            close(target.span_seconds, 1.0),
+            "span {}",
+            target.span_seconds
+        );
         assert!(close(target.source_seconds, 0.5));
         assert!(close(target.ratio, 2.0));
         assert!(target.needs_render());
@@ -656,7 +660,7 @@ mod render_tests {
     use super::*;
     use crate::buffer::AudioBuffer;
     use crate::mapped_buffer::AudioBufferKind;
-    use daw_core::{Clip, TimeMode, TempoMap};
+    use daw_core::{Clip, TempoMap, TimeMode};
     use std::sync::Arc;
 
     const RATE: u32 = 48_000;

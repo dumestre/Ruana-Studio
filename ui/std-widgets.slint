@@ -1,0 +1,22 @@
+export component ScrollView inherits Rectangle {
+    // Basic ScrollView implementation
+    // This is a simplified version - in practice you'd want proper scrolling with mouse/drag handling
+    
+    in property <length> scroll-y: 0px;
+    in property <length> viewport-height: 0px;
+    in property <length> content-height: 0px;
+    
+    Rectangle {
+        background: transparent;
+        width: parent.width;
+        height: parent.height;
+        clip: true;
+        
+        // Content container that can be scrolled
+        Rectangle {
+            y: -scroll-y;
+            width: parent.width;
+            // Height will be determined by its children
+        }
+    }
+}

@@ -37,11 +37,7 @@ pub fn pan_stereo(sample: f32, gain_l: f32, gain_r: f32) -> (f32, f32) {
 /// - Se NENHUM track está soloed → todas as não-mudas são ouvidas
 /// - Se PELO MENOS UM track está soloed → só os soloed (ignora mute) são ouvidos
 pub fn track_is_active(muted: bool, soloed: bool, any_soloed: bool) -> bool {
-    if any_soloed {
-        soloed
-    } else {
-        !muted
-    }
+    if any_soloed { soloed } else { !muted }
 }
 
 /// Mix mono para stereo buffer (1 frame).
@@ -105,11 +101,7 @@ pub fn soft_clip(x: f32) -> f32 {
     let over = a - THRESHOLD;
     let range = 1.0 - THRESHOLD;
     let shaped = THRESHOLD + range * (over / range).tanh();
-    if x < 0.0 {
-        -shaped
-    } else {
-        shaped
-    }
+    if x < 0.0 { -shaped } else { shaped }
 }
 
 /// Aplica o limitador macio nos dois canais.

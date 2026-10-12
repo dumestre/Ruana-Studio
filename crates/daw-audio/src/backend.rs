@@ -1,5 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{SampleFormat, Stream, StreamConfig};
+use cpal::{SampleFormat, Stream};
 
 /// Erros do audio backend.
 #[derive(Debug)]
@@ -34,10 +34,73 @@ impl Default for AudioConfig {
     fn default() -> Self {
         Self {
             sample_rate: 48000,
-            buffer_size: 512,
+            buffer_size: 2048,
             channels: 2,
         }
     }
+}
+
+/// Buffers pequenos (< 512) fazem a thread RT de áudio derrubar amostras
+/// quando a CPU também está renderizando a UI (Skia + wgpu). O padrão do
+/// `BufferSize::Default` varia muito entre hosts (WASAPI costuma dar ~10ms,
+/// mas hosts "low-latency" podem dar menos que 2ms) e o `cpal` não expõe o
+/// valor real — daí a escolha explícita de um buffer grande aqui.
+const MIN_BUFFER_FRAMES: u32 = 1024;
+
+/// Envia a configuração preferida para o log de diagnóstico (só com
+/// `RUANA_LOG` definido).
+fn log_chosen_config(sample_rate: u32, buffer_size: u32, channels: u16) {
+    if std::env::var("RUANA_LOG").is_ok() {
+        let ms = buffer_size as f64 / sample_rate as f64 * 1000.0;
+        eprintln!(
+            "[backend] usando {} Hz / {} frames (~{:.1} ms) / {} canais",
+            sample_rate, buffer_size, ms, channels
+        );
+    }
+}
+
+/// Escolhe a melhor configuração de saída suportada pelo dispositivo.
+///
+/// Estratégia: um buffer de pelo menos [`MIN_BUFFER_FRAMES`] frames é
+/// prioridade, porque o app renderiza a UI ao mesmo tempo que toca áudio.
+/// Sem isso o RT do cpal estoura ("granulado", "falhas", "buffer baixo").
+/// O fallback é o `default_output_config()` — que o `cpal` mantém em
+/// `BufferSize::Default` e o `CpalBackend::new` traduz para um valor fixo.
+fn pick_supported_config(
+    device: &cpal::Device,
+) -> Result<(cpal::StreamConfig, cpal::SampleFormat), AudioError> {
+    let default = device
+        .default_output_config()
+        .map_err(|_| AudioError::NoSupportedConfig)?;
+
+    // A taxa padrão do dispositivo (o motor assume 48 kHz, mas o cpal
+    // pode devolver outra — ex.: 44.1 kHz em drivers baratos).
+    let want_rate = default.sample_rate();
+
+    for range in device
+        .supported_output_configs()
+        .map_err(|_| AudioError::NoSupportedConfig)?
+    {
+        if range.channels() != default.channels() {
+            continue;
+        }
+        if range.max_sample_rate() < want_rate || range.min_sample_rate() > want_rate {
+            continue;
+        }
+        // O buffer pode ser `Range { min, max }` ou `Unknown`.
+        let max_buf = match range.buffer_size() {
+            cpal::SupportedBufferSize::Range { max, .. } => *max,
+            cpal::SupportedBufferSize::Unknown => 0,
+        };
+        if max_buf >= MIN_BUFFER_FRAMES {
+            let candidate = range.with_sample_rate(want_rate);
+            let format = candidate.sample_format();
+            return Ok((candidate.into(), format));
+        }
+    }
+
+    let format = default.sample_format();
+    Ok((default.into(), format))
 }
 
 /// Backend CPAL — abre a stream de saída de áudio do sistema.
@@ -49,27 +112,24 @@ pub struct CpalBackend {
 impl CpalBackend {
     /// Cria e inicia o backend CPAL com o callback dado.
     /// O callback recebe um slice f32 stereo intercalado (L, R, L, R, ...).
-    pub fn new(
-        mut callback: impl FnMut(&mut [f32]) + Send + 'static,
-    ) -> Result<Self, AudioError> {
+    pub fn new(mut callback: impl FnMut(&mut [f32]) + Send + 'static) -> Result<Self, AudioError> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
             .ok_or(AudioError::NoDefaultDevice)?;
 
-        let supported = device
-            .default_output_config()
-            .map_err(|_| AudioError::NoSupportedConfig)?;
-
-        let sample_format = supported.sample_format();
-        let config: StreamConfig = supported.into();
+        let (config, sample_format) = pick_supported_config(&device)?;
 
         let sample_rate = config.sample_rate;
         let channels = config.channels as u16;
         let buffer_size = match &config.buffer_size {
-            cpal::BufferSize::Default => 512,
+            // Hosts que só aceitam `Default` continuam funcionando — o
+            // valor é um número RAZOÁVEL (não mais 512 fixos).
+            cpal::BufferSize::Default => 1024,
             cpal::BufferSize::Fixed(n) => *n,
         };
+
+        log_chosen_config(sample_rate, buffer_size, channels);
 
         let config_info = AudioConfig {
             sample_rate,

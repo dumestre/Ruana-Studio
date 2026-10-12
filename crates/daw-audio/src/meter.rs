@@ -80,7 +80,8 @@ impl MeterBank {
     /// Só a contagem muda; a capacidade é fixa. Canais além do
     /// declarado não são lidos nem publicados.
     pub fn set_channel_count(&self, channels: usize) {
-        self.count.store(channels.min(MAX_METER_CHANNELS) as u32, Ordering::Relaxed);
+        self.count
+            .store(channels.min(MAX_METER_CHANNELS) as u32, Ordering::Relaxed);
     }
 
     /// Canais válidos no momento.
