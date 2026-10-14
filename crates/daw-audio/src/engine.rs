@@ -66,6 +66,34 @@ const CLIP_EDGE_FADE: f64 = 64.0;
 /// fade-a-dentro (equal-power); o ponto musical do loop não muda.
 const LOOP_XFADE_FRAMES: usize = 96;
 
+/// Comprimento da rampa quando o clip troca de buffer (varispeed →
+/// render esticado), em frames (~10 ms a 48 kHz).
+///
+/// A troca não é um wrap de loop: o clip passa a ler OUTRO buffer e
+/// outro `read_rate` no meio da reprodução. Sem rampa, a fronteira
+/// entre os dois buffers é um corte seco — o clique/pipoco. A rampa é
+/// LINEAR (os ganhos somam 1), e não equal-power: os dois buffers são
+/// o MESMO trecho musical em duas versões, então com material idêntico
+/// a soma preserva o sinal (equal-power o acentuaria no cruzamento).
+const BUFFER_SWAP_XFADE_FRAMES: usize = 480;
+
+/// Teto de clips com crossfade de troca de buffer rastreado na RT.
+/// Capacidade FIXA: o callback nunca dá `resize`/aloca.
+const MAX_CLIP_XFADES: usize = 512;
+
+/// Dois `AudioBufferKind` apontam para o MESMO buffer alocado?
+///
+/// A troca varispeed→esticado é detectada por identidade de ponteiro
+/// (mesmo clip, buffer diferente). Comparar ponteiro, e não conteúdo,
+/// é O(1) e não aloca.
+fn same_buffer(a: &AudioBufferKind, b: &AudioBufferKind) -> bool {
+    match (a, b) {
+        (AudioBufferKind::Memory(x), AudioBufferKind::Memory(y)) => Arc::ptr_eq(x, y),
+        (AudioBufferKind::Mapped(x), AudioBufferKind::Mapped(y)) => Arc::ptr_eq(x, y),
+        _ => false,
+    }
+}
+
 // ============================================================
 // SNAPSHOT
 // ============================================================
@@ -73,6 +101,10 @@ const LOOP_XFADE_FRAMES: usize = 96;
 /// Clip de áudio da timeline, com o buffer já resolvido.
 #[derive(Clone)]
 struct ClipSlot {
+    /// ID do clip no documento. Usado para CASAR o clip entre dois
+    /// snapshots (não o índice, que muda se o projeto reordenar), o que
+    /// deixa o crossfade da troca de buffer robusto.
+    id: u64,
     track_id: u64,
     start_beat: f64,
     length_beats: f64,
@@ -265,6 +297,7 @@ impl ProjectSnapshot {
                 );
 
                 Some(ClipSlot {
+                    id: c.id,
                     track_id: c.track_id,
                     start_beat: c.start_beat as f64,
                     length_beats: c.length_beats as f64,
@@ -538,6 +571,13 @@ impl EngineHandle {
 struct RtState {
     /// Último snapshot visto. Nunca fica vazio depois do primeiro.
     snapshot: Arc<ProjectSnapshot>,
+    /// Snapshot imediatamente anterior, mantido vivo por UM passo.
+    ///
+    /// Existe só para o crossfade da troca de buffer: sem ele, o buffer
+    /// antigo já teria sido liberado quando o novo snapshot chega, e
+    /// não haveria material para misturar. É o MOVE do Arc antigo (sem
+    /// alocação), não um clone do conteúdo.
+    prev_snapshot: Option<Arc<ProjectSnapshot>>,
     /// Posição do transporte em frames (contínua).
     pos_frames: f64,
     /// Ticks que ESTE engine escreveu por último no transporte.
@@ -566,6 +606,15 @@ struct RtState {
     /// Comprimento do crossfade ativo (pode ser menor que
     /// `LOOP_XFADE_FRAMES` se o loop for curto ou a cauda incompleta).
     xfade_len: usize,
+    /// Crossfade da troca de buffer por clip (frames RESTANTES),
+    /// indexado pela posição do clip no snapshot. Capacidade FIXA
+    /// ([`MAX_CLIP_XFADES`]) e zerado por seek/play — nada aloca no RT.
+    xfade_clips: Vec<u32>,
+    /// Índice (+1; 0 = nenhum) do clip no snapshot ANTERIOR que serve de
+    /// rampa descendente para o crossfade de `xfade_clips`. Guardado no
+    /// ato de armar (casamento por `clip.id`) para a leitura por frame
+    /// ser O(1) e correta mesmo se a ordem dos clips mudou.
+    xfade_prev: Vec<u32>,
     /// Pico do buffer por canal (L, R), em [`crate::meter::FLOATS_PER_CHANNEL`]
     /// entradas por canal. Zera a cada callback — o que a UI mostra é o
     /// pico DESTE buffer, e segurar o máximo histórico aqui faria o
@@ -579,6 +628,7 @@ impl RtState {
     fn new() -> Self {
         Self {
             snapshot: Arc::new(ProjectSnapshot::default()),
+            prev_snapshot: None,
             pos_frames: 0.0,
             ticks_written: u64::MAX,
             next_step: 0,
@@ -592,6 +642,8 @@ impl RtState {
             loop_tail: VecDeque::with_capacity(LOOP_XFADE_FRAMES),
             xfade_remaining: 0,
             xfade_len: 0,
+            xfade_clips: vec![0u32; MAX_CLIP_XFADES],
+            xfade_prev: vec![0u32; MAX_CLIP_XFADES],
             // Capacidade fixa, igual ao `MeterBank`. Alocar aqui, no
             // construtor, é o que mantém `prepare_meters` livre de
             // alocação — a versão anterior crescia o `Vec` no callback,
@@ -651,6 +703,17 @@ impl RtState {
     fn kill_voices(&mut self) {
         for v in self.voices.iter_mut() {
             v.buffer = None;
+        }
+    }
+
+    /// Zera os crossfades de troca de buffer (seek/play). Não realoca:
+    /// só reescreve os `Vec` de capacidade fixa já existentes.
+    fn clear_clip_xfades(&mut self) {
+        for v in self.xfade_clips.iter_mut() {
+            *v = 0;
+        }
+        for v in self.xfade_prev.iter_mut() {
+            *v = 0;
         }
     }
 
@@ -808,10 +871,15 @@ impl AudioEngine {
         // try_lock: contenção NUNCA vira silêncio. O último snapshot
         // continua válido — foi o que quebrava o áudio antes, quando
         // o lock ocupado zerava o buffer inteiro.
-        if let Ok(slot) = snapshot.try_lock() {
-            if !Arc::ptr_eq(&rt.snapshot, &slot) {
-                rt.snapshot = slot.clone();
-            }
+        let mut snapshot_swapped = false;
+        if let Ok(slot) = snapshot.try_lock()
+            && !Arc::ptr_eq(&rt.snapshot, &slot)
+        {
+            // Guarda o snapshot anterior (MOVE do Arc, sem alocar)
+            // para o crossfade da troca de buffer do clip.
+            let old = std::mem::replace(&mut rt.snapshot, slot.clone());
+            rt.prev_snapshot = Some(old);
+            snapshot_swapped = true;
         }
         let snap = rt.snapshot.clone();
 
@@ -845,6 +913,9 @@ impl AudioEngine {
                 // cauda velha (pré-seek) não pode vazar pra ele.
                 rt.xfade_remaining = 0;
                 rt.loop_tail.clear();
+                // Seek não é troca de buffer: um crossfade cruzaria
+                // posições diferentes. Zera sem realocar.
+                rt.clear_clip_xfades();
             }
         }
 
@@ -858,6 +929,9 @@ impl AudioEngine {
                 rt.kill_voices();
             } else {
                 rt.next_step = i64::MIN;
+                // Play do zero: começa do início, sem misturar com o
+                // buffer de uma reprodução anterior.
+                rt.clear_clip_xfades();
             }
             rt.was_playing = playing;
         }
@@ -964,6 +1038,36 @@ impl AudioEngine {
             }
         }
 
+        // ---- arma o crossfade da troca de buffer ---------------
+        // Só quando o snapshot mudou NESTE bloco e o transporte está na
+        // timeline: em stop/seek um blend cruzado misturaria posições
+        // diferentes. Casa o clip pelo ID (não pelo índice) para ser
+        // robusto a reordenação; exige o mesmo número de clips, então um
+        // layout novo não arma nada.
+        if snapshot_swapped
+            && playing
+            && mode == PlayMode::Timeline
+            && let Some(prev) = rt.prev_snapshot.as_ref()
+            && prev.clips.len() == snap.clips.len()
+        {
+            let n = snap.clips.len().min(rt.xfade_clips.len());
+            for i in 0..n {
+                // Debounce: republicações repetidas não REINICIAM uma
+                // rampa em andamento (isso empilharia crossfades e
+                // estenderia o blend indefinidamente).
+                if rt.xfade_clips[i] != 0 {
+                    continue;
+                }
+                let Some(pi) = prev.clips.iter().position(|p| p.id == snap.clips[i].id) else {
+                    continue;
+                };
+                if !same_buffer(&snap.clips[i].buffer, &prev.clips[pi].buffer) {
+                    rt.xfade_clips[i] = BUFFER_SWAP_XFADE_FRAMES as u32;
+                    rt.xfade_prev[i] = pi as u32 + 1;
+                }
+            }
+        }
+
         // ---- mix -----------------------------------------------
         let any_soloed = snap.tracks.iter().any(|t| t.soloed);
 
@@ -1041,7 +1145,9 @@ impl AudioEngine {
                     let mut track_l = 0.0f32;
                     let mut track_r = 0.0f32;
 
-                    for clip in snap.clips.iter().filter(|c| c.track_id == track.id) {
+                    for (ci, clip) in
+                        snap.clips.iter().enumerate().filter(|(_, c)| c.track_id == track.id)
+                    {
                         let clip_start = clip.start_beat * frames_per_beat;
                         let clip_len = clip.length_beats * frames_per_beat;
                         let offset = pos - clip_start;
@@ -1074,9 +1180,54 @@ impl AudioEngine {
                             .min(1.0) as f32;
 
                         let clip_gain = clip.gain_linear;
+                        let mut out_l = sl * edge * clip_gain;
+                        let mut out_r = sr * edge * clip_gain;
+
+                        // Crossfade da troca varispeed→buffer esticado.
+                        // Mistura LINEAR (ganhos somam 1) o clip no
+                        // snapshot anterior e o atual sobre ~10 ms: a
+                        // versão antiga fade-a-fora, a nova fade-a-dentro,
+                        // sem corte no meio da reprodução.
+                        let xfade_left = rt.xfade_clips.get(ci).copied().unwrap_or(0);
+                        if xfade_left > 0 {
+                            let prev_idx = rt.xfade_prev.get(ci).copied().unwrap_or(0);
+                            if prev_idx > 0
+                                && let Some(prev) = rt.prev_snapshot.as_ref()
+                                && let Some(p) = prev.clips.get(prev_idx as usize - 1)
+                            {
+                                let p_len = p.length_beats * frames_per_beat;
+                                let p_off = pos - p.start_beat * frames_per_beat;
+                                if p_off >= 0.0 && p_off < p_len {
+                                    let p_source = (p.source_start_beats * frames_per_beat
+                                        + p_off * p.read_rate)
+                                        .max(0.0);
+                                    let (pl, pr) = p.buffer.read(p_source);
+                                    let p_fade_in =
+                                        (p.fade_in_beats * frames_per_beat).max(CLIP_EDGE_FADE);
+                                    let p_fade_out =
+                                        (p.fade_out_beats * frames_per_beat).max(CLIP_EDGE_FADE);
+                                    let p_edge = (p_off / p_fade_in)
+                                        .min((p_len - p_off) / p_fade_out)
+                                        .min(1.0)
+                                        as f32;
+                                    let t = (BUFFER_SWAP_XFADE_FRAMES as u32 - xfade_left) as f32
+                                        / BUFFER_SWAP_XFADE_FRAMES as f32;
+                                    let g_in = t;
+                                    let g_out = 1.0 - t;
+                                    out_l = out_l * g_in + pl * p_edge * p.gain_linear * g_out;
+                                    out_r = out_r * g_in + pr * p_edge * p.gain_linear * g_out;
+                                }
+                            }
+                            // Consome um frame da rampa. `get_mut` DEPOIS
+                            // do borrow de `prev_snapshot` (campos distintos).
+                            if let Some(r) = rt.xfade_clips.get_mut(ci) {
+                                *r = xfade_left - 1;
+                            }
+                        }
+
                         mix_stereo_source(
-                            sl * edge * clip_gain,
-                            sr * edge * clip_gain,
+                            out_l,
+                            out_r,
                             gain_l,
                             gain_r,
                             &mut track_l,
@@ -1353,6 +1504,274 @@ mod tests {
         }
         // 1 beat a 120 BPM = 0.5s = 24000 frames.
         assert_eq!(frames_per_beat, 24_000.0);
+    }
+
+    /// A troca varispeed→buffer esticado NÃO pode ser um corte seco.
+    ///
+    /// O worker de timewarp publica o render e o snapshot é republicado:
+    /// o mesmo clip passa a ler outro buffer. Sem rampa, a fronteira
+    /// entre os dois buffers é um degrau — o clique/pipoco. Aqui os dois
+    /// buffers são constantes opostas (±1), então o degrau sem crossfade
+    /// seria ~2.0; com a rampa de ~10 ms ele fica diluído num frame.
+    #[test]
+    fn troca_de_buffer_faz_crossfade_sem_degrau() {
+        let rate = 48_000u32;
+        let frames = 480usize;
+        let clip_frames = 96_000usize;
+
+        let buffer_of = |value: f32| {
+            AudioBufferKind::Memory(Arc::new(AudioBuffer {
+                left: vec![value; clip_frames],
+                right: vec![value; clip_frames],
+                sample_rate: rate,
+            }))
+        };
+
+        let make_snapshot = |buffer: AudioBufferKind| {
+            Arc::new(ProjectSnapshot {
+                tracks: vec![TrackSlot {
+                    id: 0,
+                    volume: 1.0,
+                    pan: 0.5,
+                    muted: false,
+                    soloed: false,
+                }],
+                clips: vec![ClipSlot {
+                    id: 0,
+                    track_id: 0,
+                    start_beat: 0.0,
+                    length_beats: 2.0,
+                    source_start_beats: 0.0,
+                    buffer,
+                    fade_in_beats: 0.0,
+                    fade_out_beats: 0.0,
+                    gain_linear: 1.0,
+                    read_rate: 1.0,
+                }],
+                midi_clips: Vec::new(),
+                beat: BeatSlot::default(),
+                master_volume: 1.0,
+                master_muted: false,
+            })
+        };
+
+        let varispeed = make_snapshot(buffer_of(1.0));
+        let stretched = make_snapshot(buffer_of(-1.0));
+
+        let snapshot = Arc::new(Mutex::new(varispeed));
+        let transport = Arc::new(Mutex::new(Transport::default()));
+        {
+            let mut t = transport.lock().unwrap();
+            t.playing = true;
+            t.mode = PlayMode::Timeline;
+        }
+        let mut rt = RtState::new();
+        let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+        let meters = MeterBank::new();
+        meters.set_channel_count(2);
+
+        // Aquece: o clip já toca o valor do buffer antigo (+1).
+        for _ in 0..2 {
+            let mut out = vec![0.0f32; frames * 2];
+            AudioEngine::process(
+                &mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
+            );
+        }
+
+        // Publica o buffer esticado (-1): mesma posição, outro conteúdo.
+        *snapshot.lock().unwrap() = stretched;
+
+        let mut out = vec![0.0f32; frames * 2];
+        AudioEngine::process(
+            &mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
+        );
+
+        // O primeiro frame ainda é quase todo o buffer antigo (+1): o
+        // ganho de entrada começa em 0 no cruzamento.
+        let first = out[0];
+        assert!(
+            first > 0.6,
+            "o crossfade deve começar pelo buffer antigo (first={first})",
+        );
+
+        // A transição até o novo (-1) é uma rampa. Sem crossfade o salto
+        // seria ~2.0 (de +1 para -1) dentro de um único frame.
+        let mut max_step = 0.0f32;
+        let mut prev = out[0];
+        for i in 1..frames {
+            let v = out[i * 2];
+            max_step = max_step.max((v - prev).abs());
+            prev = v;
+        }
+        assert!(
+            max_step < 0.05,
+            "troca de buffer sem crossfade daria um degrau ~2.0; obtido {max_step}",
+        );
+    }
+
+    /// (a) Republicar o MESMO Arc de buffer não pode REARMAR a rampa; e
+    /// um Arc novo no meio da rampa (debounce) também não. Cada re-arma
+    /// estenderia/empilharia o blend e viraria modulação.
+    #[test]
+    fn nao_rearma_em_republicacao_repetida() {
+        let rate = 48_000u32;
+        let clip_frames = 96_000usize;
+        let make_buffer = |value: f32| {
+            Arc::new(AudioBuffer {
+                left: vec![value; clip_frames],
+                right: vec![value; clip_frames],
+                sample_rate: rate,
+            })
+        };
+        let snapshot_of = |buffer: Arc<AudioBuffer>| {
+            Arc::new(ProjectSnapshot {
+                tracks: vec![TrackSlot {
+                    id: 0,
+                    volume: 1.0,
+                    pan: 0.5,
+                    muted: false,
+                    soloed: false,
+                }],
+                clips: vec![ClipSlot {
+                    id: 0,
+                    track_id: 0,
+                    start_beat: 0.0,
+                    length_beats: 2.0,
+                    source_start_beats: 0.0,
+                    buffer: AudioBufferKind::Memory(buffer),
+                    fade_in_beats: 0.0,
+                    fade_out_beats: 0.0,
+                    gain_linear: 1.0,
+                    read_rate: 1.0,
+                }],
+                midi_clips: Vec::new(),
+                beat: BeatSlot::default(),
+                master_volume: 1.0,
+                master_muted: false,
+            })
+        };
+
+        let snapshot = Arc::new(Mutex::new(snapshot_of(make_buffer(1.0))));
+        let transport = Arc::new(Mutex::new(Transport::default()));
+        {
+            let mut t = transport.lock().unwrap();
+            t.playing = true;
+            t.mode = PlayMode::Timeline;
+        }
+        let mut rt = RtState::new();
+        let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+        let meters = MeterBank::new();
+        meters.set_channel_count(2);
+
+        let run = |rt: &mut RtState, snapshot: &Arc<Mutex<Arc<ProjectSnapshot>>>, frames: usize| {
+            let mut out = vec![0.0f32; frames * 2];
+            AudioEngine::process(&mut out, 2, rt, &transport, snapshot, &preview, &meters, rate);
+        };
+
+        run(&mut rt, &snapshot, 10); // aquece com +1
+        let b = make_buffer(-1.0);
+        *snapshot.lock().unwrap() = snapshot_of(b.clone()); // +1 -> -1: arma
+        run(&mut rt, &snapshot, 100); // 480 frames -> 380
+        assert_eq!(
+            rt.xfade_clips[0], 380,
+            "a troca de buffer deveria ter armado a rampa",
+        );
+
+        // (a) MESMO Arc republicado: não pode aumentar nem rearmar.
+        *snapshot.lock().unwrap() = snapshot_of(b.clone());
+        run(&mut rt, &snapshot, 1);
+        assert_eq!(
+            rt.xfade_clips[0], 379,
+            "republicar o MESMO Arc não pode REARMAR (esperado 379, não 479)",
+        );
+
+        // Debounce: um Arc DIFERENTE no meio da rampa também não rearma.
+        *snapshot.lock().unwrap() = snapshot_of(make_buffer(-0.5));
+        run(&mut rt, &snapshot, 1);
+        assert_eq!(
+            rt.xfade_clips[0], 378,
+            "debounce: Arc novo no meio da rampa não pode REARMAR (esperado 378)",
+        );
+    }
+
+    /// Se o número de clips muda, o layout não é o mesmo: não arma nada
+    /// (evita casar clips errados entre snapshots).
+    #[test]
+    fn nao_arma_quando_len_muda() {
+        let rate = 48_000u32;
+        let clip_frames = 96_000usize;
+        let buffer = |value: f32| {
+            AudioBufferKind::Memory(Arc::new(AudioBuffer {
+                left: vec![value; clip_frames],
+                right: vec![value; clip_frames],
+                sample_rate: rate,
+            }))
+        };
+        let make = |clips: Vec<ClipSlot>| {
+            Arc::new(ProjectSnapshot {
+                tracks: vec![TrackSlot {
+                    id: 0,
+                    volume: 1.0,
+                    pan: 0.5,
+                    muted: false,
+                    soloed: false,
+                }],
+                clips,
+                midi_clips: Vec::new(),
+                beat: BeatSlot::default(),
+                master_volume: 1.0,
+                master_muted: false,
+            })
+        };
+        let clip = |id: u64, start_beat: f64, value: f32| ClipSlot {
+            id,
+            track_id: 0,
+            start_beat,
+            length_beats: 2.0,
+            source_start_beats: 0.0,
+            buffer: buffer(value),
+            fade_in_beats: 0.0,
+            fade_out_beats: 0.0,
+            gain_linear: 1.0,
+            read_rate: 1.0,
+        };
+
+        let snapshot = Arc::new(Mutex::new(make(vec![clip(0, 0.0, 1.0)])));
+        let transport = Arc::new(Mutex::new(Transport::default()));
+        {
+            let mut t = transport.lock().unwrap();
+            t.playing = true;
+            t.mode = PlayMode::Timeline;
+        }
+        let mut rt = RtState::new();
+        let preview = Arc::new(Mutex::new(Vec::<PreviewCmd>::new()));
+        let meters = MeterBank::new();
+        meters.set_channel_count(2);
+
+        let mut warm = vec![0.0f32; 20];
+        AudioEngine::process(
+            &mut warm, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
+        );
+
+        // Agora com DOIS clips (o clip 0 troca de buffer): len 1 != 2 =>
+        // o guard de layout barra o armamento.
+        *snapshot.lock().unwrap() = make(vec![clip(0, 0.0, -1.0), clip(1, 1000.0, 0.0)]);
+
+        let mut out = vec![0.0f32; 200];
+        AudioEngine::process(
+            &mut out, 2, &mut rt, &transport, &snapshot, &preview, &meters, rate,
+        );
+
+        assert_eq!(
+            rt.xfade_clips[0], 0,
+            "mudança no número de clips não pode armar crossfade",
+        );
+        // E a troca foi seca (sem rampa): o primeiro frame já é o novo.
+        assert!(
+            out[0] < 0.0,
+            "sem crossfade, o buffer novo toca direto (out[0]={})",
+            out[0],
+        );
     }
 
     /// Grava um WAV s16le mono com um TOM de 1 kHz no início (0.25s) e

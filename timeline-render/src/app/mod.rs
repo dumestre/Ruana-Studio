@@ -774,9 +774,24 @@ impl App {
             }
         }).collect::<Vec<_>>();
 
-        let transport = transport.unwrap_or_else(|| Arc::new(Mutex::new(Transport::default())));
+        // Quem fornece o transporte é o dono do áudio. O host (app) cria e
+        // mantém o ÚNICO AudioEngine e passa `Some(transport)`; a timeline só
+        // lê a posição dele. Um engine interno aqui abriria um SEGUNDO stream
+        // CPAL sobre o MESMO transporte — o binário do app pode herdar a
+        // feature `audio` por unificação de features do workspace (o bin
+        // timeline-render é membro e tem `default = ["audio"]`). Só criamos um
+        // engine interno quando a App é dona do próprio transporte (modo
+        // standalone), mantendo o viewer do bin com áudio.
+        let (transport, _owns_transport) = match transport {
+            Some(t) => (t, false),
+            None => (Arc::new(Mutex::new(Transport::default())), true),
+        };
         #[cfg(feature = "audio")]
-        let audio_engine = AudioEngine::start(transport.clone()).ok();
+        let audio_engine = if _owns_transport {
+            AudioEngine::start(transport.clone()).ok()
+        } else {
+            None
+        };
 #[cfg(not(feature = "audio"))]
         let _audio_engine: Option<()> = None;
 
