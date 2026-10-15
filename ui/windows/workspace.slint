@@ -117,7 +117,14 @@ export component Workspace inherits Rectangle {
 
     in-out property <length> explorer-width: 300px;
 
-    in-out property <length> bottom-panel-height: 215px;
+    // Altura do painel inferior (mixer/sampler/…).
+    //
+    // 330px é o que a faixa do mixer precisa para caber SEM esmagar o
+    // bloco fixo (header 30 + padding 10 + header do canal 22 + M/S/R 18
+    // + pan 36 + fader/meter 200 + spacings 16 ≈ 332). Com 215px o Slint
+    // era obrigado a comprimir a parte de baixo da faixa — o sintoma de
+    // "só aparece quando aumenta a janela".
+    in-out property <length> bottom-panel-height: 330px;
 
 
     // ========================================================
@@ -1668,7 +1675,7 @@ export component Workspace inherits Rectangle {
                     root.bottom-panel-height;
 
                 min-value:
-                    120px;
+                    300px;
 
                 max-value:
                     600px;

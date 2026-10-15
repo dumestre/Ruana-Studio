@@ -9,6 +9,7 @@ export component Mixer inherits Rectangle {
     // começa vazio — um array com 5 zeros aqui mentiria sobre a
     // quantidade de canais até o primeiro pump.
     in-out property <[float]> meters: [];
+    min-height: 140px;
     in-out property <[bool]> clipped: [];
     in property <[string]> names: ["Drums", "Bass", "Vocal", "Synth", "Master"];
     in property <[int]> track-colors: [];
@@ -42,14 +43,6 @@ export component Mixer inherits Rectangle {
     function meter-at(i: int, slot: int) -> float {
         let idx = i * 4 + slot;
         return idx >= 0 && idx < root.meters.length ? root.meters[idx] : 0.0;
-    }
-
-    // Demo signal for mixer meter preview.
-    property <float> demo-meter-left: 0.68;
-    property <float> demo-meter-right: 0.62;
-
-    function displayed-meter-at(i: int, side: int) -> float {
-        return Math.max(root.meter-at(i, side), side == 0 ? root.demo-meter-left : root.demo-meter-right);
     }
 
     function clip-at(i: int, side: int) -> bool {
@@ -128,8 +121,8 @@ export component Mixer inherits Rectangle {
                         selected: root.selected-channel == i;
                         select-requested(channel) => { root.selected-channel = channel; }
 
-                        left-level: root.displayed-meter-at(i, 0);
-                        right-level: root.displayed-meter-at(i, 1);
+                        left-level: root.meter-at(i, 0);
+                        right-level: root.meter-at(i, 1);
                         left-peak: root.meter-at(i, 2);
                         right-peak: root.meter-at(i, 3);
                         left-clipped: root.clip-at(i, 0);
@@ -164,8 +157,8 @@ export component Mixer inherits Rectangle {
                 channel-index: root.mutes.length - 1;
                 selected: root.selected-channel == root.mutes.length - 1;
                 select-requested(channel) => { root.selected-channel = channel; }
-                left-level: root.displayed-meter-at(root.mutes.length - 1, 0);
-                right-level: root.displayed-meter-at(root.mutes.length - 1, 1);
+                left-level: root.meter-at(root.mutes.length - 1, 0);
+                right-level: root.meter-at(root.mutes.length - 1, 1);
                 left-peak: root.meter-at(root.mutes.length - 1, 2);
                 right-peak: root.meter-at(root.mutes.length - 1, 3);
                 left-clipped: root.clip-at(root.mutes.length - 1, 0);

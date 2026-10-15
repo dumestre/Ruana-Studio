@@ -49,6 +49,7 @@ export component MixerChannel inherits Rectangle {
     // ==========================================
 
     in property <int> max-slot-count: 8;
+    min-height: 140px;
     in property <int> insert-count: 0;
     in property <[string]> insert-names: [];
     in property <[bool]> insert-enabled: [];
@@ -265,6 +266,11 @@ export component MixerChannel inherits Rectangle {
         // ======================================
 
         VerticalLayout {
+            // MIDDLE FLEX: a única região elástica da faixa. `min-height:
+            // 0` garante que ela cede espaço ANTES do bloco de fader/meter
+            // quando o painel está baixo — sem isso o Slint esmagava o
+            // bottom fixo e o meter sumia.
+            min-height: 0px;
             spacing: 2px;
 
             alignment: LayoutAlignment.stretch;
@@ -350,10 +356,21 @@ export component MixerChannel inherits Rectangle {
 
         // ======================================
         // FADER + METER + DB DISPLAY
+        //
+        // BOTTOM FIXO. `min-height` é o piso do bloco: mesmo com o
+        // painel baixo, o Slint não pode esmagar fader/meter/dB — era
+        // isso que fazia a parte de baixo da faixa "sumir" e só voltar
+        // quando a janela crescia. 131px = meter 110 + dB 16 + spacing 5.
+        // Quem cede espaço é a região de inserts (flex + scroll acima).
         // ======================================
 
         VerticalLayout {
-            height: 200px;
+            // `preferred-height` (não `height`): o Slint rejeita
+            // `height` junto com `min-height` ("Cannot specify both").
+            // Assim o bloco fica com 200px quando há espaço e nunca
+            // desce abaixo de 131px.
+            preferred-height: 200px;
+            min-height: 131px;
             spacing: 5px;
             alignment: LayoutAlignment.start;
             cross-axis-alignment: CrossAxisAlignment.center;
