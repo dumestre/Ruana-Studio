@@ -315,14 +315,6 @@ impl EngineBridge {
         ui.set_timeline_area_expanded(expanded);
         ui.set_zoom_y_level(self.engine.zoom_y);
         ui.set_timeline_scroll_y((self.engine.scroll_y / ls.max(1e-4)).max(0.0));
-        let slint_sx = ui.get_timeline_scroll_x();
-        let eng_sx = self.engine.scroll_x;
-        if (slint_sx * ls - eng_sx).abs() > 1.0 {
-            eprintln!(
-                "[dbg-scroll-div] tick: engine.scroll_x={eng_sx} slint.scroll-x*scale={} (slint={slint_sx})",
-                slint_sx * ls,
-            );
-        }
 
         // Tamanho físico (px) da cena: igual ao quad (1:1).
         let aw = rw.round().clamp(0.0, 8192.0) as u32;
@@ -568,17 +560,6 @@ pub fn install_engine_callbacks(
             let mut b = b.borrow_mut();
             let scale = b.scale;
             let (px, py) = (x * scale, y * scale);
-            eprintln!(
-                "[dbg-ptr-down] x={x} y={y} btn={button} scale={scale} -> px={px} py={py} rect=({},{},{},{}) ruler={} pps={} scroll=({},{})",
-                b.engine.timeline_rect.0,
-                b.engine.timeline_rect.1,
-                b.engine.timeline_rect.2,
-                b.engine.timeline_rect.3,
-                b.engine.ruler_px,
-                b.engine.px_per_beat,
-                b.engine.scroll_x,
-                b.engine.scroll_y,
-            );
             let engine = &mut b.engine;
             engine.ctrl_pressed = ctrl;
             engine.shift_pressed = shift;
@@ -635,13 +616,6 @@ pub fn install_engine_callbacks(
                 }
             }
             engine.handle_cursor_moved((px, py));
-            if engine.clip_interaction.is_dragging() {
-                eprintln!(
-                    "[dbg-drag] pos=({px},{py}) live_beat={:.3} track={}",
-                    engine.clip_interaction.drag_live_beat,
-                    engine.clip_interaction.drag_live_track,
-                );
-            }
             b.dirty = true;
         });
     }
@@ -671,7 +645,6 @@ pub fn install_engine_callbacks(
     // ---- RODA / TOUCHPAD ---------------------------------------------
     {
         let b = bridge.clone();
-        let ui_weak = ui.as_weak();
         ui.on_engine_scroll(move |dx, dy, ctrl, _shift, alt| {
             let mut b = b.borrow_mut();
             let scale = b.scale;
@@ -679,11 +652,6 @@ pub fn install_engine_callbacks(
             let py = dy * scale;
             let engine = &mut b.engine;
             engine.handle_scroll(px, py, ctrl, alt);
-            let sx = engine.scroll_x;
-            let slint_sx = ui_weak.upgrade().map(|u| u.get_timeline_scroll_x()).unwrap_or(-1.0);
-            eprintln!(
-                "[dbg-scroll-host] engine.scroll_x={sx} slint.scroll-x={slint_sx} dx={dx} dy={dy}"
-            );
             b.dirty = true;
         });
     }

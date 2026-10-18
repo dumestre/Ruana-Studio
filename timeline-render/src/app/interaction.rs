@@ -383,10 +383,6 @@ impl App {
         }
         self.clamp_scroll_y(self.input_view_size().1);
         self.request_redraw();
-        eprintln!(
-            "[dbg-scroll] ctrl={with_ctrl} alt={with_alt} dx={dx} dy={dy} -> scroll_x={} scroll_y={} pps={}",
-            self.scroll_x, self.scroll_y, self.px_per_beat,
-        );
     }
 
     pub fn handle_mouse_button(&mut self, state: ButtonState, pos: Option<(f32, f32)>) {
@@ -1162,17 +1158,6 @@ self.play_start_seconds = self.transport_seconds;
                         }
                     } else {
                     // comportamento padrÃ£o jÃ¡ existente
-                    {
-                        let pps = self.px_per_beat.max(0.001);
-                        let hb = (pos.0 + self.scroll_x) / pps;
-                        let ht = ((pos.1 - self.ruler_px + self.scroll_y) / cm.row_height).floor().max(0.0) as usize;
-                        let h = self.clip_interaction.hit_test(&self.clips, pos, &cm);
-                        eprintln!(
-                            "[dbg-hit] pos={pos:?} -> beat={hb:.2} track={ht} n={} ruler={} pps={pps:.1} hit={h:?}",
-                            self.clips.len(),
-                            self.ruler_px,
-                        );
-                    }
                     if let Some(idx) = self.clip_interaction.hit_test(&self.clips, pos, &cm) {
                         // multiseleÃ§Ã£o (arrasta todos selecionados). SenÃ£o,
                         // colapsa para o grupo de glue.

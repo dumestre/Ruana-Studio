@@ -452,21 +452,22 @@ impl App {
             theme: t,
             max_track: self.clips.iter().map(|c| c.track_index).max().unwrap_or(0),
         };
-        let mut display_clips = self.clips.clone();
-        if let Some((clip_idx, marker_idx, offset)) = self.timewarp_preview_marker {
-            if let Some(marker) = display_clips
-                .get_mut(clip_idx)
-                .and_then(|clip| clip.warp_markers.get_mut(marker_idx))
-            {
-                marker.project_offset_beats = offset;
-            }
-        }
-        let mut clip_instances = clips::build_clip_instances(
-            &display_clips,
-            &self.clip_interaction,
-            &cm,
-            width,
-        );
+        let mut display_clips;
+        let clips_view: &[clips::ClipDemo] =
+            if let Some((clip_idx, marker_idx, offset)) = self.timewarp_preview_marker {
+                display_clips = self.clips.clone();
+                if let Some(marker) = display_clips
+                    .get_mut(clip_idx)
+                    .and_then(|clip| clip.warp_markers.get_mut(marker_idx))
+                {
+                    marker.project_offset_beats = offset;
+                }
+                &display_clips
+            } else {
+                &self.clips
+            };
+        let mut clip_instances =
+            clips::build_clip_instances(clips_view, &self.clip_interaction, &cm, width);
         if let Some((clip_idx, marker_idx, offset)) = self.timewarp_preview_marker {
             if let Some(clip) = self.clips.get(clip_idx) {
                 let anchors = std::iter::once((0.0f32, 0.0f32))
