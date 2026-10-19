@@ -1,9 +1,10 @@
 //! Renderização da timeline: paleta, helpers de cor, fontes/texto,
 //! instâncias de retângulos e o `render`/`build_instances` do `App`.
 
-use ab_glyph::{Font, ScaleFont};
+use std::collections::HashMap;
+use std::sync::Mutex;
 
-use wgpu::util::DeviceExt;
+use ab_glyph::{Font, ScaleFont};
 
 use crate::clips;
 use crate::fades;
@@ -114,6 +115,72 @@ pub fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
+// Cache de buffers GPU ---------------------------------------------------------
+
+/// Buffer de GPU reutilizado entre frames. `capacity` guarda o tamanho real
+/// alocado; dados menores são regravados com `queue.write_buffer` sem
+/// realocar. O excedente nunca é lido: o shader só acessa as instâncias do
+/// draw call e as `wave_segments` apontam para o trecho válido de `wave_bars`.
+pub struct CachedBuffer {
+    buffer: wgpu::Buffer,
+    capacity: u64,
+}
+
+/// Um slot de cache por call site. Dois `write_buffer` no MESMO buffer dentro
+/// de um mesmo submit se sobrescreveriam (o segundo vence), então cada quad/
+/// pass tem o seu — inclusive os dois draws do composite (timeline e overlay).
+#[derive(Default)]
+pub struct FrameCache {
+    instances: Option<CachedBuffer>,
+    uniforms: Option<CachedBuffer>,
+    wave_bars: Option<CachedBuffer>,
+    icon_instances: Option<CachedBuffer>,
+    overlay_quad: Option<CachedBuffer>,
+    overlay_uniform: Option<CachedBuffer>,
+    comp_bg_quad: Option<CachedBuffer>,
+    comp_bg_uniform: Option<CachedBuffer>,
+    comp_ov_quad: Option<CachedBuffer>,
+    comp_ov_uniform: Option<CachedBuffer>,
+}
+
+/// Reutiliza o buffer cacheado quando comporta os dados; caso contrário
+/// (primeiro uso ou crescimento) cria um novo com 25% de folga para reduzir
+/// realocações durante scroll/zoom. `contents` vazio reaproveita o buffer sem
+/// gravar (o draw range vazio nunca lê os dados).
+fn ensure_cached_buffer(
+    cache: &mut Option<CachedBuffer>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &'static str,
+    contents: &[u8],
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
+    if let Some(c) = cache.as_ref() {
+        if c.capacity >= contents.len() as u64 {
+            if !contents.is_empty() {
+                queue.write_buffer(&c.buffer, 0, contents);
+            }
+            return c.buffer.clone();
+        }
+    }
+    let size = (contents.len() + contents.len() / 4 + 3) & !3;
+    let size = size.max(4) as u64;
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage,
+        mapped_at_creation: false,
+    });
+    if !contents.is_empty() {
+        queue.write_buffer(&buffer, 0, contents);
+    }
+    *cache = Some(CachedBuffer {
+        buffer: buffer.clone(),
+        capacity: size,
+    });
+    buffer
+}
+
 // Fontes e texto ---------------------------------------------------------------
 
 static FONT: std::sync::OnceLock<ab_glyph::FontRef<'static>> = std::sync::OnceLock::new();
@@ -133,6 +200,36 @@ pub fn get_regular_font() -> &'static ab_glyph::FontRef<'static> {
             .expect("Failed to load font")
     })
 }
+
+// Cache de glifos rasterizados --------------------------------------------------
+
+/// Glifo rasterizado uma vez e reutilizado entre frames: `advance` + pixels
+/// RELATIVOS à âncora inteira `(round(pen_x), round(origin_y))` — cada
+/// chamada ancora na sua posição e soma os deltas, preservando a nitidez de
+/// pixel da versão sem cache (desvio máximo de 1px em canetas fracionárias).
+struct CachedGlyph {
+    advance: f32,
+    rel: Vec<(f32, f32, f32)>, // (dx, dy, alpha)
+}
+
+/// Chave do cache: endereço do fonte (estável — vem de `OnceLock` estático),
+/// bits da escala px e o caractere.
+fn glyph_cache_key(font: &ab_glyph::FontRef<'static>, scale: ab_glyph::PxScale, ch: char) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    std::ptr::from_ref(font).hash(&mut h);
+    scale.x.to_bits().hash(&mut h);
+    scale.y.to_bits().hash(&mut h);
+    (ch as u32).hash(&mut h);
+    h.finish()
+}
+
+/// Cache global de glifos (rótulos da régua, nomes de clip…). O conjunto de
+/// texto da UI é pequeno e fixo; ao estourar o cap faz-se limpeza total —
+/// melhor que LRU para um caso tão limitado.
+static GLYPH_CACHE: std::sync::OnceLock<Mutex<HashMap<u64, CachedGlyph>>> =
+    std::sync::OnceLock::new();
+const GLYPH_CACHE_CAP: usize = 8192;
 
 /// Desenha texto usando a fonte Arial Bold (via ab_glyph), rasterizada a pixels.
 /// Cada caractere é rasterizado individualmente e os pixels "on" viram RectInstance.
@@ -169,37 +266,61 @@ pub fn build_text_instances_font(
 
     let mut pen_x = center_x - total_width / 2.0;
 
+    let cache = GLYPH_CACHE.get_or_init(Default::default);
+    // Lock única por rótulo: o raster (outline_glyph) roda UMA vez por
+    // (fonte, escala, glifo); os rótulos da UI são um conjunto fixo de textos.
+    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+
     for ch in text.chars() {
         let gid = font.glyph_id(ch);
         let advance = sf.h_advance(gid);
+        let origin_y = y + sf.ascent() - 2.0;
+        // Âncora inteira — a versão sem cache também quantizava o glifo para
+        // pixels inteiros via `px_bounds`, então a nitidez é idêntica.
+        let anchor_x = pen_x.round();
+        let anchor_y = origin_y.round();
 
-        let glyph = font.glyph_id(ch).with_scale_and_position(
-            px_scale,
-            ab_glyph::point(pen_x, y + sf.ascent() - 2.0),
-        );
+        let key = glyph_cache_key(font, px_scale, ch);
+        if cache.len() >= GLYPH_CACHE_CAP && !cache.contains_key(&key) {
+            cache.clear();
+        }
+        let glyph = cache.entry(key).or_insert_with(|| {
+            let mut rel: Vec<(f32, f32, f32)> = Vec::new();
+            let g = font
+                .glyph_id(ch)
+                .with_scale_and_position(px_scale, ab_glyph::point(pen_x, origin_y));
+            if let Some(outlined) = font.outline_glyph(g) {
+                let b = outlined.px_bounds();
+                outlined.draw(|px, py, alpha| {
+                    if alpha > 0.02 {
+                        rel.push((
+                            b.min.x + px as f32 - anchor_x,
+                            b.min.y + py as f32 - anchor_y,
+                            alpha,
+                        ));
+                    }
+                });
+            }
+            CachedGlyph { advance, rel }
+        });
 
-        if let Some(outlined) = font.outline_glyph(glyph) {
-            let b = outlined.px_bounds();
-            outlined.draw(|px, py, alpha| {
-                if alpha > 0.02 {
-                    let a = (color[3] as f32 * alpha).round() as u8;
-                    instances.push(RectInstance {
-                        x: b.min.x + px as f32,
-                        y: b.min.y + py as f32,
-                        w: 1.0,
-                        h: 1.0,
-                        color: [color[0], color[1], color[2], a],
-                        wave_offset: 0,
-                        wave_count: 0,
-                        clip_w: 0.0,
-                        clip_h: 0.0,
-                        radius: 0.0,
-                    });
-                }
+        for &(dx, dy, alpha) in &glyph.rel {
+            let a = (color[3] as f32 * alpha).round() as u8;
+            instances.push(RectInstance {
+                x: anchor_x + dx,
+                y: anchor_y + dy,
+                w: 1.0,
+                h: 1.0,
+                color: [color[0], color[1], color[2], a],
+                wave_offset: 0,
+                wave_count: 0,
+                clip_w: 0.0,
+                clip_h: 0.0,
+                radius: 0.0,
             });
         }
 
-        pen_x += advance;
+        pen_x += glyph.advance;
     }
 
     instances
@@ -952,33 +1073,47 @@ impl App {
         let instances = self.build_instances(width, height);
 
         let data: Vec<f32> = instances.iter().flat_map(|i| i.to_f32()).collect();
-        let instance_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("instances"),
-            contents: bytemuck::cast_slice(&data),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let instance_buf = ensure_cached_buffer(
+            &mut self.frame_cache.instances,
+            &self.device,
+            &self.queue,
+            "instances",
+            bytemuck::cast_slice(&data),
+            wgpu::BufferUsages::VERTEX,
+        );
 
-        let uniform_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("uniforms"),
-            contents: bytemuck::cast_slice(&OrthoCamera {
-                scroll_x: 0.0,
-                scroll_y: 0.0,
-                viewport_w: width.max(1.0),
-                viewport_h: height.max(1.0),
-            }.proj()),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let uniform_buf = ensure_cached_buffer(
+            &mut self.frame_cache.uniforms,
+            &self.device,
+            &self.queue,
+            "uniforms",
+            bytemuck::cast_slice(
+                &OrthoCamera {
+                    scroll_x: 0.0,
+                    scroll_y: 0.0,
+                    viewport_w: width.max(1.0),
+                    viewport_h: height.max(1.0),
+                }
+                .proj(),
+            ),
+            wgpu::BufferUsages::UNIFORM,
+        );
 
-        let wave_bars_data = if self.wave_bars.is_empty() {
-            vec![0.0f32, 0.0f32]
-        } else {
-            self.wave_bars.clone()
-        };
-        let wave_bars_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("wave-bars"),
-            contents: bytemuck::cast_slice(&wave_bars_data),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+        // Grava direto do estado da engine (sem clone intermediário). O
+        // excedente do buffer (folga de crescimento) nunca é indexado: as
+        // `wave_segments` do frame apontam apenas para o trecho válido.
+        let wave_bars_buf = ensure_cached_buffer(
+            &mut self.frame_cache.wave_bars,
+            &self.device,
+            &self.queue,
+            "wave-bars",
+            if self.wave_bars.is_empty() {
+                bytemuck::cast_slice(&[0.0f32, 0.0f32])
+            } else {
+                bytemuck::cast_slice(&self.wave_bars)
+            },
+            wgpu::BufferUsages::STORAGE,
+        );
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("bg"),
@@ -1025,11 +1160,14 @@ impl App {
         let icon_instances = self.edit_toolbar_icon_instances(width, height);
         if !icon_instances.is_empty() {
             let icon_data: Vec<f32> = icon_instances.iter().flat_map(|i| i.to_f32()).collect();
-            let icon_instance_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("icon-instances"),
-                contents: bytemuck::cast_slice(&icon_data),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+            let icon_instance_buf = ensure_cached_buffer(
+                &mut self.frame_cache.icon_instances,
+                &self.device,
+                &self.queue,
+                "icon-instances",
+                bytemuck::cast_slice(&icon_data),
+                wgpu::BufferUsages::VERTEX,
+            );
 
             let icon_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("icon-bg"),
@@ -1095,28 +1233,33 @@ impl App {
                     0.0,  h,    0.0, 1.0,
                     w,    h,    1.0, 1.0,
                 ];
-                let quad = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("overlay-quad"),
-                    contents: bytemuck::cast_slice(&verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+                let quad = ensure_cached_buffer(
+                    &mut self.frame_cache.overlay_quad,
+                    &self.device,
+                    &self.queue,
+                    "overlay-quad",
+                    bytemuck::cast_slice(&verts),
+                    wgpu::BufferUsages::VERTEX,
+                );
                 let overlay_ubo: [f32; 20] = {
                     let p = OrthoCamera {
                         scroll_x: 0.0,
                         scroll_y: 0.0,
                         viewport_w: width.max(1.0),
                         viewport_h: height.max(1.0),
-                    }.proj();
+                    }
+                    .proj();
                     let mut u = [0.0f32; 20];
                     u[..16].copy_from_slice(&p);
                     u
                 };
-                let overlay_uniform = self.device.create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("overlay-uniforms"),
-                        contents: bytemuck::cast_slice(&overlay_ubo),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    },
+                let overlay_uniform = ensure_cached_buffer(
+                    &mut self.frame_cache.overlay_uniform,
+                    &self.device,
+                    &self.queue,
+                    "overlay-uniforms",
+                    bytemuck::cast_slice(&overlay_ubo),
+                    wgpu::BufferUsages::UNIFORM,
                 );
                 let overlay_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("overlay-bg"),
@@ -1174,9 +1317,14 @@ impl App {
         // Pass de quad texturizado reutilizando o pipeline de overlay: mesmo
         // layout de bind group (uniform + sampler + texture) e blend
         // premultiplicado (o frame offscreen sai com alpha=1 em todo pixel).
+        // `quad_cache`/`uniform_cache` são slots DISTINTOS por call site: os
+        // dois draws do mesmo frame não podem dividir o mesmo buffer (o segundo
+        // `write_buffer` sobrescreveria o primeiro antes do submit).
         let draw_textured_quad = |encoder: &mut wgpu::CommandEncoder,
                                    device: &wgpu::Device,
-                                   _queue: &wgpu::Queue,
+                                   queue: &wgpu::Queue,
+                                   quad_cache: &mut Option<CachedBuffer>,
+                                   uniform_cache: &mut Option<CachedBuffer>,
                                    pipeline: &wgpu::RenderPipeline,
                                    layout: &wgpu::BindGroupLayout,
                                    sampler: &wgpu::Sampler,
@@ -1194,28 +1342,35 @@ impl App {
                 x,     y + h, 0.0, 1.0,
                 x + w, y + h, 1.0, 1.0,
             ];
-            let quad = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("composite-quad"),
-                contents: bytemuck::cast_slice(&verts),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+            let quad = ensure_cached_buffer(
+                quad_cache,
+                device,
+                queue,
+                "composite-quad",
+                bytemuck::cast_slice(&verts),
+                wgpu::BufferUsages::VERTEX,
+            );
             let ubo: [f32; 20] = {
                 let p = OrthoCamera {
                     scroll_x: 0.0,
                     scroll_y: 0.0,
                     viewport_w: width.max(1.0),
                     viewport_h: height.max(1.0),
-                }.proj();
+                }
+                .proj();
                 let mut u = [0.0f32; 20];
                 u[..16].copy_from_slice(&p);
                 u[16..20].copy_from_slice(&mask);
                 u
             };
-            let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("composite-uniforms"),
-                contents: bytemuck::cast_slice(&ubo),
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
+            let uniform = ensure_cached_buffer(
+                uniform_cache,
+                device,
+                queue,
+                "composite-uniforms",
+                bytemuck::cast_slice(&ubo),
+                wgpu::BufferUsages::UNIFORM,
+            );
             let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("composite-bg"),
                 layout,
@@ -1299,6 +1454,8 @@ impl App {
                     encoder,
                     &self.device,
                     &self.queue,
+                    &mut self.frame_cache.comp_bg_quad,
+                    &mut self.frame_cache.comp_bg_uniform,
                     &self.overlay_pipeline,
                     &self.overlay_bind_group_layout,
                     &self.overlay_sampler,
@@ -1308,12 +1465,7 @@ impl App {
                     ry,
                     rw,
                     rh,
-                    [
-                        bw as f32,
-                        bh as f32,
-                        self.timeline_corner_radius,
-                        1.0,
-                    ],
+                    [bw as f32, bh as f32, self.timeline_corner_radius, 1.0],
                     wgpu::LoadOp::Load,
                 );
             }
@@ -1329,6 +1481,8 @@ impl App {
                     encoder,
                     &self.device,
                     &self.queue,
+                    &mut self.frame_cache.comp_ov_quad,
+                    &mut self.frame_cache.comp_ov_uniform,
                     &self.overlay_pipeline,
                     &self.overlay_bind_group_layout,
                     &self.overlay_sampler,

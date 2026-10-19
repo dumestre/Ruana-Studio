@@ -97,6 +97,8 @@ pub struct App {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub unit_quad: wgpu::Buffer,
+    /// Buffers de GPU reutilizados entre frames (um slot por call site).
+    pub frame_cache: render::FrameCache,
     pub size: (u32, u32),
 
 /// Textura alvo da renderização offscreen (engine pura). Reutilizada
@@ -806,6 +808,7 @@ impl App {
             pipeline,
             bind_group_layout,
             unit_quad,
+            frame_cache: render::FrameCache::default(),
             config,
             size,
 offscreen_texture: None,

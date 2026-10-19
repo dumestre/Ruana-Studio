@@ -27,7 +27,7 @@ use timeline_render::app::{App as TimelineEngine, ButtonState};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, KeyEvent, MouseScrollDelta, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
@@ -186,9 +186,10 @@ impl EngineBridge {
 
     /// Rotina por frame: re-espelha clips, segue o playhead, renderiza a cena
     /// da timeline DIRETO na textura `timeline_bg` (GPU→GPU) e compõe o
-    /// overlay Slint. `render_surface()` apresenta o resultado no próximo
-    /// passo.
-    pub fn tick(&mut self, ui: &MainWindow) {
+    /// overlay Slint. Retorna `true` quando a cena da timeline foi
+    /// re-renderizada neste tick (o chamador usa para pular a composição na
+    /// surface quando nada mudou). `engine.render()` apresenta o resultado.
+    pub fn tick(&mut self, ui: &MainWindow) -> bool {
         let ls = self.scale;
 
         // Duplo clique num clip → abre o editor correspondente. O id chega
@@ -529,19 +530,23 @@ impl EngineBridge {
         }
 
         // Renderiza a cena direto na textura do quad (sem readback).
+        let mut bg_rendered = false;
         if self.dirty {
             self.dirty = false;
-            if !self.engine.render_timeline_bg(aw, ah) {
+            if self.engine.render_timeline_bg(aw, ah) {
+                bg_rendered = true;
+            } else {
                 self.dirty = true;
             }
         }
 
-// Compõe a UI Slint por cima: o Skia desenha direto na textura do
+        // Compõe a UI Slint por cima: o Skia desenha direto na textura do
         // overlay da engine (GPU→GPU, sem readback) e só quando há dirty.
         let (ow, oh) = self.overlay.size();
         if let Some(tex) = self.engine.ensure_overlay_texture(ow, oh) {
             self.overlay.draw(tex);
         }
+        bg_rendered
     }
 }
 
@@ -869,8 +874,17 @@ impl ApplicationHandler for Handler {
             }
             WindowEvent::RedrawRequested => {
                 SlintOverlay::update_timers_and_animations();
-                bridge.borrow_mut().tick(ui);
-                bridge.borrow_mut().engine.render();
+                // A flag do Slint é consumida dentro do `draw` (chamado pelo
+                // tick); capturar ANTES. O playhead, em contrário, é setado
+                // DENTRO do tick — por isso o retorno `bg_rendered`.
+                let overlay_changed = bridge.borrow().overlay.is_dirty();
+                let bg_rendered = bridge.borrow_mut().tick(ui);
+                // Só compõe/presenta quando algo produziu pixels novos; com a
+                // UI estática o frame é ignorado e o loop dorme até o próximo
+                // timer/evento (gate no `about_to_wait`).
+                if bg_rendered || overlay_changed {
+                    bridge.borrow_mut().engine.render();
+                }
             }
             WindowEvent::ModifiersChanged(state) => {
                 let sts = state.state();
@@ -1085,14 +1099,61 @@ impl ApplicationHandler for Handler {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        // Loop contínuo do motor: playhead, animations do Slint e timers.
-        // NÃO forçamos redraw do overlay aqui: o próprio Slint pede repaint
-        // quando a cena fica suja (animações, metros, hover, timers) via o
-        // adapter — com a UI estática nada é re-renderizado/readback (o custo
-        // de full-screen readback + premultiply só existe na hora da sujeira).
-        if let Some(window) = &self.window {
-            window.request_redraw();
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Gate de frames: o loop SÓ gira quando há trabalho real.
+        //  - Ativo (Poll + request_redraw): cena/engine suja, playhead,
+        //    interações contínuas (botão do mouse pressionado, edge-scroll,
+        //    drag de arquivo, drop pendente) e animações do Slint ativas.
+        //  - Timer pendente (WaitUntil): os timers do Slint (metros, sync de
+        //    áudio, decode) acordam o loop no vencimento e disparam UM pump;
+        //    quando o pump suja a cena, o próprio gate decide o próximo passo.
+        //  - Ocioso puro (Wait): dorme até o próximo evento de input.
+        // `duration_until_next_timer_update` NÃO cobre animações (só timers);
+        // `has_active_animations` completa o cálculo, como documentado no
+        // runtime do Slint.
+        let next_timer = slint::platform::duration_until_next_timer_update();
+        let animations = self
+            .ui
+            .as_ref()
+            .map(|ui| ui.window().has_active_animations())
+            .unwrap_or(false);
+        // Botão pressionado = interação contínua (rede de segurança anti-stuck,
+        // a mesma do `tick`). Em não-Windows a função é um stub "sempre
+        // pressionado" — no gate só Windows a utiliza, senão o loop nunca
+        // dormiria fora da plataforma de desenvolvimento.
+        #[cfg(windows)]
+        let mouse_held = left_button_is_down();
+        #[cfg(not(windows))]
+        let mouse_held = false;
+        let active = match self.bridge.as_ref() {
+            Some(bridge) => {
+                let b = bridge.borrow();
+                b.dirty
+                    || b.overlay.is_dirty()
+                    || b.engine.playing
+                    || b.engine.panning
+                    || b.engine.scrubbing
+                    || b.engine.clip_interaction.is_dragging()
+                    || b.engine.fade_interaction.is_dragging()
+                    || b.engine.edge_scroll_x != 0.0
+                    || b.engine.edge_scroll_y != 0.0
+                    || b.engine.is_dragging_file
+                    || !b.engine.drop_paths.is_empty()
+                    || b.engine.pending_drop_import
+                    || mouse_held
+            }
+            None => false,
+        } || animations;
+
+        if active || next_timer.is_some_and(|d| d.is_zero()) {
+            event_loop.set_control_flow(ControlFlow::Poll);
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        } else if let Some(d) = next_timer {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(std::time::Instant::now() + d));
+        } else {
+            event_loop.set_control_flow(ControlFlow::Wait);
         }
     }
 }

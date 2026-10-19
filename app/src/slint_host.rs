@@ -105,6 +105,13 @@ impl SlintOverlay {
         self.window.window.request_redraw();
     }
 
+    /// A cena do Slint precisa de repaint (propriedades ou animações sujas)?
+    /// Consumida dentro de [`Self::draw`]; lida pelo gate de frames do host
+    /// ANTES do tick para decidir se o frame merece composição na surface.
+    pub fn is_dirty(&self) -> bool {
+        self.window.redraw.get()
+    }
+
     /// Tamanho físico (px) atual da UI.
     pub fn size(&self) -> (u32, u32) {
         let s = self.window.size.get();
