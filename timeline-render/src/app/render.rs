@@ -1079,7 +1079,7 @@ impl App {
             &self.queue,
             "instances",
             bytemuck::cast_slice(&data),
-            wgpu::BufferUsages::VERTEX,
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         );
 
         let uniform_buf = ensure_cached_buffer(
