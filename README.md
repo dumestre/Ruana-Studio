@@ -8,9 +8,12 @@ Ruana Studio é uma estação de trabalho de áudio digital com timeline, mixer,
 
 ## Screenshots
 
-![Timeline](docs/screenshots/timeline.png)
-![Mixer](docs/screenshots/mixer.png)
-![Plugins](docs/screenshots/plugins.png)
+![Screenshot 1](docs/screenshots/screenshot-1.png)
+![Screenshot 2](docs/screenshots/screenshot-2.png)
+![Screenshot 3](docs/screenshots/screenshot-3.png)
+![Screenshot 4](docs/screenshots/screenshot-4.png)
+![Screenshot 5](docs/screenshots/screenshot-5.png)
+![Screenshot 6](docs/screenshots/screenshot-6.png)
 
 ## Funcionalidades
 
