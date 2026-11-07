@@ -1,0 +1,54 @@
+[workspace]
+resolver = "3"
+members = [
+    "app",
+    "crates/daw-core",
+    "crates/daw-audio",
+    "crates/daw-media",
+    "crates/daw-midi",
+    "crates/daw-plugins",
+    "crates/daw-project",
+    "timeline-render",
+    "ruana-hub",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+slint = "1.18.0"
+
+# =========================================================
+# PROFILES
+#
+# Problema: `cargo build` (dev) era rápido de compilar mas o
+# app rodava mal — engine de áudio, decodificação (symphonia)
+# e o renderer Skia são código quente que despenca sem
+# otimização.
+#
+# Solução: otimizar as DEPENDÊNCIAS mesmo no dev, mantendo o
+# nosso código em debug rápido de compilar e fácil de depurar.
+# =========================================================
+
+[profile.dev]
+opt-level = 0          # nosso código: compila rápido, debugável
+debug = "line-tables-only"
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 2          # dependências (skia, symphonia, cpal...): rápidas em runtime
+
+# Crates de áudio do próprio workspace também precisam de
+# otimização — são eles que enchem o buffer de som.
+[profile.dev.package.daw-audio]
+opt-level = 2
+
+[profile.dev.package.daw-media]
+opt-level = 2
+
+# Release enxuto e ainda rápido de linkar:
+[profile.release]
+lto = "thin"
+codegen-units = 16
+debug = false

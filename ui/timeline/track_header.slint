@@ -1,0 +1,533 @@
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+import { Meter } from "../components/meter.slint";
+
+// ================================================================
+// TRACK HEADER ROW
+// ================================================================
+
+export component TrackHeaderRow inherits Rectangle {
+
+// ============================================================
+// DADOS
+// ============================================================
+
+in property <string> name: "Track";
+in property <string> track-type: "MIDI";
+in property <color> track-color: Theme.clip-midi;
+
+in property <bool> selected: false;
+in property <int> track-index: 0;
+
+in property <float> zoom-y: 1.0;
+
+in-out property <bool> muted: false;
+in-out property <bool> solo: false;
+in-out property <bool> record-armed: false;
+
+in-out property <bool> automation-enabled: false;
+
+in property <float> left-level: 0.0;
+in property <float> right-level: 0.0;
+in property <float> left-peak: 0.0;
+in property <float> right-peak: 0.0;
+in property <bool> left-clipped: false;
+in property <bool> right-clipped: false;
+
+// Volume da faixa. `in-out` porque o triângulo do medidor move o
+// valor na hora do arrasto; o Rust reescreve aqui quando o estado
+// muda por fora (ex.: autoteste de loudness).
+in-out property <float> volume: 0.8;
+
+// Acumulador do zoom vertical (Alt+roda): mesmo esquema de passos
+// fixos da timeline -> fluidez uniforme p/ roda e touchpad.
+private property <float> zoom-accum: 0.0;
+
+// ============================================================
+// CALLBACKS
+// ============================================================
+
+callback clicked(int);
+callback automation-clicked(int);
+
+// M/S/R já com o valor NOVO (1.0 = ligado, 0.0 = desligado).
+//
+// O botão calcula o valor antes de emitir, em vez de mandar um
+// "toggle" e deixar o Rust deduzir. Sem o valor, um clique duplo
+// rápido podia ser lido com o estado antigo e não desligar nada — o
+// botão voltaria ao visual anterior e o core ficaria mudo.
+callback mute-clicked(int, float);
+callback solo-clicked(int, float);
+callback record-clicked(int, float);
+
+// Volume arrastado no triângulo do medidor. O valor é a POSIÇÃO
+// (0..1) na curva dB; quem converte para ganho linear é o Rust,
+// usando a mesma curva de `app/src/meters.rs` — o Slint não deve
+// inventar um ganho próprio.
+callback volume-changed(int, float);
+
+// Clique na luz de clip.
+callback clip-cleared(int);
+
+// Zoom vertical (Alt+roda) — novo valor de zoom-y já calculado.
+callback zoom-y-scrolled(float);
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+pure function track-type-letter(t: string) -> string {
+    if t == "MIDI" {
+        return "M";
+    }
+
+    if t == "AUDIO" {
+        return "A";
+    }
+
+    if t == "BUS" {
+        return "B";
+    }
+
+    if t == "MASTER" {
+        return "Σ";
+    }
+
+    return "I";
+}
+
+// ============================================================
+// DIMENSÕES
+// ============================================================
+
+height: 64px * root.zoom-y;
+
+// ============================================================
+// FUNDO
+// ============================================================
+
+background:
+    root.selected
+        ? Theme.surface-high
+        : Theme.surface;
+
+animate background {
+    duration: 100ms;
+}
+
+// ============================================================
+// HOVER / SELEÇÃO
+// ============================================================
+
+Rectangle {
+    x: 0;
+    y: 0;
+
+    width: parent.width;
+    height: parent.height;
+
+    background:
+        root.selected
+            ? root.track-color.transparentize(0.88)
+            : selection-area.has-hover
+                ? Theme.surface-high.transparentize(0.45)
+                : transparent;
+
+    animate background {
+        duration: 100ms;
+    }
+}
+
+// ============================================================
+// INDICADOR DE TRACK
+// ============================================================
+
+Rectangle {
+    x: 0;
+    y: 7px;
+
+    width: root.selected ? 8px : 5px;
+    height: parent.height - 14px;
+
+    background: root.track-color;
+
+    border-radius: 2px;
+
+    animate width {
+        duration: 100ms;
+    }
+}
+
+// ============================================================
+// BORDA INFERIOR
+// ============================================================
+
+Rectangle {
+    x: 0;
+    y: parent.height - 1px;
+
+    width: parent.width;
+    height: 1px;
+
+    background: Theme.border;
+
+    opacity:
+        root.selected
+            ? 1.0
+            : 0.7;
+}
+
+// ============================================================
+// ÁREA DE SELEÇÃO
+// ============================================================
+
+selection-area := TouchArea {
+    x: 0;
+    y: 0;
+
+    width: parent.width;
+    height: parent.height;
+
+    mouse-cursor: pointer;
+
+    clicked => {
+        root.clicked(root.track-index);
+    }
+
+    // Alt+roda = zoom vertical (mesmo atalho da timeline). Cada row
+    // calcula o novo valor a partir do seu zoom-y e emite o callback;
+    // só o row sob o cursor recebe o scroll, então não há cascata.
+    scroll-event(event) => {
+        if event.modifiers.alt {
+            // Acúmulo + passo fixo (igual à timeline): fluido e
+            // uniforme para roda (60px/notch) e touchpad (micro-delta).
+            root.zoom-accum += (event.delta-x + event.delta-y) / 1px;
+
+            let threshold = 24.0;
+            let zoom-in-factor = 1.09;
+            let zoom-out-factor = 1.0 / zoom-in-factor;
+
+            let steps = floor(abs(root.zoom-accum) / threshold) * 1.0;
+
+            if steps > 0.0 {
+
+                let dir-mul = root.zoom-accum > 0.0
+                    ? zoom-out-factor
+                    : zoom-in-factor;
+
+                let combined = pow(dir-mul, steps);
+
+                let new-zoom-y =
+                    max(0.25,
+                        min(6.0,
+                            root.zoom-y * combined
+                        )
+                    );
+
+                root.zoom-y-scrolled(new-zoom-y);
+
+                let remain = mod(abs(root.zoom-accum), threshold);
+                root.zoom-accum = root.zoom-accum > 0.0 ? remain : -remain;
+            }
+            accept;
+        } else {
+            reject;
+        }
+    }
+}
+
+// ============================================================
+// CONTEÚDO
+// ============================================================
+
+HorizontalLayout {
+    x: 10px;
+    y: 0;
+
+    width: parent.width - 34px;
+    height: parent.height;
+
+    cross-axis-alignment: CrossAxisAlignment.center;
+
+    spacing: 10px;
+
+    // ========================================================
+    // TYPE BADGE
+    // ========================================================
+
+    Rectangle {
+        width: 28px;
+        height: 28px;
+
+        background:
+            root.track-color.transparentize(0.84);
+
+        border-radius: 7px;
+
+        border-width:
+            root.selected
+                ? 1px
+                : 0px;
+
+        border-color:
+            root.track-color.transparentize(0.35);
+
+        Text {
+            x: 0;
+            y: 0;
+
+            width: parent.width;
+            height: parent.height;
+
+            text:
+                root.track-type-letter(root.track-type);
+
+            color: root.track-color;
+
+            font-size: 11px;
+            font-weight: 800;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // ========================================================
+    // INFORMAÇÕES DA TRACK
+    // ========================================================
+
+    VerticalLayout {
+        alignment: LayoutAlignment.center;
+
+        spacing: 2px;
+
+        Text {
+            text: root.name;
+
+            color: Theme.text-primary;
+
+            font-size: 12px;
+            font-weight: 600;
+
+            vertical-alignment: center;
+
+            overflow: elide;
+        }
+
+        Text {
+            text: root.track-type;
+
+            color:
+                root.selected
+                    ? root.track-color
+                    : Theme.text-dim;
+
+            font-size: 8px;
+            font-weight: 600;
+
+            vertical-alignment: center;
+
+            overflow: elide;
+        }
+    }
+
+    // ========================================================
+    // CONTROLES
+    // ========================================================
+    // CONTROLES
+    // ========================================================
+
+    HorizontalLayout {
+        spacing: 2px;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        // ------------------------------------------------
+        // MUTE
+        // ------------------------------------------------
+
+        Button {
+            text: "M";
+            width: 18px;
+            height: 18px;
+
+            resting-bg:
+                Theme.is-paper
+                    ? Theme.base
+                    : Theme.surface-high;
+
+            text-color: Theme.text-primary;
+
+            toggled: root.muted;
+
+            toggled-bg: Theme.warn;
+            toggled-fg: Theme.on-accent;
+            toggled-icon-color: Theme.on-accent;
+            subtle-toggled: false;
+
+            borderless: true;
+            corner-radius: 2px;
+
+            clicked => {
+                root.muted = !root.muted;
+                root.mute-clicked(
+                    root.track-index,
+                    root.muted ? 1.0 : 0.0
+                );
+            }
+        }
+
+        // ------------------------------------------------
+        // SOLO
+        // ------------------------------------------------
+
+        Button {
+            text: "S";
+            width: 18px;
+            height: 18px;
+
+            resting-bg:
+                Theme.is-paper
+                    ? Theme.base
+                    : Theme.surface-high;
+
+            text-color: Theme.text-primary;
+
+            toggled: root.solo;
+
+            toggled-bg: root.track-color;
+            toggled-fg: Theme.on-accent;
+            toggled-icon-color: Theme.on-accent;
+            subtle-toggled: false;
+
+            borderless: true;
+            corner-radius: 2px;
+
+            clicked => {
+                root.solo = !root.solo;
+                root.solo-clicked(
+                    root.track-index,
+                    root.solo ? 1.0 : 0.0
+                );
+            }
+        }
+
+        // ------------------------------------------------
+        // AUTOMATION
+        // ------------------------------------------------
+
+        Button {
+            text: "A";
+            width: 18px;
+            height: 18px;
+
+            resting-bg:
+                Theme.is-paper
+                    ? Theme.base
+                    : Theme.surface-high;
+
+            text-color: Theme.text-primary;
+
+            toggled: root.automation-enabled;
+
+            toggled-bg: Colors.darkorange;
+            toggled-fg: Theme.on-accent;
+            toggled-icon-color: Theme.on-accent;
+            subtle-toggled: false;
+
+            borderless: true;
+            corner-radius: 2px;
+
+            clicked => {
+                root.automation-enabled =
+                    !root.automation-enabled;
+
+                root.automation-clicked(
+                    root.track-index
+                );
+            }
+        }
+         // ========================================================
+    // RECORD
+    // ========================================================
+
+    Button {
+        icon: @image-url("../icons/rec.svg");
+
+        icon-color: Theme.danger;
+
+        preferred-width: 0px;
+        toggled: root.record-armed;
+
+        toggled-bg: Theme.danger;
+
+        toggled-fg:
+            Theme.is-paper
+                ? Theme.base
+                : Theme.surface-high;
+
+        borderless: true;
+        corner-radius: 2px;
+
+        icon-size: 14px;
+
+        height: 18px;
+        width: 18px;
+
+        border-radius: 12px;
+
+        clicked => {
+            root.record-armed =
+                !root.record-armed;
+
+            root.record-clicked(
+                root.track-index,
+                root.record-armed ? 1.0 : 0.0
+            );
+        }
+    }
+    }
+
+   
+}
+
+// ============================================================
+// MEDIDOR + VOLUME - colado na borda direita
+//
+// Mesmo componente do mixer, com a mesma curva. O header da faixa é
+// estreito, então aqui o medidor fica mais fino; o que não muda é a
+// relação entre a altura do triângulo e a leitura da barra — se as
+// duas telas dessincronizassem, o usuário teria duas respostas
+// diferentes para "quanto volume está nessa faixa".
+// ============================================================
+
+Meter {
+    x: parent.width - self.width;
+    y: 2px;
+    width: 22px;
+    height: parent.height - 4px;
+
+    left-level: root.left-level;
+    right-level: root.right-level;
+    left-peak: root.left-peak;
+    right-peak: root.right-peak;
+    left-clipped: root.left-clipped;
+    right-clipped: root.right-clipped;
+
+    // O medidor precisa saber a que canal pertence, senão devolve o
+    // índice padrão e o clique na luz apagaria o latch de outro canal.
+    channel-index: root.track-index;
+
+    signal-fill-only: true;
+
+    volume <=> root.volume;
+
+    volume-changed(v) => {
+        root.volume-changed(root.track-index, v);
+    }
+
+    clip-cleared(ch) => {
+        root.clip-cleared(ch);
+    }
+}
+}

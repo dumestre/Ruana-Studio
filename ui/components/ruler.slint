@@ -1,0 +1,483 @@
+import { Theme } from "../theme.slint";
+
+// ============================================================
+// TimelineRuler — régua com CULLING e métrica adaptativa.
+//
+// Em vez de instanciar total-bars elementos (que explode no
+// zoom alto), só os compassos VISÍVEIS na viewport existem.
+// A densidade de subdivisões segue a largura de um compasso
+// em px, como nas DAWs:
+//
+//   < 40px/compasso  → só linhas de compasso
+//   ≥ 40px           → + batidas
+//   ≥ 120px          → + subdivisões 1/8
+//   ≥ 240px          → + subdivisões 1/16
+//
+// O índice global do compasso é `first-bar + i`, então os
+// números permanecem corretos em qualquer scroll.
+// ============================================================
+
+export component TimelineRuler inherits Rectangle {
+
+    // =====================================================
+    // MÉTRICA MUSICAL
+    // =====================================================
+
+    in property <int> total-bars: 32;
+
+    in property <int> beats-per-bar: 4;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+
+    clip: true;
+
+    in property <length> px-per-bar: 160px;
+
+    in property <length> ruler-height: 30px;
+
+    in property <length> scroll-x: 0px;
+
+    // Largura da área visível (para o culling).
+    in property <length> viewport-width: 800px;
+
+    in-out property <bool> loop-enabled: false;
+    in-out property <float> loop-start-beat: 0.0;
+    in-out property <float> loop-end-beat: 16.0;
+    callback loop-range-changed(float, float);
+
+
+    // =====================================================
+    // CALLBACK
+    // =====================================================
+
+    callback seek-to-beat(float);
+
+    // Flag de arrasto na régua e posição ao vivo do mouse —
+    // a timeline usa pra fazer o playhead seguir o cursor
+    // em tempo real (binding direto, sem roundtrip).
+    out property <bool> scrubbing: false;
+
+    out property <length> live-mouse-x:
+        scrub-touch.mouse-x;
+
+
+    // =====================================================
+    // DIMENSÃO
+    // =====================================================
+
+    height:
+        root.ruler-height;
+
+
+    // =====================================================
+    // COR DA RÉGUA
+    // =====================================================
+
+background:
+            Theme.surface-high;
+
+    if root.loop-enabled: Rectangle {
+        x: root.loop-start-beat * root.px-per-beat - root.scroll-x;
+        y: 0px;
+        width: max(2px, (root.loop-end-beat - root.loop-start-beat) * root.px-per-beat);
+        height: root.ruler-height;
+        background: transparent;
+        border-width: 1px;
+        border-color: Theme.accent;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
+        z: 20;
+
+        TouchArea {
+            width: 100%; height: 100%; mouse-cursor: pointer;
+            property <float> anchor: 0.0;
+            property <int> mode: 0;
+            pointer-event(event) => {
+                let f = max(0.0, (self.mouse-x + parent.x + root.scroll-x) / root.px-per-beat);
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    let edge = 5px / root.px-per-beat;
+                    mode = abs(f - root.loop-start-beat) <= edge ? 1 : abs(f - root.loop-end-beat) <= edge ? 2 : 3;
+                    anchor = f;
+                } else if event.kind == PointerEventKind.move && mode != 0 {
+                    let d = f - anchor;
+                    if mode == 1 { root.loop-range-changed(max(0.0, min(root.loop-end-beat - 0.01, f)), root.loop-end-beat); }
+                    else if mode == 2 { root.loop-range-changed(root.loop-start-beat, max(root.loop-start-beat + 0.01, f)); }
+                    else { let w = root.loop-end-beat - root.loop-start-beat; let s = max(0.0, min(root.total-bars * root.beats-per-bar - w, root.loop-start-beat + d)); root.loop-range-changed(s, s + w); anchor = f; }
+                } else if event.kind == PointerEventKind.up { mode = 0; }
+            }
+        }
+    }
+
+
+    // =====================================================
+    // MÉTRICA POR BATIDA
+    // =====================================================
+
+    property <length> px-per-beat:
+        root.px-per-bar
+        / root.beats-per-bar;
+
+
+    // =====================================================
+    // CULLING: primeiro/último compasso visíveis
+    //
+    // Margem de 1 compasso pra cada lado (evita "pop" nas
+    // bordas durante o scroll).
+    // =====================================================
+
+    property <int> first-bar:
+        max(
+            0,
+            Math.floor(
+                root.scroll-x / root.px-per-bar
+            ) - 1
+        );
+
+    property <int> visible-bars:
+        Math.ceil(
+            root.viewport-width / root.px-per-bar
+        ) + 2;
+
+
+    // =====================================================
+    // COMPASSOS VISÍVEIS
+    // =====================================================
+
+    for i in root.visible-bars: bar-rect := Rectangle {
+
+        // Índice GLOBAL do compasso (mantém a numeração certa).
+        property <int> bar-index:
+            root.first-bar + i;
+
+        // Posição local: origem do visor está em scroll-x no
+        // conteúdo, então subtraímos para alinhar com a tela.
+        x:
+            self.bar-index * root.px-per-bar
+            - root.scroll-x;
+
+        y:
+            0px;
+
+        width:
+            root.px-per-bar;
+
+        height:
+            parent.height;
+
+        z: -1;
+
+
+        visible:
+            bar-rect.bar-index >= 0
+            && bar-rect.bar-index < root.total-bars;
+
+
+        // =============================================
+        // FUNDO DO COMPASSO
+        // =============================================
+
+        background:
+            Math.mod(bar-rect.bar-index, 2) == 1
+                ? Theme.surface-high
+                : Theme.surface-step;
+
+
+        // =============================================
+        // LINHA DO COMPASSO
+        // =============================================
+
+        Rectangle {
+
+            x: 0px;
+
+            y: 0px;
+
+            width: 1px;
+
+            height:
+                parent.height - 1px;
+            background:
+                Math.mod(bar-rect.bar-index, 2) == 1
+                    ? (Theme.is-paper ? Theme.base : Theme.grid-line)
+                    : (Theme.is-paper ? Theme.base : Theme.grid-line).transparentize(
+                        0.45
+                    );
+        }
+
+
+        // =============================================
+        // NÚMERO DO COMPASSO
+        // =============================================
+
+        Text {
+
+            x: 3px;
+
+            y: parent.height / 2.0;
+
+            width:
+                parent.width - 5px;
+
+            height:
+                parent.height;
+            text:
+                "" + (bar-rect.bar-index + 1);
+
+            color:
+                Math.mod(bar-rect.bar-index, 2) == 1
+                    ? Theme.text-primary
+                    : Theme.text-dim;
+
+            font-size:
+                Math.mod(bar-rect.bar-index, 2) == 1
+                    ? 10px
+                    : 9px;
+
+            font-weight:
+                Math.mod(bar-rect.bar-index, 2) == 1
+                    ? 700
+                    : 500;
+
+            
+
+            horizontal-alignment:
+                left;
+
+            overflow:
+                elide;
+        }
+
+
+        // =============================================
+        // LINHAS DE BATIDA
+        // =============================================
+
+        for k in root.beats-per-bar: Rectangle {
+
+            visible:
+                k > 0
+                && root.px-per-bar >= 40px;
+
+            x:
+                k * root.px-per-beat;
+
+            y:
+                0px;
+
+            width:
+                1px;
+
+            height:
+                parent.height - 1px;
+            background:
+                Theme.is-paper ? Theme.base.transparentize(0.6) : Theme.grid-line.transparentize(0.6);
+        }
+
+
+        // =============================================
+        // SUBDIVISÃO 1/8
+        // =============================================
+
+        for k in root.beats-per-bar: Rectangle {
+
+            visible:
+                root.px-per-bar >= 120px;
+
+            x:
+                k * root.px-per-beat
+                + root.px-per-beat * 0.5;
+
+            y:
+                parent.height - 8px;
+
+            width:
+                1px;
+
+            height:
+                7px;
+
+            background:
+                Theme.is-paper ? Theme.base.transparentize(0.8) : Theme.grid-line.transparentize(0.8);
+        }
+
+
+        // =============================================
+        // SUBDIVISÃO 1/16 — 1/4
+        // =============================================
+
+        for k in root.beats-per-bar: Rectangle {
+
+            visible:
+                root.px-per-bar >= 240px;
+
+            x:
+                k * root.px-per-beat
+                + root.px-per-beat * 0.25;
+
+            y:
+                parent.height - 6px;
+
+            width:
+                1px;
+
+            height:
+                5px;
+
+            background:
+                Theme.is-paper ? Theme.base.transparentize(0.8) : Theme.grid-line.transparentize(0.8);
+        }
+
+
+        // =============================================
+        // SUBDIVISÃO 1/16 — 3/4
+        // =============================================
+
+        for k in root.beats-per-bar: Rectangle {
+
+            visible:
+                root.px-per-bar >= 240px;
+
+            x:
+                k * root.px-per-beat
+                + root.px-per-beat * 0.75;
+
+            y:
+                parent.height - 6px;
+
+            width:
+                1px;
+
+            height:
+                5px;
+
+            background:
+                Theme.is-paper ? Theme.base.transparentize(0.8) : Theme.grid-line.transparentize(0.8);
+        }
+    }
+
+
+    // =====================================================
+    // LINHA INFERIOR DA RÉGUA
+    // =====================================================
+
+    Rectangle {
+
+        x: 0px;
+
+        y:
+            parent.height - 1px;
+
+        width:
+            parent.width;
+
+        height:
+            1px;
+        background:
+            Theme.is-paper ? Theme.base : Theme.grid-line;
+
+        z: 10;
+    }
+
+
+    // =====================================================
+    // CLICK / SEEK
+    // =====================================================
+
+    scrub-touch := TouchArea {
+
+        x: 0px;
+
+        y: 0px;
+
+        width:
+            parent.width;
+
+        height:
+            parent.height;
+
+        // =================================================
+        // SCRUB CONTÍNUO
+        //
+        // O VISUAL é local (a timeline lê `live-mouse-x` direto).
+        // O SEEK ao motor de áudio é THROTTLED a ~30 Hz: um seek
+        // síncrono por evento de mouse trava a thread da UI
+        // (mutex + recálculo) e dava a sensação de "ímã/travada".
+        // =================================================
+
+        property <bool> seek-pending: false;
+
+        // Padrão PlayheadLab (validado): DOWN e UP buscam na hora;
+        // MOVE agrupa no timer de 33ms. O release SEM seek final era
+        // o que fazia a agulha "voltar" pra posição antiga na DAW.
+        pointer-event(event) => {
+
+            if event.button
+                    == PointerEventButton.left {
+
+                if event.kind == PointerEventKind.down {
+                    root.scrubbing = true;
+
+                    root.seek-to-beat(
+                        max(
+                            0.0,
+                            self.mouse-x
+                            + root.scroll-x
+                        )
+                        / root.px-per-bar
+                        * root.beats-per-bar
+                    );
+                }
+
+                if event.kind == PointerEventKind.up
+                    || event.kind == PointerEventKind.cancel {
+                    root.scrubbing = false;
+
+                    // Seek FINAL imediato: transporte fica exatamente
+                    // onde soltei, sem esperar o throttle.
+                    root.seek-to-beat(
+                        max(
+                            0.0,
+                            self.mouse-x
+                            + root.scroll-x
+                        )
+                        / root.px-per-bar
+                        * root.beats-per-bar
+                    );
+                }
+
+                if event.kind == PointerEventKind.move
+                    && !self.seek-pending {
+                    self.seek-pending = true;
+                    no-delay-timer.running = true;
+                }
+            }
+        }
+    }
+
+    // Timer de 33ms (~30 Hz): agrupa os MOVES do arrasto num
+    // único seek por frame — o motor acompanha sem travar a UI.
+    no-delay-timer := Timer {
+        interval: 33ms;
+        running: false;
+
+        triggered => {
+            self.running = false;
+            scrub-touch.seek-pending = false;
+
+            let beat =
+                (
+                    scrub-touch.mouse-x
+                    + root.scroll-x
+                )
+                / root.px-per-bar
+                * root.beats-per-bar;
+
+            root.seek-to-beat(
+                max(
+                    0.0,
+                    beat
+                )
+            );
+        }
+    }
+}

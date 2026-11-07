@@ -1,0 +1,753 @@
+import { Theme } from "../theme.slint";
+import { BeatHeader } from "beat_header.slint";
+import { BeatTrackPanel } from "beat_track_panel.slint";
+import { BeatStepGrid } from "beat_step_grid.slint";
+import { BeatMenus } from "beat_menus.slint";
+
+export component BeatContent inherits Rectangle {
+
+    // ============================================================
+    // DADOS
+    // ============================================================
+
+    in-out property <[[bool]]> patterns: [[]];
+    in-out property <int> current-pattern: 0;
+
+    // ============================================================
+    // FONTE ÚNICA DE VERDADE
+    //
+    // A grade desenha SEMPRE do pattern atual. O clique grava
+    // em patterns[current-pattern] (via callback do dono) e
+    // este binding redesenha as células. Nunca dessincroniza.
+    // ============================================================
+
+    private property <[bool]> steps:
+        root.patterns.length > 0
+        && root.current-pattern >= 0
+        && root.current-pattern < root.patterns.length
+            ? root.patterns[root.current-pattern]
+            : [];
+
+    // ============================================================
+    // STRIDE
+    //
+    // Passos por trilha no model (linha achatada do pattern).
+    // O índice global de um passo é row * stride + col; nunca
+    // assumir 16, senão resoluções maiores invadem a linha de
+    // cima.
+    // ============================================================
+
+    private property <int> stride:
+        root.patterns.length > 0
+        && root.current-pattern >= 0
+        && root.current-pattern < root.patterns.length
+        && root.instrument-indexes.length > 0
+            ? max(1, root.patterns[root.current-pattern].length
+                / root.instrument-indexes.length)
+            : 16;
+
+    in-out property <int> playhead: -1;
+
+    in-out property <[int]> step-indexes:
+        [0, 1, 2, 3, 4, 5, 6, 7,
+         8, 9, 10, 11, 12, 13, 14, 15];
+
+    in-out property <[int]> instrument-indexes:
+        [0, 1, 2, 3, 4, 5, 6, 7];
+
+    in-out property <[string]> instrument-names:
+        ["Kick", "Snare", "Clap", "Closed Hat",
+         "Open Hat", "Tom", "Cymbal", "Perc"];
+
+    // Sample carregado em cada linha ("" = vazia).
+    in-out property <[string]> track-sample-names: [];
+
+    in-out property <[bool]> track-active:
+        [true, true, true, true,
+         true, true, true, true];
+
+    in-out property <[bool]> track-solo:
+        [false, false, false, false,
+         false, false, false, false];
+
+    in-out property <[float]> track-pan:
+        [0.0, 0.0, 0.0, 0.0,
+         0.0, 0.0, 0.0, 0.0];
+
+    in-out property <[float]> track-volume:
+        [1.0, 1.0, 1.0, 1.0,
+         1.0, 1.0, 1.0, 1.0];
+
+    in-out property <[int]> track-mixer-channel:
+        [0, 1, 2, 3, 4, 5, 6, 7];
+
+    in-out property <[color]> track-colors:
+        [
+            Theme.accent,
+            Theme.ok,
+            Theme.warn,
+            Theme.danger,
+            Theme.activ,
+            #4895EF,
+            #E76F51,
+            #B08D57
+        ];
+
+    in-out property <int> selected-track: 0;
+
+    in-out property <int> grid-resolution: 16;
+    in-out property <bool> playing: false;
+
+    in-out property <float> humanize: 0.0;
+    in-out property <float> swing: 0.0;
+
+    in-out property <[int]> resolution-options:
+        [8, 16, 32, 64];
+
+    private property <[int]> one-pattern-indexes: [0];
+    private property <[int]> no-pattern-indexes: [];
+
+    in-out property <string> beat-name:
+        "BEAT SEQUENCER";
+
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
+
+    callback close-requested;
+    callback add-track-requested;
+
+    callback grid-resolution-changed(int);
+    callback drag-moved(length, length);
+    callback track-selected(int);
+    callback step-toggled(int, bool);
+
+    // Play/stop do header → transporte global (não um clock local).
+    callback play-state-changed(bool);
+
+    // Pré-escuta do sample de uma linha.
+    callback track-preview-requested(int);
+
+    // Abre o sampler da linha (instrumento daquela track do beat).
+    callback sampler-open-requested(int);
+
+    callback duplicate-beat;
+    callback copy-beat;
+    callback clear-beat;
+    callback delete-beat;
+
+    callback copy-track(int);
+    callback duplicate-track(int);
+    callback delete-track(int);
+    callback clear-track(int);
+
+    callback insert-pattern(int, int);
+    callback pattern-changed(int);
+
+    // Persistência no core (repassados ao popup).
+    callback humanize-committed(float);
+    callback swing-committed(float);
+    callback track-param-changed(int, string, float);
+
+
+    // ============================================================
+    // MENUS
+    // ============================================================
+
+    in-out property <bool> grid-dropdown-open: false;
+    in-out property <bool> beat-menu-open: false;
+    in-out property <int> track-menu-open-index: -1;
+
+
+    // ============================================================
+    // GEOMETRIA
+    // ============================================================
+
+    property <length> header-x: 12px;
+    property <length> header-y: 12px;
+
+    property <length> header-height: 34px;
+
+    property <length> divider-gap: 6px;
+
+    property <length> content-gap: 10px;
+
+    out property <length> content-top:
+        root.header-y
+        + root.header-height
+        + root.divider-gap
+        + 1px
+        + root.content-gap;
+
+    out property <length> row-height: 30px;
+
+    property <length> dynamic-content-height:
+        33px
+        + root.instrument-indexes.length
+        * root.row-height
+        + 12px;
+
+    property <length> tracks-left: 12px;
+
+    property <length> tracks-top:
+        root.content-top;
+
+    property <length> menu-y:
+        root.content-top;
+
+    property <length> track-menu-height:
+        4px
+        + 9 * 24px
+        + 2 * 1px
+        + 26px
+        + 11 * 1px;
+
+
+    // ============================================================
+    // DRAG DE SAMPLE (browser → linha do beat)
+    // ============================================================
+
+    in property <bool> drag-active: false;
+    in property <length> drag-x: 0px;
+    in property <length> drag-y: 0px;
+
+    // Linha sob o cursor durante o drag (-1 = fora do grid).
+    out property <int> drag-hover-track: -1;
+
+
+    // ============================================================
+    // TAMANHO DO COMPONENTE
+    // ============================================================
+
+    width: 800px;
+
+    height:
+        root.content-top
+        + root.dynamic-content-height
+        + 12px;
+
+
+    // ============================================================
+    // FUNDO
+    // ============================================================
+
+    background: Theme.base;
+
+    border-radius: 8px;
+
+    border-width: 1px;
+    border-color: Theme.border;
+
+
+    // ============================================================
+    // HEADER
+    // ============================================================
+
+    beat-header := BeatHeader {
+
+        x: root.header-x;
+        y: root.header-y;
+         playing <=> root.playing;
+
+    play-state-changed(value) => {
+        root.playing = value;
+        root.play-state-changed(value);}
+
+        width:
+            parent.width
+            - root.header-x * 2;
+
+        height: root.header-height;
+
+
+        // --------------------------------------------------------
+        // DADOS
+        // --------------------------------------------------------
+
+        beat-name <=> root.beat-name;
+
+        humanize <=> root.humanize;
+        swing <=> root.swing;
+
+        grid-resolution
+            <=> root.grid-resolution;
+
+        resolution-options:
+            root.resolution-options;
+
+        grid-dropdown-open
+            <=> root.grid-dropdown-open;
+
+        beat-menu-open
+            <=> root.beat-menu-open;
+
+        current-pattern
+            <=> root.current-pattern;
+
+        patterns
+            <=> root.patterns;
+
+        pattern-indexes:
+            [0];
+
+
+        // --------------------------------------------------------
+        // CALLBACKS
+        // --------------------------------------------------------
+
+        close-requested => {
+            root.close-requested();
+        }
+
+        drag-moved(dx, dy) => {
+            root.drag-moved(dx, dy);
+        }
+
+        add-track-requested => {
+            root.add-track-requested();
+        }
+
+        grid-resolution-changed(value) => {
+            root.grid-resolution-changed(value);
+        }
+
+        humanize-changed(value) => {
+            root.humanize-committed(value);
+        }
+
+        swing-changed(value) => {
+            root.swing-committed(value);
+        }
+
+        duplicate-beat => {
+            root.duplicate-beat();
+        }
+
+        copy-beat => {
+            root.copy-beat();
+        }
+
+        clear-beat => {
+            root.clear-beat();
+        }
+
+        delete-beat => {
+            root.delete-beat();
+        }
+
+        pattern-changed(idx) => {
+            root.pattern-changed(idx);
+        }
+    }
+
+
+    // ============================================================
+    // LINHA DIVISÓRIA
+    //
+    // FICA ABAIXO DO HEADER.
+    //
+    // NÃO USAR vertical-stretch.
+    // ============================================================
+
+    Rectangle {
+
+        x: root.header-x;
+
+        y:
+            beat-header.y
+            + beat-header.height
+            + root.divider-gap;
+
+        width:
+            parent.width
+            - root.header-x * 2;
+
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+
+    // ============================================================
+    // PAINEL DAS TRACKS
+    // ============================================================
+
+    track-panel := BeatTrackPanel {
+
+        x: root.header-x;
+
+        y: root.content-top;
+
+        width: 244px;
+
+        height:
+            root.dynamic-content-height;
+
+
+        // --------------------------------------------------------
+        // DADOS
+        // --------------------------------------------------------
+
+        instrument-indexes:
+            root.instrument-indexes;
+
+        instrument-names:
+            root.instrument-names;
+
+        track-sample-names:
+            root.track-sample-names;
+
+        track-active:
+            root.track-active;
+
+        track-solo:
+            root.track-solo;
+
+        track-pan:
+            root.track-pan;
+
+        track-volume:
+            root.track-volume;
+
+        track-mixer-channel:
+            root.track-mixer-channel;
+
+        track-colors:
+            root.track-colors;
+
+
+        // --------------------------------------------------------
+        // FIXAÇÃO DO DROP
+        //
+        // Só o retângulo colorido da track mostra o alvo (borda
+        // branca); a grade de steps não destaca nada durante o
+        // arrasto.
+        // --------------------------------------------------------
+
+        // `surface` no lugar do `border` do painel apagava a borda —
+        // o `BeatTrackPanel` já tem `border-color: Theme.border`
+        // como padrão, então isto só sobrescrevia para nada.
+        border-color: Theme.border;
+        drag-hover-track:
+            root.drag-hover-track;
+
+
+        // --------------------------------------------------------
+        // SELEÇÃO / MENU
+        // --------------------------------------------------------
+
+        selected-track
+            <=> root.selected-track;
+
+        track-menu-open-index
+            <=> root.track-menu-open-index;
+
+
+        // --------------------------------------------------------
+        // CALLBACK
+        // --------------------------------------------------------
+
+        track-selected(index) => {
+            root.track-selected(index);
+        }
+
+        track-preview-requested(index) => {
+            root.track-preview-requested(index);
+        }
+
+        sampler-open-requested(index) => {
+            root.sampler-open-requested(index);
+        }
+
+        track-param-changed(track, param, value) => {
+            root.track-param-changed(track, param, value);
+        }
+    }
+
+
+    // ============================================================
+    // GRID
+    // ============================================================
+
+    step-grid := BeatStepGrid {
+
+        x:
+            track-panel.x
+            + track-panel.width
+            + 12px;
+
+        y:
+            root.content-top;
+
+        width:
+            parent.width
+            - self.x
+            - root.header-x;
+
+        height:
+            root.dynamic-content-height;
+
+
+        // --------------------------------------------------------
+        // DADOS
+        //
+        // steps agora é derivado de patterns[current-pattern]
+        // (binding unidirecional — a fonte de verdade é o pattern).
+        // --------------------------------------------------------
+
+        steps: root.steps;
+
+        stride: root.stride;
+
+        instrument-indexes:
+            root.instrument-indexes;
+
+        step-indexes:
+            root.step-indexes;
+
+        playhead:
+            root.playhead;
+
+        grid-resolution:
+            root.grid-resolution;
+
+        track-active:
+            root.track-active;
+
+        track-colors:
+            root.track-colors;
+
+
+        // --------------------------------------------------------
+        // CALLBACK
+        // --------------------------------------------------------
+
+        step-toggled(index, value) => {
+            root.step-toggled(index, value);
+        }
+    }
+
+
+    // ============================================================
+    // MENUS
+    // ============================================================
+
+    BeatMenus {
+
+        x: 0px;
+        y: 0px;
+
+        width: parent.width;
+        height: parent.height;
+
+
+        // --------------------------------------------------------
+        // ESTADO
+        // --------------------------------------------------------
+
+        grid-dropdown-open
+            <=> root.grid-dropdown-open;
+
+        beat-menu-open
+            <=> root.beat-menu-open;
+
+        track-menu-open-index
+            <=> root.track-menu-open-index;
+
+
+        // --------------------------------------------------------
+        // GRID
+        // --------------------------------------------------------
+
+        resolution-options:
+            root.resolution-options;
+
+        grid-resolution:
+            root.grid-resolution;
+
+
+        // --------------------------------------------------------
+        // PATTERN
+        // --------------------------------------------------------
+
+        pattern-indexes:
+            root.patterns.length > 0
+            ? root.one-pattern-indexes
+            : root.no-pattern-indexes;
+
+        current-pattern:
+            root.current-pattern;
+
+
+        // --------------------------------------------------------
+        // TRACK
+        // --------------------------------------------------------
+
+        instrument-names:
+            root.instrument-names;
+
+        track-colors:
+            root.track-colors;
+
+
+        // --------------------------------------------------------
+        // POSIÇÃO
+        // --------------------------------------------------------
+
+        menu-y:
+            root.menu-y;
+
+        steps-anchor-x:
+            beat-header.x
+            + beat-header.steps-anchor-x;
+
+        beat-anchor-x:
+            beat-header.x
+            + beat-header.beat-anchor-x;
+
+        tracks-left:
+            root.tracks-left;
+
+        tracks-top:
+            root.tracks-top;
+
+        track-menu-height:
+            root.track-menu-height;
+
+
+        // --------------------------------------------------------
+        // GRID CALLBACK
+        // --------------------------------------------------------
+
+        grid-resolution-changed(value) => {
+
+            root.grid-resolution = value;
+
+            root.grid-resolution-changed(
+                value
+            );
+        }
+
+
+        // --------------------------------------------------------
+        // PATTERN CALLBACK
+        // --------------------------------------------------------
+
+        pattern-changed(index) => {
+            root.pattern-changed(index);
+        }
+
+
+        // --------------------------------------------------------
+        // BEAT CALLBACKS
+        // --------------------------------------------------------
+
+        duplicate-beat => {
+            root.duplicate-beat();
+        }
+
+        copy-beat => {
+            root.copy-beat();
+        }
+
+        clear-beat => {
+            root.clear-beat();
+        }
+
+        delete-beat => {
+            root.delete-beat();
+        }
+
+
+        // --------------------------------------------------------
+        // TRACK CALLBACKS
+        // --------------------------------------------------------
+
+        copy-track(track) => {
+            root.copy-track(track);
+        }
+
+        duplicate-track(track) => {
+            root.duplicate-track(track);
+        }
+
+        clear-track(track) => {
+            root.clear-track(track);
+        }
+
+        delete-track(track) => {
+            root.delete-track(track);
+        }
+
+        insert-pattern(track, interval) => {
+            root.insert-pattern(
+                track,
+                interval
+            );
+        }
+    }
+
+
+    // ============================================================
+    // PLAYBACK
+    //
+    // NÃO existe clock aqui. `playhead` vem do Rust, derivado da
+    // posição real do áudio. O Timer de 140ms que ficava neste lugar
+    // andava sozinho: a coluna acesa não tinha relação nenhuma com o
+    // que estava soando, e nem com o BPM.
+    // ============================================================
+
+
+    // ============================================================
+    // HOVER DO DRAG DE SAMPLE
+    //
+    // Enquanto um sample é arrastado, descobre sobre qual
+    // linha do grid o cursor está (mesma geometria do
+    // BeatStepGrid: rows-top 33px, pitch 30px).
+    // ============================================================
+
+    Timer {
+
+        interval: 16ms;
+
+        running:
+            root.drag-active;
+
+        triggered => {
+
+            let gx =
+                step-grid.absolute-position.x;
+
+            let gy =
+                step-grid.absolute-position.y;
+
+            // Aceita o drop também sobre o painel de tracks
+            // (retângulo colorido) para a esquerda do grid.
+            let inside-x =
+                root.drag-x >= track-panel.absolute-position.x
+                && root.drag-x <= gx + step-grid.width;
+
+            let row =
+                Math.floor(
+                    (root.drag-y - gy - 33px) / 30px
+                );
+
+            root.drag-hover-track =
+                inside-x
+                && root.drag-y >= gy + 33px
+                && root.drag-y <= gy + 33px + root.instrument-indexes.length * 30px
+                && row >= 0
+                && row < root.instrument-indexes.length
+                    ? row
+                    : -1;
+        }
+    }
+
+    // Drag terminou → limpa o highlight.
+    states [
+        idle when !root.drag-active: {
+            drag-hover-track: -1;
+        }
+    ]
+}

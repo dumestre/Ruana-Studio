@@ -1,0 +1,255 @@
+import { Theme } from "../theme.slint";
+import { StereoMeter } from "meter_reuse.slint";
+import { AudioScale } from "audio_scale.slint";
+
+// ============================================================
+// METER — estilo Ableton Live
+//
+// Layout horizontal:
+// - Triângulo de volume à esquerda
+// - Marcas da escala entre o triângulo e o meter
+// - Meter estéreo L/R no centro
+// - Valores em dB à direita
+//
+// Correção:
+// - Margem vertical interna para evitar conteúdo encostado
+//   ou cortado nas bordas superior e inferior.
+// - Todos os elementos usam a mesma área vertical útil.
+// ============================================================
+
+export component Meter inherits Rectangle {
+
+    // ========================================================
+    // MEDIÇÃO
+    // ========================================================
+
+    in property <float> left-level: 0.0;
+    in property <float> right-level: 0.0;
+    in property <float> left-peak: 0.0;
+    in property <float> right-peak: 0.0;
+
+    in property <bool> left-clipped: false;
+    in property <bool> right-clipped: false;
+
+    in property <int> channel-index: 0;
+    in property <color> fader-color: Theme.text-primary;
+    in property <color> empty-meter-color: #B8B8B8;
+
+    // ========================================================
+    // VOLUME
+    // ========================================================
+
+    in-out property <float> volume: 0.8;
+    in property <bool> signal-fill-only: false;
+
+    private property <bool> show-volume-control:
+        !root.signal-fill-only;
+
+    // ========================================================
+    // CALLBACKS
+    // ========================================================
+
+    callback volume-changed(float);
+    callback clip-cleared(int);
+
+    // ========================================================
+    // GEOMETRIA
+    // ========================================================
+
+    private property <length> triangle-width: 14px;
+    private property <length> meter-width: 14px;
+    private property <length> db-width: 24px;
+
+    private property <length> tick-width: 3px;
+    private property <length> tick-gap: 3px;
+    private property <length> gap: 4px;
+    private property <length> fader-gap: 0px;
+
+    // Margem para impedir que o conteúdo encoste nas bordas.
+    private property <length> vertical-padding: 12px;
+
+    // Área vertical compartilhada por todos os elementos.
+    private property <length> meter-height:
+        Math.max(0px, root.height - 2 * root.vertical-padding);
+
+    // Posição horizontal dos elementos.
+    private property <length> meter-x:
+        (root.width - root.meter-width) / 2;
+
+    private property <length> tick-x:
+        root.meter-x - root.tick-gap - root.tick-width;
+
+    private property <length> fader-x:
+        root.tick-x - root.fader-gap - root.triangle-width;
+
+    // Escala em dB.
+    private property <[float]> scale-db: [
+        6.0, 0.0, -6.0, -12.0, -18.0, -24.0,
+        -30.0, -36.0, -42.0, -48.0, -54.0, -60.0
+    ];
+
+    width: root.show-volume-control ? 90px : 8px;
+    min-height: 0px;
+
+    // ========================================================
+    // TRIÂNGULO DE VOLUME
+    // ========================================================
+
+    if root.show-volume-control: Rectangle {
+        x: root.fader-x;
+        y: root.vertical-padding;
+        width: root.triangle-width;
+        height: root.meter-height;
+
+        background: transparent;
+        border-radius: 3px;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+
+            moved => {
+                root.volume = Math.max(0.0, Math.min(1.0, 1.0 - self.mouse-y / self.height));
+                root.volume-changed(root.volume);
+            }
+
+            clicked => {
+                root.volume = Math.max(0.0, Math.min(1.0, 1.0 - self.mouse-y / self.height));
+                root.volume-changed(root.volume);
+            }
+        }
+
+        Image {
+            source: @image-url("../icons/play.svg");
+
+            width: 16px;
+            height: 16px;
+
+            x: (parent.width - self.width) / 2;
+
+            y: parent.height * (1.0 - root.volume) - self.height / 2;
+
+            horizontal-tiling: ImageTiling.none;
+            image-fit: ImageFit.contain;
+            image-rendering: ImageRendering.smooth;
+
+            colorize: root.fader-color;
+            z: 10;
+        }
+    }
+
+    // ========================================================
+    // METER ESTÉREO L/R
+    // ========================================================
+
+    Rectangle {
+        x: root.show-volume-control ? root.meter-x : 0px;
+        y: root.vertical-padding;
+        width: root.meter-width;
+        height: root.meter-height;
+
+        background: transparent;
+
+        StereoMeter {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+
+            left-level: root.left-level;
+            right-level: root.right-level;
+
+            left-peak: root.left-peak;
+            right-peak: root.right-peak;
+
+            left-clipped: root.left-clipped;
+            right-clipped: root.right-clipped;
+
+            meter-width: 6.5px;
+            channel-gap: 0px;
+
+            meter-background: root.empty-meter-color;
+            meter-border: transparent;
+        }
+
+        // Clique no meter para limpar a indicação de clip.
+        TouchArea {
+            width: 100%;
+            height: 100%;
+
+            clicked => {
+                root.clip-cleared(root.channel-index);
+            }
+        }
+    }
+
+    // ========================================================
+    // NÍVEIS DE dB — DIREITA
+    // ========================================================
+
+    if root.show-volume-control: Rectangle {
+        x: root.meter-x + root.meter-width + root.gap;
+        y: root.vertical-padding;
+
+        width: 20px;
+        height: root.meter-height;
+
+        background: transparent;
+
+        for db in root.scale-db: Text {
+            property <float> position:
+                (db - AudioScale.db-floor)
+                / (AudioScale.db-ceiling - AudioScale.db-floor);
+
+            text: db.to-fixed(0);
+
+            color: Theme.text-primary;
+            font-size: 10px;
+
+            horizontal-alignment: center;
+            vertical-alignment: center;
+
+            width: parent.width;
+            height: 10px;
+
+            y: Math.max(0px, Math.min(
+                parent.height - self.height,
+                parent.height * (1.0 - self.position)
+                    - self.height / 2
+            ));
+        }
+    }
+
+    // ========================================================
+    // MARCAS DA ESCALA
+    // ========================================================
+
+    if root.show-volume-control: Rectangle {
+        x: root.tick-x;
+        y: root.vertical-padding;
+
+        width: root.tick-width;
+        height: root.meter-height;
+
+        background: transparent;
+
+        for db in root.scale-db: Rectangle {
+            property <float> position:
+                (db - AudioScale.db-floor)
+                / (AudioScale.db-ceiling - AudioScale.db-floor);
+
+            x: 0px;
+
+            y: Math.max(0px, Math.min(
+                parent.height - self.height,
+                parent.height * (1.0 - self.position)
+                    - self.height / 2
+            ));
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.text-primary;
+        }
+    }
+}

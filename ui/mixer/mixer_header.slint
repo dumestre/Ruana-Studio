@@ -1,0 +1,88 @@
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+
+export component MixerHeader inherits Rectangle {
+    in-out property <bool> floating: false;
+    in property <int> selected-channel: 0;
+    callback float-toggle();
+    callback copy-slots();
+    callback paste-slots();
+    callback undo();
+    callback redo();
+
+    height: 30px;
+    background: Theme.surface;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 6px;
+        spacing: 5px;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        height: 100%;
+
+        Text {
+            text: "Mixer";
+            color: Theme.text-primary;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        Rectangle { width: 1px; height: 16px; background: Theme.border; }
+
+        Button {
+            text: "Copiar slots";
+            height: 21px;
+            padding-x: 6px;
+            corner-radius: 3px;
+            resting-bg: Theme.surface-high;
+            clicked => { root.copy-slots(); }
+        }
+        Button {
+            text: "Colar";
+            height: 21px;
+            padding-x: 6px;
+            corner-radius: 3px;
+            resting-bg: Theme.surface-high;
+            clicked => { root.paste-slots(); }
+        }
+        Button {
+            width: 23px;
+            height: 21px;
+            icon: @image-url("../icons/undo.svg");
+            icon-size: 13px;
+            borderless: true;
+            clicked => { root.undo(); }
+        }
+        Button {
+            width: 23px;
+            height: 21px;
+            icon: @image-url("../icons/redo.svg");
+            icon-size: 13px;
+            borderless: true;
+            clicked => { root.redo(); }
+        }
+
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+
+        Button {
+            width: 22px;
+            height: 20px;
+            icon: @image-url("../icons/expand_diag.svg");
+            icon-size: 12px;
+            borderless: true;
+            icon-color: Theme.text-dim;
+            transform-rotation: root.floating ? 180deg : 0deg;
+            toggled: root.floating;
+            toggled-icon-color: Theme.accent;
+            clicked => { root.float-toggle(); }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.border;
+    }
+}

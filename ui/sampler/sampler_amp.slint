@@ -1,0 +1,148 @@
+import { Theme } from "../theme.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCard, SamplerKnob, SamplerToggle } from "sampler_widgets.slint";
+
+// ============================================================
+// AMP
+// ============================================================
+//
+// Este era o pior caso: o componente declarava `height: 150px` no
+// PRÓPRIO corpo (sampler_amp.slint:16), ou seja, o pai não conseguia
+// encolher nem esticar — a página ficava 150px mais alta que o
+// espaço e o MUTE/SOLO aparecia cortado. Além disso o PAN usava
+// `PanKnob`, um segundo dial só para ele.
+//
+// Agora a altura é 100% (vem do pai) e o PAN é um `SamplerKnob`
+// bipolar com o detente no meio, que é o que o formato bipolar do
+// `SamplerStyle` já esperava.
+// ============================================================
+
+export component SamplerAmp inherits Rectangle {
+
+    in-out property <float> volume: 1.0;
+    in-out property <float> pan: 0.5;
+    in-out property <float> stereo-width: 1.0;
+    in-out property <float> phase: 0.0;
+
+    in-out property <bool> muted: false;
+    in-out property <bool> solo: false;
+
+    in-out property <bool> compact: false;
+
+    callback volume-changed(float);
+    callback pan-changed(float);
+    callback stereo-width-changed(float);
+    callback phase-changed(float);
+    callback muted-changed(bool);
+    callback solo-changed(bool);
+
+    SamplerCard {
+        title: "AMP";
+        accent: SamplerStyle.sec-amp;
+        compact: root.compact;
+        on: !root.muted;
+
+        width: 100%;
+        height: 100%;
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
+
+            SamplerKnob {
+                label: "VOL";
+                value: root.volume;
+                // 1.0 é unity de verdade na curva do projeto
+                // (`SamplerStyle.pos-to-db`). O 0.75 herdado do cap
+                // antigo significava -7,5 dB.
+                default-value: 1.0;
+                enabled: !root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-db(root.volume);
+
+                changed(value) => {
+                    root.volume = value;
+                    root.volume-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "PAN";
+                value: root.pan;
+                default-value: 0.5;
+                bipolar: true;
+                enabled: !root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-pan(root.pan);
+
+                changed(value) => {
+                    root.pan = value;
+                    root.pan-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "WIDTH";
+                value: root.stereo-width;
+                default-value: 1;
+                enabled: !root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-pct(root.stereo-width);
+
+                changed(value) => {
+                    root.stereo-width = value;
+                    root.stereo-width-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "PHASE";
+                value: root.phase;
+                default-value: 0;
+                enabled: !root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-phase(root.phase);
+
+                changed(value) => {
+                    root.phase = value;
+                    root.phase-changed(value);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact);
+
+            SamplerToggle {
+                text: "MUTE";
+                on: root.muted;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                horizontal-stretch: 1;
+
+                clicked => {
+                    root.muted = !root.muted;
+                    root.muted-changed(root.muted);
+                }
+            }
+
+            SamplerToggle {
+                text: "SOLO";
+                on: root.solo;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                horizontal-stretch: 1;
+
+                clicked => {
+                    root.solo = !root.solo;
+                    root.solo-changed(root.solo);
+                }
+            }
+        }
+    }
+}

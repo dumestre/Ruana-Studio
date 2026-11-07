@@ -1,0 +1,162 @@
+import { Theme } from "../theme.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCurves } from "sampler_curves.slint";
+import {
+    SamplerCard,
+    SamplerKnob,
+    SamplerSegments,
+    SamplerToggle,
+    SamplerCurve,
+    SamplerReadout,
+} from "sampler_widgets.slint";
+
+// ============================================================
+// MODULAÇÃO / LFO
+// ============================================================
+//
+// RATE, DEPTH, os segmentos de forma/destino e a curva ficavam todos
+// em posição absoluta (x: 8..254, y: 36..110), com a curva por último
+// em y: 110 — 180px exigidos.
+//
+// O valor do RATE muda de unidade quando o SYNC liga (Hz livre vs
+// compassos), então o readout mostra um ou outro. Sem isso o knob
+// mentia: `fmt-lfo-rate` em modo sync mostraria "0.35 Hz".
+// ============================================================
+
+export component SamplerModulation inherits Rectangle {
+
+    in-out property <float> rate: 0.35;
+    in-out property <float> depth: 0.0;
+
+    in-out property <string> waveform: "SINE";
+    in-out property <string> destination: "PITCH";
+
+    in-out property <bool> enabled: false;
+    in-out property <bool> sync: false;
+
+    in-out property <bool> compact: false;
+
+    callback rate-changed(float);
+    callback depth-changed(float);
+    callback waveform-changed(string);
+    callback destination-changed(string);
+    callback enabled-changed(bool);
+    callback sync-changed(bool);
+
+    SamplerCard {
+        title: "MODULATION";
+        accent: SamplerStyle.sec-mod;
+        compact: root.compact;
+        has-toggle: true;
+        on: root.enabled;
+
+        width: 100%;
+        height: 100%;
+
+        toggled => {
+            root.enabled = !root.enabled;
+            root.enabled-changed(root.enabled);
+        }
+
+        SamplerCurve {
+            commands: SamplerCurves.lfo-curve(root.waveform, root.depth);
+            stroke: SamplerStyle.sec-mod;
+            dim: !root.enabled;
+            compact: root.compact;
+            vertical-stretch: 1;
+        }
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
+
+            SamplerKnob {
+                label: "RATE";
+                value: root.rate;
+                default-value: 0.35;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
+                value-text: root.sync
+                    ? SamplerStyle.fmt-lfo-sync(root.rate)
+                    : SamplerStyle.fmt-lfo-rate(root.rate);
+
+                changed(value) => {
+                    root.rate = value;
+                    root.rate-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "DEPTH";
+                value: root.depth;
+                default-value: 0;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
+                value-text: SamplerStyle.fmt-pct(root.depth);
+
+                changed(value) => {
+                    root.depth = value;
+                    root.depth-changed(value);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact);
+
+            SamplerSegments {
+                options: ["SINE", "TRI", "SAW", "SQR"];
+                value: root.waveform;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
+
+                picked(choice) => {
+                    root.waveform = choice;
+                    root.waveform-changed(choice);
+                }
+            }
+
+            SamplerSegments {
+                options: ["PITCH", "FILTER", "AMP"];
+                value: root.destination;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
+
+                picked(choice) => {
+                    root.destination = choice;
+                    root.destination-changed(choice);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact);
+
+            SamplerToggle {
+                text: "SYNC";
+                on: root.sync;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-mod;
+                horizontal-stretch: 0;
+
+                clicked => {
+                    root.sync = !root.sync;
+                    root.sync-changed(root.sync);
+                }
+            }
+
+            SamplerReadout {
+                label: "DEST";
+                value: root.destination + " " + SamplerStyle.fmt-pct(root.depth);
+                compact: root.compact;
+            }
+        }
+    }
+}

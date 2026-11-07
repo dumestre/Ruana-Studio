@@ -1,0 +1,518 @@
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+
+export component SamplerMapping inherits Rectangle {
+
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
+    in-out property <int> selected-key: 60;
+    in-out property <int> selected-layer: 0;
+
+    in-out property <int> low-key: 36;
+    in-out property <int> high-key: 84;
+
+    in-out property <int> low-velocity: 1;
+    in-out property <int> high-velocity: 127;
+
+    in-out property <string> sample-name: "No Sample";
+
+    callback key-selected(int);
+    callback load-sample;
+    callback clear-sample;
+
+    // ============================================================
+    // FUNDO
+    // ============================================================
+
+    background: Theme.surface-high;
+
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    // ============================================================
+    // TÍTULO
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 5px;
+
+        width: parent.width - 16px;
+        height: 18px;
+
+        text: "MAPPING";
+
+        color: Theme.text-dim;
+
+        font-size: 9px;
+        font-weight: 600;
+
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        x: 8px;
+        y: 27px;
+
+        width: parent.width - 16px;
+        height: 1px;
+
+        background: Theme.border;
+    }
+
+    // ============================================================
+    // MAPA
+    // ============================================================
+
+    Rectangle {
+        x: 8px;
+        y: 34px;
+
+        width: parent.width - 16px;
+        height: 92px;
+
+        background: Theme.base;
+
+        border-width: 1px;
+        border-color: Theme.border;
+        border-radius: 2px;
+
+        // ========================================================
+        // LINHAS HORIZONTAIS
+        // ========================================================
+
+        Rectangle {
+            x: 0;
+            y: parent.height * 0.25;
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.grid-sub;
+        }
+
+        Rectangle {
+            x: 0;
+            y: parent.height * 0.50;
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.grid-line;
+        }
+
+        Rectangle {
+            x: 0;
+            y: parent.height * 0.75;
+
+            width: parent.width;
+            height: 1px;
+
+            background: Theme.grid-sub;
+        }
+
+        // ========================================================
+        // RANGE DA LAYER
+        // ========================================================
+
+        Rectangle {
+            x: root.low-key <= root.high-key
+                ? ((root.low-key - 36) / 48.0) * parent.width
+                : 0px;
+
+            y: 8px;
+
+            width: max(
+                2px,
+                ((root.high-key - root.low-key + 1) / 48.0)
+                    * parent.width
+            );
+
+            height: parent.height - 16px;
+
+            background: Theme.accent;
+
+            opacity: 0.18;
+
+            border-width: 1px;
+            border-color: Theme.accent;
+        }
+
+        // ========================================================
+        // KEY GRID
+        // ========================================================
+
+        for i in [
+            0, 1, 2, 3, 4, 5, 6, 7,
+            8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23
+        ]: Rectangle {
+
+            x: i * (parent.width / 24.0);
+
+            y: 0;
+
+            width: 1px;
+
+            height: parent.height;
+
+            background: Theme.grid-sub;
+        }
+
+        // ========================================================
+        // SAMPLE RANGE
+        // ========================================================
+
+        Rectangle {
+            x: 0;
+            y: parent.height * 0.50;
+
+            width: parent.width;
+
+            height: parent.height * 0.45;
+
+            background: Theme.clip-audio;
+
+            opacity: 0.16;
+        }
+
+        // ========================================================
+        // SELECTED KEY
+        // ========================================================
+
+        Rectangle {
+            x: max(
+                0px,
+                min(
+                    parent.width - 2px,
+                    ((root.selected-key - 36) / 48.0)
+                        * parent.width
+                )
+            );
+
+            y: 0;
+
+            width: 2px;
+
+            height: parent.height;
+
+            background: Theme.accent;
+        }
+
+        // ========================================================
+        // VELOCITY INDICATOR
+        // ========================================================
+
+        Rectangle {
+            x: 0;
+
+            y: parent.height
+                - (root.high-velocity / 127.0)
+                * parent.height;
+
+            width: parent.width;
+
+            height: 2px;
+
+            background: Theme.warn;
+        }
+
+        Rectangle {
+            x: 0;
+
+            y: parent.height
+                - (root.low-velocity / 127.0)
+                * parent.height;
+
+            width: parent.width;
+
+            height: 2px;
+
+            background: Theme.warn;
+        }
+
+        // ========================================================
+        // INTERAÇÃO
+        // ========================================================
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+
+            clicked => {
+                root.selected-key =
+                    max(
+                        36,
+                        min(
+                            84,
+                            36
+                            + round(
+                                touch.mouse-x
+                                / parent.width
+                                * 48
+                            )
+                        )
+                    );
+
+                root.key-selected(root.selected-key);
+            }
+        }
+    }
+
+    // ============================================================
+    // NOTAS
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 132px;
+
+        width: 48px;
+        height: 18px;
+
+        text: "LOW";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 58px;
+        y: 132px;
+
+        width: 48px;
+        height: 18px;
+
+        text: root.low-key;
+
+        color: Theme.text-primary;
+
+        font-size: 9px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 112px;
+        y: 132px;
+
+        width: 48px;
+        height: 18px;
+
+        text: "ROOT";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 166px;
+        y: 132px;
+
+        width: 48px;
+        height: 18px;
+
+        text: root.selected-key;
+
+        color: Theme.accent;
+
+        font-size: 9px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 220px;
+        y: 132px;
+
+        width: 48px;
+        height: 18px;
+
+        text: "HIGH";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 274px;
+        y: 132px;
+
+        width: 48px;
+        height: 18px;
+
+        text: root.high-key;
+
+        color: Theme.text-primary;
+
+        font-size: 9px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    // ============================================================
+    // SAMPLE
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 158px;
+
+        width: 58px;
+        height: 20px;
+
+        text: "SAMPLE";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 70px;
+        y: 158px;
+
+        width: 190px;
+        height: 20px;
+
+        text: root.sample-name;
+
+        color: Theme.text-primary;
+
+        font-size: 9px;
+
+        vertical-alignment: center;
+    }
+
+    // ============================================================
+    // LOAD
+    // ============================================================
+
+    Button {
+        x: 270px;
+        y: 155px;
+
+        width: 54px;
+        height: 26px;
+
+        text: "LOAD";
+
+        clicked => {
+            root.load-sample();
+        }
+    }
+
+    // ============================================================
+    // CLEAR
+    // ============================================================
+
+    Button {
+        x: 330px;
+        y: 155px;
+
+        width: 54px;
+        height: 26px;
+
+        text: "CLEAR";
+
+        clicked => {
+            root.sample-name = "No Sample";
+            root.clear-sample();
+        }
+    }
+
+    // ============================================================
+    // VELOCITY
+    // ============================================================
+
+    Text {
+        x: 8px;
+        y: 188px;
+
+        width: 80px;
+        height: 18px;
+
+        text: "VELOCITY";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 94px;
+        y: 188px;
+
+        width: 70px;
+        height: 18px;
+
+        text:
+            root.low-velocity
+            + " - "
+            + root.high-velocity;
+
+        color: Theme.text-primary;
+
+        font-size: 9px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    // ============================================================
+    // LAYER
+    // ============================================================
+
+    Text {
+        x: 176px;
+        y: 188px;
+
+        width: 54px;
+        height: 18px;
+
+        text: "LAYER";
+
+        color: Theme.text-dim;
+
+        font-size: 8px;
+
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: 232px;
+        y: 188px;
+
+        width: 54px;
+        height: 18px;
+
+        text: root.selected-layer + 1;
+
+        color: Theme.accent;
+
+        font-size: 9px;
+
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

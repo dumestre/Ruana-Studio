@@ -1,0 +1,115 @@
+import { Theme } from "../theme.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCurves } from "sampler_curves.slint";
+import { SamplerCard, SamplerKnob, SamplerCurve } from "sampler_widgets.slint";
+
+// ============================================================
+// AMP ENVELOPE
+// ============================================================
+//
+// A curva ADSR aqui era desenhada com um punhado de `Rectangle`
+// empilhados (a versão antiga, y: 40..~100) e os 4 knobs ficavam
+// numa fileira de 48px em x: 8/60/112/164.
+//
+// `SamplerCurves.adsr` já devolve a curva como Path; o poço agora é
+// `SamplerCurve` e ocupa a sobra da altura. Os knobs esticam igual
+// nos outros cards.
+// ============================================================
+
+export component SamplerEnvelope inherits Rectangle {
+
+    in-out property <float> attack: 0.01;
+    in-out property <float> decay: 0.20;
+    in-out property <float> sustain: 0.80;
+    in-out property <float> release: 0.25;
+
+    in-out property <bool> compact: false;
+
+    callback attack-changed(float);
+    callback decay-changed(float);
+    callback sustain-changed(float);
+    callback release-changed(float);
+
+    SamplerCard {
+        title: "AMP ENVELOPE";
+        accent: SamplerStyle.sec-amp;
+        compact: root.compact;
+
+        width: 100%;
+        height: 100%;
+
+        SamplerCurve {
+            commands: SamplerCurves.adsr(
+                root.attack,
+                root.decay,
+                root.sustain,
+                root.release,
+                true
+            );
+            stroke: SamplerStyle.sec-amp;
+            compact: root.compact;
+            vertical-stretch: 1;
+        }
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
+
+            SamplerKnob {
+                label: "A";
+                value: root.attack;
+                default-value: 0.01;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-time(root.attack);
+
+                changed(value) => {
+                    root.attack = value;
+                    root.attack-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "D";
+                value: root.decay;
+                default-value: 0.20;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-time(root.decay);
+
+                changed(value) => {
+                    root.decay = value;
+                    root.decay-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "S";
+                value: root.sustain;
+                default-value: 0.80;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-pct(root.sustain);
+
+                changed(value) => {
+                    root.sustain = value;
+                    root.sustain-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "R";
+                value: root.release;
+                default-value: 0.25;
+                compact: root.compact;
+                accent: SamplerStyle.sec-amp;
+                value-text: SamplerStyle.fmt-time(root.release);
+
+                changed(value) => {
+                    root.release = value;
+                    root.release-changed(value);
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,202 @@
+import { Theme } from "../theme.slint";
+
+export component BrowserItem inherits Rectangle {
+    in property <string> name: "";
+    in property <string> type: "";
+    in property <string> icon: "♫";
+    in property <image> icon-image: @image-url("");
+    in property <bool> selected: false;
+    in property <bool> drag-enabled: false;
+
+    // Propriedades extras para layout em colunas
+    in property <string> display-type: "";
+    in property <string> display-ext: "";
+    in property <int> display-size: 0;
+    in property <string> display-modified: "";
+    in property <bool> is-drive: false;
+
+    callback clicked();
+    callback drag-started();
+    callback drag-moved(length, length);
+    callback drag-finished();
+
+    in-out property <bool> dragging: false;
+
+    height: 28px;
+
+    background: root.selected
+        ? Theme.surface-high
+        : transparent;
+
+    border-radius: 3px;
+
+    // Indicador de seleção (sobreposto na borda esquerda)
+    Rectangle {
+        x: 0px;
+        y: (parent.height - self.height) / 2;
+        width: 2px;
+        height: 18px;
+        visible: root.selected;
+
+        background: Theme.accent;
+        border-radius: 1px;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        // Nome + ícone
+        HorizontalLayout {
+            spacing: 6px;
+            horizontal-stretch: 4;
+
+            Image {
+                source: root.icon-image;
+                width: 16px;
+                height: 16px;
+                colorize: root.selected
+                    ? Theme.accent
+                    : Theme.text-dim;
+            }
+
+            Text {
+                text: root.name;
+
+                color: root.selected
+                    ? Theme.text-primary
+                    : Theme.text-dim;
+
+                font-size: 10px;
+
+                vertical-alignment: center;
+
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+        }
+
+        // Tipo
+        Text {
+            text: root.display-type;
+
+            color: root.is-drive
+                ? Theme.accent
+                : Theme.text-dim;
+
+            font-size: 8px;
+            font-weight: 500;
+
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        // Extensão
+        Text {
+            text: root.display-ext.to_uppercase();
+
+            color: Theme.text-dim;
+
+            font-size: 8px;
+
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        // Tamanho
+        Text {
+            text: root.display-size > 0
+                ? (root.display-size >= 1048576
+                    ? "{root.display-size / 1048576} MB"
+                    : root.display-size >= 1024
+                        ? "{root.display-size / 1024} KB"
+                        : "{root.display-size} B")
+                : (root.is-drive ? "Drive" : "—");
+
+            color: Theme.text-dim;
+
+            font-size: 8px;
+
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            horizontal-stretch: 1.5;
+            overflow: elide;
+        }
+
+        // Data modificada
+        Text {
+            text: root.display-modified;
+
+            color: Theme.text-dim;
+
+            font-size: 8px;
+
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            horizontal-stretch: 2;
+            overflow: elide;
+        }
+    }
+
+    states [
+        hovered when touch.has-hover && !root.selected: {
+            background: Theme.surface-high;
+        }
+    ]
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+
+        property <bool> is-down: false;
+        property <length> press-x: 0px;
+        property <length> press-y: 0px;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down
+                && event.button == PointerEventButton.left
+                && root.drag-enabled {
+                self.is-down = true;
+                self.press-x = self.mouse-x;
+                self.press-y = self.mouse-y;
+            } else if event.kind == PointerEventKind.up
+                && self.is-down {
+                self.is-down = false;
+                if root.dragging {
+                    root.dragging = false;
+                    root.drag-finished();
+                }
+            } else if event.kind == PointerEventKind.move
+                && self.is-down {
+                if !root.dragging {
+                    let dx = self.mouse-x - self.press-x;
+                    let dy = self.mouse-y - self.press-y;
+                    if (dx < 0px ? -dx : dx) > 6px
+                        || (dy < 0px ? -dy : dy) > 6px {
+                        root.dragging = true;
+                        root.drag-started();
+                    }
+                }
+                if root.dragging {
+                    let win = self.absolute-position;
+                    root.drag-moved(
+                        self.mouse-x + win.x,
+                        self.mouse-y + win.y
+                    );
+                }
+            }
+        }
+
+        clicked => {
+            if !root.dragging {
+                root.clicked();
+            }
+        }
+    }
+}

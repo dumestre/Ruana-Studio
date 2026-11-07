@@ -1,0 +1,92 @@
+import { Theme } from "../theme.slint";
+
+export component Button inherits Rectangle {
+    in property <string> text: "";
+    in property <image> icon: @image-url("");
+    in property <image> filled-icon: @image-url("");
+    in property <bool> toggled: false;
+    in property <bool> enabled: true;
+    in property <color> icon-color: Theme.text-dim;
+    in property <length> icon-size: 16px;
+    in property <color> text-color: Theme.text-dim;
+    in property <color> toggled-icon-color: Theme.accent;
+    in property <color> toggled-bg: Theme.accent;
+    in property <color> toggled-fg: Theme.on-accent;
+    in property <bool> subtle-toggled: false;
+    in property <bool> borderless: false;
+    in property <bool> keep-icon-color: false;
+    in property <length> corner-radius: 4px;
+    in property <length> letter-spacing: 0px;
+    in property <length> padding-x: 7px;
+    in property <color> hover-text-color: Theme.accent;
+    in property <color> resting-bg: Theme.surface;
+    in property <color> hover-bg: Theme.surface-high;
+    callback clicked;
+
+    background: root.resting-bg;
+    border-radius: self.corner-radius;
+    border-width: self.borderless ? 0px : 1px;
+    border-color: Theme.border;
+    height: 26px;
+    horizontal-stretch: 0;
+    preferred-width: max(
+        20px,
+        (root.text != ""
+            ? label.preferred-width
+            : (root.icon.width > 0 ? root.icon-size : 20px))
+            + 2 * root.padding-x
+    );
+    width: self.preferred-width;
+
+    icon-image := Image {
+        source: root.toggled && root.filled-icon.width > 0
+            ? root.filled-icon
+            : root.icon;
+        visible: root.icon.width > 0;
+        width: root.icon-size;
+        height: root.icon-size;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: root.icon-color;
+    }
+
+    label := Text {
+        text: root.text;
+        visible: root.text != "";
+        color: root.text-color;
+        font-size: 11px;
+        letter-spacing: root.letter-spacing;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    states [
+        disabled when !self.enabled: {
+            opacity: 0.35;
+        }
+        hovered when self.enabled && touch.has-hover && !touch.pressed && !self.toggled: {
+            background: root.hover-bg;
+            border-color: Theme.border;
+            label.color: root.hover-text-color;
+        }
+        on when self.enabled && self.toggled && !touch.pressed: {
+            background: self.subtle-toggled ? root.resting-bg : self.toggled-bg;
+            border-color: self.subtle-toggled ? Theme.border : self.toggled-bg;
+            label.color: self.subtle-toggled ? root.text-color : self.toggled-fg;
+            icon-image.colorize: self.subtle-toggled ? root.toggled-icon-color : self.toggled-fg;
+        }
+        active when self.enabled && touch.pressed: {
+            icon-image.colorize: self.keep-icon-color ? (self.toggled ? root.toggled-icon-color : root.icon-color) : (self.toggled ? root.toggled-fg : Theme.accent-hover);
+        }
+    ]
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}

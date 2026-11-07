@@ -1,0 +1,193 @@
+import { Mixer } from "../mixer/mixer.slint";
+import { SamplerArea } from "../components/sampler_area.slint";
+import { Button } from "../components/button.slint";
+import { Theme } from "../theme.slint";
+import { SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
+
+export component FloatPanel inherits Window {
+    title: "Floating Tool";
+    no-frame: true;
+    width: 640px;
+    height: 400px;
+
+    in-out property <int> tool-tab: 0;
+
+    // Medição real, compartilhada com a janela principal.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
+
+    // Estado do mixer (espelhado do core via Rust)
+    in-out property <[bool]> mixer-mutes: [false, false, false, false, false];
+    in-out property <[bool]> mixer-soloes: [false, false, false, false, false];
+    in-out property <[bool]> mixer-arms: [false, false, false, false, false];
+    in-out property <[float]> mixer-volumes: [0.8, 0.8, 0.8, 0.8, 0.8];
+    in-out property <[float]> mixer-pans: [0.5, 0.5, 0.5, 0.5, 0.5];
+
+    // Inserts do mixer (espelhados do core via Rust)
+    in-out property <[int]> mixer-insert-counts: [0, 0, 0, 0, 0];
+    in-out property <[string]> mixer-insert-names: [];
+    in-out property <[bool]> mixer-insert-enabled: [];
+    in-out property <int> mixer-max-inserts: 8;
+
+    // Altura natural do conteúdo do mixer (lida pelo Rust para dimensionar a janela).
+    in-out property <length> mixer-natural-height: mixer-content.natural-height;
+
+    callback close-panel();
+    callback mixer-param-changed(int, string, float);
+    callback channel-clip-cleared(int);
+    callback mixer-insert-added(int);
+    callback mixer-insert-removed(int, int);
+    callback mixer-insert-toggled(int, int);
+    callback resize-cancel();
+    callback resize-move(length, length);
+    callback resize-end();
+
+    // Highlight de alvo enquanto um arquivo do SO é arrastado sobre a
+    // janela (preenchido pelo winit handler instalado no Rust).
+    in-out property <bool> sampler-drop-hover: false;
+
+    property <string> header-title:
+        root.tool-tab == 0 ? "Mixer" : "Sampler";
+
+    property <length> resize-corner: 16px;
+
+    background: Theme.base;
+
+    VerticalLayout {
+        spacing: 0;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
+
+        // Header
+        Rectangle {
+            width: 100%;
+            height: 28px;
+            background: Theme.surface;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 6px;
+                spacing: 6px;
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.center;
+                height: 100%;
+
+                Text {
+                    text: root.header-title;
+                    color: Theme.text-primary;
+                    font-size: 10px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                Button {
+                    width: 22px;
+                    height: 20px;
+                    icon: @image-url("../icons/close.svg");
+                    icon-size: 12px;
+                    borderless: true;
+                    icon-color: Theme.text-dim;
+                    clicked => { root.close-panel(); }
+                }
+            }
+
+            Rectangle {
+                y: parent.height - 1px;
+                width: 100%;
+                height: 1px;
+                background: Theme.border;
+            }
+        }
+
+        // Conteúdo
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            vertical-stretch: 1;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+            clip: true;
+
+            mixer-content := Mixer {
+                width: 100%;
+                height: 100%;
+                visible: root.tool-tab == 0;
+                show-header: false;
+                meters <=> root.channel-meters;
+                clipped <=> root.channel-clipped;
+                mutes <=> root.mixer-mutes;
+                soloes <=> root.mixer-soloes;
+                arms <=> root.mixer-arms;
+                volumes <=> root.mixer-volumes;
+                pans <=> root.mixer-pans;
+                insert-counts <=> root.mixer-insert-counts;
+                insert-names <=> root.mixer-insert-names;
+                insert-enabled <=> root.mixer-insert-enabled;
+                max-inserts <=> root.mixer-max-inserts;
+                channel-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+                channel-clip-cleared(ch) => { root.channel-clip-cleared(ch); }
+                channel-insert-added(ch) => { root.mixer-insert-added(ch); }
+                channel-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
+                channel-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }
+            }
+
+            SamplerArea {
+                width: 100%;
+                height: 100%;
+                visible: root.tool-tab == 1;
+                show-header: false;
+                drop-hover: root.sampler-drop-hover;
+                sample-name <=> SamplerState.sample-name;
+                sample-loaded <=> SamplerState.sample-loaded;
+                sample-format <=> SamplerState.sample-format;
+                sample-duration <=> SamplerState.sample-duration;
+            }
+
+        }
+    }
+
+    // Handle de redimensionamento no canto inferior direito.
+    // Pega a posição do ponteiro relativa à janela usando
+    // absolute-position + mouse-x/y (o handle acompanha o canto).
+    resize-handle := Rectangle {
+        x: root.width - resize-corner;
+        y: root.height - resize-corner;
+        width: resize-corner;
+        height: resize-corner;
+        background: transparent;
+
+        TouchArea {
+            mouse-cursor: root.tool-tab == 0 ? MouseCursor.ns-resize : MouseCursor.nwse-resize;
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.down) {
+                    root.resize-cancel();
+                } else if (ev.kind == PointerEventKind.up) {
+                    root.resize-end();
+                }
+            }
+            moved => {
+                root.resize-move(
+                    self.absolute-position.x + self.mouse-x,
+                    self.absolute-position.y + self.mouse-y
+                );
+            }
+        }
+
+        Path {
+            x: 3px;
+            y: 3px;
+            width: 10px;
+            height: 10px;
+            stroke: Theme.text-dim;
+            stroke-width: 1px;
+            MoveTo { x: 0; y: 10; }
+            LineTo { x: 10; y: 0; }
+            MoveTo { x: 0; y: 5; }
+            LineTo { x: 5; y: 0; }
+        }
+    }
+}

@@ -1,0 +1,174 @@
+//! Tipos de dados e geometria dos clips: `ClipDemo`, `ClipMetrics` e
+//! `clip_rect` (conversões cursor ↔ conteúdo e retângulos de render).
+
+/// Uma nota dentro de um clip MIDI.
+///
+/// `start` é em beats **locais** (relativos a `ClipDemo::beat`), igual a
+/// `daw_midi::Note`. O renderer desenha uma barra por nota, então um
+/// pattern vazio aparece vazio — que é a diferença visível entre um clip
+/// de verdade e um clip sem conteúdo.
+#[derive(Clone, Copy, Debug)]
+pub struct ClipNote {
+    /// Altura MIDI (0..127, 60 = C4).
+    pub pitch: i32,
+    /// Início em beats locais ao clip.
+    pub start: f32,
+    /// Duração em beats locais.
+    pub length: f32,
+    /// Velocidade 0..127.
+    pub velocity: i32,
+}
+
+/// Um clip posicionado numa faixa (track) da timeline.
+#[derive(Clone, Debug)]
+pub struct ClipDemo {
+    /// Id do clip no `Project` do core (0 = clip criado na engine, ainda
+    /// sem contraparte no documento). Usado pelo write-back hosted para
+    /// reconciliar edições (mover/redimensionar/apagar) → fonte da verdade.
+    pub id: u32,
+    pub track_index: usize,
+    pub beat: f32,
+    pub len: f32,
+    pub is_midi: bool,
+    pub color: usize,
+    pub name: Option<String>,
+    pub seam_beat: Option<f32>,
+    pub pre_glue_len: Option<f32>,
+    pub pre_glue_color: Option<usize>,
+
+    /// Amostras da waveform deste clip (min/max interleaved, 2 por coluna).
+    pub wave: Vec<f32>,
+
+    /// Conteúdo MIDI do clip. Vazio = clip sem notas, que é desenhado
+    /// como um retângulo vazio (e não toca: o motor de áudio descarta
+    /// clip MIDI sem notas, `daw-audio/src/engine.rs`).
+    pub notes: Vec<ClipNote>,
+
+    /// Caminho do arquivo de áudio original, se houver.
+    pub file_path: Option<String>,
+
+    /// Posição de início dentro do arquivo original, em beats do projeto.
+    pub source_start_beats: f32,
+
+    /// Duração do arquivo original em beats (antes de qualquer corte/trim).
+    ///
+    /// `0.0` com `source_start_beats > 0` é o pedido explícito de
+    /// "DO OFFSET ATÉ O FIM do arquivo" — é assim que o clip MUSICAL se
+    /// identifica para a geração da onda (o conteúdo é a fonte inteira a
+    /// partir do trim, esticada para o span). A regra de região está em
+    /// `waveform.rs::decode_real_wave`.
+    pub source_length_beats: f32,
+
+    /// Número de canais de áudio: 1 = mono, 2 = stereo.
+    pub channels: u16,
+
+    /// Duração NATURAL da região da fonte, em segundos. É o comprimento do
+    /// trecho do arquivo que o clip lê (do início ao fim da região de trim),
+    /// conhecido só após decodificar o arquivo — por isso é preenchido em
+    /// `build_wave_bars_and_segments` (e vale `0.0` enquanto não há decode).
+    ///
+    /// É o `region_len_seconds` que `daw_core::warp::plan_for_clip` exige: sem
+    /// ele não dá para converter `source_seconds` ↔ fração da onda nem
+    /// posicionar marcadores de AudioWarp sem deformar o áudio.
+    pub region_seconds: f64,
+
+    /// Marcadores de AudioWarp do clip (free warp), ordenados por
+    /// `source_seconds`. Vazio = clip sem warp.
+    ///
+    /// Vive DENTRO do `ClipDemo` de propósito: é estado do clip, então tem de
+    /// viajar com ele em slice/glue/paste/duplicar/undo — uma lista paralela
+    /// (como `fades`) se dessincronizaria em qualquer edição estrutural.
+    ///
+    /// As coordenadas são locais ao clip e relativas à REGIÃO da fonte
+    /// (`source_seconds` conta de onde o clip começa a ler o arquivo) — ver
+    /// `daw_core::WarpMarker`.
+    pub warp_markers: Vec<daw_core::WarpMarker>,
+}
+
+/// Métricas de conversão cursor ↔ conteúdo, espelhadas do App.
+#[derive(Clone)]
+pub struct ClipMetrics {
+    pub px_per_beat: f32,
+
+    /// Segmentos (offset, count) no buffer `wave_bars`, FIXOS por id do clip
+    /// (calculados uma vez com os lens originais). Stretch/move nunca mudam
+    /// o buffer, então NUNCA recomputar a partir dos lens vivos — senão o
+    /// stretch de um clip corrompe a waveform dos clips seguintes.
+    pub wave_segments: Vec<(u32, u32)>,
+
+    pub row_height: f32,
+    pub scroll_x: f32,
+    pub scroll_y: f32,
+    pub ruler_px: f32,
+    pub theme: usize,
+    /// Maior índice de track em uso (para limitar arrasto dentro das tracks).
+    pub max_track: usize,
+}
+
+impl ClipMetrics {
+    /// Retorna o tamanho do passo do grid em beats, baseado no zoom (px_per_beat).
+    /// Espelha a lógica de renderização do grid em `render.rs`.
+    pub fn grid_beat_step(&self) -> f32 {
+        let px_per_bar = self.px_per_beat * 4.0;
+        if px_per_bar >= 960.0 {
+            1.0 / 16.0
+        } else if px_per_bar >= 480.0 {
+            1.0 / 8.0
+        } else if px_per_bar >= 240.0 {
+            1.0 / 4.0
+        } else if px_per_bar >= 120.0 {
+            1.0 / 2.0
+        } else {
+            1.0
+        }
+    }
+
+    /// Converte o cursor da janela para o (beat, track) do conteúdo.
+    pub(super) fn cursor_to_beat_track(&self, cursor: (f32, f32)) -> (f32, usize) {
+        let content_x = cursor.0 + self.scroll_x;
+        let content_y = cursor.1 - self.ruler_px + self.scroll_y;
+
+        let beat = if self.px_per_beat > 0.0 {
+            content_x / self.px_per_beat
+        } else {
+            0.0
+        };
+
+        let track = if self.row_height > 0.0 {
+            (content_y / self.row_height).floor().max(0.0) as usize
+        } else {
+            0
+        };
+
+        (beat, track)
+    }
+
+    /// Menor índice de track que ainda fica visível abaixo da régua com o
+    /// scroll atual. Usado para impedir que clips arrastados "saiam para
+    /// fora" pelo topo (atrás da régua) quando a timeline está rolada.
+    pub fn visible_min_track(&self) -> usize {
+        if self.row_height <= 0.0 {
+            return 0;
+        }
+        (self.scroll_y / self.row_height).ceil() as usize
+    }
+}
+
+/// Retângulo de um clip em coordenadas de janela (já descontando scroll).
+pub fn clip_rect(
+    clip: &ClipDemo,
+    m: &ClipMetrics,
+) -> (f32, f32, f32, f32) {
+    let x = clip.beat * m.px_per_beat - m.scroll_x;
+
+    // SEM largura mínima artificial.
+    // A borda direita deve espelhar exatamente `len * px_per_beat`.
+    let w = clip.len * m.px_per_beat;
+
+    let y =
+        m.ruler_px
+        + clip.track_index as f32 * m.row_height
+        - m.scroll_y;
+
+    (x, y, w, m.row_height)
+}

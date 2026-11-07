@@ -1,0 +1,325 @@
+// ============================================================
+// VOCABULÁRIO VISUAL DO SAMPLER
+// ============================================================
+//
+// Fica FORA do Theme de propósito: o Theme é compartilhado com
+// timeline / mixer / piano-roll e não pode ser alterado. Aqui só
+// derivamos tokens locais do Sampler.
+//
+// SEM ESTADO. Existem DOIS Samplers vivos ao mesmo tempo
+// (bottom-panel de 215px + float panel), então densidade não pode
+// morar num global — ela desce pela árvore como `compact`. Este
+// global tem apenas constantes e funções puras.
+//
+// ATENÇÃO sobre formatação de números:
+//   - `to-fixed(n)` é LOCALIZADO (vira vírgula em pt-BR). Ótimo
+//     para texto de UI, PROIBIDO dentro de comandos de Path.
+//   - Em Path use coordenadas inteiras / `to-string-unlocalized()`
+//     (ver sampler_curves.slint).
+//
+// Toda função é `public`: função de `global` só fica visível para
+// outro componente quando anotada assim.
+// ============================================================
+
+import { Theme } from "../theme.slint";
+import { AudioScale } from "../components/audio_scale.slint";
+
+export global SamplerStyle {
+
+    // ========================================================
+    // SUPERFÍCIES
+    //
+    // Três níveis de profundidade que o sampler antigo não tinha:
+    // painel (fundo) < card (controles) < inset (poço de gráfico).
+    // ========================================================
+
+    out property <color> panel: Theme.base;
+
+    out property <color> card: Theme.surface;
+    out property <color> card-hi: Theme.surface-high;
+    out property <color> card-on: Theme.accent.transparentize(0.82);
+
+    out property <color> inset: Theme.base;
+    out property <color> inset-line: Theme.border;
+    out property <color> inset-line-soft: Theme.surface;
+
+    out property <color> rail: Theme.border;
+    out property <color> rail-hi: Theme.surface-high;
+
+    out property <color> hairline: Theme.border;
+    out property <color> hairline-soft: Theme.surface;
+
+    // ========================================================
+    // TEXTO
+    // ========================================================
+
+    out property <color> text: Theme.text-primary;
+    out property <color> text-mid: Theme.text-primary.transparentize(0.15);
+    out property <color> text-dim: Theme.text-dim;
+    out property <color> text-faint: Theme.text-dim.transparentize(0.35);
+
+    // ========================================================
+    // ACENTOS POR SEÇÃO
+    //
+    // O sampler antigo pintava TUDO de verde accent, então nada
+    // lia como "ligado". Aqui cada seção tem seu tom (usado só
+    // na faixa do card e no traço da curva) e o verde accent do
+    // Theme fica reservado para ESTADO ATIVO.
+    // ========================================================
+
+    out property <color> sec-sample: Theme.accent;
+    out property <color> sec-play: #4FC3A1;
+    out property <color> sec-pitch: #5C9CE0;
+    out property <color> sec-filter: #E0A32B;
+    out property <color> sec-amp: #3FC07A;
+    out property <color> sec-mod: #A97BD6;
+    out property <color> sec-zone: #6FA86B;
+    out property <color> sec-map: #D9704F;
+
+    // ========================================================
+    // DENSIDADE
+    //
+    // Funções e não propriedades: `compact` é por instância.
+    // ========================================================
+
+    public pure function pad(c: bool) -> length {
+        return c ? 5px : 9px;
+    }
+
+    public pure function gap(c: bool) -> length {
+        return c ? 4px : 7px;
+    }
+
+    public pure function card-pad(c: bool) -> length {
+        return c ? 5px : 8px;
+    }
+
+    public pure function header-h(c: bool) -> length {
+        return c ? 24px : 38px;
+    }
+
+    public pure function tab-h(c: bool) -> length {
+        return c ? 20px : 24px;
+    }
+
+    public pure function knob(c: bool) -> length {
+        return c ? 30px : 40px;
+    }
+
+    public pure function row-h(c: bool) -> length {
+        return c ? 20px : 24px;
+    }
+
+    public pure function title-size(c: bool) -> length {
+        return c ? 8px : 9px;
+    }
+
+    public pure function label-size(c: bool) -> length {
+        return c ? 7px : 8px;
+    }
+
+    public pure function value-size(c: bool) -> length {
+        return c ? 9px : 10px;
+    }
+
+    public pure function name-size(c: bool) -> length {
+        return c ? 11px : 13px;
+    }
+
+    // ========================================================
+    // FORMATAÇÃO HONESTA DE VALORES
+    //
+    // O sampler antigo mostrava valores inventados: cutoff
+    // LINEAR em Hz, "GAIN" = (volume - 0.75) * 48, FINE de
+    // ±200 ct sobrepondo o TUNE. Aqui a conversão é a real.
+    // ========================================================
+
+    // Frequência de corte: exponencial 20 Hz .. 20 kHz.
+    public pure function cutoff-hz(v: float) -> float {
+        return 20 * Math.pow(1000, Math.clamp(v, 0, 1));
+    }
+
+    public pure function fmt-hz(v: float) -> string {
+        let hz = cutoff-hz(v);
+        if hz >= 1000 {
+            return (hz / 1000).to-fixed(hz >= 10000 ? 1 : 2) + " kHz";
+        }
+        return Math.round(hz) + " Hz";
+    }
+
+    // Volume: MESMA curva do fader e do medidor do projeto
+    // (`ui/components/audio_scale.slint`) — 0 = silêncio, 1 = unity,
+    // com -60 dB no piso. Antes isto repetia a fórmula antiga do cap
+    // (0.75 = unity, +6 dB de headroom) que não existe mais: o knob
+    // ficava em 0.75 e o texto dizia "0.0 dB" para um ganho que valia
+    // -7,5 dB. Delegar para a curva oficial é o que impede a divergência
+    // de voltar; o "+6 dB" da curva velha também faria a luz de clip
+    // parecer parte do medidor.
+    public pure function pos-to-db(v: float) -> float {
+        return AudioScale.fader-pos-to-db(v);
+    }
+
+    public pure function fmt-db(v: float) -> string {
+        if v <= 0.0 {
+            return "-inf dB";
+        }
+        let db = pos-to-db(v);
+        return (db >= 0.05 ? "+" : "") + db.to-fixed(1) + " dB";
+    }
+
+    // Ganho linear 0..1 -> dB real (drive, depth de mod etc).
+    public pure function fmt-gain-db(g: float) -> string {
+        if g <= 0.0001 {
+            return "-inf dB";
+        }
+        return (20 * Math.log(g, 10)).to-fixed(1) + " dB";
+    }
+
+    // Semitons: ±12 (TUNE).
+    public pure function semis(v: float) -> float {
+        return Math.round((v - 0.5) * 24);
+    }
+
+    public pure function fmt-semis(v: float) -> string {
+        let s = semis(v);
+        return (s > 0 ? "+" : "") + s + " st";
+    }
+
+    // Cents: ±100 (FINE). O antigo usava ±200, que sobrepõe
+    // um semitom inteiro do TUNE.
+    public pure function cents(v: float) -> float {
+        return Math.round((v - 0.5) * 200);
+    }
+
+    public pure function fmt-cents(v: float) -> string {
+        let c = cents(v);
+        return (c > 0 ? "+" : "") + c + " ct";
+    }
+
+    // Oitavas: ±2.
+    public pure function octaves(v: float) -> float {
+        return Math.round((v - 0.5) * 4);
+    }
+
+    public pure function fmt-octaves(v: float) -> string {
+        let o = octaves(v);
+        return (o > 0 ? "+" : "") + o;
+    }
+
+    // Tempo exponencial 1 ms .. 10 s (envelope).
+    public pure function time-ms(v: float) -> float {
+        return Math.pow(10, Math.clamp(v, 0, 1) * 4);
+    }
+
+    public pure function fmt-time(v: float) -> string {
+        let ms = time-ms(v);
+        if ms >= 1000 {
+            return (ms / 1000).to-fixed(2) + " s";
+        }
+        if ms >= 100 {
+            return Math.round(ms) + " ms";
+        }
+        return ms.to-fixed(1) + " ms";
+    }
+
+    // Glide: 0 .. 2 s linear (0 = off).
+    public pure function fmt-glide(v: float) -> string {
+        if v <= 0.001 {
+            return "OFF";
+        }
+        return Math.round(v * 2000) + " ms";
+    }
+
+    // LFO livre: exponencial 0.05 Hz .. 20 Hz.
+    public pure function lfo-hz(v: float) -> float {
+        return 0.05 * Math.pow(400, Math.clamp(v, 0, 1));
+    }
+
+    public pure function fmt-lfo-rate(v: float) -> string {
+        let hz = lfo-hz(v);
+        return (hz < 10 ? hz.to-fixed(2) : hz.to-fixed(1)) + " Hz";
+    }
+
+    // LFO sincronizado: divisões musicais.
+    public pure function fmt-lfo-sync(v: float) -> string {
+        let i: int = Math.clamp(Math.round(v * 7), 0, 7);
+        if i == 0 { return "8 bars"; }
+        if i == 1 { return "4 bars"; }
+        if i == 2 { return "2 bars"; }
+        if i == 3 { return "1 bar"; }
+        if i == 4 { return "1/2"; }
+        if i == 5 { return "1/4"; }
+        if i == 6 { return "1/8"; }
+        return "1/16";
+    }
+
+    public pure function fmt-pct(v: float) -> string {
+        return Math.round(v * 100) + "%";
+    }
+
+    public pure function fmt-pct-bi(v: float) -> string {
+        let p = Math.round((v - 0.5) * 200);
+        return (p > 0 ? "+" : "") + p + "%";
+    }
+
+    public pure function fmt-pan(v: float) -> string {
+        let p = Math.round((v - 0.5) * 200);
+        if p == 0 {
+            return "CENTER";
+        }
+        if p < 0 {
+            return "L" + (0 - p);
+        }
+        return "R" + p;
+    }
+
+    public pure function fmt-phase(v: float) -> string {
+        return Math.round(v * 360) + " deg";
+    }
+
+    // Ressonância como Q (0.7 .. 18).
+    public pure function fmt-q(v: float) -> string {
+        return (0.7 + Math.clamp(v, 0, 1) * 17.3).to-fixed(2);
+    }
+
+    // ========================================================
+    // NOTAS MIDI
+    // ========================================================
+
+    public pure function note-name(midi: int) -> string {
+        let names: [string] = [
+            "C", "C#", "D", "D#", "E", "F",
+            "F#", "G", "G#", "A", "A#", "B"
+        ];
+        let m: int = Math.clamp(midi, 0, 127);
+        let oct: int = Math.floor(m / 12) - 1;
+        let semi: int = Math.clamp(m - (oct + 1) * 12, 0, 11);
+        return names[semi] + oct;
+    }
+
+    // Posição 0..1 -> nota MIDI no range C1..C7.
+    public pure function pos-to-midi(v: float) -> int {
+        return Math.round(24 + Math.clamp(v, 0, 1) * 72);
+    }
+
+    public pure function fmt-key(v: float) -> string {
+        return note-name(pos-to-midi(v));
+    }
+
+    public pure function fmt-vel(v: float) -> string {
+        let n: int = Math.round(1 + Math.clamp(v, 0, 1) * 126);
+        return n + "";
+    }
+
+    // Fração do sample -> m:ss.mmm.
+    public pure function fmt-pos(frac: float, total-ms: float) -> string {
+        let ms = Math.max(0, frac * total-ms);
+        let total-s: int = Math.floor(ms / 1000);
+        let mins: int = Math.floor(total-s / 60);
+        let secs: int = total-s - mins * 60;
+        let rest: int = Math.floor(ms - total-s * 1000);
+        return mins + ":"
+            + (secs < 10 ? "0" : "") + secs + "."
+            + (rest < 100 ? (rest < 10 ? "00" : "0") : "") + rest;
+    }
+}

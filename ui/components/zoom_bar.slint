@@ -1,0 +1,384 @@
+import { Theme } from "../theme.slint";
+
+// =========================================================
+// BARRA DE ZOOM HORIZONTAL
+// =========================================================
+
+export component ZoomBarHorizontal inherits Rectangle {
+
+
+in-out property <float> value: 1.0;
+
+in property <float> min-value: 0.5;
+in property <float> max-value: 4.0;
+
+property <float> step: 0.25;
+
+property <float> range:
+    root.max-value - root.min-value;
+
+property <bool> dragging: false;
+
+property <length> start-abs-x: 0px;
+property <float> start-value: 0.0;
+
+callback zoom-changed(float);
+
+height: 16px;
+
+background: Theme.base;
+
+border-radius: 3px;
+
+border-width: 1px;
+border-color: Theme.border;
+
+HorizontalLayout {
+    cross-axis-alignment: CrossAxisAlignment.center;
+    spacing: 0px;
+
+    Rectangle {
+        width: 18px;
+        height: 100%;
+
+        Image {
+            source:
+                @image-url("../icons/zoomout.svg");
+
+            width: 12px;
+            height: 12px;
+
+            x:
+                (parent.width - self.width) / 2;
+
+            y:
+                (parent.height - self.height) / 2;
+
+            colorize:
+                Theme.text-dim;
+        }
+
+        minus-touch := TouchArea {
+            width: 100%;
+            height: 100%;
+
+            mouse-cursor: pointer;
+
+            clicked => {
+                root.value =
+                    max(
+                        root.min-value,
+                        root.value - root.step
+                    );
+            }
+        }
+    }
+
+    Rectangle {
+        horizontal-stretch: 1;
+        height: 100%;
+
+        background:
+            track-touch.has-hover || root.dragging
+                ? Theme.surface-high
+                : transparent;
+
+        Rectangle {
+            x:
+                (
+                    (root.value - root.min-value)
+                    / root.range
+                )
+                * parent.width
+                - 1px;
+
+            y: 1px;
+
+            width: 2px;
+            height: parent.height - 2px;
+
+            background: Theme.accent;
+        }
+
+        track-touch := TouchArea {
+            width: 100%;
+            height: 100%;
+
+            mouse-cursor: pointer;
+
+            pointer-event(event) => {
+
+                if event.kind == PointerEventKind.down
+                    && event.button == PointerEventButton.left {
+
+                    root.dragging = true;
+
+                    root.start-abs-x =
+                        self.absolute-position.x
+                        + self.mouse-x;
+
+                    root.start-value =
+                        root.value;
+
+                } else if root.dragging
+                    && event.kind == PointerEventKind.move {
+
+                    root.value =
+                        max(
+                            root.min-value,
+                            min(
+                                root.max-value,
+                                root.start-value
+                                + (
+                                    (
+                                        self.absolute-position.x
+                                        + self.mouse-x
+                                        - root.start-abs-x
+                                    )
+                                    / 1px
+                                )
+                                / (
+                                    self.width / 1px
+                                )
+                                * root.range
+                            )
+                        );
+
+                } else if root.dragging
+                    && event.kind == PointerEventKind.up {
+
+                    root.dragging = false;
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        width: 18px;
+        height: 100%;
+
+        Image {
+            source:
+                @image-url("../icons/zoomin.svg");
+
+            width: 12px;
+            height: 12px;
+
+            x:
+                (parent.width - self.width) / 2;
+
+            y:
+                (parent.height - self.height) / 2;
+
+            colorize:
+                Theme.text-dim;
+        }
+
+        plus-touch := TouchArea {
+            width: 100%;
+            height: 100%;
+
+            mouse-cursor: pointer;
+
+            clicked => {
+                root.value =
+                    min(
+                        root.max-value,
+                        root.value + root.step
+                    );
+            }
+        }
+    }
+}
+}
+
+// =========================================================
+// BARRA DE ZOOM VERTICAL
+// =========================================================
+
+export component ZoomBarVertical inherits Rectangle {
+
+in-out property <float> value: 1.0;
+
+in property <float> min-value: 0.4;
+in property <float> max-value: 3.0;
+
+property <float> step: 0.25;
+
+property <float> range:
+    root.max-value - root.min-value;
+
+property <bool> dragging: false;
+
+property <length> start-abs-y: 0px;
+property <float> start-value: 0.0;
+
+callback zoom-requested(float);
+
+width: 16px;
+
+background: Theme.base;
+
+border-radius: 3px;
+
+border-width: 1px;
+border-color: Theme.border;
+
+VerticalLayout {
+    cross-axis-alignment: CrossAxisAlignment.center;
+    spacing: 0px;
+
+    // MAIS ZOOM
+    Rectangle {
+        width: 100%;
+        height: 18px;
+
+        Image {
+            source:
+                @image-url("../icons/zoomin.svg");
+
+            width: 12px;
+            height: 12px;
+
+            x:
+                (parent.width - self.width) / 2;
+
+            y:
+                (parent.height - self.height) / 2;
+
+            colorize: Theme.text-dim;
+        }
+
+        plus-touch := TouchArea {
+            width: 100%;
+            height: 100%;
+
+            mouse-cursor: pointer;
+
+            clicked => {
+                root.value =
+                    min(
+                        root.max-value,
+                        root.value + root.step
+                    );
+            }
+        }
+    }
+
+    // TRILHO
+    Rectangle {
+        vertical-stretch: 1;
+        width: 100%;
+
+        background:
+            track-touch.has-hover || root.dragging
+                ? Theme.surface-high
+                : transparent;
+
+        Rectangle {
+            x: 1px;
+
+            y:
+                (
+                    (root.max-value - root.value)
+                    / root.range
+                )
+                * (parent.height - 2px);
+
+            width: parent.width - 2px;
+            height: 2px;
+
+            background: Theme.accent;
+        }
+
+        track-touch := TouchArea {
+            width: 100%;
+            height: 100%;
+
+            mouse-cursor: pointer;
+
+            pointer-event(event) => {
+
+                if event.kind == PointerEventKind.down
+                    && event.button == PointerEventButton.left {
+
+                    root.dragging = true;
+
+                    root.start-abs-y =
+                        self.absolute-position.y
+                        + self.mouse-y;
+
+                    root.start-value =
+                        root.value;
+
+                } else if root.dragging
+                    && event.kind == PointerEventKind.move {
+
+                    root.value =
+                        max(
+                            root.min-value,
+                            min(
+                                root.max-value,
+                                root.start-value
+                                - (
+                                    (
+                                        self.absolute-position.y
+                                        + self.mouse-y
+                                        - root.start-abs-y
+                                    )
+                                    / 1px
+                                )
+                                / (
+                                    self.height / 1px
+                                )
+                                * root.range
+                            )
+                        );
+
+                } else if root.dragging
+                    && event.kind == PointerEventKind.up {
+
+                    root.dragging = false;
+                }
+            }
+        }
+    }
+
+    // MENOS ZOOM
+    Rectangle {
+        width: 100%;
+        height: 18px;
+
+        Image {
+            source:
+                @image-url("../icons/zoomout.svg");
+
+            width: 12px;
+            height: 12px;
+
+            x:
+                (parent.width - self.width) / 2;
+
+            y:
+                (parent.height - self.height) / 2;
+
+            colorize: Theme.text-dim;
+        }
+
+        minus-touch := TouchArea {
+            width: 100%;
+            height: 100%;
+
+            mouse-cursor: pointer;
+
+            clicked => {
+                root.value =
+                    max(
+                        root.min-value,
+                        root.value - root.step
+                    );
+            }
+        }
+    }
+}
+}

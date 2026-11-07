@@ -1,0 +1,352 @@
+// ============================================================
+// CURVAS DO SAMPLER  (comandos SVG para o elemento Path)
+// ============================================================
+//
+// POR QUE ISSO EXISTE
+//
+// O sampler antigo desenhava "curvas" com 32 Rectangle de 1px de
+// altura desconectados (sampler_filter.slint e
+// sampler_velocity.slint). Em qualquer trecho inclinado o traço
+// seguinte pulava ~2,5px num gráfico de 100px, então a curva
+// aparecia como escadinha pontilhada.
+//
+// Aqui cada curva é UM Path com `commands` calculado em runtime.
+// Bézier em vez de amostragem ponto-a-ponto porque Slint não tem
+// laço dentro de função — e Bézier fica mais liso do que 32
+// amostras de todo jeito.
+//
+// CONVENÇÕES
+//
+// - Viewbox 1000 x 1000, sempre com `fit: fill` no Path, então a
+//   curva estica para qualquer tamanho de card.
+// - `stroke-width` do Slint fica em px de tela e NÃO escala com o
+//   viewbox — ou seja, a espessura é constante, que é exatamente
+//   o que queremos.
+// - TODA coordenada passa por `nn()`: arredonda e converte SEM
+//   locale. Interpolar float direto trocaria "." por "," em pt-BR
+//   e quebraria o parser SVG (`L 12,5 20,3`).
+// - Toda função é `public`: função de `global` só fica visível
+//   para outro componente quando anotada assim.
+// ============================================================
+
+export global SamplerCurves {
+
+    // Lado do viewbox usado por todas as curvas.
+    out property <float> vb: 1000;
+
+    // Coordenada -> string segura para comandos SVG.
+    public pure function nn(v: float) -> string {
+        return Math.round(Math.clamp(v, -8000, 8000)).to-string-unlocalized();
+    }
+
+    public pure function pt(x: float, y: float) -> string {
+        return nn(x) + "," + nn(y);
+    }
+
+    // ========================================================
+    // FILTRO
+    //
+    // x = frequência em escala log (20 Hz .. 20 kHz)
+    // y = ganho: y=0 é +12 dB, y=200 é 0 dB, y=1000 é -48 dB
+    //     (60 dB de janela, 16,67 unidades por dB)
+    //
+    // 24 dB/oitava = 400 unidades de y por oitava; uma oitava
+    // ocupa 1000 / log2(1000) = 100,3 unidades de x, logo a
+    // inclinação é ~3,99 y por x.
+    // ========================================================
+
+    out property <float> unity-y: 200;
+
+    public pure function res-peak-y(q: float) -> float {
+        // q = 0 -> pico em 0 dB; q = 1 -> +12 dB (topo do viewbox).
+        return 200 - Math.clamp(q, 0, 1) * 200;
+    }
+
+    public pure function lowpass(fc: float, q: float, close: bool) -> string {
+        let xc = Math.clamp(fc, 0, 1) * 1000;
+        let yp = res-peak-y(q);
+        let a0 = Math.max(0, xc - 240);
+        let ye = Math.min(1400, yp + (1000 - xc) * 3.99);
+
+        let s = "M " + pt(0, 200)
+            + " L " + pt(a0, 200)
+            + " C " + pt(a0 + (xc - a0) * 0.55, 200)
+            + " " + pt(xc - (xc - a0) * 0.16, yp)
+            + " " + pt(xc, yp)
+            + " C " + pt(xc + (1000 - xc) * 0.12, yp + (ye - yp) * 0.52)
+            + " " + pt(xc + (1000 - xc) * 0.45, ye - (ye - yp) * 0.05)
+            + " " + pt(1000, ye);
+
+        return close ? s + " L " + pt(1000, 1000) + " L " + pt(0, 1000) + " Z" : s;
+    }
+
+    public pure function highpass(fc: float, q: float, close: bool) -> string {
+        let xc = Math.clamp(fc, 0, 1) * 1000;
+        let yp = res-peak-y(q);
+        let b0 = Math.min(1000, xc + 240);
+        let ys = Math.min(1400, yp + xc * 3.99);
+
+        let s = "M " + pt(0, ys)
+            + " C " + pt(xc * 0.55, ys - (ys - yp) * 0.52)
+            + " " + pt(xc * 0.88, yp + (ys - yp) * 0.05)
+            + " " + pt(xc, yp)
+            + " C " + pt(xc + (b0 - xc) * 0.16, yp)
+            + " " + pt(xc + (b0 - xc) * 0.45, 200)
+            + " " + pt(b0, 200)
+            + " L " + pt(1000, 200);
+
+        return close ? s + " L " + pt(1000, 1000) + " L " + pt(0, 1000) + " Z" : s;
+    }
+
+    public pure function bandpass(fc: float, q: float, close: bool) -> string {
+        let xc = Math.clamp(fc, 0, 1) * 1000;
+        let yp = res-peak-y(q);
+        // Sino estreita conforme o Q sobe.
+        let w = 420 - Math.clamp(q, 0, 1) * 250;
+        let lo = Math.max(0, xc - w);
+        let hi = Math.min(1000, xc + w);
+
+        let s = "M " + pt(0, 1000)
+            + " L " + pt(lo, 1000)
+            + " C " + pt(lo + (xc - lo) * 0.55, 1000)
+            + " " + pt(xc - (xc - lo) * 0.22, yp)
+            + " " + pt(xc, yp)
+            + " C " + pt(xc + (hi - xc) * 0.22, yp)
+            + " " + pt(hi - (hi - xc) * 0.55, 1000)
+            + " " + pt(hi, 1000)
+            + " L " + pt(1000, 1000);
+
+        return close ? s + " L " + pt(1000, 1000) + " L " + pt(0, 1000) + " Z" : s;
+    }
+
+    public pure function notch(fc: float, q: float, close: bool) -> string {
+        let xc = Math.clamp(fc, 0, 1) * 1000;
+        // Q alto = notch mais estreito e mais fundo.
+        let w = 360 - Math.clamp(q, 0, 1) * 220;
+        let depth = 620 + Math.clamp(q, 0, 1) * 380;
+        let lo = Math.max(0, xc - w);
+        let hi = Math.min(1000, xc + w);
+
+        let s = "M " + pt(0, 200)
+            + " L " + pt(lo, 200)
+            + " C " + pt(lo + (xc - lo) * 0.62, 200)
+            + " " + pt(xc - (xc - lo) * 0.18, depth)
+            + " " + pt(xc, depth)
+            + " C " + pt(xc + (hi - xc) * 0.18, depth)
+            + " " + pt(hi - (hi - xc) * 0.62, 200)
+            + " " + pt(hi, 200)
+            + " L " + pt(1000, 200);
+
+        return close ? s + " L " + pt(1000, 1000) + " L " + pt(0, 1000) + " Z" : s;
+    }
+
+    public pure function filter-curve(kind: string, fc: float, q: float, close: bool) -> string {
+        if kind == "HP" {
+            return highpass(fc, q, close);
+        }
+        if kind == "BP" {
+            return bandpass(fc, q, close);
+        }
+        if kind == "NOTCH" {
+            return notch(fc, q, close);
+        }
+        return lowpass(fc, q, close);
+    }
+
+    // ========================================================
+    // ENVELOPE ADSR
+    //
+    // y = 0 é nível máximo, y = 1000 é silêncio.
+    // Ataque côncavo, decay e release convexos (comportamento
+    // analógico): quadráticas em vez de retas.
+    //
+    // As funções de posição são públicas porque o card do
+    // envelope precisa delas para pôr os handles exatamente nos
+    // vértices da curva.
+    // ========================================================
+
+    public pure function env-x-attack(a: float) -> float {
+        return 20 + Math.clamp(a, 0, 1) * 250;
+    }
+
+    public pure function env-x-decay(a: float, d: float) -> float {
+        return env-x-attack(a) + 30 + Math.clamp(d, 0, 1) * 290;
+    }
+
+    public pure function env-x-hold(a: float, d: float) -> float {
+        return env-x-decay(a, d) + 170;
+    }
+
+    public pure function env-x-release(a: float, d: float, r: float) -> float {
+        return Math.min(1000, env-x-hold(a, d) + 30 + Math.clamp(r, 0, 1) * 290);
+    }
+
+    public pure function env-y-sustain(s: float) -> float {
+        return 1000 - Math.clamp(s, 0, 1) * 1000;
+    }
+
+    public pure function adsr(a: float, d: float, s: float, r: float, close: bool) -> string {
+        let xa = env-x-attack(a);
+        let xd = env-x-decay(a, d);
+        let xh = env-x-hold(a, d);
+        let xr = env-x-release(a, d, r);
+        let ys = env-y-sustain(s);
+
+        let str = "M " + pt(0, 1000)
+            + " Q " + pt(xa * 0.55, 380) + " " + pt(xa, 0)
+            + " Q " + pt(xa + (xd - xa) * 0.32, ys * 0.52) + " " + pt(xd, ys)
+            + " L " + pt(xh, ys)
+            + " Q " + pt(xh + (xr - xh) * 0.32, ys + (1000 - ys) * 0.52)
+            + " " + pt(xr, 1000);
+
+        return close ? str + " L " + pt(0, 1000) + " Z" : str;
+    }
+
+    // ========================================================
+    // LFO — 1,5 ciclo atravessando o viewbox
+    //
+    // Meio período = 333 unidades. A senoide usa a aproximação
+    // clássica: cúbica com os dois controles a 4/3 da amplitude
+    // aproxima meia senoide com erro imperceptível.
+    // ========================================================
+
+    public pure function lfo-curve(kind: string, depth: float) -> string {
+        let amp = Math.clamp(depth, 0, 1) * 430;
+        let mid = 500;
+
+        if kind == "TRI" {
+            return "M " + pt(0, mid)
+                + " L " + pt(167, mid - amp)
+                + " L " + pt(500, mid + amp)
+                + " L " + pt(833, mid - amp)
+                + " L " + pt(1000, mid);
+        }
+
+        if kind == "SAW" {
+            return "M " + pt(0, mid + amp)
+                + " L " + pt(333, mid - amp)
+                + " L " + pt(333, mid + amp)
+                + " L " + pt(667, mid - amp)
+                + " L " + pt(667, mid + amp)
+                + " L " + pt(1000, mid - amp);
+        }
+
+        if kind == "SQR" {
+            return "M " + pt(0, mid - amp)
+                + " L " + pt(333, mid - amp)
+                + " L " + pt(333, mid + amp)
+                + " L " + pt(667, mid + amp)
+                + " L " + pt(667, mid - amp)
+                + " L " + pt(1000, mid - amp);
+        }
+
+        if kind == "S&H" {
+            // Passos fixos (não aleatórios: precisa ser puro e
+            // estável entre frames, senão pisca).
+            return "M " + pt(0, mid - amp * 0.7)
+                + " L " + pt(140, mid - amp * 0.7)
+                + " L " + pt(140, mid + amp * 0.35)
+                + " L " + pt(300, mid + amp * 0.35)
+                + " L " + pt(300, mid - amp * 0.15)
+                + " L " + pt(470, mid - amp * 0.15)
+                + " L " + pt(470, mid + amp)
+                + " L " + pt(640, mid + amp)
+                + " L " + pt(640, mid - amp * 0.45)
+                + " L " + pt(820, mid - amp * 0.45)
+                + " L " + pt(820, mid + amp * 0.6)
+                + " L " + pt(1000, mid + amp * 0.6);
+        }
+
+        // SINE
+        let k = amp * 1.3333;
+        return "M " + pt(0, mid)
+            + " C " + pt(111, mid - k) + " " + pt(222, mid - k) + " " + pt(333, mid)
+            + " C " + pt(444, mid + k) + " " + pt(556, mid + k) + " " + pt(667, mid)
+            + " C " + pt(778, mid - k) + " " + pt(889, mid - k) + " " + pt(1000, mid);
+    }
+
+    // ========================================================
+    // CURVA DE VELOCITY
+    //
+    // x = velocity de entrada, y = resposta (y=1000 é zero).
+    // ========================================================
+
+    public pure function velocity-curve(kind: string, close: bool) -> string {
+        let s =
+            kind == "EXP"
+                ? "M " + pt(0, 1000) + " C " + pt(420, 965) + " " + pt(720, 790) + " " + pt(1000, 0)
+                : kind == "LOG"
+                    ? "M " + pt(0, 1000) + " C " + pt(280, 210) + " " + pt(580, 45) + " " + pt(1000, 0)
+                    : kind == "S-CURVE"
+                        ? "M " + pt(0, 1000) + " C " + pt(390, 1000) + " " + pt(610, 0) + " " + pt(1000, 0)
+                        : "M " + pt(0, 1000) + " L " + pt(1000, 0);
+
+        return close ? s + " L " + pt(1000, 1000) + " Z" : s;
+    }
+
+    // ========================================================
+    // ARCOS DE KNOB  (viewbox 100 x 100)
+    //
+    // Ângulo em graus com 0 = 12 horas, positivo no sentido do
+    // relógio. Varredura total de 270° (-135° .. +135°).
+    // ========================================================
+
+    out property <float> knob-vb: 100;
+    out property <float> knob-r: 37;
+    out property <float> knob-sweep: 270;
+
+    public pure function ang-x(a: float, r: float) -> float {
+        return 50 + r * Math.sin(a * 1deg);
+    }
+
+    public pure function ang-y(a: float, r: float) -> float {
+        return 50 - r * Math.cos(a * 1deg);
+    }
+
+    // Arco entre dois ângulos, sempre no sentido do relógio.
+    public pure function knob-arc(a-from: float, a-to: float) -> string {
+        let lo = Math.min(a-from, a-to);
+        let hi = Math.max(a-from, a-to);
+        let span = hi - lo;
+
+        // Arco degenerado: um `M` isolado é SVG válido e não
+        // desenha nada (evita ruído no parser).
+        if span < 0.6 {
+            return "M " + pt(ang-x(lo, knob-r), ang-y(lo, knob-r));
+        }
+
+        return "M " + pt(ang-x(lo, knob-r), ang-y(lo, knob-r))
+            + " A " + nn(knob-r) + "," + nn(knob-r)
+            + " 0 " + (span > 180 ? "1" : "0") + " 1 "
+            + pt(ang-x(hi, knob-r), ang-y(hi, knob-r));
+    }
+
+    public pure function knob-track() -> string {
+        return knob-arc(0 - knob-sweep / 2, knob-sweep / 2);
+    }
+
+    public pure function knob-angle(v: float) -> float {
+        return 0 - knob-sweep / 2 + Math.clamp(v, 0, 1) * knob-sweep;
+    }
+
+    public pure function knob-value(v: float) -> string {
+        return knob-arc(0 - knob-sweep / 2, knob-angle(v));
+    }
+
+    // Bipolar: cresce a partir das 12 horas para os dois lados.
+    public pure function knob-value-bipolar(v: float) -> string {
+        return knob-arc(0, knob-angle(v));
+    }
+
+    // Ponteiro: risco do miolo até a borda interna do arco.
+    public pure function knob-pointer(v: float) -> string {
+        let a = knob-angle(v);
+        return "M " + pt(ang-x(a, 13), ang-y(a, 13))
+            + " L " + pt(ang-x(a, 29), ang-y(a, 29));
+    }
+
+    // Marca do detent (12 horas) para knobs bipolares.
+    public pure function knob-detent() -> string {
+        return "M " + pt(50, 1) + " L " + pt(50, 8);
+    }
+}

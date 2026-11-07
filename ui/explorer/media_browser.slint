@@ -1,0 +1,160 @@
+import { Theme } from "../theme.slint";
+import { BrowserItem } from "../components/browser_item.slint";
+
+export struct MediaItem {
+    name: string,
+    type: string,
+    category: string,
+    path: string,
+}
+
+export component MediaBrowser inherits Rectangle {
+    in property <[MediaItem]> media: [];
+    in property <[string]> categories: ["All", "Loops", "One-Shot", "Vocals", "MIDI"];
+    in-out property <string> category-filter: "All";
+
+    in-out property <int> selected-index: -1;
+
+    callback media-selected(string, string, string); // name, type, path
+
+    callback audio-drag-started(string, string, string, color, bool); // name, path, type, color, is-midi
+    callback audio-drag-moved(length, length);
+    callback audio-drag-finished();
+
+    background: transparent;
+
+    VerticalLayout {
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
+        spacing: 5px;
+
+        // Cabeçalho
+        Rectangle {
+            height: 26px;
+            background: Theme.base;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: 3px;
+
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 7px;
+                spacing: 6px;
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                Image {
+                    source: @image-url("../icons/media.svg");
+                    width: 15px;
+                    height: 15px;
+                    colorize: Theme.accent;
+                }
+
+                Text {
+                    text: "Media";
+                    color: Theme.text-primary;
+                    font-size: 9px;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        // Filtros
+        Rectangle {
+            height: 26px;
+            background: Theme.base;
+
+            HorizontalLayout {
+                alignment: LayoutAlignment.space-around;
+                cross-axis-alignment: CrossAxisAlignment.center;
+                spacing: 3px;
+
+                for cat[index] in root.categories : Rectangle {
+                    width: 48px;
+                    height: 23px;
+
+                    background: root.category-filter == cat
+                        ? Theme.surface-high
+                        : transparent;
+
+                    border-radius: 3px;
+
+                    Text {
+                        text: cat;
+                        color: root.category-filter == cat
+                            ? Theme.accent
+                            : Theme.text-dim;
+                        font-size: 8px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.category-filter = cat;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Lista
+        Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            background: transparent;
+
+            VerticalLayout {
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.stretch;
+                spacing: 1px;
+
+                Text {
+                    text: "MEDIA";
+                    height: 20px;
+                    horizontal-alignment: TextHorizontalAlignment.center;
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                for item[index] in root.media : BrowserItem {
+                    visible: root.category-filter == "All"
+                        || item.category == root.category-filter;
+
+                    name: item.name;
+                    type: item.type;
+                    selected: root.selected-index == index;
+                    icon: "";
+                    icon-image: @image-url("../icons/media.svg");
+                    drag-enabled: item.type == "WAV";
+
+                    clicked => {
+                        root.selected-index = index;
+                        root.media-selected(item.name, item.type, item.path);
+                    }
+
+                    drag-started() => {
+                        root.audio-drag-started(
+                            item.name,
+                            item.path,
+                            item.type,
+                            Theme.clip-audio,
+                            false
+                        );
+                    }
+
+                    drag-moved(x, y) => {
+                        root.audio-drag-moved(x, y);
+                    }
+
+                    drag-finished() => {
+                        root.audio-drag-finished();
+                    }
+                }
+            }
+        }
+    }
+}

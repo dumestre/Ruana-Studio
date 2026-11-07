@@ -1,0 +1,23 @@
+[package]
+name = "daw-audio"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+daw-core = { path = "../daw-core" }
+daw-media = { path = "../daw-media" }
+daw-midi = { path = "../daw-midi" }
+cpal = { version = "0.18", optional = true }
+memmap2 = "0.9"
+hound = "3.5"
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Memory",
+    "Win32_Storage_FileSystem",
+] }
+timestretch = "0.15.0"
+
+[features]
+default = ["cpal-out"]
+cpal-out = ["dep:cpal"]
+jack = ["cpal-out", "cpal/jack"]

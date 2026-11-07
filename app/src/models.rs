@@ -1,0 +1,432 @@
+//! Projeção inicial do core nos modelos Slint e sincronização
+//! granular via eventos do documento.
+
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::rc::Rc;
+
+use crate::ClipData;
+use crate::MainWindow;
+use crate::explorer::load_directory_entries;
+use crate::mixer::mixer_inserts_state;
+use crate::waveform::{WaveformCache, to_clip_data};
+use daw_core::clip::Clip;
+use daw_core::project::{ChangeKind, DocumentEvent, Project};
+use daw_media::filesystem::default_samples_dir;
+use slint::{Global, Model};
+use std::path::PathBuf;
+
+/// Compassos necessários para caber até `end_beat`: teto em
+/// compassos + 8 de folga, mínimo 32. Cresce monotonicamente
+/// (undo não encolhe a timeline — comportamento padrão de DAW).
+pub fn bars_for_end_beat(end_beat: f64, beats_per_bar: i32) -> i32 {
+    ((end_beat / beats_per_bar as f64).ceil() as i32 + 8).max(32)
+}
+
+/// Identidade de um clip como "material" do ClipPool.
+///
+/// Cópias idênticas (mesmo arquivo/notas + mesmas edições) compartilham a
+/// mesma chave e colapsam numa única entrada; alterar parâmetros audíveis
+/// (ganho, fades, região de origem, conteúdo MIDI) gera chave nova.
+fn pool_entry_key(c: &ClipData) -> String {
+    let gain = (c.gain_db * 100.0).round();
+    let fade_in = (c.fade_in * 100.0).round();
+    let fade_out = (c.fade_out * 100.0).round();
+    if c.is_midi {
+        format!("M|{}|{gain}|{fade_in}|{fade_out}", c.midi_fingerprint)
+    } else {
+        let path = c.file_path.as_str().to_lowercase().replace('\\', "/");
+        let offset = (c.source_offset * 100.0).round();
+        format!("A|{path}|{offset}|{gain}|{fade_in}|{fade_out}")
+    }
+}
+
+/// Entradas da biblioteca global do ClipPool: uma por material real,
+/// na ordem de primeiro uso na timeline.
+pub fn build_pool_clips(clips: &[ClipData], beat_pattern_names: &[String]) -> Vec<ClipData> {
+    let mut seen = HashSet::new();
+    clips
+        .iter()
+        .filter(|c| {
+            !c.is_midi
+                || !beat_pattern_names
+                    .iter()
+                    .any(|pattern_name| pattern_name == c.name.as_str())
+        })
+        .filter(|c| seen.insert(pool_entry_key(c)))
+        .cloned()
+        .collect()
+}
+
+/// Fim (em batidas) relevante do evento, para crescer total-bars.
+/// Considera old E new — cobrir undo/redo sem ramificar.
+fn event_max_end_beat(event: &DocumentEvent) -> Option<f64> {
+    let end = |c: &Clip| c.end_beat() as f64;
+    let both = |a: &Clip, b: &Clip| end(a).max(end(b));
+    match event {
+        DocumentEvent::ClipAdded(c) => Some(end(c)),
+        DocumentEvent::ClipSliced { left, right, .. } => Some(both(left, right)),
+        DocumentEvent::ClipMoved { old, new } => Some(both(old, new)),
+        DocumentEvent::ClipsGlued {
+            left_before, right, ..
+        } => Some(both(left_before, right)),
+        DocumentEvent::ClipResized { old, new } => Some(both(old, new)),
+        _ => None,
+    }
+}
+
+/// Preenche os modelos da UI a partir do estado inicial do core.
+///
+/// Retorna os `VecModel` compartilhados para que o assinante de
+/// eventos possa atualizá-los granularmente em runtime.
+pub fn initial_bind(
+    ui: &MainWindow,
+    project: &Project,
+    waveforms: &WaveformCache,
+) -> (
+    Rc<slint::VecModel<slint::SharedString>>,
+    Rc<slint::VecModel<ClipData>>,
+    Rc<slint::VecModel<i32>>,
+) {
+    let track_names: Vec<slint::SharedString> = project
+        .tracks
+        .iter()
+        .map(|t| t.name.clone().into())
+        .collect();
+    let tracks_model = Rc::new(slint::VecModel::from(track_names));
+    ui.set_track_names(tracks_model.clone().into());
+
+    // Cores das tracks (índice na paleta da UI).
+    let track_colors: Vec<i32> = project.tracks.iter().map(|t| t.color as i32).collect();
+    let track_colors_model = Rc::new(slint::VecModel::from(track_colors));
+    ui.set_track_colors(track_colors_model.clone().into());
+
+    let clips: Vec<ClipData> = project
+        .clips
+        .iter()
+        .map(|c| to_clip_data(c, waveforms))
+        .collect();
+    let clips_model = Rc::new(slint::VecModel::from(clips));
+    ui.set_clips(clips_model.clone().into());
+
+    // Inserts iniciais (o estado de volume/pan/mute/etc. é aplicado
+    // pelos MixerModels compartilhados em `main`).
+    let (insert_counts, insert_names, insert_enabled, max_inserts) = mixer_inserts_state(project);
+    ui.set_mixer_insert_counts(Rc::new(slint::VecModel::from(insert_counts)).into());
+    ui.set_mixer_insert_names(Rc::new(slint::VecModel::from(insert_names)).into());
+    ui.set_mixer_insert_enabled(Rc::new(slint::VecModel::from(insert_enabled)).into());
+    ui.set_mixer_max_inserts(max_inserts);
+
+    // Inicializa file browser na pasta de samples padrão. Se ela não
+    // puder ser criada (disco cheio, perfil sem Documentos), cai para o
+    // diretório de trabalho — abrir num explorador vazio parece defeito.
+    let samples_dir = default_samples_dir();
+    let start_dir = match std::fs::create_dir_all(&samples_dir) {
+        Ok(()) => samples_dir,
+        Err(err) => {
+            eprintln!("[explorer] {} indisponível: {err}", samples_dir.display());
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        }
+    };
+    let initial_path = start_dir.to_string_lossy().to_string();
+    ui.set_explorer_current_path(initial_path.clone().into());
+    ui.set_explorer_path_history(Rc::new(slint::VecModel::from(vec![initial_path.into()])).into());
+    ui.set_explorer_history_index(0);
+    ui.set_explorer_can_go_up(start_dir.parent().is_some_and(|p| p.is_dir()));
+    let initial_entries = load_directory_entries(&start_dir, "");
+    ui.set_explorer_entries(Rc::new(slint::VecModel::from(initial_entries)).into());
+
+    (tracks_model, clips_model, track_colors_model)
+}
+
+/// Índice da linha do modelo cujo clip tem o id informado.
+pub fn clip_row(model: &slint::VecModel<ClipData>, id: i32) -> Option<usize> {
+    (0..model.row_count()).find(|&i| model.row_data(i).map(|c| c.id == id).unwrap_or(false))
+}
+
+/// Aplica um `DocumentEvent` aos modelos da UI.
+///
+/// `undo = true` reverte a mudança (caso contrário aplica/refaz).
+/// Nunca toca no `Project` — apenas nos modelos, pois é chamado
+/// de dentro de uma mutação do core (reentrância proibida).
+pub fn apply_change(
+    tracks_model: &slint::VecModel<slint::SharedString>,
+    clips_model: &slint::VecModel<ClipData>,
+    event: &DocumentEvent,
+    undo: bool,
+    waveforms: &WaveformCache,
+) {
+    match event {
+        DocumentEvent::TrackAdded(track) => {
+            if undo {
+                let track_id = track.id as i32;
+                let mut i = 0;
+                while i < clips_model.row_count() {
+                    if clips_model
+                        .row_data(i)
+                        .map(|c| c.track_index == track_id)
+                        .unwrap_or(false)
+                    {
+                        clips_model.remove(i);
+                    } else {
+                        i += 1;
+                    }
+                }
+                if tracks_model.row_count() > 0 {
+                    tracks_model.remove(tracks_model.row_count() - 1);
+                }
+            } else {
+                tracks_model.push(track.name.clone().into());
+            }
+        }
+        DocumentEvent::ClipAdded(clip) => {
+            if undo {
+                if let Some(i) = clip_row(clips_model, clip.id as i32) {
+                    clips_model.remove(i);
+                }
+            } else {
+                clips_model.push(to_clip_data(clip, waveforms));
+            }
+        }
+        DocumentEvent::ClipSliced {
+            original,
+            left,
+            right,
+        } => {
+            if undo {
+                if let Some(i) = clip_row(clips_model, right.id as i32) {
+                    clips_model.remove(i);
+                }
+                if let Some(i) = clip_row(clips_model, original.id as i32) {
+                    clips_model.set_row_data(i, to_clip_data(original, waveforms));
+                }
+            } else {
+                if let Some(i) = clip_row(clips_model, left.id as i32) {
+                    clips_model.set_row_data(i, to_clip_data(left, waveforms));
+                }
+                clips_model.push(to_clip_data(right, waveforms));
+            }
+        }
+        DocumentEvent::ClipMoved { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
+        DocumentEvent::ClipDeleted(clip) => {
+            if undo {
+                clips_model.push(to_clip_data(clip, waveforms));
+            } else if let Some(i) = clip_row(clips_model, clip.id as i32) {
+                clips_model.remove(i);
+            }
+        }
+        DocumentEvent::ClipsGlued {
+            left_before,
+            left,
+            right,
+        } => {
+            if undo {
+                if let Some(i) = clip_row(clips_model, left_before.id as i32) {
+                    clips_model.set_row_data(i, to_clip_data(left_before, waveforms));
+                }
+                clips_model.push(to_clip_data(right, waveforms));
+            } else {
+                if let Some(i) = clip_row(clips_model, left.id as i32) {
+                    clips_model.set_row_data(i, to_clip_data(left, waveforms));
+                }
+                if let Some(i) = clip_row(clips_model, right.id as i32) {
+                    clips_model.remove(i);
+                }
+            }
+        }
+        DocumentEvent::ClipResized { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
+        DocumentEvent::ClipRenamed { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
+        DocumentEvent::ClipColorChanged { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
+        DocumentEvent::ClipFadesChanged { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
+        DocumentEvent::ClipGainChanged { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
+        DocumentEvent::ClipNotesChanged { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
+        DocumentEvent::ClipTimewarpChanged { old, new } => {
+            let data = if undo { old } else { new };
+            if let Some(i) = clip_row(clips_model, data.id as i32) {
+                clips_model.set_row_data(i, to_clip_data(data, waveforms));
+            }
+        }
+        DocumentEvent::TempoChanged { .. } => {
+            // Tempo-warp não altera metadados de clips — apenas o mapa
+            // de tempo. A UI re-renderiza a régua/playhead separadamente.
+        }
+        DocumentEvent::MixerInsertsChanged { .. } => {
+            // O modelo visual dos inserts é reprojetado pelo estado do mixer.
+        }
+    }
+}
+
+/// Assina os eventos do documento e mantém os modelos da UI
+/// sincronizados de forma granular. `ui` é usado para crescer
+/// `total-bars` quando um clip passa do fim atual da timeline.
+pub fn bind_document_events(
+    project: &Project,
+    tracks_model: Rc<slint::VecModel<slint::SharedString>>,
+    clips_model: Rc<slint::VecModel<ClipData>>,
+    pool_clips_model: Rc<slint::VecModel<ClipData>>,
+    waveforms: Rc<RefCell<WaveformCache>>,
+    ui: slint::Weak<MainWindow>,
+) {
+    project.subscribe(move |event, kind| {
+        let wf = waveforms.borrow();
+        apply_change(
+            &tracks_model,
+            &clips_model,
+            event,
+            kind == ChangeKind::Undo,
+            &wf,
+        );
+        drop(wf);
+        let pool: Vec<ClipData> = (0..clips_model.row_count())
+            .filter_map(|i| clips_model.row_data(i))
+            .collect();
+        let pattern_names = ui
+            .upgrade()
+            .map(|ui| {
+                crate::BeatState::get(&ui)
+                    .get_pattern_names()
+                    .iter()
+                    .map(|name| name.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        pool_clips_model.set_vec(build_pool_clips(&pool, &pattern_names));
+        // Cresce a timeline se o clip passou do fim atual.
+        if let Some(end) = event_max_end_beat(event) {
+            if let Some(ui) = ui.upgrade() {
+                let needed = bars_for_end_beat(end, ui.get_beats_per_bar());
+                if needed > ui.get_total_bars() {
+                    ui.set_total_bars(needed);
+                }
+            }
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use slint::SharedString;
+
+    fn audio(id: i32, path: &str, offset: f32, gain: f32) -> ClipData {
+        ClipData {
+            id,
+            track_index: 0,
+            name: SharedString::from("a"),
+            beat: 0.0,
+            len: 4.0,
+            is_midi: false,
+            color: 1,
+            multi_selected: false,
+            fade_in: 0.0,
+            fade_out: 0.0,
+            gain_db: gain,
+            file_path: SharedString::from(path),
+            source_offset: offset,
+            midi_fingerprint: SharedString::from(""),
+            waveform: slint::Image::default(),
+        }
+    }
+
+    fn midi(id: i32, fp: &str) -> ClipData {
+        ClipData {
+            id,
+            track_index: 0,
+            name: SharedString::from("m"),
+            beat: 0.0,
+            len: 4.0,
+            is_midi: true,
+            color: 1,
+            multi_selected: false,
+            fade_in: 0.0,
+            fade_out: 0.0,
+            gain_db: 0.0,
+            file_path: SharedString::from(""),
+            source_offset: 0.0,
+            midi_fingerprint: SharedString::from(fp),
+            waveform: slint::Image::default(),
+        }
+    }
+
+    #[test]
+    fn identical_audio_copies_collapse_to_one_pool_entry() {
+        let clips = vec![
+            audio(1, "C:/samples/kick.wav", 0.0, 0.0),
+            audio(2, "C:/samples/kick.wav", 0.0, 0.0),
+            audio(3, "c:\\samples\\KICK.wav", 0.0, 0.0),
+        ];
+        let pool = build_pool_clips(&clips, &[]);
+        assert_eq!(pool.len(), 1);
+        assert_eq!(pool[0].id, 1);
+    }
+
+    #[test]
+    fn modified_gain_or_region_split_pool_entry() {
+        let clips = vec![
+            audio(1, "C:/samples/kick.wav", 0.0, 0.0),
+            audio(2, "C:/samples/kick.wav", 0.0, -6.0),
+            audio(3, "C:/samples/kick.wav", 2.0, 0.0),
+        ];
+        let pool = build_pool_clips(&clips, &[]);
+        assert_eq!(pool.len(), 3);
+    }
+
+    #[test]
+    fn identical_midi_copies_collapse_distinct_notes_stay() {
+        let clips = vec![
+            midi(1, "0,60,100,100;"),
+            midi(2, "0,60,100,100;"),
+            midi(3, "0,64,100,100;"),
+        ];
+        let pool = build_pool_clips(&clips, &[]);
+        assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn beat_pattern_timeline_clips_are_not_listed_as_midi_pool_items() {
+        let mut beat_clip = midi(1, "0,60,100,100;");
+        beat_clip.name = SharedString::from("Beat 1");
+        let pattern_names = vec!["Beat 1".to_string()];
+        let other_clip = midi(2, "0,64,100,100;");
+
+        let pool = build_pool_clips(&[beat_clip, other_clip], &pattern_names);
+
+        assert_eq!(pool.len(), 1);
+        assert_eq!(pool[0].id, 2);
+    }
+}

@@ -1,0 +1,56 @@
+import { Theme } from "../theme.slint";
+
+export component BrowserTreeRow inherits Rectangle {
+    in property <string> name: "";
+    in property <string> icon: "▸";
+    in property <int> indent: 0;
+    in-out property <bool> selected: false;
+    in property <bool> folder: true;
+
+    height: 24px;
+
+    background: root.selected
+        ? Theme.surface-high
+        : transparent;
+
+    border-radius: 3px;
+
+    HorizontalLayout {
+        padding-left: 6px + root.indent * 14px;
+        padding-right: 6px;
+        spacing: 5px;
+        alignment: center;
+
+        Text {
+            text: root.folder ? root.icon : "♫";
+            width: 14px;
+
+            color: root.selected
+                ? Theme.accent
+                : Theme.text-dim;
+
+            font-size: 10px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.name;
+
+            color: root.selected
+                ? Theme.text-primary
+                : Theme.text-dim;
+
+            font-size: 10px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+
+    TouchArea {
+        clicked => {
+            root.selected = true;
+        }
+    }
+}

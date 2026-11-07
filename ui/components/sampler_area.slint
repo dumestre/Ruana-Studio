@@ -1,0 +1,125 @@
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+import { Sampler } from "../sampler/sampler.slint";
+
+component PanelHeader inherits Rectangle {
+    in property <string> title: "";
+    in-out property <bool> floating: false;
+    callback float-toggle();
+
+    height: 26px;
+    background: Theme.surface;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+
+        alignment: LayoutAlignment.space-between;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        height: 100%;
+
+        Text {
+            text: root.title;
+            color: Theme.text-primary;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        Button {
+            width: 22px;
+            height: 20px;
+
+            icon: @image-url("../icons/expand_diag.svg");
+            icon-size: 12px;
+
+            borderless: true;
+            icon-color: Theme.text-dim;
+
+            transform-rotation: root.floating
+                ? 180deg
+                : 0deg;
+
+            toggled: root.floating;
+            toggled-icon-color: Theme.accent;
+
+            clicked => {
+                root.float-toggle();
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+
+        width: 100%;
+        height: 1px;
+
+        background: Theme.border;
+    }
+}
+
+export component SamplerArea inherits Rectangle {
+
+    in-out property <bool> floating: false;
+
+    callback float-toggle();
+    callback load-sample-requested();
+    callback sample-dropped(string, string);
+    in-out property <string> sample-name: "No Sample";
+    in-out property <bool> sample-loaded: false;
+    in-out property <string> sample-format: "";
+    in-out property <string> sample-duration: "";
+
+    in property <bool> show-header: true;
+    in property <bool> drop-hover: false;
+
+    background: Theme.base;
+
+    VerticalLayout {
+        spacing: 0;
+
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
+
+        if root.show-header: PanelHeader {
+            title: "Sampler";
+
+            floating <=> root.floating;
+
+            float-toggle => {
+                root.float-toggle();
+            }
+        }
+
+        Sampler {
+            width: 100%;
+            height: 100%;
+
+            vertical-stretch: 1;
+            sample-name <=> root.sample-name;
+            sample-loaded <=> root.sample-loaded;
+            sample-format <=> root.sample-format;
+            sample-duration <=> root.sample-duration;
+            load-sample-requested => { root.load-sample-requested(); }
+        }
+    }
+
+    if root.drop-hover: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: Theme.accent.brighter(-0.92);
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: 4px;
+
+        Text {
+            text: "Drop audio here";
+            font-size: 11px;
+            font-weight: 600;
+            color: Theme.accent;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}

@@ -1,0 +1,444 @@
+import { Theme } from "../theme.slint";
+
+
+// =========================================================
+// BARRA DE ROLAGEM HORIZONTAL
+// =========================================================
+
+export component ScrollBarHorizontal inherits Rectangle {
+
+    in-out property <length> value: 0px;
+    in property <length> max-value: 0px;
+    in property <length> thumb-size: 100px;
+
+    property <length> thumb-min: 18px;
+    property <length> inset: 3px;
+
+    property <bool> dragging: false;
+
+    property <length> start-abs-x: 0px;
+    property <length> start-value: 0px;
+
+    width: 16px;
+
+    opacity: root.max-value <= 0px ? 0.3 : 1.0;
+
+
+    // =====================================================
+    // LAYOUT HORIZONTAL
+    // =====================================================
+
+    HorizontalLayout {
+
+        width: 100%;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        height: 100%;
+
+
+        // =================================================
+        // TRILHO
+        // =================================================
+
+        track := Rectangle {
+
+            width: 100%;
+            height: 100%;
+
+            background:
+                touch.has-hover || root.dragging
+                    ? Theme.surface-high
+                    : Theme.surface;
+
+            border-radius: 7px;
+
+
+            // =============================================
+            // LARGURA DO THUMB
+            // =============================================
+
+            property <length> thumb-width:
+                root.max-value <= 0px
+                    ? max(
+                        0px,
+                        track.width - 2 * root.inset
+                    )
+                    : max(
+                        root.thumb-min,
+                        min(
+                            root.thumb-size,
+                            max(
+                                0px,
+                                track.width - 2 * root.inset
+                            )
+                        )
+                    );
+
+
+            // =============================================
+            // ESPAÇO PERCORRÍVEL
+            // =============================================
+
+            property <length> track-width:
+                max(
+                    1px,
+                    track.width
+                    - 2 * root.inset
+                    - track.thumb-width
+                );
+
+
+            // =============================================
+            // POSIÇÃO DO THUMB
+            // =============================================
+
+            property <length> thumb-x:
+                root.max-value <= 0px
+                    ? root.inset
+                    : root.inset
+                        + (
+                            root.value / root.max-value
+                        ) * track.track-width;
+
+
+            // =============================================
+            // THUMB
+            // =============================================
+
+            Rectangle {
+
+                x: track.thumb-x;
+                y: 2px;
+
+                width: track.thumb-width;
+                height: track.height - 4px;
+
+                background:
+                    root.dragging
+                        ? Theme.surface-high
+                        : Theme.border;
+
+                border-radius: 5px;
+            }
+
+
+            // =============================================
+            // ÁREA DE INTERAÇÃO
+            // =============================================
+
+            touch := TouchArea {
+
+                width: 100%;
+                height: 100%;
+
+                mouse-cursor: pointer;
+
+
+                pointer-event(event) => {
+
+                    // =====================================
+                    // PRESSIONOU
+                    // =====================================
+
+                    if event.kind == PointerEventKind.down
+                        && event.button == PointerEventButton.left
+                        && root.max-value > 0px {
+
+                        root.dragging = true;
+
+                        root.start-abs-x =
+                            self.absolute-position.x
+                            + self.mouse-x;
+
+                        root.start-value =
+                            root.value;
+
+
+                        // =================================
+                        // CLICOU FORA DO THUMB
+                        // =================================
+
+                        if self.mouse-x < track.thumb-x
+                            || self.mouse-x >
+                                track.thumb-x
+                                + track.thumb-width {
+
+                            root.value =
+                                max(
+                                    0px,
+                                    min(
+                                        root.max-value,
+
+                                        (
+                                            self.mouse-x
+                                            - track.thumb-width / 2
+                                        )
+                                        / track.track-width
+                                        * root.max-value
+                                    )
+                                );
+                        }
+
+
+                    // =====================================
+                    // MOVENDO
+                    // =====================================
+
+                    } else if root.dragging
+                        && event.kind == PointerEventKind.move {
+
+                        root.value =
+                            max(
+                                0px,
+                                min(
+                                    root.max-value,
+
+                                    root.start-value
+                                    + (
+                                        (
+                                            self.absolute-position.x
+                                            + self.mouse-x
+                                        )
+                                        - root.start-abs-x
+                                    )
+                                    / track.track-width
+                                    * root.max-value
+                                )
+                            );
+
+
+                    // =====================================
+                    // SOLTOU
+                    // =====================================
+
+                    } else if root.dragging
+                        && event.kind == PointerEventKind.up {
+
+                        root.dragging = false;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+// =========================================================
+// BARRA DE ROLAGEM VERTICAL
+// =========================================================
+
+export component ScrollBarVertical inherits Rectangle {
+
+    in-out property <length> value: 0px;
+    in property <length> max-value: 0px;
+    in property <length> thumb-size: 100px;
+
+    property <length> thumb-min: 18px;
+    property <length> inset: 3px;
+
+    property <bool> dragging: false;
+
+    property <length> start-abs-y: 0px;
+    property <length> start-value: 0px;
+
+    width: 16px;
+
+    opacity: root.max-value <= 0px ? 0.3 : 1.0;
+
+
+    // =====================================================
+    // LAYOUT VERTICAL
+    // =====================================================
+
+    VerticalLayout {
+
+        width: 16px;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        height: 0px;
+
+
+        // =================================================
+        // TRILHO
+        // =================================================
+
+        track := Rectangle {
+
+            width: 100%;
+            height: 100%;
+
+            background:
+                touch.has-hover || root.dragging
+                    ? Theme.surface-high
+                    : Theme.surface;
+
+            border-radius: 7px;
+
+
+            // =============================================
+            // ALTURA DO THUMB
+            // =============================================
+
+            property <length> thumb-height:
+                root.max-value <= 0px
+                    ? max(
+                        0px,
+                        track.height - 2 * root.inset
+                    )
+                    : max(
+                        root.thumb-min,
+                        min(
+                            root.thumb-size,
+                            max(
+                                0px,
+                                track.height - 2 * root.inset
+                            )
+                        )
+                    );
+
+
+            // =============================================
+            // ESPAÇO PERCORRÍVEL
+            // =============================================
+
+            property <length> track-height:
+                max(
+                    1px,
+                    track.height
+                    - 2 * root.inset
+                    - track.thumb-height
+                );
+
+
+            // =============================================
+            // POSIÇÃO DO THUMB
+            // =============================================
+
+            property <length> thumb-y:
+                root.max-value <= 0px
+                    ? root.inset
+                    : root.inset
+                        + (
+                            root.value / root.max-value
+                        ) * track.track-height;
+
+
+            // =============================================
+            // THUMB
+            // =============================================
+
+            Rectangle {
+
+                x: 2px;
+                y: track.thumb-y;
+
+                width: track.width - 4px;
+                height: track.thumb-height;
+
+                background:
+                    root.dragging
+                        ? Theme.surface-high
+                        : Theme.border;
+
+                border-radius: 5px;
+            }
+
+
+            // =============================================
+            // ÁREA DE INTERAÇÃO
+            // =============================================
+
+            touch := TouchArea {
+
+                width: 100%;
+                height: 100%;
+
+                mouse-cursor: pointer;
+
+
+                pointer-event(event) => {
+
+                    // =====================================
+                    // PRESSIONOU
+                    // =====================================
+
+                    if event.kind == PointerEventKind.down
+                        && event.button == PointerEventButton.left
+                        && root.max-value > 0px {
+
+                        root.dragging = true;
+
+                        root.start-abs-y =
+                            self.absolute-position.y
+                            + self.mouse-y;
+
+                        root.start-value =
+                            root.value;
+
+
+                        // =================================
+                        // CLICOU FORA DO THUMB
+                        // =================================
+
+                        if self.mouse-y < track.thumb-y
+                            || self.mouse-y >
+                                track.thumb-y
+                                + track.thumb-height {
+
+                            root.value =
+                                max(
+                                    0px,
+                                    min(
+                                        root.max-value,
+
+                                        (
+                                            self.mouse-y
+                                            - track.thumb-height / 2
+                                        )
+                                        / track.track-height
+                                        * root.max-value
+                                    )
+                                );
+                        }
+
+
+                    // =====================================
+                    // MOVENDO
+                    // =====================================
+
+                    } else if root.dragging
+                        && event.kind == PointerEventKind.move {
+
+                        root.value =
+                            max(
+                                0px,
+                                min(
+                                    root.max-value,
+
+                                    root.start-value
+                                    + (
+                                        (
+                                            self.absolute-position.y
+                                            + self.mouse-y
+                                        )
+                                        - root.start-abs-y
+                                    )
+                                    / track.track-height
+                                    * root.max-value
+                                )
+                            );
+
+
+                    // =====================================
+                    // SOLTOU
+                    // =====================================
+
+                    } else if root.dragging
+                        && event.kind == PointerEventKind.up {
+
+                        root.dragging = false;
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,108 @@
+// ============================================================
+// BEAT STATE
+//
+// Ponte UI ↔ bridge (Rust) do beat sequencer.
+//
+// O Rust projeta o estado do core aqui (fonte única) e consome
+// os callbacks de persistência. O MainWindow faz a ponte destas
+// propriedades com a instância do BeatPopup.
+// ============================================================
+
+export global BeatState {
+
+    // --------------------------------------------------------
+    // DADOS (projetados do core pelo Rust)
+    // --------------------------------------------------------
+
+    in-out property <[[bool]]> patterns: [[]];
+
+    // Nomes de todos os patterns do projeto
+    // (exibidos no Clip Pool).
+    in-out property <[string]> pattern-names: [];
+
+    // Duração de cada pattern em beats da timeline (N/4).
+    // Usada pelo Clip Pool para mostrar a duração correspondente
+    // e para o drop criar o clip com o comprimento certo.
+    in-out property <[float]> pattern-durations: [];
+
+    in-out property <int> current-pattern: 0;
+
+    in-out property <int> grid-resolution: 16;
+
+    in-out property <float> humanize: 0.0;
+
+    in-out property <float> swing: 0.0;
+
+    in-out property <[string]> instrument-names: [];
+
+    // Nome do sample carregado em cada linha ("" = linha vazia).
+    //
+    // Serve para a linha mostrar que tem som carregado — sem isso o
+    // único sinal de que o drop funcionou era o nome da trilha mudar.
+    in-out property <[string]> track-sample-names: [];
+
+    in-out property <[bool]> track-active: [];
+
+    in-out property <[bool]> track-solo: [];
+
+    in-out property <[float]> track-pan: [];
+
+    in-out property <[float]> track-volume: [];
+
+    in-out property <[int]> track-mixer-channel: [];
+
+    // Passo que está soando (-1 = parado).
+    //
+    // Escrito pelo Rust a partir do MESMO relógio do áudio, então a
+    // coluna acesa é a que se ouve.
+    in-out property <int> playhead: -1;
+
+
+    // --------------------------------------------------------
+    // PERSISTÊNCIA (callbacks consumidos pelo Rust)
+    // --------------------------------------------------------
+
+    callback step-committed(int, bool);
+
+    callback grid-resolution-committed(int);
+
+    callback humanize-committed(float);
+
+    callback swing-committed(float);
+
+    callback track-param-committed(int, string, float);
+
+    callback pattern-changed(int);
+
+    // Cria um novo padrão vazio e o seleciona (botão "+" do Clip Pool).
+    callback create-pattern;
+
+    // Linha do beat selecionada pelo usuário → o Rust sincroniza o
+    // sampler para refletir o instrumento (sample) daquela linha.
+    callback track-selected(int);
+
+    // Botão "sampler" de uma linha do beat → abre a aba do sampler
+    // apontando para a linha.
+    callback sampler-open(int);
+
+    callback duplicate-beat;
+    callback copy-beat;
+    callback clear-beat;
+    callback delete-beat;
+
+    callback copy-track(int);
+    callback duplicate-track(int);
+    callback delete-track(int);
+    callback clear-track(int);
+
+    callback insert-pattern(int, int);
+
+    // Toca o sample da linha na hora (pré-escuta).
+    //
+    // Soa com o transporte parado — é o clique no botão de canal do
+    // channel rack.
+    callback preview-track(int);
+
+    // Abre o popup do beat sequencer (do duplo clique no Clip Pool).
+    callback open-beat-popup;
+}

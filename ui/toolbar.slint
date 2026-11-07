@@ -1,0 +1,562 @@
+import { Button } from "components/button.slint";
+import { Theme } from "theme.slint";
+import { ProjectKey } from "components/project_key.slint";
+import { ThemePicker } from "components/theme_picker.slint";
+import { Transport } from "transport.slint";
+import { EditToolbar } from "edit_toolbar.slint";
+import { KnobWithoutText } from "components/knob.slint";
+
+export component Toolbar inherits Rectangle {
+    in-out property <bool> snap-enabled: true;
+    in-out property <bool> follow-enabled: true;
+    in-out property <bool> grid-enabled: true;
+    in-out property <bool> full-screen: false;
+    in-out property <bool> jump-to-pattern: false;
+
+    callback zoom-in;
+    callback zoom-out;
+    callback snap-toggled(bool);
+    callback follow-toggled(bool);
+    callback grid-toggled(bool);
+    callback close;
+    callback minimize;
+    callback page-toggled(bool);
+    callback theme-selected(int);
+
+    // Arrasto da janela (no-frame): move a janela do SO a partir da
+    // barra vazia. Dead-zone antes de mover — clique puro não arrasta.
+    callback window-drag-started();
+    callback window-drag-moved(length, length);
+    callback window-drag-finished();
+    in property <length> drag-threshold: 4px;
+    private property <length> press-x: 0px;
+    private property <length> press-y: 0px;
+    private property <bool> drag-armed: false;
+
+    // ---- Transport (integrado à toolbar) ----
+    in-out property <bool> playing: false;
+    in-out property <bool> loop-enabled: false;
+    in-out property <bool> metronome-enabled: false;
+    in-out property <int> metronome-sound: 0;
+    in-out property <float> metronome-volume: 0.7;
+    in-out property <int> transport-position: 0;
+    in-out property <int> bpm: 120;
+    in-out property <int> beats-per-bar: 4;
+    in-out property <int> ppq: 960;
+    in-out property <float> master-volume: 0.7;
+
+    callback play-state-changed(bool);
+    callback loop-state-changed(bool);
+    callback metronome-state-changed(bool);
+    callback metronome-sound-changed(int);
+    callback metronome-volume-changed(float);
+    callback set-bpm(float);
+    callback master-volume-changed(float);
+
+    height: 34px;
+    
+
+    // ============================================================
+    // DRAG AREA — move a janela frameless (fica atrás dos botões;
+    // só pega o espaço vazio da barra).
+    // ============================================================
+
+    drag-area := TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+
+        moved => {
+            if (self.pressed) {
+                if (!root.drag-armed) {
+                    if (max(
+                        abs(self.mouse-x - root.press-x),
+                        abs(self.mouse-y - root.press-y)
+                    ) >= root.drag-threshold) {
+                        root.drag-armed = true;
+                        root.window-drag-started();
+                    }
+                }
+                if (root.drag-armed) {
+                    root.window-drag-moved(
+                        self.mouse-x - root.press-x,
+                        self.mouse-y - root.press-y
+                    );
+                }
+            }
+        }
+
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                root.press-x = self.mouse-x;
+                root.press-y = self.mouse-y;
+                root.drag-armed = false;
+            } else if (event.kind == PointerEventKind.up) {
+                if (root.drag-armed) {
+                    root.drag-armed = false;
+                    root.window-drag-finished();
+                }
+            }
+        }
+    }
+
+    // ============================================================
+    // LAYOUT PRINCIPAL DA TOOLBAR
+    // ============================================================
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+
+        spacing: 16px;
+
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+
+        // ========================================================
+        // 1. LOGO & TÍTULO
+        // ========================================================
+
+        HorizontalLayout {
+            spacing: 1px;
+
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+            Image {
+                source: @image-url("../app/assets/RuanaStudio.svg");
+                width: 26px;
+                height: 26px;
+            }
+        }
+
+
+        // ========================================================
+        // 2. MENUS
+        // ========================================================
+
+        HorizontalLayout {
+            spacing: 2px;
+
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+            Button {
+                text: "File";   
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.Transparent;
+
+                clicked => {}
+            }
+
+            Button {
+                text: "Edit";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.Transparent;
+
+                clicked => {}
+            }
+
+            Button {
+                text: "New";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+               resting-bg: Theme.Transparent;
+
+                clicked => {}
+            }
+
+            Button {
+                text: "Save";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.Transparent;
+
+                clicked => {}
+            }
+
+            Button {
+                text: "Save As";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.Transparent;
+
+                clicked => {}
+            }
+
+            Button {
+                text: "Settings";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.Transparent;
+
+                clicked => {}
+            }
+
+            Button {
+                text: "Help";
+                height: 18px;
+                padding-x: 3px;
+                borderless: true;
+                text-color: Theme.text-primary;
+                letter-spacing: 1px;
+                corner-radius: 2px;
+                resting-bg: Theme.Transparent;
+
+                clicked => {}
+            }
+        }
+
+
+        // ========================================================
+        // 3. FERRAMENTAS DA DAW
+        // ========================================================
+
+        HorizontalLayout {
+            spacing: 20px;
+
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+            // ----------------------------------------------------
+            // PROJECT KEY
+            // ----------------------------------------------------
+
+            ProjectKey {
+                border-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+            }
+
+
+            // ----------------------------------------------------
+            // UNDO / REDO
+            // ----------------------------------------------------
+
+            HorizontalLayout {
+                spacing: 2px;
+
+
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                Button {
+                    height: 18px;
+                    width: 18px;
+
+                    drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+
+                    icon: @image-url("icons/undo.svg");
+                    icon-size: 16px;
+                    icon-color: Theme.text-primary;
+
+                    borderless: true;
+
+                    clicked => {}
+                }
+
+                Button {
+                    height: 18px;
+                    width: 18px;
+                    drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+
+                    icon: @image-url("icons/redo.svg");
+                    icon-size: 16px;
+                    icon-color: Theme.text-primary;
+
+                    borderless: true;
+
+                    clicked => {}
+                }
+            }
+
+
+            // ----------------------------------------------------
+            // FOLLOW / SNAP
+            // ----------------------------------------------------
+
+            HorizontalLayout {
+                spacing: 2px;
+
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                Button {
+                    icon: @image-url("icons/follow.svg");
+                    filled-icon: @image-url("icons/follow_filled.svg");
+
+                    icon-size: 16px;
+                    icon-color: Theme.text-primary;
+
+                    height: 18px;
+                    width: 18px;
+
+                    drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+
+                    toggled: root.follow-enabled;
+                    toggled-bg: Theme.accent;
+                    toggled-fg: Theme.on-accent;
+                    toggled-icon-color: Theme.on-accent;
+
+                    subtle-toggled: false;
+                    borderless: true;
+
+                    clicked => {
+                        root.follow-enabled = !root.follow-enabled;
+                        root.follow-toggled(root.follow-enabled);
+                    }
+                }
+
+                Button {
+                    icon: @image-url("icons/snap.svg");
+                    filled-icon: @image-url("icons/snap_filled.svg");
+
+                    icon-size: 16px;
+                    icon-color: Theme.text-primary;
+
+                    height: 18px;
+                    width: 18px;
+
+                    drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+
+                    toggled: root.snap-enabled;
+                    toggled-bg: Theme.accent;
+                    toggled-fg: Theme.on-accent;
+                    toggled-icon-color: Theme.on-accent;
+
+                    subtle-toggled: false;
+                    borderless: true;
+
+                    clicked => {
+                        root.snap-enabled = !root.snap-enabled;
+                        root.snap-toggled(root.snap-enabled);
+                    }
+                }
+            }
+
+
+            
+
+
+            // ----------------------------------------------------
+            // THEME PICKER
+            // ----------------------------------------------------
+
+            ThemePicker {
+                theme-selected(i) => {
+                    root.theme-selected(i);
+                }
+            }
+        }
+
+
+        // ========================================================
+        // TRANSPORT
+        // ========================================================
+
+        EditToolbar { }
+
+        Transport {
+            playing <=> root.playing;
+            loop-enabled <=> root.loop-enabled;
+            metronome-enabled <=> root.metronome-enabled;
+            metronome-sound <=> root.metronome-sound;
+            metronome-volume <=> root.metronome-volume;
+
+            position <=> root.transport-position;
+
+            bpm <=> root.bpm;
+            beats-per-bar <=> root.beats-per-bar;
+            ppq <=> root.ppq;
+
+            play-state-changed(state) => {
+                root.play-state-changed(state);
+            }
+
+            loop-state-changed(state) => {
+                root.loop-state-changed(state);
+            }
+
+            metronome-state-changed(enabled) => {
+                root.metronome-state-changed(enabled);
+            }
+
+            metronome-sound-changed(sound) => {
+                root.metronome-sound-changed(sound);
+            }
+
+            metronome-volume-changed(value) => {
+                root.metronome-volume-changed(value);
+            }
+
+            set-bpm(value) => {
+                root.set-bpm(value);
+            }
+        }
+
+        // ========================================================
+        // VOLUME GERAL (Master)
+        // ========================================================
+        KnobWithoutText {
+            width: 26px;
+            height: 26px;
+            value: root.master-volume;
+            changed(v) => {
+                root.master-volume = v;
+                root.master-volume-changed(v);
+            }
+        }
+
+
+        // ========================================================
+        // 4. CONTROLES DA JANELA
+        // ========================================================
+
+        HorizontalLayout {
+            spacing: 4px;
+
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+
+            // ----------------------------------------------------
+            // MINIMIZAR
+            // ----------------------------------------------------
+
+            Button {
+                width: 12px;
+                height: 12px;
+
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                preferred-height: 0px;
+                preferred-width: 0px;
+
+                text: "";
+
+                corner-radius: 4px;
+
+                resting-bg:
+                    #FEBC2E;
+
+                borderless: true;
+
+                clicked => {
+                    root.minimize();
+                }
+            }
+
+
+            // ----------------------------------------------------
+            // MAXIMIZAR / RESTAURAR
+            // ----------------------------------------------------
+
+            Button {
+                width: 12px;
+                height: 12px;
+
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                text: "";
+
+                corner-radius: 4px;
+
+                resting-bg:
+                    #28C840;
+
+                borderless: true;
+
+                clicked => {
+                    root.full-screen =
+                        !root.full-screen;
+                }
+            }
+
+
+            // ----------------------------------------------------
+            // FECHAR
+            // ----------------------------------------------------
+
+            Button {
+                width: 12px;
+                height: 12px;
+
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                text: "";
+
+                corner-radius: 4px;
+
+                resting-bg:
+                    #FF5F57;
+
+                borderless: true;
+
+                clicked => {
+                    root.close();
+                }
+            }
+        }
+    }
+}

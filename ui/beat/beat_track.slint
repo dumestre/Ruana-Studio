@@ -1,0 +1,392 @@
+import { Theme } from "../theme.slint";
+import { KnobWithoutText, PanKnobWithoutText } from "../components/knob.slint";
+
+export component BeatTrack inherits Rectangle {
+
+    in-out property <int> track-index: 0;
+    in property <string> track-name: "Kick";
+
+    // Nome do sample carregado ("" = linha sem som).
+    in property <string> sample-name: "";
+
+    property <bool> has-sample:
+        root.sample-name != "";
+
+    in property <color> track-color: Theme.accent;
+
+    in-out property <bool> active: true;
+    in-out property <bool> solo: false;
+
+    in-out property <float> pan: 0.0;
+    in-out property <float> volume: 1.0;
+    in-out property <int> mixer-channel: 0;
+
+    in property <bool> selected: false;
+
+    // Alvo do drag de sample (linha onde o sample vai cair).
+    in property <bool> drag-target: false;
+
+    in-out property <int> track-menu-open-index: -1;
+
+    // ============================================================
+    // COLUNAS
+    // ============================================================
+
+    property <length> pan-width: 28px;
+    property <length> volume-width: 28px;
+    property <length> channel-width: 30px;
+    property <length> mute-width: 22px;
+    property <length> solo-width: 22px;
+    property <length> column-spacing: 2px;
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
+
+    callback selected-changed;
+    callback active-changed(bool);
+    callback solo-changed(bool);
+    callback pan-changed(float);
+    callback volume-changed(float);
+    callback mixer-channel-changed(int);
+
+    // Pré-escuta do sample da linha.
+    callback preview-requested;
+
+    // Abre o sampler da linha (instrumento daquela track do beat).
+    // Disparado pelo clique no retângulo da track quando tem sample.
+    callback sampler-open-requested;
+
+    height: 30px;
+
+    background: root.selected
+        ? Theme.surface-high
+        : transparent;
+
+    border-radius: 4px;
+
+    border-width: root.selected ? 1px : 0px;
+    border-color: root.selected
+        ? Theme.accent
+        : transparent;
+
+
+    // ============================================================
+    // LAYOUT
+    //
+    // PAN | VOL | CH | M | S | TRACK
+    // ============================================================
+
+    HorizontalLayout {
+        padding-left: 1px;
+        padding-right: 1px;
+
+        spacing: root.column-spacing;
+
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+
+        // ========================================================
+        // PAN
+        // ========================================================
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+
+            PanKnobWithoutText {
+                width: 100%;
+                height: 100%;
+
+                value: (root.pan + 1.0) / 2.0;
+
+                changed(v) => {
+                    root.pan = v * 2.0 - 1.0;
+                    root.pan-changed(root.pan);
+                }
+            }
+        }
+
+
+        // ========================================================
+        // VOLUME
+        // ========================================================
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+
+            KnobWithoutText {
+                width: 100%;
+                height: 100%;
+
+                value: root.volume;
+
+                changed(v) => {
+                    root.volume = v;
+                    root.volume-changed(root.volume);
+                }
+            }
+        }
+
+
+        // ========================================================
+        // CHANNEL
+        // ========================================================
+
+        Rectangle {
+            width: root.channel-width;
+            height: 18px;
+
+            background: Theme.surface-high;
+
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            Text {
+                text: "" + (root.mixer-channel + 1);
+
+                width: 100%;
+                height: 100%;
+
+                color: Theme.text-dim;
+
+                font-family: "";
+                font-size: 14px;
+                font-weight: 0;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.mixer-channel =
+                        Math.mod(root.mixer-channel + 1, 16);
+
+                    root.mixer-channel-changed(
+                        root.mixer-channel
+                    );
+                }
+            }
+        }
+
+
+        // ========================================================
+        // MUTE
+        // ========================================================
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+
+            background: !root.active
+                ? Theme.accent
+                : Theme.surface-high;
+
+            border-radius: 4px;
+
+            border-width: 1px;
+
+            border-color: !root.active
+                ? Theme.accent
+                : Theme.border;
+
+            Text {
+                text: "M";
+
+                width: 100%;
+                height: 100%;
+
+                color: !root.active
+                    ? Theme.on-accent
+                    : Theme.text-dim;
+
+                font-size: 9px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.active = !root.active;
+                    root.active-changed(root.active);
+                }
+            }
+        }
+
+
+        // ========================================================
+        // SOLO
+        // ========================================================
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+
+            background: root.solo
+                ? Theme.accent
+                : Theme.surface-high;
+
+            border-radius: 4px;
+
+            border-width: 1px;
+
+            border-color: root.solo
+                ? Theme.accent
+                : Theme.border;
+
+            Text {
+                text: "S";
+
+                width: 100%;
+                height: 100%;
+
+                color: root.solo
+                    ? Theme.on-accent
+                    : Theme.text-dim;
+
+                font-size: 9px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.solo = !root.solo;
+                    root.solo-changed(root.solo);
+                }
+            }
+        }
+
+
+        // ========================================================
+        // TRACK
+        //
+        // Esta é a única coluna que cresce.
+        // O TouchArea fica DENTRO dela.
+        // Clicar no retângulo da track (nome+cor) abre o sampler
+        // da linha quando ela tem sample carregado.
+        // ========================================================
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 24px;
+
+            background: root.track-color;
+
+            border-radius: 4px;
+
+            border-width: root.drag-target
+                ? 2px
+                : 1px;
+
+            border-color: root.drag-target
+                ? Theme.text-primary
+                : (root.selected
+                    ? Theme.text-primary
+                    : Theme.border);
+
+            opacity: root.active ? 1.0 : 0.35;
+
+
+            // ====================================================
+            // SAMPLE CARREGADO
+            //
+            // Ponto à esquerda: sinal de que a linha tem som. Sem
+            // ele, a única pista do drop era o nome mudar — e uma
+            // linha renomeada sem sample parece igual a uma com.
+            // ====================================================
+
+            Rectangle {
+                x: 5px;
+                y: (parent.height - 5px) / 2;
+
+                width: 5px;
+                height: 5px;
+
+                border-radius: 2.5px;
+
+                background: Theme.accent;
+
+                visible: root.has-sample;
+            }
+
+
+            // ====================================================
+            // NOME
+            // ====================================================
+
+            Text {
+                text: root.track-name;
+
+                x: 12px;
+                y: 0px;
+
+                width: parent.width - 18px;
+                height: parent.height;
+
+                color: Theme.base;
+
+                font-size: 10px;
+                font-weight: 700;
+
+                horizontal-alignment: center;
+                vertical-alignment: center;
+
+                overflow: elide;
+            }
+
+
+            // ====================================================
+            // INTERAÇÃO DA TRACK
+            //
+            // Agora acompanha automaticamente a largura da
+            // coluna TRACK.
+            // ====================================================
+
+            TouchArea {
+                width: parent.width;
+                height: parent.height;
+
+                mouse-cursor: pointer;
+
+                pointer-event(event) => {
+
+                    if event.kind == PointerEventKind.down
+                        && event.button == PointerEventButton.left {
+
+                        root.selected-changed();
+
+                        // Clicar no retângulo da track abre o sampler
+                        // da linha (como no channel rack do FL).
+                        if root.has-sample {
+                            root.sampler-open-requested();
+                            root.preview-requested();
+                        }
+
+                    } else if event.kind == PointerEventKind.down
+                        && event.button == PointerEventButton.right {
+
+                        if root.track-menu-open-index
+                            == root.track-index {
+
+                            root.track-menu-open-index = -1;
+
+                        } else {
+
+                            root.track-menu-open-index =
+                                root.track-index;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

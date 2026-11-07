@@ -1,0 +1,904 @@
+// ============================================================
+// ui/clip_pool.slint
+// ============================================================
+
+import { Theme } from "theme.slint";
+import { ClipPalette } from "clip_palette.slint";
+import { BeatState } from "beat/beat_state.slint";
+import { ClipData } from "timeline/clip_data.slint";
+import { Button } from "components/button.slint";
+
+
+// ============================================================
+// CLIP ITEM VISUAL
+// ============================================================
+
+export component ClipItemVisual inherits Rectangle {
+
+    // ========================================================
+    // DADOS
+    // ========================================================
+
+    in property <string> name: "";
+
+    in property <string> position: "";
+
+    in property <string> duration: "";
+
+    in property <color> clip-color:
+        Theme.clip-midi;
+
+    in property <bool> is-midi:
+        true;
+
+    // Arquivo de áudio de origem (vazio em MIDI / padrões do beat).
+    //
+    // PRECISA chegar até o `clip-dropped`: é o que faz o drop na
+    // timeline criar um clip COM `file_path` — e portanto com a
+    // waveform REAL decodificada — em vez do bloco procedural.
+    in property <string> path: "";
+
+
+    // ========================================================
+    // VISUAL
+    // ========================================================
+
+    height:
+        38px;
+
+    background:
+        Theme.base;
+
+    border-radius:
+        4px;
+
+    border-width:
+        1px;
+
+    border-color:
+        Theme.border;
+
+
+    HorizontalLayout {
+
+        cross-axis-alignment:
+            CrossAxisAlignment.center;
+
+        padding-left:
+            0px;
+
+        padding-right:
+            6px;
+
+        spacing:
+            8px;
+
+
+        // ====================================================
+        // INDICADOR DE COR
+        // ====================================================
+
+        Rectangle {
+
+            width:
+                4px;
+
+            height:
+                90%;
+
+            background:
+                root.clip-color;
+
+            border-radius:
+                8px;
+        }
+
+
+        // ====================================================
+        // INFORMAÇÕES
+        // ====================================================
+
+        VerticalLayout {
+
+            spacing:
+                2px;
+
+
+            Text {
+
+                text:
+                    root.name;
+
+                color:
+                    Theme.text-primary;
+
+                font-size:
+                    11px;
+
+                vertical-alignment:
+                    center;
+
+                overflow:
+                    elide;
+            }
+
+
+            Text {
+
+                visible:
+                    root.position != ""
+                    || root.duration != "";
+
+                text:
+                    root.position != ""
+                        ? "Pos "
+                            + root.position
+                            + "  ·  Len "
+                            + root.duration
+                        : "Len "
+                            + root.duration;
+
+                color:
+                    Theme.text-dim;
+
+                font-size:
+                    9px;
+
+                vertical-alignment:
+                    center;
+
+                overflow:
+                    elide;
+            }
+        }
+    }
+}
+
+
+// ============================================================
+// CLIP ITEM
+// ============================================================
+
+component ClipItem inherits ClipItemVisual {
+
+    // ========================================================
+    // DRAG
+    // ========================================================
+
+    in-out property <bool> drag-active:
+        false;
+
+    callback drag-started(
+        string,
+        string,
+        string,
+        color,
+        bool,
+        string
+    );
+
+    callback drag-moved(
+        length,
+        length
+    );
+
+    callback drag-finished();
+
+
+    // ========================================================
+    // CLIQUE / DUPLO CLIQUE
+    // ========================================================
+
+    callback clicked();
+    callback double-clicked();
+
+
+    // ========================================================
+    // VISUAL DRAG
+    // ========================================================
+
+    opacity: root.drag-active ? 0.35 : 1.0;
+
+
+    // ========================================================
+    // TOUCH
+    // ========================================================
+
+    touch := TouchArea {
+
+        x:
+            0px;
+
+        y:
+            0px;
+
+        width:
+            parent.width;
+
+        height:
+            parent.height;
+
+        mouse-cursor:
+            grab;
+
+
+        property <bool> is-down:
+            false;
+
+        property <length> press-x:
+            0px;
+
+        property <length> press-y:
+            0px;
+
+        property <bool> did-drag:
+            false;
+
+
+        // ====================================================
+        // CLIQUE / DUPLO CLIQUE
+        //
+        // Delegados ao TouchArea, que mede o TEMPO REAL entre os
+        // cliques. A versão anterior contava um `Timer` de 1ms
+        // ligado em CADA item do pool: como o timer só é advance-
+        // do uma vez por frame, a "janela de 300ms" viravam 300
+        // FRAMES (~5s) — o duplo clique não tinha prazo, e o
+        // Timer mantinha a cena do Slint suja a cada frame mesmo
+        // com o mouse parado, forcando re-render de toda a UI.
+        // ====================================================
+
+        clicked => {
+            // Arrasto que voltou para dentro do item e soltou
+            // aqui não é clique.
+            if self.did-drag {
+                self.did-drag = false;
+                return;
+            }
+            root.clicked();
+        }
+
+        double-clicked => {
+            self.did-drag = false;
+            root.double-clicked();
+        }
+
+
+        // ====================================================
+        // POINTER
+        // ====================================================
+
+        pointer-event(event) => {
+
+            // =================================================
+            // MOUSE DOWN
+            // =================================================
+
+            if event.kind
+                == PointerEventKind.down
+                && event.button
+                == PointerEventButton.left {
+
+                self.is-down =
+                    true;
+
+                self.did-drag =
+                    false;
+
+                self.press-x =
+                    self.mouse-x;
+
+                self.press-y =
+                    self.mouse-y;
+            }
+
+
+            // =================================================
+            // MOUSE UP
+            // =================================================
+
+            else if event.kind
+                == PointerEventKind.up
+                && self.is-down {
+
+                self.is-down =
+                    false;
+
+
+                // ---------------------------------------------
+                // CLIQUE PURO / DUPLO CLIQUE
+                //
+                // Não é tratado aqui: o TouchArea emite `clicked` /
+                // `double-clicked` com o tempo real. Um arrasto que
+                // volta e solta dentro do item é filtrado pelo
+                // `did-drag` lá no handler do `clicked`.
+                // ---------------------------------------------
+
+
+                // ---------------------------------------------
+                // FINALIZA DRAG
+                // ---------------------------------------------
+
+                if root.drag-active {
+
+                    root.drag-active =
+                        false;
+
+                    root.drag-finished();
+                }
+            }
+
+
+            // =================================================
+            // MOUSE MOVE
+            // =================================================
+
+            else if event.kind
+                == PointerEventKind.move
+                && self.is-down {
+
+                if !root.drag-active {
+
+                    let dx =
+                        self.mouse-x
+                        - self.press-x;
+
+                    let dy =
+                        self.mouse-y
+                        - self.press-y;
+
+
+                    if (dx < 0px ? -dx : dx) > 6px
+                        || (dy < 0px ? -dy : dy) > 6px {
+
+                        self.did-drag =
+                            true;
+
+                        root.drag-active =
+                            true;
+
+                        root.drag-started(
+                            root.name,
+                            root.position,
+                            root.duration,
+                            root.clip-color,
+                            root.is-midi,
+                            root.path
+                        );
+                    }
+                }
+
+
+                if root.drag-active {
+
+                    let win =
+                        self.absolute-position;
+
+                    root.drag-moved(
+                        self.mouse-x + win.x,
+                        self.mouse-y + win.y
+                    );
+                }
+            }
+        }
+    }
+}
+
+
+// ============================================================
+// CLIP POOL
+// ============================================================
+
+export component ClipPool inherits Rectangle {
+
+    border-radius: 6px;
+
+    clip: true;
+
+    in-out property <int> selected-tab: 0;
+
+    // ========================================================
+    // DADOS
+    //
+    // O pool é uma BIBLIOTECA GLOBAL: lista TODOS os clips
+    // importados/criados (audio e MIDI, de qualquer track)
+    // + os beat patterns do projeto. Sem filtro por track.
+    // ========================================================
+
+    in property <[ClipData]> clips:
+        [];
+
+
+    // ========================================================
+    // CALLBACKS
+    // ========================================================
+
+    callback clip-clicked(
+        int
+    );
+
+    callback clip-drag-started(
+        string,
+        string,
+        string,
+        color,
+        bool,
+        string
+    );
+
+    callback clip-drag-moved(
+        length,
+        length
+    );
+
+    callback clip-drag-finished();
+
+
+    // ========================================================
+    // PALETA
+    // ========================================================
+
+    private property <color> audio-default:
+        Theme.accent;
+
+
+    // ========================================================
+    // DIMENSÕES
+    // ========================================================
+
+    preferred-width:
+        230px;
+
+    background:
+        Theme.surface-high;
+
+
+    // ========================================================
+    // BORDA DIREITA
+    // ========================================================
+
+    Rectangle {
+
+        x:
+            parent.width - 1px;
+
+        y:
+            0px;
+
+        width:
+            1px;
+
+        height:
+            100%;
+
+        background:
+            transparent;
+    }
+
+
+    // ========================================================
+    // CONTEÚDO
+    // ========================================================
+
+    VerticalLayout {
+
+        alignment:
+            LayoutAlignment.stretch;
+
+        cross-axis-alignment:
+            CrossAxisAlignment.stretch;
+
+        padding:
+            8px;
+
+        spacing:
+            8px;
+
+
+        // ====================================================
+        // CABEÇALHO
+        // ====================================================
+
+        
+
+            HorizontalLayout {
+
+                alignment:
+                    LayoutAlignment.stretch;
+
+                cross-axis-alignment:
+                    CrossAxisAlignment.center;
+
+                spacing:
+                    6px;
+
+
+                Image {
+
+                    source:
+                        @image-url(
+                            "icons/clippool.svg"
+                        );
+
+                    width:
+                        22px;
+
+                    height:
+                        22px;
+
+                    colorize:
+                        Theme.text-primary;
+                }
+
+
+                Text {
+
+                    text:
+                        "Clip Pool";
+
+                    color:
+                        Theme.text-primary;
+
+                    font-size:
+                        12px;
+
+                    font-weight:
+                        700;
+
+                    horizontal-alignment:
+                        center;
+
+                    vertical-alignment:
+                        center;
+
+                    overflow:
+                        elide;
+
+                    horizontal-stretch:
+                        1;
+                }
+            }
+
+            HorizontalLayout {
+
+                alignment:
+                    LayoutAlignment.center;
+
+                cross-axis-alignment:
+                    CrossAxisAlignment.center;
+
+                spacing:
+                    4px;
+
+                Button {
+                    text: "Audio";
+                    width: 58px;
+                    height: 22px;
+                    padding-x: 2px;
+                    corner-radius: 3px;
+                    toggled: root.selected-tab == 0;
+
+                    clicked => {
+                        root.selected-tab = 0;
+                    }
+                }
+
+                Button {
+                    text: "MIDI";
+                    width: 54px;
+                    height: 22px;
+                    padding-x: 2px;
+                    corner-radius: 3px;
+                    toggled: root.selected-tab == 1;
+
+                    clicked => {
+                        root.selected-tab = 1;
+                    }
+                }
+
+                Button {
+                    text: "Beat Seq.";
+                    width: 76px;
+                    height: 22px;
+                    padding-x: 2px;
+                    corner-radius: 3px;
+                    toggled: root.selected-tab == 2;
+
+                    clicked => {
+                        root.selected-tab = 2;
+                    }
+                }
+            }
+
+
+            // ====================================================
+            // LISTA — CLIPS DE ÁUDIO OU MIDI
+            // ====================================================
+
+            clips-list := VerticalLayout {
+
+                visible:
+                    root.selected-tab != 2;
+
+                spacing:
+                    4px;
+
+
+            for clip[i] in root.clips: ClipItem {
+
+                // ============================================
+                // DADOS
+                // ============================================
+
+                name:
+                    clip.name;
+
+                position:
+                    Math.round(
+                        clip.beat * 10
+                    ) / 10;
+
+                duration:
+                    Math.round(
+                        clip.len * 10
+                    ) / 10;
+
+                visible:
+                    root.selected-tab == 0
+                        ? !clip.is-midi
+                        : clip.is-midi;
+
+
+                // ============================================
+                // COR
+                // ============================================
+
+                clip-color:
+                    clip.color == 0
+                        ? (
+                            clip.is-midi
+                                ? Theme.clip-midi
+                                : root.audio-default
+                        )
+                        : ClipPalette.colors[
+                            Math.mod(
+                                clip.color,
+                                ClipPalette.colors.length
+                            )
+                        ];
+
+
+                // ============================================
+                // TIPO
+                // ============================================
+
+                is-midi:
+                    clip.is-midi;
+
+                // Arquivo de origem: sem isto o drop vira "sem arquivo"
+                // e a timeline cai na waveform procedural (placeholder).
+                path:
+                    clip.file-path;
+
+
+                // ============================================
+                // CLIQUE
+                // ============================================
+
+                clicked => {
+
+                    root.clip-clicked(
+                        clip.id
+                    );
+                }
+
+
+                // ============================================
+                // DRAG START
+                // ============================================
+
+                drag-started(
+                    n,
+                    p,
+                    d,
+                    c,
+                    m,
+                    path
+                ) => {
+
+                    root.clip-drag-started(
+                        n,
+                        p,
+                        d,
+                        c,
+                        m,
+                        path
+                    );
+                }
+
+
+                // ============================================
+                // DRAG MOVE
+                // ============================================
+
+                drag-moved(
+                    x,
+                    y
+                ) => {
+
+                    root.clip-drag-moved(
+                        x,
+                        y
+                    );
+                }
+
+
+                // ============================================
+                // DRAG FINISH
+                // ============================================
+
+                drag-finished => {
+
+                    root.clip-drag-finished();
+                }
+            }
+        }
+
+
+        // ====================================================
+        // BEAT SEQUENCER PATTERNS
+        // ====================================================
+
+        HorizontalLayout {
+
+            visible:
+                root.selected-tab == 2;
+
+            alignment:
+                LayoutAlignment.center;
+
+            cross-axis-alignment:
+                CrossAxisAlignment.center;
+
+            // ----------------------------------------------------
+            // CRIAR NOVO PADRÃO
+            //
+            // Cria um padrão vazio no core (BeatState.create-pattern)
+            // e o popup do beat se abre (o handler do Rust re-projeta
+            // o novo padrão como ativo e seta beat-open).
+            // ----------------------------------------------------
+
+            Button {
+                text: "+ Add Pattern";
+                width: 112px;
+                height: 24px;
+                padding-x: 6px;
+                corner-radius: 3px;
+                text-color: Theme.text-primary;
+
+                clicked => {
+                    BeatState.create-pattern();
+                }
+            }
+        }
+
+
+        beats-list := VerticalLayout {
+
+            visible:
+                root.selected-tab == 2;
+
+            spacing:
+                4px;
+
+
+            for pattern-name[i] in BeatState.pattern-names: ClipItem {
+
+                // ============================================
+                // DADOS
+                // ============================================
+
+                name:
+                    pattern-name;
+
+                is-midi:
+                    true;
+
+                // Padrão do beat sequencer não tem arquivo próprio.
+                path:
+                    "";
+
+                border-width: 0px;
+                clip-color:
+                    Theme.accent;
+
+                // Duração correspondente do padrão (resolução/4):
+                // o drag carrega este valor e o drop cria o clip
+                // com o comprimento real, não 4 beats fixos.
+                duration:
+                    BeatState.pattern-durations.length > i
+                        ? Math.round(
+                            BeatState.pattern-durations[i] * 10
+                        ) / 10
+                        : 4.0;
+
+
+                // ============================================
+                // CLIQUE → seleciona o pattern no sequencer
+                // ============================================
+
+                clicked => {
+                    BeatState.pattern-changed(
+                        i
+                    );
+                }
+
+                // ============================================
+                // DUPLO CLIQUE → abre popup do beat sequencer
+                // ============================================
+
+                double-clicked => {
+                    BeatState.pattern-changed(
+                        i
+                    );
+                    BeatState.open-beat-popup();
+                }
+
+
+                // ============================================
+                // DRAG → cria clip MIDI ao soltar na timeline
+                // ============================================
+
+                drag-started(
+                    n,
+                    p,
+                    d,
+                    c,
+                    m,
+                    path
+                ) => {
+
+                    root.clip-drag-started(
+                        n,
+                        p,
+                        d,
+                        c,
+                        m,
+                        path
+                    );
+                }
+
+
+                drag-moved(
+                    x,
+                    y
+                ) => {
+
+                    root.clip-drag-moved(
+                        x,
+                        y
+                    );
+                }
+
+
+                drag-finished => {
+
+                    root.clip-drag-finished();
+                }
+            }
+        }
+
+
+        // ====================================================
+        // ESPAÇADOR
+        // ====================================================
+
+        Rectangle {
+
+            horizontal-stretch:
+                1;
+
+            background:
+                transparent;
+        }
+    }
+}

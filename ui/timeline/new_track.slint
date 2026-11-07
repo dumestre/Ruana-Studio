@@ -1,0 +1,203 @@
+import { Theme } from "../theme.slint";
+
+// ================================================================
+// ITEM DO MENU DE TIPO DE TRACK
+// ================================================================
+
+export component TrackTypeItem inherits Rectangle {
+    in property <image> icon: @image-url("");
+    in property <string> name: "";
+    in property <string> description: "";
+    in property <color> item-color: Theme.accent;
+
+    callback clicked();
+
+    height: 38px;
+
+    border-radius: 6px;
+
+    background:
+        area.has-hover
+            ? Theme.surface-high
+            : transparent;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+
+        spacing: 10px;
+
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        Rectangle {
+            width: 26px;
+            height: 26px;
+
+            background:
+                root.item-color.transparentize(0.82);
+
+            border-radius: 6px;
+
+            Image {
+                source: root.icon;
+
+                width: 15px;
+                height: 15px;
+
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+
+                colorize: root.item-color;
+            }
+        }
+
+        VerticalLayout {
+            spacing: 1px;
+
+            Text {
+                text: root.name;
+
+                color: Theme.text-primary;
+                font-size: 11px;
+                font-weight: 600;
+            }
+
+            Text {
+                text: root.description;
+
+                color: Theme.text-dim;
+                font-size: 9px;
+            }
+        }
+    }
+
+    area := TouchArea {
+        width: 100%;
+        height: 100%;
+
+        mouse-cursor: pointer;
+
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+
+// ================================================================
+// SELETOR DE TIPO DE TRACK
+//
+// Lista os tipos de track como TrackTypeItem. Ao escolher um,
+// emite `track-type-selected` com o código esperado pelo core
+// (AUDIO, MIDI, INSTRUMENT, DRUM, FX, BUS, MASTER). O fechamento
+// do popup que o hospeda fica a cargo de quem o usa.
+// ================================================================
+
+export component TrackTypeSelector inherits Rectangle {
+
+    callback track-type-selected(string);
+
+    width: 210px;
+
+    Rectangle {
+
+        background:
+            Theme.base;
+
+        border-width:
+            1px;
+
+        border-color:
+            Theme.border;
+
+        border-radius:
+            8px;
+
+        VerticalLayout {
+
+            padding:
+                6px;
+
+            spacing:
+                2px;
+
+            TrackTypeItem {
+                icon: @image-url("../icons/midi.svg");
+                name: "MIDI";
+                description: "Notas e controllers";
+                item-color: Theme.clip-midi;
+
+                clicked => {
+                    root.track-type-selected("MIDI");
+                }
+            }
+
+            TrackTypeItem {
+                icon: @image-url("../icons/audio.svg");
+                name: "Audio";
+                description: "Áudio gravado / importado";
+                item-color: Theme.clip-audio;
+
+                clicked => {
+                    root.track-type-selected("AUDIO");
+                }
+            }
+
+            TrackTypeItem {
+                icon: @image-url("../icons/instrument.svg");
+                name: "Instrumento";
+                description: "Plugins instrumentais";
+                item-color: Theme.accent;
+
+                clicked => {
+                    root.track-type-selected("INSTRUMENT");
+                }
+            }
+
+            TrackTypeItem {
+                icon: @image-url("../icons/drum.svg");
+                name: "Bateria";
+                description: "Kit de bateria";
+                item-color: Theme.activ;
+
+                clicked => {
+                    root.track-type-selected("DRUM");
+                }
+            }
+
+            TrackTypeItem {
+                icon: @image-url("../icons/fx.svg");
+                name: "FX";
+                description: "Efeitos e sends";
+                item-color: Theme.warn;
+
+                clicked => {
+                    root.track-type-selected("FX");
+                }
+            }
+
+            TrackTypeItem {
+                icon: @image-url("../icons/bus.svg");
+                name: "Bus";
+                description: "Roteamento de grupo";
+                item-color: Theme.accent;
+
+                clicked => {
+                    root.track-type-selected("BUS");
+                }
+            }
+
+            TrackTypeItem {
+                icon: @image-url("../icons/master.svg");
+                name: "Master";
+                description: "Saída principal";
+                item-color: Theme.playhead;
+
+                clicked => {
+                    root.track-type-selected("MASTER");
+                }
+            }
+        }
+    }
+}

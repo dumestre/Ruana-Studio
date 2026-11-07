@@ -1,0 +1,456 @@
+import { Theme } from "../theme.slint";
+import { TrackClip } from "track_clip.slint";
+import { ClipData } from "clip_data.slint";
+import { ClipDragState } from "clip_drag/clip_drag_state.slint";
+
+export component TrackRow inherits Rectangle {
+
+    // =====================================================
+    // DADOS
+    // =====================================================
+
+    in property <int> track-index: 0;
+
+    in property <bool> selected-track: false;
+
+    in property <int> selected-clip: -1;
+
+    in property <[ClipData]> clips: [];
+
+
+    // =====================================================
+    // MÉTRICAS
+    // =====================================================
+
+    in property <length> px-per-beat: 40px;
+
+    in property <length> px-per-bar: 160px;
+
+    in property <length> row-height: 64px;
+
+    in property <length> ruler-height: 30px;
+
+    // Viewport horizontal (culling): início e largura visíveis.
+    in property <length> view-scroll-x: 0px;
+
+    in property <length> view-width: 800px;
+
+    // Margem de folga pra cada lado (evita pop nas bordas).
+    property <length> cull-margin:
+        self.view-width * 0.25;
+
+
+    // =====================================================
+    // MÉTRICA MUSICAL
+    // =====================================================
+
+    in property <int> total-bars: 32;
+
+    in property <int> beats-per-bar: 4;
+
+
+    // =====================================================
+    // FERRAMENTA
+    // =====================================================
+
+    in property <int> active-tool: 0;
+
+    // Total de tracks (para clamp do arrasto).
+    in property <int> track-count: 1;
+
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
+
+    callback clip-selected(int);
+
+    callback slice-requested(int, float);
+
+    callback clip-move-committed(
+        int,
+        int,
+        float
+    );
+
+    callback clip-resize-committed(
+        int,
+        int,
+        float,
+        float
+    );
+
+    callback clip-delete-requested(int);
+
+    callback clip-rename-requested(int, string);
+
+    callback clip-color-cycle-requested(int);
+
+    callback clip-copy-requested(int);
+
+
+    callback clip-fade-committed(
+        int,
+        float,
+        float
+    );
+
+    callback marquee-commit(
+        float,
+        float,
+        float,
+        float
+    );
+
+
+    // =====================================================
+    // DIMENSÃO
+    // =====================================================
+
+    height:
+        root.row-height;
+
+
+    // =====================================================
+    // FUNDO
+    //
+    // IMPORTANTE:
+    // transparente para deixar o grid da Timeline
+    // continuar aparecendo.
+    // =====================================================
+
+    background:
+        transparent;
+
+
+    // =====================================================
+    // HIGHLIGHT DA TRACK SELECIONADA
+    //
+    // 82% transparente = apenas uma tonalidade.
+    // O grid continua visível por baixo.
+    // =====================================================
+
+    Rectangle {
+
+        x: 0px;
+
+        y: 0px;
+
+        width:
+            parent.width;
+
+        height:
+            parent.height;
+
+        background:
+            root.selected-track
+                ? Theme.surface-high.transparentize(
+                    0.82
+                )
+                : transparent;
+
+        z: 1;
+    }
+
+
+    // =====================================================
+    // LINHA INFERIOR
+    // =====================================================
+
+    Rectangle {
+
+        x: 0px;
+
+        y:
+            parent.height - 1px;
+
+        width:
+            parent.width;
+
+        height:
+            1px;
+
+        background:
+            Theme.is-paper ? Theme.base : Theme.border;
+
+        z: 10;
+    }
+
+
+    // =====================================================
+    // CLIPS
+    // =====================================================
+
+    for clip in root.clips: TrackClip {
+
+        // Só o teste de linha.
+        //
+        // IMPORTANTE: o clip em arrasto NÃO pode ser escondido
+        // com `visible: false`. Em Slint isso é compilado para
+        // um `Clip` de tamanho ZERO em volta do elemento — ou
+        // seja, apagaria a TouchArea que está sustentando o
+        // gesto. Ele fica no lugar como fantasma (`ghost`) e o
+        // overlay desenha a cópia que segue o mouse.
+        visible:
+            clip.track-index == root.track-index
+            // CULLING horizontal: clip fora da viewport (com
+            // folga) não é instanciado visualmente. O custo da
+            // timeline vira constante no número de clips.
+            && (clip.beat * px-per-beat)
+                < view-scroll-x + view-width + cull-margin
+            && ((clip.beat + clip.len) * px-per-beat)
+                > view-scroll-x - cull-margin;
+
+        ghost:
+            ClipDragState.active
+            && ClipDragState.clip-id == clip.id;
+
+
+        // =============================================
+        // IDENTIDADE
+        // =============================================
+
+        name:
+            clip.name;
+
+        clip-id:
+            clip.id;
+
+        track-index:
+            root.track-index;
+
+
+        // =============================================
+        // POSIÇÃO
+        // =============================================
+
+        beat:
+            clip.beat;
+
+
+        // =============================================
+        // DURAÇÃO
+        // =============================================
+
+        len:
+            clip.len;
+
+
+        // =============================================
+        // TIPO / COR
+        // =============================================
+
+        is-midi:
+            clip.is-midi;
+
+        color-index:
+            clip.color;
+
+        // Waveform agora é renderizada no canvas wgpu (fragment shader).
+        // waveform: clip.waveform;  // removido
+
+
+        // =============================================
+        // ESCALA
+        // =============================================
+
+        px-per-beat:
+            root.px-per-beat;
+
+        row-height:
+            root.row-height;
+
+        ruler-height:
+            root.ruler-height;
+
+        track-count:
+            root.track-count;
+
+
+        // =============================================
+        // SELEÇÃO
+        // =============================================
+
+        selected:
+            root.selected-clip
+            == clip.id;
+
+        multi-selected:
+            clip.multi-selected;
+
+
+        // =============================================
+        // FERRAMENTA
+        // =============================================
+
+        active-tool:
+            root.active-tool;
+
+
+        // Fades do clip (beats). Vêm do modelo; o drag local só
+        // escreve nestes no commit do release.
+        fade-in:
+            clip.fade-in;
+
+        fade-out:
+            clip.fade-out;
+
+
+        // =============================================
+        // CLIQUE
+        // =============================================
+
+        clicked(id) => {
+
+            root.clip-selected(
+                id
+            );
+        }
+
+
+        // =============================================
+        // SLICE
+        // =============================================
+
+        slice-requested(
+            id,
+            position
+        ) => {
+
+            root.slice-requested(
+                id,
+                position
+            );
+        }
+
+
+        // =============================================
+        // MOVE / RESIZE — commit único
+        // =============================================
+
+        clip-move-committed(
+            id,
+            track,
+            beat
+        ) => {
+
+            root.clip-move-committed(
+                id,
+                track,
+                beat
+            );
+        }
+
+
+        clip-resize-committed(
+            id,
+            side,
+            len,
+            beat
+        ) => {
+
+            root.clip-resize-committed(
+                id,
+                side,
+                len,
+                beat
+            );
+        }
+
+
+        // =============================================
+        // DELETE
+        // =============================================
+
+        clip-delete-requested(
+            id
+        ) => {
+
+            root.clip-delete-requested(
+                id
+            );
+        }
+
+
+        // =============================================
+        // RENAME
+        // =============================================
+
+        clip-rename-requested(
+            id,
+            new_name
+        ) => {
+
+            root.clip-rename-requested(
+                id,
+                new_name
+            );
+        }
+
+
+        // =============================================
+        // COLOR
+        // =============================================
+
+        clip-color-cycle-requested(
+            id
+        ) => {
+
+            root.clip-color-cycle-requested(
+                id
+            );
+        }
+
+
+        // =============================================
+        // COPY
+        // =============================================
+
+        clip-copy-requested(
+            id
+        ) => {
+
+            root.clip-copy-requested(
+                id
+            );
+        }
+
+
+        // =============================================
+        // FADE COMMIT
+        // =============================================
+
+        clip-fade-committed(
+            id,
+            fi,
+            fo
+        ) => {
+
+            root.clip-fade-committed(
+                id,
+                fi,
+                fo
+            );
+        }
+
+
+        // =============================================
+        // MARQUEE COMMIT
+        // =============================================
+
+        marquee-commit(
+            b0,
+            b1,
+            t0,
+            t1
+        ) => {
+
+            root.marquee-commit(
+                b0,
+                b1,
+                t0,
+                t1
+            );
+        }
+    }
+}

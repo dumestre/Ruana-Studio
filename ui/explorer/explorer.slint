@@ -1,0 +1,232 @@
+import { Theme } from "../theme.slint";
+import { SearchBar } from "../components/search_bar.slint";
+import { BrowserFileEntry, FileBrowser } from "file_browser.slint";
+import { MediaBrowser } from "media_browser.slint";
+import { PluginBrowser } from "plugin_browser.slint";
+import { Preview } from "preview.slint";
+import { ExplorerHeader } from "explorer_header.slint";
+import { ExplorerTabs } from "explorer_tabs.slint";
+
+
+export component Explorer inherits Rectangle {
+    in-out property <int> browser-mode: 0;
+    in-out property <string> search-text: "";
+    in-out property <string> preview-file-name: "Ruana Studio";
+    in-out property <string> preview-file-info: "Folder";
+
+    // Filesystem properties
+    in-out property <string> current-path: "";
+    in-out property <[string]> path-history: [];
+    in-out property <int> history-index: -1;
+    in-out property <[BrowserFileEntry]> entries: [];
+    in-out property <bool> can-go-up: false;
+
+    callback audio-drag-started(string, string, string, color, bool);
+    callback audio-drag-moved(length, length);
+    callback audio-drag-finished();
+
+    callback explorer-path-changed(string);
+    callback explorer-directory-entered(string);
+    callback explorer-go-up();
+    callback explorer-history-go(int);
+    callback explorer-search-changed(string);
+    callback explorer-go-to-drives(); // Raiz: lista drives
+
+    preferred-width: 300px;
+    width: 300px;
+    
+
+    // PAINEL: senta direto no fundo da janela, então é `surface`.
+    // Era `surface-high` — o mesmo tom dos itens da lista, que
+    // ficavam invisíveis dentro do próprio painel.
+    // Dentro dele: poços em `base` (busca, barra de navegação,
+    // cabeçalho da tabela, preview) e widgets em `surface-high`
+    // (itens, abas) — um degrau acima do painel, como manda a
+    // escada do theme.slint.
+    background: Theme.surface;
+
+    border-radius: 6px;
+
+    clip: true;
+
+
+    // =====================================================
+    // BORDA DIREITA
+    // =====================================================
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: 100%;
+
+        background: Theme.border;
+    }
+
+
+    VerticalLayout {
+        alignment: LayoutAlignment.stretch;
+        padding: 6px;
+        spacing: 6px;
+
+
+        // =====================================================
+        // HEADER
+        // =====================================================
+
+        ExplorerHeader {
+            menu-clicked => {
+                // Menu do Explorer será implementado depois.
+            }
+        }
+
+
+        // =====================================================
+        // TABS
+        // =====================================================
+
+        ExplorerTabs {
+            selected <=> root.browser-mode;
+
+            tab-changed => {
+                root.preview-file-name = "No file selected";
+                root.preview-file-info = "Select an audio file";
+            }
+        }
+
+
+        // =====================================================
+        // SEARCH
+        // =====================================================
+
+        SearchBar {
+            text <=> root.search-text;
+
+            placeholder: root.browser-mode == 0
+                ? "Search files..."
+                : root.browser-mode == 1
+                    ? "Search media..."
+                    : "Search plugins...";
+
+            // Filtrar é releitura da pasta atual no Rust — o filtro
+            // roda sobre os nomes reais, não sobre uma lista congelada.
+            changed text => {
+                if root.browser-mode == 0 {
+                    root.explorer-search-changed(self.text);
+                }
+            }
+        }
+
+
+        // =====================================================
+        // BROWSER
+        // =====================================================
+
+        Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            background: transparent;
+
+            if root.browser-mode == 0 : FileBrowser {
+                entries: root.entries;
+                current-path: root.current-path;
+                path-history: root.path-history;
+                history-index: root.history-index;
+                can-go-up: root.can-go-up;
+                selected-index: -1;
+
+                path-changed(path) => {
+                    root.explorer-path-changed(path);
+                }
+                file-selected(name, type, path) => {
+                    root.preview-file-name = name;
+                    root.preview-file-info = type + " | " + path;
+                }
+                directory-entered(path) => {
+                    root.explorer-directory-entered(path);
+                }
+                explorer-go-up() => {
+                    root.explorer-go-up();
+                }
+                explorer-go-to-drives() => {
+                    root.explorer-go-to-drives();
+                }
+                history-go(delta) => {
+                    root.explorer-history-go(delta);
+                }
+                audio-drag-started(name, path, type, color, is-midi) => {
+                    root.audio-drag-started(name, path, type, color, is-midi);
+                }
+                audio-drag-moved(x, y) => {
+                    root.audio-drag-moved(x, y);
+                }
+                audio-drag-finished() => {
+                    root.audio-drag-finished();
+                }
+            }
+
+            if root.browser-mode == 1 : MediaBrowser {
+                media: [];
+                categories: ["All", "Loops", "One-Shot", "Vocals", "MIDI"];
+                category-filter: "All";
+                selected-index: -1;
+
+                media-selected(name, type, path) => {
+                    root.preview-file-name = name;
+                    root.preview-file-info = type + " | " + path;
+                }
+
+                audio-drag-started(name, path, type, color, is-midi) => {
+                    root.audio-drag-started(name, path, type, color, is-midi);
+                }
+
+                audio-drag-moved(x, y) => {
+                    root.audio-drag-moved(x, y);
+                }
+
+                audio-drag-finished() => {
+                    root.audio-drag-finished();
+                }
+            }
+
+            if root.browser-mode == 2 : PluginBrowser {
+                plugin-selected(name, type) => {
+                    root.preview-file-name = name;
+                    root.preview-file-info = type;
+                }
+            }
+        }
+
+
+        // =====================================================
+        // PREVIEW SEPARATOR
+        // =====================================================
+
+        Rectangle {
+            height: 1px;
+
+            background: Theme.border;
+        }
+
+
+        // =====================================================
+        // PREVIEW
+        // =====================================================
+
+        Preview {
+            file-name: root.preview-file-name;
+            file-info: root.preview-file-info;
+            duration: "00:00";
+            progress: 0.0;
+            playing: false;
+
+            play => {
+                // Ligação com o engine virá depois.
+            }
+
+            stop => {
+                // Ligação com o engine virá depois.
+            }
+        }
+    }
+}

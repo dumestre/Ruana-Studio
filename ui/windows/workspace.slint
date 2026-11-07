@@ -1,0 +1,2442 @@
+// ============================================================
+// ui/windows/workspace.slint
+// ============================================================
+
+import { Theme } from "../theme.slint";
+import { Toolbar } from "../toolbar.slint";
+import { EditToolbar } from "../edit_toolbar.slint";
+import { ClipPool, ClipItemVisual } from "../clip_pool.slint";
+import { Timeline } from "../timeline/timeline.slint";
+import { ClipData } from "../timeline/clip_data.slint";
+import { Explorer } from "../explorer/explorer.slint";
+import { BrowserFileEntry } from "../explorer/file_browser.slint";
+import { Mixer } from "../mixer/mixer.slint";
+import { SamplerArea } from "../components/sampler_area.slint";
+import { BarProperties } from "../components/bar_properties.slint";
+import { VerticalBar } from "../components/vertical_bar.slint";
+
+import {
+    SplitterVerticalGrowLeft,
+    SplitterVerticalGrowRight,
+    SplitterHorizontal
+} from "../components/splitter.slint";
+import {
+    ZoomBarHorizontal,
+    ZoomBarVertical
+} from "../components/zoom_bar.slint";
+import {
+    ScrollBarHorizontal,
+    ScrollBarVertical
+} from "../components/scrollbar.slint";
+import { TrackPanel } from "../timeline/track_panel.slint";
+import { BottomToolbar } from "../components/bottom_toolbar.slint";
+import { ClipDragState, TimelineMetrics, SamplerMetrics, SamplerState } from "../timeline/clip_drag/clip_drag_state.slint";
+import { HorizontalBarTool } from "../components/horizontal_bar.slint";
+
+
+export component Workspace inherits Rectangle {
+
+    // ========================================================
+    // ESTADO PRINCIPAL
+    // ========================================================
+
+    in-out property <bool> full-screen: false;
+
+    in-out property <float> zoom-level: 1.0;
+
+    in-out property <bool> playing: false;
+
+    in-out property <bool> loop-enabled: false;
+    in-out property <float> loop-start-beat: 0.0;
+    in-out property <float> loop-end-beat: 16.0;
+    callback loop-state-changed(bool);
+    callback loop-range-changed(float, float);
+
+    changed loop-start-beat => { root.loop-range-changed(root.loop-start-beat, root.loop-end-beat); }
+    changed loop-end-beat => { root.loop-range-changed(root.loop-start-beat, root.loop-end-beat); }
+
+    in-out property <int> transport-position: 0;
+
+    in-out property <float> transport-time-seconds: 0;
+
+    in-out property <int> bpm: 120;
+    in-out property <bool> metronome-enabled: false;
+    in-out property <int> metronome-sound: 0;
+    in-out property <float> metronome-volume: 0.7;
+
+    in-out property <int> ppq: 960;
+
+    in-out property <int> beats-per-bar: 4;
+
+    in-out property <int> total-bars: 32;
+
+    in-out property <int> selected-track: 0;
+
+    in-out property <int> active-tool: 0;
+
+    in-out property <bool> beat-open: false;
+
+    in-out property <bool> explorer-visible: true;
+    in-out property <string> sampler-sample-name: "No Sample";
+    in-out property <bool> sampler-sample-loaded: false;
+    in-out property <string> sampler-sample-format: "";
+    in-out property <string> sampler-sample-duration: "";
+
+    private property <bool> clip-focus-active: false;
+    private property <float> clip-focus-zoom: 1.0;
+    private property <length> clip-focus-scroll-x: 0px;
+    private property <length> clip-focus-scroll-y: 0px;
+
+    out property <length> timeline-view-width: timeline.width;
+
+
+    // ========================================================
+    // CLIP POOL
+    // ========================================================
+
+    in-out property <bool> clip-pool-open: true;
+
+    in-out property <bool> clip-pool-floating: false;
+
+    in-out property <length> clip-pool-float-x: 260px;
+
+    in-out property <length> clip-pool-float-y: 80px;
+
+    in-out property <length> clip-pool-float-width: 320px;
+
+    in-out property <length> clip-pool-float-height: 520px;
+
+
+    // ========================================================
+    // PAINÉIS
+    // ========================================================
+
+    in-out property <length> left-panel-width: 230px;
+
+    in-out property <length> tracks-header-width: 200px;
+
+    in-out property <length> explorer-width: 300px;
+
+    // Altura do painel inferior (mixer/sampler/…).
+    //
+    // 330px é o que a faixa do mixer precisa para caber SEM esmagar o
+    // bloco fixo (header 30 + padding 10 + header do canal 22 + M/S/R 18
+    // + pan 36 + fader/meter 200 + spacings 16 ≈ 332). Com 215px o Slint
+    // era obrigado a comprimir a parte de baixo da faixa — o sintoma de
+    // "só aparece quando aumenta a janela".
+    in-out property <length> bottom-panel-height: 330px;
+
+
+    // ========================================================
+    // DADOS
+    // ========================================================
+
+    in-out property <[string]> track-names: [
+        "Drums",
+        "Bass",
+        "Vocal",
+        "Synth"
+    ];
+
+    // Índice de cor da paleta por track (0 = padrão por tipo).
+    in-out property <[int]> track-colors: [
+        0,
+        0,
+        0,
+        0
+    ];
+
+    in-out property <[ClipData]> clips: [
+        {
+            id: 0,
+            track-index: 0,
+            name: "Drums A",
+            beat: 0.0,
+            len: 4.0,
+            is-midi: true
+        },
+        {
+            id: 1,
+            track-index: 1,
+            name: "Bass A",
+            beat: 0.0,
+            len: 8.0,
+            is-midi: true
+        },
+        {
+            id: 2,
+            track-index: 2,
+            name: "Vocal Verse",
+            beat: 0.0,
+            len: 4.0,
+            is-midi: false
+        }
+    ];
+
+    in-out property <[ClipData]> pool-clips: [];
+
+
+    // ========================================================
+    // DRAG
+    // ========================================================
+
+    in-out property <float> zoom-y-level: 1.0;
+
+    // Piano roll/timewarp abertos (tecla P/T): a timeline assume a largura
+    // total da janela, ocultando a track panel e o splitter.
+    in-out property <bool> timeline-area-expanded: false;
+
+    in-out property <bool> drag-active: false;
+
+    in-out property <bool> drag-inited: false;
+
+    in-out property <bool> drag-over-timeline: false;
+
+    in-out property <float> drag-snap-beat: 0.0;
+
+    in-out property <int> drag-drop-track: 0;
+
+    in-out property <length> drag-x: 0px;
+
+    in-out property <length> drag-y: 0px;
+
+    in-out property <string> drag-name: "";
+
+    in-out property <string> drag-position: "";
+
+    in-out property <string> drag-duration: "";
+
+    in-out property <color> drag-color:
+        Theme.clip-midi;
+
+    in-out property <bool> drag-is-midi: true;
+
+
+    // ========================================================
+    // MIXER
+    // ========================================================
+
+    // Medição real compartilhada com o cabeçalho das faixas.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
+
+    in-out property <[bool]> mixer-mutes:
+        [false, false, false, false, false];
+
+    in-out property <[bool]> mixer-soloes:
+        [false, false, false, false, false];
+
+    in-out property <[bool]> mixer-arms:
+        [false, false, false, false, false];
+
+    in-out property <[float]> mixer-volumes:
+        [0.8, 0.8, 0.8, 0.8, 0.8];
+
+    in-out property <[float]> mixer-pans:
+        [0.5, 0.5, 0.5, 0.5, 0.5];
+
+    in-out property <[int]> mixer-insert-counts:
+        [0, 0, 0, 0, 0];
+
+    in-out property <[string]> mixer-insert-names:
+        [];
+
+    in-out property <[bool]> mixer-insert-enabled:
+        [];
+
+    in-out property <int> mixer-max-inserts:
+        8;
+
+    in-out property <int> mixer-selected-channel: 0;
+
+
+    // ========================================================
+    // EXPLORER
+    // ========================================================
+
+    in-out property <string> explorer-current-path: "";
+
+    in-out property <[string]> explorer-path-history: [];
+
+    in-out property <int> explorer-history-index: -1;
+
+    in-out property <[BrowserFileEntry]> explorer-entries: [];
+
+    in-out property <bool> explorer-can-go-up: false;
+
+    in-out property <string> explorer-search-text: "";
+
+
+    // ========================================================
+    // BOTTOM PANEL
+    // ========================================================
+
+    in-out property <bool> bottom-panel-visible: false;
+
+    // Timeline renderizada pelo wgpu do host (arquitetura do AGENTS.md):
+    // quando true, o componente Timeline fica transparente (buraco) e o
+    // frame do wgpu é composto direto na surface por baixo da UI.
+    in-out property <bool> native-overlay: false;
+
+    in-out property <[bool]> floated:
+        [false, false];
+
+    in-out property <int> selected-tab: -1;
+
+    in-out property <int> selected-clip: -1;
+
+
+    // ========================================================
+    // SNAP / FOLLOW
+    // ========================================================
+
+    in-out property <bool> snap-enabled: true;
+
+    in-out property <bool> follow-playhead: true;
+
+
+    // ========================================================
+    // TIMELINE COORDENADAS
+    // ========================================================
+
+    out property <length> timeline-abs-x:
+        timeline.absolute-position.x;
+
+    out property <length> timeline-abs-y:
+        timeline.absolute-position.y;
+
+    // Y absoluto do INÍCIO DAS TRACKS (abaixo da régua).
+    //
+    // Quem converte coordenadas de janela → linha da track
+    // (drop do SO) precisa descontar a régua, senão o índice
+    // sai deslocado e o clip cai na track errada.
+    out property <length> timeline-content-top-abs-y:
+        timeline.absolute-position.y
+        + timeline.ruler-height;
+
+    in-out property <length> timeline-scroll-x <=> timeline.scroll-x;
+
+    in-out property <length> timeline-scroll-y <=> timeline.scroll-y;
+
+    // =================================================
+    // ESCALA REAL DA CENA ( dona: Rust )
+    //
+    // `px-per-beat`, `row-height` e `ruler-height` não são mais
+    // constantes do Slint: o Rust escreve aqui, a cada frame, os
+    // valores que a engine wgpu USOU para desenhar (px/beat vivo,
+    // 64*zoom_y de linha, ruler_px). O ghost do ClipPool, o preview
+    // de drop e o ponto de inserção leem daqui, então o card que o
+    // usuário vê e o clip que entra na timeline não podem divergir.
+    // =================================================
+
+    in-out property <length> timeline-px-per-beat <=> timeline.px-per-beat;
+
+    in-out property <length> timeline-row-height <=> timeline.row-height;
+
+    in-out property <length> timeline-ruler-height <=> timeline.ruler-height;
+
+    // Tamanho físico do componente Timeline (o frame wgpu do host é
+    // composto cobrindo exatamente este retângulo no modo nativo).
+    out property <length> timeline-rect-width:
+        timeline.width;
+
+    out property <length> timeline-rect-height:
+        timeline.height;
+
+    // Métricas do motor de zoom/scroll (Rust). O blur de âncora do
+    // cursor e o clamp dos targets precisam desses valores ATUAIS.
+    in-out property <length> timeline-left-padding <=> timeline.timeline-left-padding;
+
+    out property <length> timeline-max-scroll-x:
+        timeline.max-scroll-x;
+
+    out property <length> timeline-max-scroll-y:
+        timeline.max-scroll-y;
+
+
+    // ========================================================
+    // CANVAS WGPU DA TIMELINE
+    // ========================================================
+
+    in-out property <image> timeline-canvas-background <=> timeline.canvas;
+
+    out property <length> timeline-canvas-content-width:
+        timeline.canvas-content-width;
+
+    out property <length> timeline-canvas-content-height:
+        timeline.canvas-content-height;
+
+    // Área REAL (lógico) do canvas da engine — o Rust dimensiona o buffer
+    // offscreen a partir dela (× scale factor do monitor).
+    out property <length> timeline-canvas-area-width:
+        timeline.canvas-area-width;
+
+    out property <length> timeline-canvas-area-height:
+        timeline.canvas-area-height;
+
+    callback timeline-canvas-render-requested();
+
+    // Eventos crus → engine wgpu headless do timeline-render (Fase 3).
+    callback engine-pointer-down(float, float, int, bool, bool, bool);
+    callback engine-pointer-move(float, float);
+    callback engine-pointer-up(float, float, int);
+    callback engine-scroll(float, float, bool, bool, bool);
+    callback engine-key-event(string, bool, bool, bool);
+
+    // Escrita do zoom vertical vinda do Slint (track panel) → engine.
+    callback timeline-zoom-y-changed(float);
+
+
+    // ========================================================
+    // CALLBACKS
+    // ========================================================
+
+    callback close();
+
+    callback minimize();
+
+    callback window-drag-started();
+    callback window-drag-moved(length, length);
+    callback window-drag-finished();
+
+    callback play-state-changed(bool);
+
+    callback seek-to(float);
+
+    callback set-bpm(float);
+    callback metronome-state-changed(bool);
+    callback metronome-sound-changed(int);
+    callback metronome-volume-changed(float);
+
+    callback add-track-requested(string);
+
+    callback clip-slice-requested(int, float);
+
+    callback clip-glue-requested(int);
+
+    callback glue-clip-at(
+        float,
+        length,
+        length,
+        length
+    ) -> int;
+
+    callback clip-move-committed(
+        int,
+        int,
+        float
+    );
+
+    callback clip-resize-committed(
+        int,
+        int,
+        float,
+        float
+    );
+
+    callback clip-delete-requested(int);
+
+    callback clip-rename-requested(int, string);
+
+    callback clip-color-cycle-requested(int);
+
+    callback clip-copy-requested(int);
+
+
+    callback clip-fade-committed(
+        int,
+        float,
+        float
+    );
+
+    callback clip-gain-committed(
+        int,
+        float
+    );
+
+    callback clip-paste-requested(float, int);
+
+    callback pencil-created(float, int, float);
+
+    callback marquee-select(float, float, int, int);
+
+    callback theme-selected(int);
+
+    // Delete em massa: apaga todos os clips multi-selecionados.
+    callback multi-delete-requested();
+
+    // Clique na timeline → FocusScope global volta a ter foco.
+    callback keyboard-focus-requested();
+
+    // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
+    callback scroll-input(float, float, bool, bool, bool, float, float);
+
+    callback mixer-param-changed(int, string, float);
+
+    // Ações vindas do cabeçalho da faixa. O M/S/R do header usava para
+    // desenhar o estado e parar aí; agora chegam ao core pela MESMA
+    // rota do mixer, o que garante que as duas telas não divergem.
+    callback track-param-changed(int, string, float);
+
+    // Apaga o latch de clip de um canal.
+    callback channel-clip-cleared(int);
+
+    callback mixer-insert-added(int);
+
+    callback mixer-insert-removed(int, int);
+
+    callback mixer-insert-toggled(int, int);
+    callback mixer-copy-slots(int);
+    callback mixer-paste-slots(int);
+    callback mixer-undo-requested();
+    callback mixer-redo-requested();
+
+    callback explorer-path-changed(string);
+
+    callback explorer-directory-entered(string);
+
+    callback explorer-go-up();
+
+    callback explorer-history-go(int);
+
+    callback explorer-search-changed(string);
+
+    callback explorer-go-to-drives();
+
+    callback drag-begin(
+        string,
+        string,
+        string,
+        string,
+        color,
+        bool
+    );
+
+    callback drag-move(length, length);
+
+    callback drag-end();
+
+    callback float-toggle(int);
+
+    callback tool-changed(int);
+
+    // Recoloriza os clips da track selecionada
+    // com o índice de cor da paleta.
+    callback track-recolor-requested(
+        int,
+        int
+    );
+
+    callback timeline-bounds-changed(
+        float,
+        float,
+        float,
+        float
+    );
+    callback sampler-load-requested();
+    callback sampler-sample-dropped(string, string);
+
+
+    // ========================================================
+    // LAYOUT PRINCIPAL
+    // ========================================================
+
+    VerticalLayout {
+
+        alignment:
+            LayoutAlignment.stretch;
+
+        cross-axis-alignment:
+            CrossAxisAlignment.stretch;
+
+        spacing:
+            0;
+
+
+        // ====================================================
+        // TOOLBAR
+        // ====================================================
+
+        Toolbar {
+
+            full-screen <=>
+                root.full-screen;
+
+            snap-enabled <=>
+                root.snap-enabled;
+
+            follow-enabled <=>
+                root.follow-playhead;
+
+
+            zoom-in => {
+                root.zoom-level =
+                    min(
+                        root.zoom-level + 0.25,
+                        4.0
+                    );
+            }
+
+            zoom-out => {
+                root.zoom-level =
+                    max(
+                        root.zoom-level - 0.25,
+                        0.5
+                    );
+            }
+
+            close => {
+                root.close();
+            }
+
+            minimize => {
+                root.minimize();
+            }
+
+            window-drag-started() => {
+                root.window-drag-started();
+            }
+
+            window-drag-moved(x, y) => {
+                root.window-drag-moved(x, y);
+            }
+
+            window-drag-finished() => {
+                root.window-drag-finished();
+            }
+
+            theme-selected(i) => {
+                root.theme-selected(i);
+            }
+
+            playing <=> root.playing;
+            loop-enabled <=> root.loop-enabled;
+            transport-position <=> root.transport-position;
+            bpm <=> root.bpm;
+            ppq <=> root.ppq;
+            beats-per-bar <=> root.beats-per-bar;
+            metronome-enabled <=> root.metronome-enabled;
+            metronome-sound <=> root.metronome-sound;
+            metronome-volume <=> root.metronome-volume;
+
+            play-state-changed(state) => {
+                root.play-state-changed(state);
+            }
+            loop-state-changed(state) => { root.loop-enabled = state; root.loop-state-changed(state); }
+            metronome-state-changed(enabled) => { root.metronome-state-changed(enabled); }
+            metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
+            metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
+            set-bpm(value) => { root.set-bpm(value); }
+        }
+
+
+        // ====================================================
+        // EDIT TOOLBAR
+        // ====================================================
+
+        BarProperties {
+
+            active-tool <=>
+                root.active-tool;
+
+            clip-pool-open <=>
+                root.clip-pool-open;
+
+            beat-open <=>
+                root.beat-open;
+
+            explorer-visible <=>
+                root.explorer-visible;
+
+            panel-visible <=>
+                root.bottom-panel-visible;
+
+
+            master-volume: root.mixer-volumes[root.mixer-volumes.length - 1];
+            master-volume-changed(v) => {
+                root.mixer-volumes[root.mixer-volumes.length - 1] = v;
+                root.mixer-param-changed(
+                    root.mixer-volumes.length - 1,
+                    "volume",
+                    v
+                );
+            }
+
+            tool-changed(tool) => {
+                root.tool-changed(
+                    tool
+                );
+            }
+        }
+
+
+        // ====================================================
+        // ÁREA PRINCIPAL
+        // ====================================================
+
+        workspace := Rectangle {
+
+            width:
+                100%;
+
+            vertical-stretch:
+                1;
+
+
+            // =================================================
+            // CLIP POOL DOCKADO
+            // =================================================
+
+            clip_pool := ClipPool {
+
+                x:
+                    5px;
+
+                y:
+                    0px;
+
+                width:
+                    root.left-panel-width
+                    - 10px;
+
+                height:
+                    100%;
+
+                visible:
+                    root.clip-pool-open
+                    && !root.clip-pool-floating;
+
+                clips:
+                    root.pool-clips;
+
+
+                // ---------------------------------------------
+                // CLIQUE NO CLIP
+                //
+                // Clique apenas seleciona.
+                // NÃO abre o Clip Pool flutuante.
+                // ---------------------------------------------
+
+                clip-clicked(id) => {
+                    root.selected-clip =
+                        id;
+                }
+
+
+                // ---------------------------------------------
+                // DRAG START
+                //
+                // O Clip Pool informa que começou um arraste.
+                // O Workspace cria o estado global do drag.
+                // ---------------------------------------------
+
+                clip-drag-started(
+                    name,
+                    position,
+                    duration,
+                    color,
+                    is-midi,
+                    path
+                ) => {
+
+                    root.selected-clip =
+                        root.selected-clip;
+
+                    root.drag-begin(
+                        name,
+                        path,
+                        position,
+                        duration,
+                        color,
+                        is-midi
+                    );
+                }
+
+
+                // ---------------------------------------------
+                // DRAG MOVE
+                // ---------------------------------------------
+
+                clip-drag-moved(x, y) => {
+                    root.drag-move(
+                        x,
+                        y
+                    );
+                }
+
+
+                // ---------------------------------------------
+                // DRAG FINISHED
+                // ---------------------------------------------
+
+                clip-drag-finished => {
+                    root.drag-end();
+                }
+            }
+
+
+            // =================================================
+            // CLIP POOL FLUTUANTE
+            // =================================================
+
+            clip-pool-window := Rectangle {
+
+                visible:
+                    root.clip-pool-open
+                    && root.clip-pool-floating;
+
+                x:
+                    root.clip-pool-float-x;
+
+                y:
+                    root.clip-pool-float-y;
+
+                width:
+                    root.clip-pool-float-width;
+
+                height:
+                    root.clip-pool-float-height;
+
+                background:
+                    transparent;
+
+                border-width:
+                    1px;
+
+                border-color:
+                    Theme.border;
+
+                border-radius:
+                    8px;
+
+                z:
+                    500;
+
+
+                // =============================================
+                // HEADER
+                // =============================================
+
+                Rectangle {
+
+                    x:
+                        0px;
+
+                    y:
+                        0px;
+
+                    width:
+                        100%;
+
+                    height:
+                        34px;
+
+                    background:
+                        Theme.surface-high;
+
+                    border-radius:
+                        8px;
+
+
+                    HorizontalLayout {
+
+                        padding-left:
+                            10px;
+
+                        padding-right:
+                            6px;
+
+                        spacing:
+                            8px;
+
+                        cross-axis-alignment:
+                            CrossAxisAlignment.center;
+
+
+                        Image {
+
+                            source:
+                                @image-url(
+                                    "../icons/clippool.svg"
+                                );
+
+                            width:
+                                20px;
+
+                            height:
+                                20px;
+                        }
+
+
+                        Text {
+
+                            text:
+                                "Clip Pool";
+
+                            color:
+                                Theme.accent;
+
+                            font-size:
+                                12px;
+
+                            font-weight:
+                                700;
+
+                            vertical-alignment:
+                                center;
+
+                            horizontal-stretch:
+                                1;
+                        }
+
+
+                        Rectangle {
+
+                            width:
+                                24px;
+
+                            height:
+                                24px;
+
+                            background:
+                                transparent;
+
+                            border-radius:
+                                4px;
+
+
+                            Text {
+
+                                text:
+                                    "×";
+
+                                width:
+                                    100%;
+
+                                height:
+                                    100%;
+
+                                color:
+                                    Theme.text-dim;
+
+                                font-size:
+                                    17px;
+
+                                horizontal-alignment:
+                                    center;
+
+                                vertical-alignment:
+                                    center;
+                            }
+
+
+                            TouchArea {
+
+                                clicked => {
+                                    root.clip-pool-floating =
+                                        false;
+                                }
+                            }
+                        }
+                    }
+                }
+
+
+                // =============================================
+                // CONTEÚDO
+                // =============================================
+
+                ClipPool {
+
+                    x:
+                        0px;
+
+                    y:
+                        34px;
+
+                    width:
+                        parent.width;
+
+                    height:
+                        parent.height - 34px;
+
+                    clips:
+                        root.pool-clips;
+
+
+                    // -----------------------------------------
+                    // CLIQUE
+                    // -----------------------------------------
+
+                    clip-clicked(id) => {
+                        root.selected-clip =
+                            id;
+                    }
+
+
+                    // -----------------------------------------
+                    // DRAG START
+                    // -----------------------------------------
+
+                    clip-drag-started(
+                        name,
+                        position,
+                        duration,
+                        color,
+                        is-midi,
+                        path
+                    ) => {
+
+                        root.drag-begin(
+                            name,
+                            path,
+                            position,
+                            duration,
+                            color,
+                            is-midi
+                        );
+                    }
+
+
+                    // -----------------------------------------
+                    // DRAG MOVE
+                    // -----------------------------------------
+
+                    clip-drag-moved(x, y) => {
+                        root.drag-move(
+                            x,
+                            y
+                        );
+                    }
+
+
+                    // -----------------------------------------
+                    // DRAG FINISHED
+                    // -----------------------------------------
+
+                    clip-drag-finished => {
+                        root.drag-end();
+                    }
+                }
+            }
+
+
+            // =================================================
+            // CENTER PANEL
+            // =================================================
+
+            center-panel := Rectangle {
+
+                x:
+                    root.clip-pool-open && !root.clip-pool-floating
+                        ? root.left-panel-width
+                        : 5px;
+
+                y:
+                    0px;
+
+                width:
+                    parent.width
+                    - (
+                        root.clip-pool-open && !root.clip-pool-floating
+                            ? root.left-panel-width
+                            : 5px
+                    )
+                    - (
+                        root.explorer-visible
+                            ? root.explorer-width + 10px
+                            : 0px
+                    );
+
+                height:
+                    root.bottom-panel-visible
+                        ? parent.height
+                            - root.bottom-panel-height
+                            - 5px
+                        : parent.height;
+
+
+                VerticalLayout {
+
+                    spacing:
+                        0;
+
+                    alignment:
+                        LayoutAlignment.stretch;
+
+                    cross-axis-alignment:
+                        CrossAxisAlignment.stretch;
+
+                    height:
+                        100%;
+
+
+                    HorizontalLayout {
+
+                        spacing:
+                            0;
+
+                        cross-axis-alignment:
+                            CrossAxisAlignment.stretch;
+
+                        height:
+                            100%;
+
+
+                        // =====================================
+                        // TRACK PANEL
+                        // =====================================
+
+                        TrackPanel {
+
+                            visible:
+                                !root.timeline-area-expanded;
+
+                            width:
+                                root.timeline-area-expanded
+                                    ? 0px
+                                    : root.tracks-header-width;
+
+                            selected-track <=>
+                                root.selected-track;
+
+                            track-names:
+                                root.track-names;
+
+                            track-colors:
+                                root.track-colors;
+
+                            channel-meters <=>
+                                root.channel-meters;
+
+                            channel-clipped <=>
+                                root.channel-clipped;
+
+                            // O header lê o volume do MESMO array do
+                            // mixer. Ler de outro lugar foi como a
+                            // timeline e o mixer passaram a mostrar
+                            // volumes diferentes para a mesma faixa.
+                            track-volumes:
+                                root.mixer-volumes;
+
+                            // M/S/R dos MESMOS arrays do mixer. Se o
+                            // cabeçalho guardasse o estado por conta
+                            // própria, dar mute no mixer deixaria o
+                            // cabeçalho asserting que a faixa ainda
+                            // está audível.
+                            track-mutes <=>
+                                root.mixer-mutes;
+
+                            track-soloes <=>
+                                root.mixer-soloes;
+
+                            track-arms <=>
+                                root.mixer-arms;
+
+                            zoom-y:
+                                root.zoom-y-level;
+
+                            scroll-y:
+                                timeline.scroll-y;
+
+                            track-clicked(index) => {
+                                root.selected-track =
+                                    index;
+                            }
+
+
+                            add-track-requested(type) => {
+                                root.add-track-requested(
+                                    type
+                                );
+                            }
+
+
+                            recolor-requested(track, color) => {
+                                root.track-recolor-requested(
+                                    track,
+                                    color
+                                );
+                            }
+
+                            // Alt+roda sobre a track panel faz zoom
+                            // vertical, propagando pelo zoom-y-level
+                            // (sincroniza timeline + ZoomBarVertical).
+                            // Volume/M/S/R do cabeçalho passam pelo
+                            // MESMO caminho do mixer. O nome da
+                            // propriedade não importa aqui: quem
+                            // converte posição em ganho é o Rust.
+                            track-volume-changed(track, pos) => {
+                                root.track-param-changed(
+                                    track,
+                                    "volume",
+                                    pos
+                                );
+                            }
+
+                            // `muted`/`soloed`/`arm` — os mesmos
+                            // nomes que `MixerParam::from_str`
+                            // reconhece. O valor vem do botão, que já
+                            // calculou o estado novo; aqui não há
+                            // dedução de toggle.
+                            track-mute-clicked(track, on) => {
+                                root.track-param-changed(
+                                    track,
+                                    "muted",
+                                    on
+                                );
+                            }
+
+                            track-solo-clicked(track, on) => {
+                                root.track-param-changed(
+                                    track,
+                                    "soloed",
+                                    on
+                                );
+                            }
+
+                            track-record-clicked(track, on) => {
+                                root.track-param-changed(
+                                    track,
+                                    "arm",
+                                    on
+                                );
+                            }
+
+                            channel-clip-cleared(channel) => {
+                                root.channel-clip-cleared(
+                                    channel
+                                );
+                            }
+
+                            zoom-y-scrolled(new-zoom-y) => {
+                                root.zoom-y-level =
+                                    new-zoom-y;
+
+                                root.timeline-zoom-y-changed(
+                                    new-zoom-y
+                                );
+                            }
+                        }
+
+                        // =================================================
+                // TRACK SPLITTER
+                // =================================================
+
+                SplitterVerticalGrowLeft {
+
+                    visible:
+                        !root.timeline-area-expanded;
+
+                    width:
+                        root.timeline-area-expanded
+                            ? 0px
+                            : 5px;
+
+                    height:
+                        100%;
+
+                    value <=>
+                        root.tracks-header-width;
+
+                    min-value:
+                        120px;
+
+                    max-value:
+                        420px;
+
+                    z:
+                        50;
+                }
+
+
+                        // =====================================
+                        // TIMELINE
+                        // =====================================
+
+                        timeline := Timeline {
+
+                            horizontal-stretch:
+                                1;
+
+                            selected-track <=>
+                                root.selected-track;
+
+                            current-time-seconds <=>
+                                root.transport-time-seconds;
+
+                            playing:
+                                root.playing;
+
+                            bpm:
+                                root.bpm;
+
+                            beats-per-bar:
+                                root.beats-per-bar;
+
+                            total-bars:
+                                root.total-bars;
+
+                            zoom <=>
+                                root.zoom-level;
+
+                            // BIDIRECIONAL: Alt+roda na timeline
+                            // escreve de volta em root.zoom-y-level,
+                            // mantendo a track panel e o ZoomBarVertical
+                            // sincronizados com o atalho da timeline.
+                            zoom-y <=>
+                                root.zoom-y-level;
+
+                            loop-enabled: root.loop-enabled;
+                            loop-start-beat: root.loop-start-beat;
+                            loop-end-beat: root.loop-end-beat;
+
+                            // Modo nativo: timeline transparente (wgpu por baixo).
+                            overlay-hosted <=>
+                                root.native-overlay;
+
+                            track-names:
+                                root.track-names;
+
+                            active-tool:
+                                root.active-tool;
+
+                            clips:
+                                root.clips;
+
+                            drop-visible:
+                                root.drag-active
+                                && root.drag-inited
+                                && root.drag-over-timeline;
+
+                            follow-playhead:
+                                root.follow-playhead;
+
+                            drop-x:
+                                root.drag-snap-beat
+                                * timeline.px-per-beat;
+
+                            drop-track:
+                                root.drag-drop-track;
+
+                            drop-len-beats:
+                                4.0;
+
+
+                            // ---------------------------------
+                            // CANVAS WGPU (fundo da timeline)
+                            // ---------------------------------
+
+                            canvas-render-requested() => {
+                                root.timeline-canvas-render-requested();
+                            }
+
+                            // ---------------------------------
+                            // EVENTOS CRUS → ENGINE (Fase 3)
+                            // ---------------------------------
+
+                            engine-pointer-down(x, y, b, c, s, a) => {
+                                root.engine-pointer-down(x, y, b, c, s, a);
+                            }
+
+                            engine-pointer-move(x, y) => {
+                                root.engine-pointer-move(x, y);
+                            }
+
+                            engine-pointer-up(x, y, b) => {
+                                root.engine-pointer-up(x, y, b);
+                            }
+
+                            engine-scroll(dx, dy, c, s, a) => {
+                                root.engine-scroll(dx, dy, c, s, a);
+                            }
+
+                            engine-key-event(t, c, s, a) => {
+                                root.engine-key-event(t, c, s, a);
+                            }
+
+
+                            // ---------------------------------
+                            // TRACK
+                            // ---------------------------------
+
+                            select-track(index) => {
+                                root.selected-track =
+                                    index;
+
+                                // Selecionar a track (cabeçalho)
+                                // deseleciona o clip: assim a paleta
+                                // volta a colorir a track + clips,
+                                // em vez de ficar presa ao clip.
+                                root.selected-clip =
+                                    -1;
+                            }
+
+
+                            // ---------------------------------
+                            // SEEK
+                            // ---------------------------------
+
+                            seek-to(beat) => {
+                                root.seek-to(
+                                    beat
+                                );
+                            }
+
+                            // ---------------------------------
+                            // MARQUEE (Ctrl+arrasto)
+                            // ---------------------------------
+
+                            marquee-select(b0, b1, t0, t1) => {
+                                                    root.marquee-select(
+                                                        b0,
+                                                        b1,
+                                                        t0,
+                                                        t1
+                                                    );
+                                                }
+
+                                                multi-delete-requested() => {
+                                                    root.multi-delete-requested();
+                                                }
+
+                            keyboard-focus-requested() => {
+                                root.keyboard-focus-requested();
+                            }
+
+                            // Scroll/zoom (roda/touchpad) → RUST (motor).
+                            scroll-input(dx, dy, ctrl, shift, alt, mx, my) => {
+                                root.scroll-input(dx, dy, ctrl, shift, alt, mx, my);
+                            }
+
+
+                            // ---------------------------------
+                            // CLIP SELECT
+                            // ---------------------------------
+
+                            clip-selected(index) => {
+
+                                // `index` é o ID DO CLIP.
+                                // Gravá-lo em selected-track
+                                // embaralhava a track ativa a
+                                // cada DOWN — inclusive no
+                                // primeiro frame de todo
+                                // arrasto.
+
+                                root.selected-clip =
+                                    index;
+                            }
+
+
+                            // ---------------------------------
+                            // SLICE
+                            // ---------------------------------
+
+                            clip-slice-requested(
+                                id,
+                                position
+                            ) => {
+
+                                root.clip-slice-requested(
+                                    id,
+                                    position
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // GLUE
+                            // ---------------------------------
+
+                            clip-glue-requested(id) => {
+
+                                root.clip-glue-requested(
+                                    id
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // GLUE AT
+                            // ---------------------------------
+
+                            glue-clip-at(
+                                row,
+                                x,
+                                sx,
+                                ppb
+                            ) => {
+
+                                root.glue-clip-at(
+                                    row,
+                                    x,
+                                    sx,
+                                    ppb
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // MOVE / RESIZE — commit único
+                            // ---------------------------------
+
+                            clip-move-committed(
+                                id,
+                                track,
+                                beat
+                            ) => {
+
+                                root.clip-move-committed(
+                                    id,
+                                    track,
+                                    beat
+                                );
+                            }
+
+
+                            clip-resize-committed(
+                                id,
+                                side,
+                                len,
+                                beat
+                            ) => {
+
+                                root.clip-resize-committed(
+                                    id,
+                                    side,
+                                    len,
+                                    beat
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // DELETE
+                            // ---------------------------------
+
+                            clip-delete-requested(id) => {
+
+                                root.clip-delete-requested(
+                                    id
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // RENAME
+                            // ---------------------------------
+
+                            clip-rename-requested(
+                                id,
+                                name
+                            ) => {
+
+                                root.clip-rename-requested(
+                                    id,
+                                    name
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // COLOR
+                            // ---------------------------------
+
+                            clip-color-cycle-requested(id) => {
+
+                                root.clip-color-cycle-requested(
+                                    id
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // COPY
+                            // ---------------------------------
+
+                            clip-copy-requested(id) => {
+
+                                root.clip-copy-requested(
+                                    id
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // FADE COMMIT
+                            // ---------------------------------
+
+                            clip-fade-committed(
+                                id,
+                                fi,
+                                fo
+                            ) => {
+
+                                root.clip-fade-committed(
+                                    id,
+                                    fi,
+                                    fo
+                                );
+                            }
+
+                            // ---------------------------------
+                            // GAIN COMMIT
+                            // ---------------------------------
+
+                            clip-gain-committed(
+                                id,
+                                db
+                            ) => {
+
+                                root.clip-gain-committed(
+                                    id,
+                                    db
+                                );
+                            }
+
+
+                            // ---------------------------------
+                            // PASTE
+                            // ---------------------------------
+
+                            paste-requested(
+                                beat,
+                                track
+                            ) => {
+
+                                root.clip-paste-requested(
+                                    beat,
+                                    track
+                                );
+                            }
+
+                            pencil-created(
+                                beat,
+                                track,
+                                len
+                            ) => {
+
+                                root.pencil-created(
+                                    beat,
+                                    track,
+                                    len
+                                );
+                            }
+                            
+                        }
+                    }
+                }
+
+
+              
+
+
+                // =================================================
+                // HORIZONTAL SCROLLBAR
+                // =================================================
+
+              
+                
+            
+
+
+
+            
+            }
+
+
+            // =================================================
+            // BOTTOM SPLITTER
+            // =================================================
+
+           
+            SplitterHorizontal {
+
+                visible:
+                    root.bottom-panel-visible;
+
+                x:
+                    root.clip-pool-open && !root.clip-pool-floating
+                        ? root.left-panel-width
+                        : 0px;
+
+                y:
+                    parent.height
+                    - root.bottom-panel-height
+                    - 5px;
+
+                width:
+                    center-panel.width;
+
+                height:
+                    5px;
+
+                value <=>
+                    root.bottom-panel-height;
+
+                min-value:
+                    300px;
+
+                max-value:
+                    600px;
+
+                z:
+                    30;
+            }
+            
+
+
+            // =================================================
+            // BOTTOM PANEL
+            // =================================================
+
+            bottom-panel := Rectangle {
+
+                visible:
+                    root.bottom-panel-visible;
+
+                x:
+                    root.clip-pool-open && !root.clip-pool-floating
+                        ? root.left-panel-width
+                        : 0px;
+
+                y:
+                    parent.height
+                    - root.bottom-panel-height;
+
+                width:
+                    center-panel.width;
+
+                height:
+                    root.bottom-panel-height;
+
+                background:
+                    transparent;
+
+                border-top-left-radius:
+                    8px;
+
+                border-top-right-radius:
+                    8px;
+
+
+                property <int> current-tab:
+                    bottom-toolbar.selected-tab;
+
+
+                Rectangle {
+
+                    width:
+                        100%;
+
+                    height:
+                        100%;
+
+                    clip:
+                        true;
+
+
+                    // -----------------------------------------
+                    // MIXER
+                    // -----------------------------------------
+
+                    Mixer {
+
+                        width:
+                            100%;
+
+                        height:
+                            100%;
+
+                        visible:
+                            bottom-panel.current-tab == 0;
+
+                        floating:
+                            root.floated[0];
+
+                        float-toggle => {
+                            root.float-toggle(
+                                0
+                            );
+                        }
+
+                        meters <=>
+                            root.channel-meters;
+
+                        clipped <=>
+                            root.channel-clipped;
+
+                        mutes <=>
+                            root.mixer-mutes;
+
+                        soloes <=>
+                            root.mixer-soloes;
+
+                        arms <=>
+                            root.mixer-arms;
+
+                        volumes <=>
+                            root.mixer-volumes;
+
+                        pans <=>
+                            root.mixer-pans;
+
+                        insert-counts <=>
+                            root.mixer-insert-counts;
+
+                        insert-names <=>
+                            root.mixer-insert-names;
+
+                        insert-enabled <=>
+                            root.mixer-insert-enabled;
+
+                        max-inserts:
+                            root.mixer-max-inserts;
+
+                        track-colors: root.track-colors;
+                        selected-channel <=> root.mixer-selected-channel;
+                        copy-inserts(ch) => { root.mixer-copy-slots(ch); }
+                        paste-inserts(ch) => { root.mixer-paste-slots(ch); }
+                        undo-requested => { root.mixer-undo-requested(); }
+                        redo-requested => { root.mixer-redo-requested(); }
+
+
+                        channel-param-changed(
+                            idx,
+                            param,
+                            val
+                        ) => {
+
+                            root.mixer-param-changed(
+                                idx,
+                                param,
+                                val
+                            );
+                        }
+
+
+                        channel-insert-added(ch) => {
+                            root.mixer-insert-added(
+                                ch
+                            );
+                        }
+
+
+                        channel-insert-removed(
+                            ch,
+                            slot
+                        ) => {
+
+                            root.mixer-insert-removed(
+                                ch,
+                                slot
+                            );
+                        }
+
+
+                        channel-insert-toggled(
+                            ch,
+                            slot
+                        ) => {
+
+                            root.mixer-insert-toggled(
+                                ch,
+                                slot
+                            );
+                        }
+
+
+                        channel-clip-cleared(ch) => {
+
+                            root.channel-clip-cleared(
+                                ch
+                            );
+                        }
+                    }
+
+
+                    // -----------------------------------------
+                    // SAMPLER
+                    // -----------------------------------------
+
+                    SamplerArea {
+
+                        width:
+                            100%;
+
+                        height:
+                            100%;
+
+                        visible:
+                            bottom-panel.current-tab == 1;
+
+                        floating:
+                            root.floated[1];
+
+                        drop-hover:
+                            root.drag-active
+                            && root.drag-inited
+                            && SamplerMetrics.visible;
+
+                        sample-name <=> root.sampler-sample-name;
+                        sample-loaded <=> root.sampler-sample-loaded;
+                        sample-format <=> root.sampler-sample-format;
+                        sample-duration <=> root.sampler-sample-duration;
+                        load-sample-requested => { root.sampler-load-requested(); }
+
+                        sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
+
+                        float-toggle => {
+                            root.float-toggle(
+                                1
+                            );
+                        }
+                    }
+
+
+                    // -----------------------------------------
+                    // EMPTY
+                    // -----------------------------------------
+
+                    Rectangle {
+
+                        visible:
+                            bottom-panel.current-tab == 3;
+
+                        width:
+                            100%;
+
+                        height:
+                            100%;
+
+                        background:
+                            Theme.base;
+                    }
+                }
+            }
+
+
+            // =================================================
+            // EXPLORER
+            // =================================================
+
+            Rectangle {
+
+                x:
+                    parent.width
+                    - root.explorer-width
+                    - 5px;
+
+                y:
+                    0px;
+
+                width:
+                    root.explorer-width
+                    - 5px;
+
+                height:
+                    100%;
+
+                visible:
+                    root.explorer-visible;
+
+                    
+
+
+                SplitterVerticalGrowRight {
+
+                    x:
+                        -5px;
+
+                    y:
+                        0px;
+
+                    width:
+                        5px;
+
+                    height:
+                        100%;
+
+                    value <=>
+                        root.explorer-width;
+
+                    min-value:
+                        220px;
+
+                    max-value:
+                        500px;
+
+                    z:
+                        40;
+                }
+                
+
+
+                Explorer {
+
+                    x:
+                        0px;
+
+                    y:
+                        0px;
+
+                    width:
+                        parent.width;
+
+                    height:
+                        100%;
+
+                    z:
+                        40;
+
+                    current-path <=>
+                        root.explorer-current-path;
+
+                    path-history <=>
+                        root.explorer-path-history;
+
+                    history-index <=>
+                        root.explorer-history-index;
+
+                    entries <=>
+                        root.explorer-entries;
+
+                    can-go-up <=>
+                        root.explorer-can-go-up;
+
+                    search-text <=>
+                        root.explorer-search-text;
+
+
+                    audio-drag-started(
+                        name,
+                        path,
+                        type,
+                        color,
+                        is-midi
+                    ) => {
+
+                        root.drag-begin(
+                            name,
+                            path,
+                            "",
+                            "",
+                            color,
+                            is-midi
+                        );
+                    }
+
+
+                    audio-drag-moved(x, y) => {
+                        root.drag-move(
+                            x,
+                            y
+                        );
+                    }
+
+
+                    audio-drag-finished => {
+                        root.drag-end();
+                    }
+
+
+                    explorer-path-changed(path) => {
+                        root.explorer-path-changed(
+                            path
+                        );
+                    }
+
+
+                    explorer-directory-entered(path) => {
+                        root.explorer-directory-entered(
+                            path
+                        );
+                    }
+
+
+                    explorer-go-up() => {
+                        root.explorer-go-up();
+                    }
+
+
+                    explorer-history-go(delta) => {
+                        root.explorer-history-go(
+                            delta
+                        );
+                    }
+
+
+                    explorer-search-changed(term) => {
+                                            root.explorer-search-changed(
+                                                term
+                                            );
+                                        }
+
+                                        explorer-go-to-drives() => {
+                                            root.explorer-go-to-drives();
+                                        }
+                                    }
+                                }
+
+
+            // =================================================
+            // DRAG GHOST
+            // =================================================
+
+            Rectangle {
+
+                visible:
+                    root.drag-active
+                    && root.drag-inited;
+
+                // =================================================
+                // POSIÇÃO DO GHOST
+                //
+                // Fora da timeline: o card segue o cursor livremente.
+                //
+                // Sobre a timeline: o card vira o PRÉVISO DO DROP —
+                // trava no beat e na LINHA onde o clip vai entrar.
+                // Antes ele travava só no X e continuava no Y cru
+                // do cursor, enquanto o clip caía numa linha
+                // calculada com 42px — número que a engine nunca
+                // usou: ela desenha com 64*zoom_y. O usuário via o
+                // card num lugar e o clip entrava em outro — o
+                // "arrastar" não parecia automático porque não dava
+                // para prever onde ia cair.
+                //
+                // `TimelineMetrics` é o que a engine usou no frame
+                // anterior (publicado pelo Rust a cada frame), então
+                // card e `drop_preview` caem no mesmo lugar.
+                // =================================================
+
+                x:
+                    root.drag-over-timeline
+
+                    ? timeline.absolute-position.x
+                        - workspace.absolute-position.x
+                        - TimelineMetrics.scroll-x
+                        + root.drag-snap-beat
+                            * TimelineMetrics.px-per-beat
+
+                    : root.drag-x
+                        - workspace.absolute-position.x
+                        - (
+                            root.left-panel-width
+                            - 16px
+                        ) / 2;
+
+                y:
+                    root.drag-over-timeline
+
+                    ? TimelineMetrics.content-top-abs-y
+                        - workspace.absolute-position.y
+                        + TimelineMetrics.scroll-y
+                        + root.drag-drop-track
+                            * TimelineMetrics.row-height
+                        + (
+                            TimelineMetrics.row-height
+                            - 38px
+                        ) / 2
+
+                    : root.drag-y
+                        - workspace.absolute-position.y
+                        - 19px;
+
+                width:
+                    root.left-panel-width - 16px;
+
+                height:
+                    38px;
+
+                z:
+                    200;
+
+
+                Rectangle {
+
+                    x:
+                        -3px;
+
+                    y:
+                        -3px;
+
+                    width:
+                        parent.width + 6px;
+
+                    height:
+                        parent.height + 6px;
+
+                    background:
+                        root.drag-color.transparentize(
+                            0.65
+                        );
+
+                    border-radius:
+                        7px;
+
+                    z:
+                        -1;
+                }
+
+
+                ClipItemVisual {
+
+                    width:
+                        100%;
+
+                    height:
+                        100%;
+
+                    name:
+                        root.drag-name;
+
+                    position:
+                        root.drag-position;
+
+                    duration:
+                        root.drag-duration;
+
+                    clip-color:
+                        root.drag-color;
+
+                    is-midi:
+                        root.drag-is-midi;
+                }
+            }
+        }
+
+
+        // ====================================================
+        // STATUS BAR
+        // ====================================================
+
+        Rectangle {
+
+            width:
+                100%;
+
+            height:
+                22px;
+
+            background:
+                transparent;
+
+
+            HorizontalLayout {
+
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.center;
+                padding-left:
+                    8px;
+
+                padding-right:
+                    8px;
+
+                spacing:
+                    16px;
+
+
+                Text {
+
+                    text:
+                        "Ruana Studio 0.1.0";
+
+                    color:
+                        Theme.text-dim;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
+                }
+
+
+                Rectangle {
+
+                    horizontal-stretch:
+                        1;
+
+                    background:
+                        transparent;
+                }
+                // ====================================================
+        // BOTTOM TOOLBAR
+        // ====================================================
+
+        bottom-toolbar := BottomToolbar {
+
+            toolbar-height <=>
+                bottom-toolbar.height;
+
+            selected-tab <=>
+                root.selected-tab;
+
+            panel-visible <=>
+                root.bottom-panel-visible;
+        }
+
+
+                Text {
+
+                    text:
+                        "120 BPM";
+
+                    color:
+                        Theme.text-dim;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
+                }
+
+
+                Text {
+
+                    text:
+                        "44.1 kHz";
+
+                    color:
+                        Theme.text-dim;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
+                }
+
+
+                Text {
+
+                    text:
+                        "24-bit";
+
+                    color:
+                        Theme.text-dim;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
+                }
+
+
+                Text {
+
+                    text:
+                        "FASE 1 - UI";
+
+                    color:
+                        Theme.accent;
+
+                    font-size:
+                        10px;
+
+                    vertical-alignment:
+                        center;
+                }
+            }
+        }
+
+
+        // ====================================================
+        // BOTTOM TOOLBAR
+        // ====================================================
+
+
+
+        // ====================================================
+        // TIMER BOUNDS
+        //
+        // Publica as métricas da timeline para o global
+        // TimelineMetrics (usado pelo drag-move em main.slint
+        // para calcular preview de drop SEM timer próprio) e
+        // mantém o gerenciador de cursores do Rust atualizado.
+        // ====================================================
+
+        Timer {
+
+            interval:
+                50ms;
+
+            running:
+                true;
+
+
+            triggered() => {
+
+                // =============================================
+                // TimelineMetrics: SÓ o que é layout.
+                //
+                // A escala da cena (px/beat, altura da linha, altura
+                // da régua, scroll, resolução do grid) é publicada
+                // pelo Rust a CADA FRAME no `tick` do host — é a
+                // mesma que a engine wgpu usou para desenhar o
+                // frame anterior. Escrever aqui de novo (a 50ms)
+                // reintroduzia a divergência: o preview da engine
+                // e o ponto de inserção usavam escalas diferentes,
+                // e o ghost chegava atrasado em relação ao cursor.
+                //
+                // `track-count` continua aqui: só muda quando uma
+                // track é criada/apagada, não a cada frame.
+                // =============================================
+
+                TimelineMetrics.track-count =
+                    root.track-names.length;
+
+                // Pede um re-render do canvas wgpu de fundo se algo
+                // mudou. O Rust de-duplica e só renderiza quando os
+                // parâmetros (scroll/zoom/dimensões) realmente mudam.
+                root.timeline-canvas-render-requested();
+
+                // Snap compartilhado com o motor de arrasto
+                // (resize local e preview usam o mesmo flag).
+                ClipDragState.snap-enabled =
+                    root.snap-enabled;
+
+                SamplerMetrics.abs-x =
+                    bottom-panel.absolute-position.x / 1px;
+
+                SamplerMetrics.abs-y =
+                    bottom-panel.absolute-position.y / 1px;
+
+                SamplerMetrics.width =
+                    bottom-panel.width / 1px;
+
+                SamplerMetrics.height =
+                    bottom-panel.height / 1px;
+
+                SamplerMetrics.visible =
+                    root.bottom-panel-visible
+                    && bottom-panel.current-tab == 1;
+
+                // Espelha o estado do sampler para o global
+                // SamplerState (a janela flutuante consome isso).
+                SamplerState.sample-name =
+                    root.sampler-sample-name;
+
+                SamplerState.sample-loaded =
+                    root.sampler-sample-loaded;
+
+                SamplerState.sample-format =
+                    root.sampler-sample-format;
+
+                SamplerState.sample-duration =
+                    root.sampler-sample-duration;
+
+                root.timeline-bounds-changed(
+                    timeline.absolute-position.x / 1px,
+                    (timeline.absolute-position.y
+                        + timeline.ruler-height) / 1px,
+                    timeline.width / 1px,
+                    (timeline.height
+                        - timeline.ruler-height) / 1px
+                );
+            }
+        }
+    }
+}

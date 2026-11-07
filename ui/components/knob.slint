@@ -1,0 +1,140 @@
+import { Theme } from "../theme.slint";
+
+export component Knob {
+    in-out property <float> value: 0.5;
+    in property <string> caption: "";
+    in property <string> display-value: "";
+    in property <bool> show-display: true;
+    in property <bool> show-text: true;
+    in property <bool> centered: false;
+    in property <angle> arc-start: -135deg;
+    in property <angle> arc-sweep: 270deg;
+    callback changed(float);
+
+    in-out property <float> last-y: 0;
+
+    // Arco e ponteiro: no Paper usa o texto primário, senão o accent.
+    property <color> accent-color: Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+    // The dial occupies the upper portion while the remaining height is used by
+    // the value and caption. This keeps the whole control usable when resized.
+    property <length> dial-size: root.show-text
+        ? min(root.width, root.height * 0.64)
+        : min(root.width, root.height);
+    property <length> dot-size: max(1px, root.dial-size * 0.1);
+    property <length> label-size: min(9px, root.dial-size * 0.25);
+
+    width: 36px;
+    height: 56px;
+
+    // 1. Arco de Pontos
+    for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]: Rectangle {
+        property <float> position: i / 47.0;
+        property <bool> active: root.centered
+            ? (
+                root.value <= 0.5
+                    ? self.position >= root.value && self.position <= 0.5
+                    : self.position >= 0.5 && self.position <= root.value
+            )
+            : self.position <= root.value;
+            
+        property <angle> theta: root.arc-start + self.position * root.arc-sweep;
+
+        // O SEGREDO DO ARCO CINZA: Fica invisível quando não está preenchido
+        visible: self.active;
+
+        width: root.dot-size;
+        height: root.dot-size;
+        x: parent.width / 2 + Math.cos(self.theta - 90deg) * root.dial-size * 0.42 - self.width / 2;
+        y: root.dial-size / 2 + Math.sin(self.theta - 90deg) * root.dial-size * 0.42 - self.height / 2;
+        
+        background: root.accent-color;
+        border-radius: self.width / 2;
+    }
+
+    // 2. Corpo principal do Knob
+    Rectangle {
+        width: root.dial-size * 0.72;
+        height: root.dial-size * 0.72;
+        x: (parent.width - self.width) / 2;
+        y: root.dial-size * 0.14;
+        background: Theme.surface-high;
+        border-radius: self.width / 2;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+        // O SEGREDO DA ROTAÇÃO: Usar rotation-angle no lugar de transform-rotation
+        Rectangle {
+            width: max(1px, parent.width * 0.12);
+            height: parent.height * 0.38;
+            x: (parent.width - self.width) / 2;
+            y: parent.height * 0.12;
+            background: root.accent-color;
+            border-radius: self.width / 2;
+            
+            transform-rotation: root.arc-start + root.value * root.arc-sweep;
+            transform-origin: { x: self.width / 2, y: self.height };
+        }
+
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            moved => {
+                if (self.pressed) {
+                    root.value = max(0, min(1, root.value + (root.last-y - touch.mouse-y / 1px) * 0.01));
+                    root.last-y = touch.mouse-y / 1px;
+                    root.changed(root.value);
+                }
+            }
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down) {
+                    root.last-y = touch.mouse-y / 1px;
+                }
+            }
+        }
+    }
+
+    Text {
+        text: root.display-value;
+        visible: root.show-text && root.show-display;
+        y: root.dial-size;
+        width: parent.width;
+        color: Theme.text-primary;
+        font-size: root.label-size;
+        horizontal-alignment: center;
+    }
+
+    Text {
+        text: root.caption;
+        visible: root.show-text;
+        y: root.dial-size + root.label-size + 2px;
+        width: parent.width;
+        color: Theme.text-dim;
+        font-size: root.label-size;
+        horizontal-alignment: center;
+    }
+}
+
+export component PanKnob inherits Knob {
+    centered: true;
+    // Padrão clássico de DAW (270 graus, indo de -135° até +135°)
+    arc-start: -135deg; 
+    arc-sweep: 270deg;
+    value: 0.5; // O centro perfeito
+}
+
+export component KnobWithoutText inherits Knob {
+    height: 36px;
+    show-text: false;
+}
+
+export component PanKnobWithoutText inherits KnobWithoutText {
+    centered: true;
+    height: 36px;
+    arc-start: -135deg;
+    arc-sweep: 270deg;
+    value: 0.5;
+}

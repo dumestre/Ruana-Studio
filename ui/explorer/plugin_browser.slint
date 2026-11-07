@@ -1,0 +1,274 @@
+import { Theme } from "../theme.slint";
+import { BrowserItem } from "../components/browser_item.slint";
+
+export struct PluginItem {
+    name: string,
+    type: string,
+    category: string,
+}
+
+export component PluginBrowser inherits Rectangle {
+    in property <[PluginItem]> plugins: [
+        {
+            name: "Ruana Synth",
+            type: "Native",
+            category: "Instruments"
+        },
+        {
+            name: "Ruana EQ",
+            type: "Native",
+            category: "Effects"
+        },
+        {
+            name: "Ruana Compressor",
+            type: "Native",
+            category: "Effects"
+        },
+        {
+            name: "PreVocal",
+            type: "Native",
+            category: "Effects"
+        },
+        {
+            name: "Surge XT",
+            type: "VST3",
+            category: "Instruments"
+        },
+        {
+            name: "Surge XT",
+            type: "CLAP",
+            category: "Instruments"
+        }
+    ];
+
+    in-out property <string> format-filter: "All";
+
+    in-out property <int> selected-index: -1;
+
+    callback plugin-selected(string, string);
+
+    background: transparent;
+
+    VerticalLayout {
+        alignment: LayoutAlignment.start;
+        cross-axis-alignment: CrossAxisAlignment.stretch;
+        spacing: 5px;
+
+        // Cabeçalho
+        Rectangle {
+            height: 26px;
+
+            background: Theme.base;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: 3px;
+
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 7px;
+                spacing: 6px;
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                Image {
+                    source: @image-url("../icons/plugin.svg");
+
+                    width: 15px;
+                    height: 15px;
+
+                    colorize: Theme.accent;
+                }
+
+                Text {
+                    text: "Plugins";
+
+                    color: Theme.text-primary;
+                    font-size: 9px;
+
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        // Filtros
+        Rectangle {
+            height: 26px;
+            background: transparent;
+
+            HorizontalLayout {
+                alignment: LayoutAlignment.space-around;
+                cross-axis-alignment: CrossAxisAlignment.center;
+                spacing: 3px;
+
+                Rectangle {
+                    width: 45px;
+                    height: 23px;
+
+                    background: root.format-filter == "All"
+                        ? Theme.surface-high
+                        : transparent;
+
+                    border-radius: 3px;
+
+                    Text {
+                        text: "All";
+
+                        color: root.format-filter == "All"
+                            ? Theme.text-primary
+                            : Theme.text-dim;
+
+                        font-size: 8px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.format-filter = "All";
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 55px;
+                    height: 23px;
+
+                    background: root.format-filter == "Native"
+                        ? Theme.surface-high
+                        : transparent;
+
+                    border-radius: 3px;
+
+                    Text {
+                        text: "Native";
+
+                        color: root.format-filter == "Native"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
+                        font-size: 8px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.format-filter = "Native";
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 48px;
+                    height: 23px;
+
+                    background: root.format-filter == "VST3"
+                        ? Theme.surface-high
+                        : transparent;
+
+                    border-radius: 3px;
+
+                    Text {
+                        text: "VST3";
+
+                        color: root.format-filter == "VST3"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
+                        font-size: 8px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.format-filter = "VST3";
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 48px;
+                    height: 23px;
+
+                    background: root.format-filter == "CLAP"
+                        ? Theme.surface-high
+                        : transparent;
+
+                    border-radius: 3px;
+
+                    Text {
+                        text: "CLAP";
+
+                        color: root.format-filter == "CLAP"
+                            ? Theme.accent
+                            : Theme.text-dim;
+
+                        font-size: 8px;
+
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.format-filter = "CLAP";
+                        }
+                    }
+                }
+            }
+        }
+
+        // Lista
+        Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            background: transparent;
+
+            HorizontalLayout {
+                alignment: LayoutAlignment.stretch;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+            VerticalLayout {
+                alignment: LayoutAlignment.stretch;
+                spacing: 1px;
+
+                Text {
+                    text: "PLUGINS";
+
+                    height: 20px;
+                    horizontal-alignment: TextHorizontalAlignment.center;
+
+                    color: Theme.text-dim;
+                    font-size: 8px;
+                    font-weight: 700;
+
+                    vertical-alignment: TextVerticalAlignment.center;
+                }
+
+                for plugin[index] in root.plugins : BrowserItem {
+                    visible: root.format-filter == "All"
+                        || plugin.type == root.format-filter;
+
+                    name: plugin.name;
+                    type: plugin.type;
+
+                    selected: root.selected-index == index;
+                    icon: "";
+                    icon-image: @image-url("../icons/plugin.svg");
+
+                    clicked => {
+                        root.selected-index = index;
+                        root.plugin-selected(plugin.name, plugin.type);
+                    }
+                }
+            }
+        }
+        }
+    }
+}

@@ -1,0 +1,274 @@
+import { Theme } from "../theme.slint";
+import { BeatStep } from "beat_step.slint";
+
+export component BeatStepGrid inherits Rectangle {
+
+    in-out property <[bool]> steps: [];
+
+    in property <[int]> instrument-indexes: [];
+    in property <[int]> step-indexes: [];
+
+    in property <int> playhead: -1;
+    in property <int> grid-resolution: 16;
+
+    in property <[bool]> track-active: [];
+    in property <[color]> track-colors: [];
+
+    // ============================================================
+    // DRAG DE SAMPLE
+    //
+    // Linha alvo enquanto um sample é arrastado do browser
+    // sobre a grade (-1 = fora). O highlight segue o cursor.
+    // ============================================================
+
+    in property <int> hover-row: -1;
+    in property <bool> drag-active: false;
+
+    // Passos por trilha no model (row * stride + col).
+    in property <int> stride: 16;
+
+    callback step-toggled(int, bool);
+
+    property <bool> stick-hit: false;
+
+    property <length> row-pitch: 30px;
+    property <length> rows-top: 33px;
+
+    property <length> cell-size: 28px;
+    property <length> cell-gap: 2px;
+
+    // Largura ocupada pelas células de uma linha (igual à
+    // largura de cada BeatStep, que fica centrado).
+    property <length> cells-width:
+        root.grid-resolution * root.cell-size
+        + max(0, root.grid-resolution - 1) * root.cell-gap;
+
+    // x da primeira célula — as linhas são CENTRALIZADAS,
+    // então o hit-test precisa deste offset real.
+    property <length> cells-x:
+        (self.width - root.cells-width) / 2;
+
+
+    background: Theme.surface;
+
+    border-radius: 6px;
+    border-width: 0px;
+    border-color: Theme.border;
+
+
+    // ============================================================
+    // HIGHLIGHT DA LINHA ALVO DO DROP
+    // ============================================================
+
+    Rectangle {
+
+        visible:
+            root.drag-active
+            && root.hover-row >= 0
+            && root.hover-row < root.instrument-indexes.length;
+
+        x:
+            root.cells-x - 5px;
+
+        y:
+            root.rows-top
+            + root.hover-row * root.row-pitch
+            + 1px;
+
+        width:
+            root.cells-width + 10px;
+
+        height: 28px;
+
+        background:
+            Theme.accent.transparentize(0.84);
+
+        border-radius: 6px;
+
+        border-width: 1px;
+
+        border-color:
+            Theme.accent.transparentize(0.35);
+    }
+
+
+    // ============================================================
+    // STEPS
+    // ============================================================
+
+    for inst in root.instrument-indexes: BeatStep {
+
+        track-index: inst;
+
+        y:
+            33px + inst * 30px;
+
+        width:
+            root.grid-resolution * 28px
+            + max(0, root.grid-resolution - 1) * 2px;
+
+        height: 30px;
+
+        x:
+            (parent.width - self.width) / 2;
+
+        steps <=> root.steps;
+
+        stride:
+            root.stride;
+
+        playhead:
+            root.playhead;
+
+        grid-resolution:
+            root.grid-resolution;
+
+        step-indexes:
+            root.step-indexes;
+
+        track-active:
+            root.track-active[inst];
+
+        accent-color:
+            root.track-colors[inst];
+    }
+
+
+    // ============================================================
+    // INTERAÇÃO
+    //
+    // A grade só EMITE step-toggled. Quem grava é o dono do
+    // pattern (beat.slint / beat_popup.slint), e o binding
+    // steps → patterns[current-pattern] redesenha as células.
+    //
+    // NUNCA escrever direto em root.steps aqui: além de criar
+    // segunda fonte de verdade, atribuição em índice de array
+    // vazio é no-op silencioso no Slint.
+    // ============================================================
+
+    grid-touch := TouchArea {
+
+        width: 100%;
+        height: 100%;
+
+        mouse-cursor: default;
+
+        property <int> paint-row: -1;
+        property <int> paint-col: -1;
+
+
+        pointer-event(event) => {
+
+            if event.kind
+                == PointerEventKind.down
+                && event.button
+                == PointerEventButton.left {
+
+                root.stick-hit = false;
+
+                hit-timer.running = false;
+                hit-timer.running = true;
+
+
+                let row =
+                    Math.floor(
+                        (self.mouse-y - root.rows-top)
+                        / root.row-pitch
+                    );
+
+
+                let col =
+                    Math.floor(
+                        (self.mouse-x - root.cells-x)
+                        / (root.cell-size + root.cell-gap)
+                    );
+
+
+                if row >= 0
+                    && row < root.instrument-indexes.length
+                    && col >= 0
+                    && col < root.grid-resolution
+                    && col < root.stride {
+
+                    let index =
+                        row * root.stride + col;
+
+                    let next =
+                        !root.steps[index];
+
+
+                    root.step-toggled(
+                        index,
+                        next
+                    );
+
+
+                    self.paint-row = row;
+                    self.paint-col = col;
+                }
+
+
+            } else if event.kind
+                == PointerEventKind.move
+                && self.pressed {
+
+
+                let row =
+                    Math.floor(
+                        (self.mouse-y - root.rows-top)
+                        / root.row-pitch
+                    );
+
+
+                let col =
+                    Math.floor(
+                        (self.mouse-x - root.cells-x)
+                        / (root.cell-size + root.cell-gap)
+                    );
+
+
+                if row >= 0
+                    && row < root.instrument-indexes.length
+                    && col >= 0
+                    && col < root.grid-resolution
+                    && col < root.stride
+                    && !(row == self.paint-row
+                        && col == self.paint-col) {
+
+
+                    let index =
+                        row * root.stride + col;
+
+
+                    root.step-toggled(
+                        index,
+                        true
+                    );
+
+
+                    self.paint-row = row;
+                    self.paint-col = col;
+                }
+
+
+            } else if event.kind
+                == PointerEventKind.up {
+
+                self.paint-row = -1;
+                self.paint-col = -1;
+            }
+        }
+    }
+
+
+    hit-timer := Timer {
+
+        interval: 90ms;
+        running: false;
+
+        triggered => {
+            self.running = false;
+            root.stick-hit = false;
+        }
+    }
+}

@@ -1,0 +1,44 @@
+import { Theme } from "../theme.slint";
+
+export component StepCell inherits Rectangle {
+    in property <bool> active: false;
+    in property <bool> current: false;
+    in property <color> accent-color: Theme.accent;
+    in property <bool> beat-group-highlight: false;
+
+    width: 28px;
+    height: 28px;
+
+    background: transparent;
+
+    Rectangle {
+        width: 20px;
+        height: 20px;
+
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+
+        background: root.active
+            ? root.accent-color
+            : (
+                root.beat-group-highlight
+                    ? Theme.base
+                    : Theme.surface-high
+            );
+
+        border-radius: 6px;
+
+        border-width: root.current
+            ? 2px
+            : 1px;
+
+        border-color: root.current
+            ? Theme.playhead
+            : (
+                root.active
+                    ? root.accent-color
+                    : Theme.border
+            );
+            
+    }
+}

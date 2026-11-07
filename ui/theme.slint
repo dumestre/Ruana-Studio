@@ -1,0 +1,350 @@
+// ============================================================
+// THEME — paletas selecionáveis por índice (`active`).
+//
+// TODA a UI consome ONLY os tokens deste global. Trocar tema =
+// setar `Theme.active` (do Rust ou do seletor do toolbar); as
+// binds abaixo re-selecionam a paleta e o resto do app repinta.
+//
+// Índices: 0 Studio Dark · 1 Midnight Blue · 2 Violeta Ruana ·
+//          3 Volt · 4 Sunset · 5 Ocean Teal · 6 Paper (claro).
+//
+// EM CADA LISTA ABAIXO, CADA VALOR ESTÁ NO SEU ÍNDICE, comentado:
+//   [0] Studio Dark  = TEMA PADRÃO (default do app)
+//   [6] Paper        = TEMA CLARO (o que estamos ajustando)
+// A ordem de cada lista é: [0] [1] [2] [3] [4] [5] [6].
+//
+// ------------------------------------------------------------
+// REGRA DE USO (a escada) — não pular degrau.
+//
+//   base         → o FUNDO. A janela, o vazio atrás de tudo, e
+//                  os POÇOS/"inset": campo de texto, LCD, trilho
+//                  de medidor, slot vazio. Coisa que afunda.
+//   surface      → o PAINEL que senta em cima do fundo. Explorer,
+//                  canal do mixer, painel do beat, popup.
+//   surface-high → o WIDGET dentro do painel. Botão em repouso,
+//                  aba, item de lista, célula do grid.
+//
+//   surface-step / timeline-bg / grid-line / grid-sub
+//                → EXCLUSIVOS DA TIMELINE. Explorer, mixer e beat
+//                  não os tocam: eles usam só a escada de 3 degraus.
+//
+// Dois erros que a escada elimina:
+//   • painel com `surface-high` (vira widget) — some um degrau e
+//     o filho não contrasta com o pai;
+//   • botão com `base` (vira poço) — some um degrau para TRÁS e
+//     o botão fica mais escuro que o painel que o contém.
+//     Botão em repouso é SEMPRE `surface-high`.
+//
+// `on-accent` / `on-crimson` são a cor do TEXTO quando o fundo já
+// é `accent` / `crimson`. Nunca `text-primary` sobre accent.
+// ============================================================
+
+export global Theme {
+
+    in-out property <int> active: 0;
+
+    out property <color> Transparent: #00000000;
+
+    // FUNDO GERAL DA JANELA (MainWindow). É a "main vazia".
+    private property <[color]> base-list: [
+        #313131, // [0] Studio Dark (PADRÃO)
+        #161A21, // [1] Midnight Blue
+        #191722, // [2] Violeta Ruana
+        #14160E, // [3] Volt
+        #211A12, // [4] Sunset
+        #0F1E21, // [5] Ocean Teal
+        #646464,  // [6] PAPER (claro) ★
+    ];
+    // SUPERFÍCIES / PAINÉIS que sobem um degrau do base.
+    private property <[color]> surface-list: [
+        #242424, // [0] Studio Dark (PADRÃO)
+        #1D242E, // [1] Midnight Blue
+        #221E2E, // [2] Violeta Ruana
+        #1C1F15, // [3] Volt
+        #2A2117, // [4] Sunset
+        #15262A, // [5] Ocean Teal
+        #919191  // [6] PAPER (claro) ★
+    ];
+
+    // SUPERFÍCIE MAIS CLARA: hover, cards, botões da edit_toolbar.
+    private property <[color]> surface-high-list: [
+        #555555, // [0] Studio Dark (PADRÃO)
+        #26303D, // [1] Midnight Blue
+        #2D2740, // [2] Violeta Ruana
+        #262A1D, // [3] Volt
+        #362A1B, // [4] Sunset
+        #1E3035, // [5] Ocean Teal
+        #919191  // [6] PAPER (claro) ★
+    ];
+
+    // BORDAS e separadores.
+    private property <[color]> border-list: [
+        #3D3D3D, // [0] Studio Dark (PADRÃO)
+        #33404F, // [1] Midnight Blue
+        #3C3350, // [2] Violeta Ruana
+        #383F2C, // [3] Volt
+        #4A3A26, // [4] Sunset
+        #2C4247, // [5] Ocean Teal
+        #D2D2D2  // [6] PAPER (claro) ★
+    ];
+
+    // DROP SHADOW (drop-shadow-color dos widgets elevados: botões,
+    // LCD do transport, knobs, bar_properties).
+    //
+    // REGRA: a sombra tem de ser SEMPRE mais escura que o fundo onde
+    // ela cai. No Paper (fundo claro) `#2f2f2f` entrega isso de graça.
+    // Nos temas escuros o mesmo `#2f2f2f` fica MAIS CLARO que o painel
+    // (`surface` #242424, `base` #313131), virando halo em vez de
+    // sombra — por isso cada tema escuro tem o seu quase-preto, tingido
+    // com o matiz da própria paleta para a elevação ler igual ao Paper.
+    private property <[color]> shadow-list: [
+        #0F0F0F, // [0] Studio Dark — quase-preto sobre surface #242424
+        #06090D, // [1] Midnight Blue — quase-preto azulado
+        #09070E, // [2] Violeta Ruana — quase-preto violeta
+        #060802, // [3] Volt — quase-preto esverdeado
+        #0B0804, // [4] Sunset — quase-preto âmbar
+        #030A0B, // [5] Ocean Teal — quase-preto ciano
+        #2F2F2F  // [6] PAPER (claro) ★ — aprovado, NÃO MEXER
+    ];
+
+    // COR DE DESTAQUE (accent). Verde padrão no Studio e no Paper.
+    private property <[color]> accent-list: [
+        #00C853, // [0] Studio Dark (PADRÃO)
+        #4FA8FF, // [1] Midnight Blue
+        #B85CFF, // [2] Violeta Ruana
+        #A8FF00, // [3] Volt
+        #FF9F43, // [4] Sunset
+        #2EC4B6, // [5] Ocean Teal
+        #00C853  // [6] PAPER (claro) ★
+    ];
+
+    // ACCENT no estado HOVER.
+    private property <[color]> accent-hover-list: [
+        #09F664, // [0] Studio Dark (PADRÃO)
+        #76BFFF, // [1] Midnight Blue
+        #CE8AFF, // [2] Violeta Ruana
+        #C4FF4D, // [3] Volt
+        #FFB66D, // [4] Sunset
+        #5AD9CC, // [5] Ocean Teal
+        #09F664  // [6] PAPER (claro) ★
+    ];
+
+    // TEXTO/ÍCONE quando sobre o ACCENT (contraste).
+    private property <[color]> on-accent-list: [
+        #333333, // [0] Studio Dark (PADRÃO)
+        #161A21, // [1] Midnight Blue
+        #191722, // [2] Violeta Ruana
+        #14160E, // [3] Volt
+        #211A12, // [4] Sunset
+        #0F1E21, // [5] Ocean Teal
+        #1E1E1E,  // [6] PAPER (claro) ★
+    ];
+
+    // TEXTO PRINCIPAL (nomes, labels).
+    private property <[color]> text-primary-list: [
+        #E8E8E8, // [0] Studio Dark (PADRÃO)
+        #E4ECF4, // [1] Midnight Blue
+        #EDE6F5, // [2] Violeta Ruana
+        #F2F5E8, // [3] Volt
+        #F5EDE2, // [4] Sunset
+        #E2F0EE, // [5] Ocean Teal
+        #1E1E1E,  // [6] PAPER (claro) ★
+    ];
+
+    // TEXTO SECUNDÁRIO / DISCRETO (dicas, breadcrumbs).
+    private property <[color]> text-dim-list: [
+        #9A9A9A, // [0] Studio Dark (PADRÃO)
+        #8FA0B2, // [1] Midnight Blue
+        #9A8FB0, // [2] Violeta Ruana
+        #9BA38A, // [3] Volt
+        #B0A090, // [4] Sunset
+        #8FAAA6, // [5] Ocean Teal
+        #B0B0B0  // [6] PAPER (claro) ★
+    ];
+
+    // SEMÂNTICO: OK / sucesso.
+    private property <[color]> ok-list: [
+        #6FA86B, // [0] Studio Dark (PADRÃO)
+        #6FA86B, // [1] Midnight Blue
+        #6FA86B, // [2] Violeta Ruana
+        #8FC14F, // [3] Volt
+        #8FAA6B, // [4] Sunset
+        #6FA86B, // [5] Ocean Teal
+        #00A35C  // [6] PAPER (claro) ★
+    ];
+
+    // SEMÂNTICO: aviso (warn).
+    private property <[color]> warn-list: [
+        #F2B021, // [0] Studio Dark (PADRÃO)
+        #F2B021, // [1] Midnight Blue
+        #F2B021, // [2] Violeta Ruana
+        #F2B021, // [3] Volt
+        #F2B021, // [4] Sunset
+        #F2B021, // [5] Ocean Teal
+        #C77D02  // [6] PAPER (claro) ★
+    ];
+
+    // SEMÂNTICO: perigo / erro.
+    private property <[color]> danger-list: [
+        #C80014, // [0] Studio Dark (PADRÃO)
+        #C80014, // [1] Midnight Blue
+        #C80014, // [2] Violeta Ruana
+        #C80014, // [3] Volt
+        #C80014, // [4] Sunset
+        #C80014, // [5] Ocean Teal
+        #FF4032  // [6] PAPER (claro) ★
+    ];
+
+    // TOGGLES ATIVOS (follow/snap) — verde fixo nos temas escuros,
+    // no Paper mantém o accent (claro).
+    private property <[color]> toggle-active-bg-list: [
+        #00C853, // [0] Studio Dark (PADRÃO)
+        #00C853, // [1] Midnight Blue
+        #00C853, // [2] Violeta Ruana
+        #00C853, // [3] Volt
+        #00C853, // [4] Sunset
+        #00C853, // [5] Ocean Teal
+        #00C853  // [6] PAPER (claro) ★ mantém accent
+    ];
+
+    // COR DA PLAYHEAD.
+    private property <[color]> playhead-list: [
+        #DC143C, // [0] Studio Dark (PADRÃO)
+        #DC143C, // [1] Midnight Blue
+        #DC143C, // [2] Violeta Ruana
+        #DC143C, // [3] Volt
+        #DC143C, // [4] Sunset
+        #DC143C, // [5] Ocean Teal
+        #DC143C  // [6] PAPER (claro) ★
+    ];
+
+    // CRIMSON — fundo das ferramentas ativas na toolbar (antes era accent verde).
+    private property <[color]> crimson-list: [
+        #DC143C, // [0] Studio Dark (PADRÃO)
+        #DC143C, // [1] Midnight Blue
+        #DC143C, // [2] Violeta Ruana
+        #DC143C, // [3] Volt
+        #DC143C, // [4] Sunset
+        #DC143C, // [5] Ocean Teal
+        #DC143C  // [6] PAPER (claro) ★
+    ];
+
+    // TEXTO/ÍCONE quando sobre CRIMSON (contraste claro).
+    private property <[color]> on-crimson-list: [
+        #FFFFFF, // [0] Studio Dark (PADRÃO)
+        #FFFFFF, // [1] Midnight Blue
+        #FFFFFF, // [2] Violeta Ruana
+        #FFFFFF, // [3] Volt
+        #FFFFFF, // [4] Sunset
+        #FFFFFF, // [5] Ocean Teal
+        #FFFFFF  // [6] PAPER (claro) ★
+    ];
+
+    // CLIPS DE ÁUDIO.
+    private property <[color]> clip-audio-list: [
+        #00C853, // [0] Studio Dark (PADRÃO)
+        #4FA8FF, // [1] Midnight Blue
+        #B85CFF, // [2] Violeta Ruana
+        #A8FF00, // [3] Volt
+        #FF9F43, // [4] Sunset
+        #2EC4B6, // [5] Ocean Teal
+        #E0AA2A  // [6] PAPER (claro) ★
+    ];
+
+    // CLIPS DE MIDI.
+    private property <[color]> clip-midi-list: [
+        #6FA86B, // [0] Studio Dark (PADRÃO)
+        #6FA86B, // [1] Midnight Blue
+        #6FA86B, // [2] Violeta Ruana
+        #8FC14F, // [3] Volt
+        #8FAA6B, // [4] Sunset
+        #6FA86B, // [5] Ocean Teal
+        #52BA46  // [6] PAPER (claro) ★
+    ];
+
+    // ESTADO "ATIVO" (recém-ativado / destaque).
+    private property <[color]> activ-list: [
+        #10f100, // [0] Studio Dark (PADRÃO)
+        #4FA8FF, // [1] Midnight Blue
+        #B85CFF, // [2] Violeta Ruana
+        #A8FF00, // [3] Volt
+        #FF9F43, // [4] Sunset
+        #2EC4B6, // [5] Ocean Teal
+        #52BA46  // [6] PAPER (claro) ★
+    ];
+
+    // GRID PRINCIPAL da timeline.
+    private property <[color]> grid-line-list: [
+        #757575, // [0] Studio Dark (PADRÃO) — visível sobre surface-step #424242
+        #4A5A70, // [1] Midnight Blue — visível sobre surface-step #232D38
+        #4A4466, // [2] Violeta Ruana — visível sobre surface-step #272334
+        #4A4D3A, // [3] Volt — visível sobre surface-step #20231A
+        #5A4E3A, // [4] Sunset — visível sobre surface-step #30261F
+        #3A5C66, // [5] Ocean Teal — visível sobre surface-step #192C31
+        #D6D6D6  // [6] PAPER (claro) ★
+    ];
+
+    // SUB-GRID (divisões menores da timeline).
+    private property <[color]> grid-sub-list: [
+        #454545, // [0] Studio Dark (PADRÃO) — visível sobre surface-step #424242
+        #2A3645, // [1] Midnight Blue — sutil sobre surface-step #232D38
+        #2F2C42, // [2] Violeta Ruana — sutil sobre surface-step #272334
+        #2A2D24, // [3] Volt — sutil sobre surface-step #20231A
+        #3A3028, // [4] Sunset — sutil sobre surface-step #30261F
+        #21363C, // [5] Ocean Teal — sutil sobre surface-step #192C31
+        #EFEFEF  // [6] PAPER (claro) ★
+    ];
+
+    // TIMELINE BG — degrau próprio da timeline: mais claro que
+    // `base`, mais escuro que `surface-step`. Não usar fora dela.
+    private property <[color]> timeline-bg-list: [
+        #696969, // [0] Studio Dark — entre base #313131 e surface #242424
+        #1E2C35, // [1] Midnight Blue — entre base #161A21 e surface #1D242E
+        #1F1B28, // [2] Violeta Ruana — entre base #191722 e surface #221E2E
+        #181B11, // [3] Volt — entre base #14160E e surface #1C1F15
+        #252119, // [4] Sunset — entre base #211A12 e surface #2A2117
+        #122628, // [5] Ocean Teal — entre base #0F1E21 e surface #15262A
+        #797979  // [6] PAPER (claro) — entre base #646464 e surface #919191
+    ];
+
+    // SURFACE-STEP — um degrau acima de `surface`, o fundo do GRID
+    // da timeline. É o que `grid-line`/`grid-sub` precisam enxergar.
+    private property <[color]> surface-step-list: [
+        #424242, // [0] Studio Dark — entre #242424 e #555555
+        #232D38, // [1] Midnight Blue — entre #1D242E e #26303D
+        #272334, // [2] Violeta Ruana — entre #221E2E e #2D2740
+        #20231A, // [3] Volt — entre #1C1F15 e #262A1D
+        #30261F, // [4] Sunset — entre #2A2117 e #362A1B
+        #192C31, // [5] Ocean Teal — entre #15262A e #1E3035
+        #7A7A7A  // [6] PAPER (claro) — distinto de base #646464 e surface #919191
+    ];
+
+    private property <int> clamp: min(max(0, active), base-list.length - 1);
+
+    // Tokens expostos — a UI usa apenas estes nomes:
+    in property <color> base: base-list[clamp];
+    in property <color> surface: surface-list[clamp];
+    in property <color> surface-high: surface-high-list[clamp];
+    in property <color> border: border-list[clamp];
+    in property <color> shadow: shadow-list[clamp];
+    in property <color> accent: accent-list[clamp];
+    in property <color> accent-hover: accent-hover-list[clamp];
+    in property <color> on-accent: on-accent-list[clamp];
+    in property <color> text-primary: text-primary-list[clamp];
+    in property <color> text-dim: text-dim-list[clamp];
+    in property <color> ok: ok-list[clamp];
+    in property <color> warn: warn-list[clamp];
+    in property <color> danger: danger-list[clamp];
+    in property <color> playhead: playhead-list[clamp];
+    in property <color> crimson: crimson-list[clamp];
+    in property <color> on-crimson: on-crimson-list[clamp];
+    in property <color> clip-audio: clip-audio-list[clamp];
+    in property <color> clip-midi: clip-midi-list[clamp];
+    in property <color> activ: activ-list[clamp];
+    in property <color> grid-line: grid-line-list[clamp];
+    in property <color> grid-sub: grid-sub-list[clamp];
+    in property <color> toggle-active-bg: toggle-active-bg-list[clamp];
+    in property <bool> is-paper: active == 6;
+    in property <color> timeline-bg: timeline-bg-list[clamp];
+    in property <color> surface-step: surface-step-list[clamp];
+}

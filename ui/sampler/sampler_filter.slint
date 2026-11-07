@@ -1,0 +1,133 @@
+import { Theme } from "../theme.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCurves } from "sampler_curves.slint";
+import {
+    SamplerCard,
+    SamplerKnob,
+    SamplerSegments,
+    SamplerCurve,
+} from "sampler_widgets.slint";
+
+// ============================================================
+// FILTER
+// ============================================================
+//
+// Mesma correção do PITCH: a versão anterior fixava 3 Knobs de 54px
+// em x: 8/70/132, os 4 botões de tipo em x: 8..144 e a curva em y: 68
+// com 100px de altura — 210px de altura exigidos, mais os 34px de
+// respiro do título.
+//
+// A curva agora é um `SamplerCurve` (Path de verdade, viewbox 1000),
+// então o poço acompanha a altura que sobrar em vez de ter 100px
+// cravados. O tipo virou `SamplerSegments`, que é o mesmo controle
+// usado no LFO — um widget em vez de quatro botões posicionados.
+// ============================================================
+
+export component SamplerFilter inherits Rectangle {
+
+    in-out property <float> cutoff: 0.75;
+    in-out property <float> resonance: 0.0;
+    in-out property <float> drive: 0.0;
+
+    in-out property <string> filter-type: "LP";
+
+    in-out property <bool> enabled: false;
+
+    in-out property <bool> compact: false;
+
+    callback cutoff-changed(float);
+    callback resonance-changed(float);
+    callback drive-changed(float);
+    callback filter-type-changed(string);
+    callback enabled-changed(bool);
+
+    SamplerCard {
+        title: "FILTER";
+        accent: SamplerStyle.sec-filter;
+        compact: root.compact;
+        has-toggle: true;
+        on: root.enabled;
+
+        width: 100%;
+        height: 100%;
+
+        toggled => {
+            root.enabled = !root.enabled;
+            root.enabled-changed(root.enabled);
+        }
+
+        SamplerCurve {
+            commands: SamplerCurves.filter-curve(
+                root.filter-type,
+                root.cutoff,
+                root.resonance,
+                true
+            );
+            stroke: SamplerStyle.sec-filter;
+            dim: !root.enabled;
+            compact: root.compact;
+            vertical-stretch: 1;
+        }
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
+
+            SamplerKnob {
+                label: "CUTOFF";
+                value: root.cutoff;
+                default-value: 0.75;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-filter;
+                value-text: SamplerStyle.fmt-hz(root.cutoff);
+
+                changed(value) => {
+                    root.cutoff = value;
+                    root.cutoff-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "RESO";
+                value: root.resonance;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-filter;
+                value-text: SamplerStyle.fmt-q(root.resonance);
+
+                changed(value) => {
+                    root.resonance = value;
+                    root.resonance-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "DRIVE";
+                value: root.drive;
+                enabled: root.enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-filter;
+                value-text: SamplerStyle.fmt-gain-db(root.drive);
+
+                changed(value) => {
+                    root.drive = value;
+                    root.drive-changed(value);
+                }
+            }
+        }
+
+        SamplerSegments {
+            options: ["LP", "HP", "BP", "NOTCH"];
+            value: root.filter-type;
+            enabled: root.enabled;
+            compact: root.compact;
+            accent: SamplerStyle.sec-filter;
+
+            picked(choice) => {
+                root.filter-type = choice;
+                root.filter-type-changed(choice);
+            }
+        }
+    }
+}

@@ -1,0 +1,341 @@
+import { Button } from "./button.slint";
+import { Theme } from "../theme.slint";
+
+export component BarProperties inherits Rectangle {
+
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
+    callback tool-changed(int);
+
+    in-out property <int> active-tool: 0;
+
+    in-out property <bool> clip-pool-open: false;
+    in-out property <bool> beat-open: false;
+    in-out property <bool> explorer-visible: true;
+    in-out property <bool> panel-visible: true;
+
+    // ============================================================
+    // PARÂMETROS
+    // ============================================================
+
+    in-out property <float> gain: 0.0;
+    in-out property <float> pitch: 0.0;
+    in-out property <int> octave: 0;
+    
+    // NOVOS PARÂMETROS (Mesmo padrão visual)
+    in-out property <float> pan: 0.0;
+    in-out property <bool> phase-inverted: false;
+    in-out property <bool> reversed: false;
+
+    // Volume geral da DAW (canal Master)
+    in-out property <float> master-volume: 0.8;
+    callback master-volume-changed(float);
+
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
+
+    height: 32px;
+
+    background: transparent;
+    
+
+
+    // ============================================================
+    // ÚNICO HORIZONTAL LAYOUT
+    // ============================================================
+
+    HorizontalLayout {
+
+        x: 0px;
+        y: 0px;
+
+        width: 100%;
+        height: 100%;
+
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 3px;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+
+        HorizontalLayout {
+
+        // ========================================================
+        // CLIP POOL
+        // ========================================================
+
+        Button {
+            drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+            width: 18px;
+            height: 18px;
+            resting-bg: Theme.surface-high;
+            icon: @image-url("../icons/clippool.svg");
+            icon-size: 16px;
+            icon-color: Theme.text-primary;
+            text: "";
+            borderless: true;
+            corner-radius: 4px;
+            toggled: root.clip-pool-open;
+            toggled-fg: Theme.on-accent;
+            toggled-bg: Theme.accent;
+            toggled-icon-color: Theme.on-accent;
+            subtle-toggled: false;
+            clicked => {
+                root.clip-pool-open = !root.clip-pool-open;
+            }
+        }
+    }
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
+
+        HorizontalLayout {
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+        // ========================================================
+        // GAIN
+        // ========================================================
+        Rectangle {
+            width: 58px; height: 26px; background: transparent;
+            VerticalLayout {
+                spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
+                Text { text: "GAIN"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
+                TextInput { text: root.gain + " dB"; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
+            }
+            
+        }
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
+
+        // ========================================================
+        // PITCH
+        // ========================================================
+        Rectangle {
+            width: 58px; height: 26px; background: transparent;
+            VerticalLayout {
+                spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
+                Text { text: "PITCH"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
+                Text { text: root.pitch + " st"; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
+            }
+        }
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
+
+        // ========================================================
+        // OCTAVE
+        // ========================================================
+        Rectangle {
+            width: 58px; height: 26px; background: transparent;
+            VerticalLayout {
+                spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
+                Text { text: "OCTAVE"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
+                TextInput { text: root.octave + " oct"; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
+            }
+        }
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
+
+        // ========================================================
+        // PAN
+        // ========================================================
+        Rectangle {
+            width: 58px; height: 26px; background: transparent;
+            VerticalLayout {
+                spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
+                Text { text: "PAN"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
+                TextInput { text: root.pan == 0 ? "C" : root.pan; color: Theme.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; }
+            }
+        }
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
+
+        // ========================================================
+        // INVERT PHASE
+        // ========================================================
+        Rectangle {
+            width: 58px; height: 26px; background: transparent;
+            
+            TouchArea {
+                clicked => { root.phase-inverted = !root.phase-inverted; }
+            }
+
+            VerticalLayout {
+                spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
+                Text { text: "PHASE"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
+                Text { 
+                    text: root.phase-inverted ? "180°" : "0°"; 
+                    color: root.phase-inverted ? Theme.accent : Theme.text-primary; 
+                    font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; 
+                }
+            }
+        }
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
+
+        // ========================================================
+        // REVERSE
+        // ========================================================
+        Rectangle {
+            width: 58px; height: 26px; background: transparent;
+            
+            TouchArea {
+                clicked => { root.reversed = !root.reversed; }
+            }
+
+            VerticalLayout {
+                spacing: 0px; alignment: LayoutAlignment.center; cross-axis-alignment: CrossAxisAlignment.center;
+                Text { text: "REVERSE"; color: Theme.text-dim; font-size: 8px; horizontal-alignment: center; vertical-alignment: center; height: 11px; }
+                Text { 
+                    text: root.reversed ? "ON" : "OFF"; 
+                    color: root.reversed ? Theme.accent : Theme.text-primary; 
+                    font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; height: 13px; 
+                }
+            }
+        }
+    }
+
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
+
+        HorizontalLayout {
+            spacing: 2px;
+            alignment: LayoutAlignment.end;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+        // ========================================================
+        // DIVISOR
+        // ========================================================
+        Rectangle { width: 1px; height: 20px; background: Theme.border;
+        drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+ }
+
+        // ========================================================
+        // DRUM / BEAT
+        // ========================================================
+        Button {
+            drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+            width: 18px; height: 18px; resting-bg: Theme.surface-high;
+            icon: @image-url("../icons/drum.svg"); icon-size: 16px; icon-color: Theme.text-primary;
+            text: ""; borderless: true; corner-radius: 4px;
+            toggled: root.beat-open;
+            toggled-fg: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
+            toggled-bg: Theme.accent;
+            toggled-icon-color: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
+            subtle-toggled: false;
+            clicked => { root.beat-open = !root.beat-open; }
+        }
+
+        // ========================================================
+        // EXPLORER
+        // ========================================================
+        Button {
+            drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+            width: 18px; height: 18px; resting-bg: Theme.surface-high;
+            icon: @image-url("../icons/folder.svg"); icon-size: 16px; icon-color: Theme.text-primary;
+            text: ""; borderless: true; corner-radius: 4px;
+            toggled: root.explorer-visible;
+            toggled-fg: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
+            toggled-bg: Theme.accent;
+            toggled-icon-color: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
+            subtle-toggled: false;
+            clicked => { root.explorer-visible = !root.explorer-visible; }
+        }
+
+        // ========================================================
+        // PANEL
+        // ========================================================
+        Button {
+            drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+            width: 18px; height: 18px; resting-bg: Theme.surface-high;
+            icon: @image-url("../icons/restore.svg"); icon-size: 16px; icon-color: Theme.text-primary;
+            text: ""; borderless: true; corner-radius: 4px;
+            toggled: root.panel-visible;
+            toggled-fg: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
+            toggled-bg: Theme.accent;
+            toggled-icon-color: Theme.is-paper ? Theme.text-primary : Theme.on-accent;
+            subtle-toggled: false;
+            clicked => { root.panel-visible = !root.panel-visible; }
+        }
+    }
+    }
+}

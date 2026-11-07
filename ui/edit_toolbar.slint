@@ -1,0 +1,292 @@
+import { Button } from "components/button.slint";
+import { Theme } from "theme.slint";
+
+export component EditToolbar inherits Rectangle {
+
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
+    in-out property <int> active-tool: 0;
+
+    in-out property <bool> clip-pool-open: false;
+    in-out property <bool> beat-open: false;
+    in-out property <bool> explorer-visible: true;
+    in-out property <bool> panel-visible: true;
+
+    callback tool-changed(int);
+
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
+
+    height: 20px;
+    background: transparent;
+
+
+    // ============================================================
+    // TOOLBAR - LAYOUT PROFISSIONAL (CORRIGIDO PARA RELEASE)
+    // ============================================================
+
+    HorizontalLayout {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        spacing: 0px;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        padding-left: 4px;
+        padding-right: 4px;
+
+        // CENTER - ferramentas principais
+        HorizontalLayout {
+            spacing: 2px;
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+            horizontal-stretch: 1;
+
+            // =================================================
+            // SELECT - 0
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/select.svg");
+                filled-icon: @image-url("icons/select_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                padding-x: 0px;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+
+                toggled: root.active-tool == 0;
+
+                toggled-fg: Theme.on-crimson;
+                toggled-bg: Theme.crimson;
+                toggled-icon-color: Theme.on-crimson;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 0;
+                    root.tool-changed(0);
+                }
+            }
+
+            // =================================================
+            // DRAW - 4
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/draw.svg");
+                filled-icon: @image-url("icons/draw_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                toggled: root.active-tool == 4;
+
+                toggled-fg: Theme.on-crimson;
+                toggled-bg: Theme.crimson;
+                toggled-icon-color: Theme.on-crimson;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 4;
+                    root.tool-changed(4);
+                }
+            }
+
+
+            // =================================================
+            // SLICE - 1
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/slice.svg");
+                filled-icon: @image-url("icons/slice_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                toggled: root.active-tool == 1;
+
+                toggled-fg: Theme.on-crimson;
+                toggled-bg: Theme.crimson;
+                toggled-icon-color: Theme.on-crimson;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 1;
+                    root.tool-changed(1);
+                }
+            }
+
+
+            // =================================================
+            // GLUE - 2
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/glue.svg");
+                filled-icon: @image-url("icons/glue_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                toggled: root.active-tool == 2;
+
+                toggled-fg: Theme.on-crimson;
+                toggled-bg: Theme.crimson;
+                toggled-icon-color: Theme.on-crimson;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 2;
+                    root.tool-changed(2);
+                }
+            }
+
+
+            // =================================================
+            // STRETCH - 3
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/expand_diag.svg");
+                filled-icon: @image-url("icons/stretch_filled.svg");
+
+                icon-size: 16px;
+                icon-color: Theme.text-primary;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                toggled: root.active-tool == 3;
+
+                toggled-fg: Theme.on-crimson;
+                toggled-bg: Theme.crimson;
+                toggled-icon-color: Theme.on-crimson;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 3;
+                    root.tool-changed(3);
+                }
+            }
+
+
+
+            // =================================================
+            // ERASE - 5
+            // =================================================
+
+            Button {
+                width: 18px;
+                height: 18px;
+
+                resting-bg: Theme.surface-high;
+
+                icon: @image-url("icons/erase.svg");
+                filled-icon: @image-url("icons/erase_filled.svg");
+
+                icon-color: Theme.text-primary;
+                icon-size: 16px;
+
+                text: "";
+
+                borderless: true;
+                corner-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                toggled: root.active-tool == 5;
+
+                toggled-fg: Theme.on-crimson;
+                toggled-bg: Theme.crimson;
+                toggled-icon-color: Theme.on-crimson;
+
+                subtle-toggled: false;
+
+                clicked => {
+                    root.active-tool = 5;
+                    root.tool-changed(5);
+                }
+            }
+        }
+    }
+}

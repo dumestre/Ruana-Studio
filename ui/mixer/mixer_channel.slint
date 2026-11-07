@@ -1,0 +1,489 @@
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+import { PanControl } from "pan_control.slint";
+import { Meter } from "../components/meter.slint";
+import { InsertSlot } from "insert_slot.slint";
+import { AudioScale } from "../components/audio_scale.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component MixerChannel inherits Rectangle {
+
+    // ==========================================
+    // IDENTIDADE
+    // ==========================================
+
+    in property <string> name: "";
+    in property <color> channel-color: Theme.accent;
+    in property <bool> is-master: false;
+    in property <int> channel-index: 0;
+    in property <bool> selected: false;
+    callback select-requested(int);
+
+    in property <length> available-height: 200px;
+
+    // ==========================================
+    // ESTADO
+    // ==========================================
+
+    in property <bool> muted: false;
+    in property <bool> soloed: false;
+    in property <bool> arm: false;
+
+    // Mudado para 'in-out' para podermos alterar visualmente ao arrastar!
+    in-out property <float> volume: 0.8;
+    
+    in-out property <float> pan: 0.5;
+
+    // Medição real, em dB normalizado (0..1). Quem popula é o
+    // `MeterPump` a partir do pico que a engine publica — não existe
+    // mais VU simulado.
+    in property <float> left-level: 0.0;
+    in property <float> right-level: 0.0;
+    in property <float> left-peak: 0.0;
+    in property <float> right-peak: 0.0;
+    in property <bool> left-clipped: false;
+    in property <bool> right-clipped: false;
+
+    // ==========================================
+    // INSERTS
+    // ==========================================
+
+    in property <int> max-slot-count: 8;
+    min-height: 140px;
+    in property <int> insert-count: 0;
+    in property <[string]> insert-names: [];
+    in property <[bool]> insert-enabled: [];
+
+    // ==========================================
+    // CALLBACKS
+    // ==========================================
+
+    callback param-changed(int, string, float);
+
+    callback insert-add();
+    callback insert-remove(int);
+    callback insert-toggle(int);
+
+    // Clique na luz de clip: apaga o latch daquele canal.
+    callback clear-clip(int);
+
+    // ==========================================
+    // DISPLAY
+    // ==========================================
+
+
+    // O LCD passa a ler a curva oficial em vez de repetir a fórmula
+    // `-60 + pos*60` aqui. As duas versões divergiram uma vez e o
+    // medidor passou a discordar do número ao lado.
+    //
+    // O fundo é silêncio DE VERDADE (ver `AudioScale.fader-pos-to-
+    // linear`), então "-60.0 dB" mentiria ali: o ganho é zero. O piso
+    // da escala é onde a barra para de descer, não onde a faixa cala.
+    property <string> vol-display:
+        AudioScale.fader-pos-to-db(root.volume).to-fixed(1);
+
+    // ==========================================
+    // CHANNEL
+    // ==========================================
+
+    width: 100px;
+    background: Theme.surface;
+
+    // Seleciona ao clicar em áreas livres; o editor de dB, em z superior,
+    // encaminha seus próprios cliques para o campo de texto.
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.select-requested(root.channel-index); }
+        z: -1;
+    }
+
+    // ==========================================
+    // DIVISÓRIA
+    // ==========================================
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 22px;
+        background: root.channel-color;
+
+        Text {
+            text: root.name;
+            color: #17191d;
+            font-size: 10px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: 100%;
+            height: 100%;
+            overflow: elide;
+        }
+    }
+
+    Rectangle {
+        x: parent.width - 1px;
+        y: 0px;
+        width: 1px;
+        height: parent.height;
+        background: Theme.border;
+        z: 2;
+    }
+
+    Rectangle {
+        x: 0px;
+        y: 22px;
+        width: parent.width - 1px;
+        height: parent.height - 22px;
+        background: transparent;
+        border-width: root.selected ? 1px : 0px;
+        border-color: root.channel-color;
+        z: 1;
+    }
+
+    // ==========================================
+    // CHANNEL STRIP
+    // ==========================================
+
+    VerticalLayout {
+        padding: 5px;
+        spacing: 4px;
+        vertical-stretch: 1;
+
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        // ======================================
+        // HEADER
+        // ======================================
+
+        Rectangle {
+            height: 22px;
+            background: transparent;
+        }
+
+        // ======================================
+        // MUTE / SOLO / RECORD
+        // ======================================
+
+        HorizontalLayout {
+            height: 18px;
+
+            spacing: 2px;
+
+            alignment: LayoutAlignment.center;
+            cross-axis-alignment: CrossAxisAlignment.center;
+
+            // MUTE
+            Button {
+                width: 18px;
+                height: 16px;
+                // Botão em repouso é SEMPRE `surface-high` — o mesmo
+                // descanso da toolbar e da edit_toolbar. Era `base`,
+                // que é o POÇO: deixava o botão mais escuro que o
+                // painel que o contém (um degrau para trás).
+                resting-bg: Theme.surface-high;
+                corner-radius: 2px;
+                
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                text: "M";
+
+                toggled: root.muted;
+                // Era `surface` — idêntico ao fundo do canal, então
+                // o mute ligado não mudava nada na tela.
+                toggled-bg: Theme.accent;
+
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "muted",
+                        root.muted ? 0.0 : 1.0
+                    );
+                }
+            }
+
+            // SOLO
+            if !root.is-master: Button {
+                width: 16px;
+                height: 16px;
+                resting-bg: Theme.surface-high;
+                corner-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                text: "S";
+
+                toggled: root.soloed;
+                toggled-bg: Theme.accent;
+
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "soloed",
+                        root.soloed ? 0.0 : 1.0
+                    );
+                }
+            }
+
+            // RECORD
+            if !root.is-master: Button {
+                width: 16px;
+                height: 16px;
+                resting-bg: Theme.surface-high;
+                corner-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                text: "R";
+
+                toggled: root.arm;
+                toggled-bg: Theme.danger;
+
+                clicked => {
+                    root.param-changed(
+                        root.channel-index,
+                        "arm",
+                        root.arm ? 0.0 : 1.0
+                    );
+                }
+            }
+        }
+
+        // ======================================
+        // INSERTS
+        // ======================================
+
+        VerticalLayout {
+            // MIDDLE FLEX: a única região elástica da faixa. `min-height:
+            // 0` garante que ela cede espaço ANTES do bloco de fader/meter
+            // quando o painel está baixo — sem isso o Slint esmagava o
+            // bottom fixo e o meter sumia.
+            min-height: 0px;
+            spacing: 2px;
+
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.center;
+            horizontal-stretch: 0;
+
+            vertical-stretch: 1;
+
+            // Scrollable area for insert slots
+            ScrollView {
+                width: 100%;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    cross-axis-alignment: CrossAxisAlignment.center;
+                    horizontal-stretch: 1;
+                    spacing: 2px;
+                    width: 100%;
+
+                    for j in [0, 1, 2, 3, 4, 5, 6, 7]: InsertSlot {
+                        visible: j < root.insert-count;
+
+                        slot-index: j;
+
+                        name: root.insert-names[
+                            root.channel-index * root.max-slot-count + j
+                        ];
+
+                        enabled: root.insert-enabled[
+                            root.channel-index * root.max-slot-count + j
+                        ];
+
+                        toggle() => {
+                            root.insert-toggle(j);
+                        }
+
+                        remove() => {
+                            root.insert-remove(j);
+                        }
+                    }
+                }
+            }
+
+            // ADD INSERT (always visible at bottom)
+            Button {
+                text: "+";
+
+                width: 18px;
+                height: 18px;
+
+                padding-x: 0px;
+            
+
+                preferred-width: 0px;
+                // O descanso herdado (`surface`) era idêntico ao fundo
+                // do canal — o "+" só aparecia quando o mouse passava
+                // em cima. Alinhado com o repouso do M/S/R acima.
+                resting-bg: Theme.surface-high;
+
+                corner-radius: 3px;
+
+                text-color: Theme.text-dim;
+
+                clicked => {
+                    root.insert-add();
+                }
+            }
+        }
+
+            // ======================================
+        // PAN
+        // ======================================
+
+        PanControl {
+            horizontal-stretch: 1;
+            value <=> root.pan;
+            changed(v) => {
+                root.param-changed(root.channel-index, "pan", v);
+            }
+        }
+
+        
+
+        // ======================================
+        // FADER + METER + DB DISPLAY
+        //
+        // BOTTOM FIXO. `min-height` é o piso do bloco: mesmo com o
+        // painel baixo, o Slint não pode esmagar fader/meter/dB — era
+        // isso que fazia a parte de baixo da faixa "sumir" e só voltar
+        // quando a janela crescia. 131px = meter 110 + dB 16 + spacing 5.
+        // Quem cede espaço é a região de inserts (flex + scroll acima).
+        // ======================================
+
+        VerticalLayout {
+            // `preferred-height` (não `height`): o Slint rejeita
+            // `height` junto com `min-height` ("Cannot specify both").
+            // Assim o bloco fica com 200px quando há espaço e nunca
+            // desce abaixo de 131px.
+            preferred-height: 200px;
+            min-height: 131px;
+            spacing: 5px;
+            alignment: LayoutAlignment.start;
+            cross-axis-alignment: CrossAxisAlignment.center;
+            vertical-stretch: 0; // Explicitly prevent vertical stretching
+
+        
+
+            VerticalLayout {
+                cross-axis-alignment: CrossAxisAlignment.center;
+                height: 100%;
+
+            // O medidor e o fader são o MESMO componente agora: o
+            // triângulo vive sobre a própria barra. Tira exatamente a
+            // duplicação que fazia o número do LCD e o desenho do
+            // controle discordarem.
+            Meter {
+               
+                horizontal-stretch: 0;
+                vertical-stretch: 1; // Explicitly prevent vertical stretching
+
+                // Sem isto a luz de clip devolveria o índice padrão (0)
+                // e o clique no canal 5 apagaria o latch do canal 0.
+                channel-index: root.channel-index;
+                fader-color: root.channel-color;
+                empty-meter-color: Theme.is-paper
+                    ? Theme.surface.darker(0.2)
+                    : Theme.surface.brighter(0.65);
+
+                left-level: root.left-level;
+                right-level: root.right-level;
+                left-peak: root.left-peak;
+                min-height: 110px;
+                right-peak: root.right-peak;
+                left-clipped: root.left-clipped;
+                right-clipped: root.right-clipped;
+
+                volume <=> root.volume;
+
+                volume-changed(v) => {
+                    root.param-changed(root.channel-index, "volume", v);
+                }
+
+                clip-cleared(ch) => {
+                    root.clear-clip(ch);
+                }
+            }
+
+            // ==================================
+            // DB DISPLAY
+            // ==================================
+            Rectangle {
+                width: 58px;
+                height: 16px;
+                vertical-stretch: 0; // Explicitly prevent vertical stretching
+
+                background: Theme.base;
+
+                border-radius: 3px;
+                border-width: 1px;
+                border-color: Theme.border;
+
+                HorizontalLayout {
+                    padding-left: 2px;
+                    padding-right: 2px;
+                    spacing: 4px;
+                    alignment: LayoutAlignment.center;
+                    cross-axis-alignment: CrossAxisAlignment.center;
+                    width: 100%;
+                    height: 100%;
+
+                    db-value-input := TextInput {
+                        text: root.vol-display;
+                        // Decimal aceita sinal negativo e separador decimal.
+                        input-type: decimal;
+                        horizontal-stretch: 1;
+                        height: 100%;
+                        color: Theme.text-primary;
+                        font-size: 9px;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+
+                        accepted => {
+                            root.volume = AudioScale.db-to-fader-pos(self.text.to-float());
+                            root.param-changed(root.channel-index, "volume", root.volume);
+                            self.clear-focus();
+                        }
+                    }
+
+                    Text {
+                        text: "dB";
+                        width: 12px;
+                        height: 100%;
+                        color: Theme.text-dim;
+                        font-size: 8px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // A caixa inteira edita o valor. Isso também encaminha
+                // cliques no sufixo dB ao campo sem selecionar o canal.
+                TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: text;
+                    clicked => {
+                        db-value-input.focus();
+                        db-value-input.select-all();
+                    }
+                    z: 10;
+                }
+            }
+        }
+        }
+    }
+}

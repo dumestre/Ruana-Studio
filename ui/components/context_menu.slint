@@ -1,0 +1,232 @@
+import { Theme } from "../theme.slint";
+
+// ============================================================
+// ITEM DE MENU
+//
+// label      — texto exibido
+// action     — identificador devolvido em action-chosen
+// separator  — renderiza como linha divisória (ignora label)
+// danger     — estilo de ação destrutiva (Theme.warn)
+// disabled   — esmaecido e não clicável
+// ============================================================
+
+export struct MenuItem {
+    label: string,
+    action: string,
+    separator: bool,
+    danger: bool,
+    disabled: bool,
+}
+
+
+// ============================================================
+// ESTADO GLOBAL DO MENU DE CONTEXTO DE CLIP
+//
+// Permite que qualquer elemento profundo (ex.: TrackClip)
+// abra o menu sem plumbagem de callbacks por N camadas.
+// Coordenadas são relativas à janela.
+// ============================================================
+
+export global ClipContextMenuState {
+    in-out property <bool> open: false;
+    in-out property <length> x: 0px;
+    in-out property <length> y: 0px;
+    in-out property <int> clip-id: -1;
+}
+
+
+// ============================================================
+// CONTEXT MENU
+//
+// Menu genérico reutilizável. Instancie como overlay ocupando
+// todo o pai (janela ou painel) e alimente `items` com
+// [MenuItem]. Fecha ao clicar fora ou ao escolher um item.
+// ============================================================
+
+export component ContextMenu inherits Rectangle {
+
+    // --------------------------------------------------------
+    // API
+    // --------------------------------------------------------
+
+    in-out property <bool> open: false;
+
+    in property <length> menu-x: 0px;
+
+    in property <length> menu-y: 0px;
+
+    in property <[MenuItem]> items: [];
+
+    in property <string> title: "";
+
+    in property <length> menu-width: 150px;
+
+    callback action-chosen(string);
+
+
+    // --------------------------------------------------------
+    // DIMENSÃO / VISIBILIDADE
+    // --------------------------------------------------------
+
+    background: transparent;
+
+    visible: root.open;
+
+    clip: false;
+
+
+    private property <length> panel-height:
+        (root.title == "" ? 0px : 26px)
+        + root.items.length * 24px
+        + 2px;
+
+
+    // --------------------------------------------------------
+    // BACKDROP — clique fora fecha
+    // --------------------------------------------------------
+
+    TouchArea {
+
+        clicked => {
+            root.open = false;
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // PAINEL
+    // --------------------------------------------------------
+
+    panel := Rectangle {
+
+        x:
+            min(
+                max(4px, root.menu-x),
+                max(4px, parent.width - root.menu-width - 4px)
+            );
+
+        y:
+            min(
+                max(4px, root.menu-y),
+                max(4px, parent.height - root.panel-height - 4px)
+            );
+
+        width: root.menu-width;
+
+        background: Theme.surface-high;
+
+        border-radius: 4px;
+
+        border-width: 1px;
+        border-color: Theme.border;
+
+        z: 30;
+
+        drop-shadow-blur: 12px;
+        drop-shadow-color: #00000066;
+        drop-shadow-offset-y: 3px;
+
+
+        VerticalLayout {
+
+            padding: 2px;
+            spacing: 0px;
+
+
+            // ====================================================
+            // TÍTULO OPCIONAL
+            // ====================================================
+
+            if root.title != "" : Rectangle {
+
+                height: 26px;
+
+                Text {
+
+                    text: root.title;
+
+                    width: 100%;
+                    height: 100%;
+
+                    color: Theme.text-dim;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+            }
+
+
+            // ====================================================
+            // ITENS
+            // ====================================================
+
+            for it in root.items: Rectangle {
+
+                touch := TouchArea {
+
+                    enabled:
+                        !it.separator
+                        && !it.disabled;
+
+                    clicked => {
+                        root.action-chosen(it.action);
+                        root.open = false;
+                    }
+                }
+
+                property <bool> hovered:
+                    touch.has-hover;
+
+                height:
+                    it.separator ? 1px : 24px;
+
+                background:
+                    !it.separator
+                    && self.hovered
+                    && !it.disabled
+                        ? Theme.accent.transparentize(0.82)
+                        : transparent;
+
+                border-radius: 3px;
+
+
+                if it.separator : Rectangle {
+
+                    y: 0;
+
+                    width: parent.width;
+                    height: 1px;
+
+                    background: Theme.border;
+                }
+
+
+                if !it.separator : Text {
+
+                    text: it.label;
+
+                    width: 100%;
+                    height: 100%;
+
+                    color:
+                        it.disabled ? Theme.text-dim.transparentize(0.4)
+                        : it.danger ? Theme.warn
+                        : Theme.text-primary;
+
+                    font-size: 9px;
+                    font-weight: 700;
+
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+
+                    x: 8px;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,219 @@
+import { Theme } from "../theme.slint";
+import { TimelineHeader } from "header.slint";
+
+
+export component TrackPanel inherits Rectangle {
+
+    // =====================================================
+    // DADOS
+    // =====================================================
+
+    in property <[string]> track-names: [];
+
+    in property <[int]> track-colors: [];
+
+    in property <[float]> track-volumes: [];
+
+    // M/S/R compartilhados com o mixer (mesmos arrays, mesmo estado).
+    in-out property <[bool]> track-mutes: [];
+    in-out property <[bool]> track-soloes: [];
+    in-out property <[bool]> track-arms: [];
+
+    // Medição real, achatada em 4 floats por canal
+    // ([L, R, pico L, pico R]) e 2 bools ([clip L, clip R]).
+    // Os MESMOS modelos que alimentam o mixer: o header da faixa e a
+    // tira do mixer mostram o mesmo canal com a mesma curva.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
+
+    in-out property <int> selected-track: 0;
+
+    in property <length> ruler-height: 25px;
+
+    in property <float> zoom-y: 1.0;
+
+    in property <length> scroll-y: 0px;
+
+
+    // =====================================================
+    // LARGURA
+    // =====================================================
+
+    min-width:
+        200px;
+
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
+
+    callback track-clicked(int);
+
+    callback add-track-requested(string);
+
+    callback recolor-requested(int, int);
+
+    // Volume arrastado no triângulo do medidor (posição 0..1 na curva
+    // dB). Repassado do cabeçalho até o Rust, que converte para ganho
+    // linear e publica no core.
+    callback track-volume-changed(int, float);
+
+    // M/S/R do cabeçalho da faixa. Antes isto não ia a lugar nenhum —
+    // o botão desenhava o estado mas o core nunca era avisado.
+    callback track-mute-clicked(int, float);
+    callback track-solo-clicked(int, float);
+    callback track-record-clicked(int, float);
+
+    // Clique na luz de clip de um canal.
+    callback channel-clip-cleared(int);
+
+    // Zoom vertical (Alt+roda) vindo das rows do header.
+    callback zoom-y-scrolled(float);
+
+
+    // =====================================================
+    // FUNDO
+    // =====================================================
+
+    background:
+        Theme.surface-high;
+
+    border-radius:
+        6px;
+
+
+    // =====================================================
+    // HEADER DOS TRACKS
+    // =====================================================
+
+    TimelineHeader {
+
+        x:
+            0px;
+
+        y:
+            0px;
+
+        width:
+            parent.width;
+
+        height:
+            parent.height;
+
+        border-radius:
+            6px;
+
+
+        track-names:
+            root.track-names;
+
+        track-colors:
+            root.track-colors;
+
+        channel-meters <=>
+            root.channel-meters;
+
+        channel-clipped <=>
+            root.channel-clipped;
+
+        track-volumes:
+            root.track-volumes;
+
+        track-mutes <=>
+            root.track-mutes;
+
+        track-soloes <=>
+            root.track-soloes;
+
+        track-arms <=>
+            root.track-arms;
+
+        selected-track:
+            root.selected-track;
+
+        ruler-height:
+            root.ruler-height;
+
+        zoom-y:
+            root.zoom-y;
+
+        scroll-y:
+            root.scroll-y;
+
+
+        track-clicked(index) => {
+
+            root.track-clicked(
+                index
+            );
+        }
+
+
+        add-track-requested(type) => {
+
+            root.add-track-requested(
+                type
+            );
+        }
+
+
+        recolor-requested(track, color) => {
+
+            root.recolor-requested(
+                track,
+                color
+            );
+        }
+
+
+        track-volume-changed(track, pos) => {
+
+            root.track-volume-changed(
+                track,
+                pos
+            );
+        }
+
+
+        track-mute-clicked(track, on) => {
+
+            root.track-mute-clicked(
+                track,
+                on
+            );
+        }
+
+
+        track-solo-clicked(track, on) => {
+
+            root.track-solo-clicked(
+                track,
+                on
+            );
+        }
+
+
+        track-record-clicked(track, on) => {
+
+            root.track-record-clicked(
+                track,
+                on
+            );
+        }
+
+
+        channel-clip-cleared(channel) => {
+
+            root.channel-clip-cleared(
+                channel
+            );
+        }
+
+        zoom-y-scrolled(new-zoom-y) => {
+
+            root.zoom-y-scrolled(
+                new-zoom-y
+            );
+        }
+    }
+}

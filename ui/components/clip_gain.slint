@@ -1,0 +1,121 @@
+import { Theme } from "../theme.slint";
+import { ClipDragState } from "../timeline/clip_drag/clip_drag_state.slint";
+
+// ============================================================
+// CLIP GAIN — controle de ganho do clip (linha + bolinha central)
+//
+// POSICIONADO SOBRE O CORPO DO CLIP. Recebe por prop a geometria do
+// corpo (body-w/body-h) e o ganho do modelo (gain-db). O arrasto
+// vertical na bolinha central ajusta o ganho em dB (-24..+12) de
+// forma 100% local; o release dispara `gain-committed` pro core.
+//
+// Estado de gesto mantido AQUI; o valor ao vivo é publicado em
+// `display-gain-db` (usado pelo track_clip p/ o waveform request).
+// ============================================================
+
+export component ClipGain inherits Rectangle {
+
+    in property <int> clip-id: 0;
+    in property <float> gain-db: 0.0;
+    in property <length> body-w: 0px;
+    in property <length> body-h: 0px;
+    in property <length> header-height: 0px;
+    in property <bool> hovered: false;
+    in property <bool> show: false;
+
+    // Publicado: o track_clip lê `display-gain-db` (p/ gain-linear).
+    in-out property <float> display-gain-db: root.gaining ? root.live-gain-db : root.gain-db;
+
+    callback gain-committed(int, float);
+
+    background: transparent;
+
+    private property <bool> gaining: false;
+    private property <length> gain-start-y: 0px;
+    private property <float> gain-start-db: 0.0;
+    private property <float> live-gain-db: 0.0;
+
+    private property <length> gain-grip-size: 10px;
+    private property <length> gain-grip-half: root.gain-grip-size / 2;
+
+    private property <length> gain-line-y:
+        root.body-h / 2 - root.display-gain-db * 1.5px;
+
+    // Posição real no clip: a linha vive no CORPO (que começa após o
+    // header); `gain-line-y` é relativa ao corpo, somamos o header.
+    private property <length> gain-y:
+        root.header-height + root.gain-line-y;
+
+    // =====================================================
+    // LINHA DE GANHO
+    // =====================================================
+
+    if root.show:
+        Rectangle {
+            x: 0px;
+            y: Math.clamp(root.gain-y - 0.75px, root.header-height, root.header-height + root.body-h - 1.5px);
+            width: root.body-w;
+            height: 1.5px;
+            background: Theme.surface;
+            opacity: root.gaining ? 1.0 : 0.85;
+            z: 5;
+        }
+
+    // =====================================================
+    // BOLINHA (GRIP) — também é a TouchArea do gesto
+    // =====================================================
+
+    if root.show && (root.hovered || root.gaining):
+        TouchArea {
+            x: root.width / 2 - root.gain-grip-half;
+            y: Math.clamp(root.gain-y - root.gain-grip-half, root.header-height, root.header-height + root.body-h - root.gain-grip-size);
+            width: root.gain-grip-size;
+            height: root.gain-grip-size;
+            mouse-cursor: pointer;
+            z: 6;
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: root.gain-grip-size;
+                height: root.gain-grip-size;
+                border-radius: root.gain-grip-half;
+                background: root.gaining ? Theme.accent : Theme.accent-hover;
+                border-width: 1px;
+                border-color: Theme.on-accent;
+                opacity: root.gaining ? 1.0 : 0.9;
+            }
+
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    root.gaining = true;
+                    root.gain-start-y = self.absolute-position.y + self.mouse-y;
+                    root.gain-start-db = root.gain-db;
+                    root.live-gain-db = root.gain-db;
+                } else if event.kind == PointerEventKind.up && root.gaining {
+                    root.gaining = false;
+                    root.gain-committed(root.clip-id, root.live-gain-db);
+                }
+            }
+
+            moved => {
+                if self.pressed && root.gaining {
+                    let cursor-abs-y = self.absolute-position.y + self.mouse-y;
+                    let dy-px = cursor-abs-y - root.gain-start-y;
+                    let dg-db = -dy-px / 1.5px;
+                    let g-snap = ClipDragState.snap-enabled ? Math.round(dg-db) : dg-db;
+                    root.live-gain-db = Math.max(-24.0, Math.min(12.0, root.gain-start-db + g-snap));
+                }
+            }
+
+            if root.gaining:
+                Text {
+                    x: root.gain-grip-size + 4px;
+                    y: root.gain-grip-size / 2 - 6px;
+                    text: Math.round(root.display-gain-db * 10) / 10 + " dB";
+                    color: #FFFFFF;
+                    font-size: 8px;
+                    font-weight: 700;
+                }
+        }
+}

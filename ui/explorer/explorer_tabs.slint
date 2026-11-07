@@ -1,0 +1,119 @@
+import { Theme } from "../theme.slint";
+
+component ExplorerTab inherits Rectangle {
+    in property <string> label: "";
+    in property <string> icon: "";
+    in property <image> icon-image: @image-url("");
+    in property <bool> active: false;
+
+    callback clicked();
+
+    height: 26px;
+
+    background: root.active
+        ? Theme.surface-high
+        : transparent;
+
+    border-radius: 3px;
+
+    HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 7px;
+        spacing: 5px;
+        alignment: center;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+       
+
+        Image {
+            source: root.icon-image;
+            vertical-alignment: ImageVerticalAlignment.center;
+            visible: root.icon-image.width > 0;
+            width: 15px;
+            height: 15px;
+            horizontal-alignment: ImageHorizontalAlignment.center;
+            image-rendering: ImageRendering.smooth;
+            colorize: root.active
+                ? Theme.accent
+                : Theme.text-dim;
+        }
+
+        Text {
+            text: root.label;
+
+            color: root.active
+                ? Theme.text-primary
+                : Theme.text-dim;
+
+            font-size: 11px;
+            horizontal-alignment: TextHorizontalAlignment.center;
+
+            vertical-alignment: center;
+        }
+    }
+
+    states [
+        hovered when touch.has-hover && !root.active: {
+            background: Theme.surface-high;
+        }
+    ]
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+
+export component ExplorerTabs inherits Rectangle {
+    in-out property <int> selected: 0;
+
+    callback tab-changed(int);
+
+    height: 26px;
+    background: Theme.base;
+
+    HorizontalLayout {
+        alignment: LayoutAlignment.center;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        spacing: 3px;
+
+        ExplorerTab {
+            label: "Files";
+            icon: "";
+            icon-image: @image-url("../icons/disk.svg");
+            active: root.selected == 0;
+
+            clicked => {
+                root.selected = 0;
+                root.tab-changed(0);
+            }
+        }
+
+        ExplorerTab {
+            label: "Media";
+            icon: "";
+            icon-image: @image-url("../icons/media.svg");
+            active: root.selected == 1;
+
+            clicked => {
+                root.selected = 1;
+                root.tab-changed(1);
+            }
+        }
+
+        ExplorerTab {
+            label: "Plugins";
+            icon: "";
+            icon-image: @image-url("../icons/plugin.svg");
+            active: root.selected == 2;
+
+            clicked => {
+                root.selected = 2;
+                root.tab-changed(2);
+            }
+        }
+    }
+}

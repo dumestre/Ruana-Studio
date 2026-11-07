@@ -1,0 +1,79 @@
+import { Theme } from "../theme.slint";
+
+export component StereoMeter inherits Rectangle {
+    in property <float> left-level: 0.0;
+    in property <float> right-level: 0.0;
+    in property <float> left-peak: 0.0;
+    in property <float> right-peak: 0.0;
+    in property <bool> left-clipped: false;
+    in property <bool> right-clipped: false;
+
+    in property <length> meter-width: 5px;
+    in property <length> channel-gap: 1px;
+    in property <color> meter-background: #B8B8B8;
+    in property <color> meter-border: transparent;
+    in property <bool> signal-fill-only: false;
+
+    private property <length> meter-height: Math.max(1px, root.height);
+    private property <length> channel-width: Math.max(2px, root.meter-width);
+    private property <length> divider-width: 1px;
+
+    width: root.channel-width * 2 + root.channel-gap + root.divider-width;
+    background: transparent;
+    border-radius: 0px;
+
+    function level-clamped(value: float) -> float {
+        if value != value { return 0.0; }
+        return Math.max(0.0, Math.min(1.0, value));
+    }
+
+    HorizontalLayout {
+        x: 0; y: 0; width: parent.width; height: parent.height;
+        alignment: center;
+        spacing: root.channel-gap / 2;
+
+        // CANAL L
+        Rectangle {
+            width: root.channel-width; height: root.meter-height;
+            background: root.meter-background;
+            border-width: 0px; border-color: root.meter-border;
+            border-radius: 0px; clip: true;
+
+            Rectangle {
+                x: 0px; y: 0px; width: parent.width; height: parent.height;
+                background: #00C853;
+                clip: true;
+                Rectangle {
+                    x: 0px; y: 0px; width: parent.width;
+                    height: parent.height * (1.0 - root.level-clamped(root.left-level));
+                    background: root.meter-background;
+                    visible: !root.signal-fill-only || root.left-level > 0.001;
+                }
+            }
+        }
+
+        Rectangle {
+            width: root.divider-width; height: root.meter-height;
+            background: #000000;
+        }
+        // CANAL R
+        Rectangle {
+            width: root.channel-width; height: root.meter-height;
+            background: root.meter-background;
+            border-width: 0px; border-color: root.meter-border;
+            border-radius: 0px; clip: true;
+
+            Rectangle {
+                x: 0px; y: 0px; width: parent.width; height: parent.height;
+                background: #00C853;
+                clip: true;
+                Rectangle {
+                    x: 0px; y: 0px; width: parent.width;
+                    height: parent.height * (1.0 - root.level-clamped(root.right-level));
+                    background: root.meter-background;
+                    visible: !root.signal-fill-only || root.right-level > 0.001;
+                }
+            }
+        }
+    }
+}

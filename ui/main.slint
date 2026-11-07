@@ -1,0 +1,1201 @@
+import { Theme } from "theme.slint";
+import { ClipData } from "timeline/clip_data.slint";
+import { BeatPopup } from "beat/beat_popup.slint";
+import { BeatState } from "beat/beat_state.slint";
+import { Workspace } from "windows/workspace.slint";
+import { BrowserFileEntry } from "explorer/file_browser.slint";
+import { FloatPanel } from "windows/float_panel.slint";
+import { ContextMenu, ClipContextMenuState } from "components/context_menu.slint";
+import { TimelineMetrics, SamplerMetrics, BeatMetrics } from "timeline/clip_drag/clip_drag_state.slint";
+
+export { FloatPanel }
+export { BrowserFileEntry }
+export { BeatState }
+export { TimelineMetrics }
+export { SamplerMetrics }
+export { BeatMetrics }
+
+export struct TimelineCoords {
+    track: int,
+    beat: float,
+}
+
+
+export component MainWindow inherits Window {
+
+    forward-focus: undo-scope;
+
+    // =====================================================
+    // JANELA
+    // =====================================================
+
+    title:
+        "Ruana Studio";
+
+    preferred-width:
+        1380px;
+
+    preferred-height:
+        880px;
+
+    min-width:
+        1280px;
+
+    min-height:
+        720px;
+
+    background:
+        root.native-overlay
+            ? transparent
+            : Theme.base;
+
+    no-frame:
+        true;
+
+    full-screen:
+        false;
+
+
+    // =====================================================
+    // ESTADO
+    // =====================================================
+
+    in-out property <int> transport-position:
+        0;
+
+    // TEMPO CONTÍNUO da Playhead, em segundos (float).
+    // Fonte: clock visual no Rust. A Timeline converte
+    // segundos → pixels; NUNCA passa por beat/grid/snap.
+    in-out property <float> transport-time-seconds:
+        0;
+
+    // =====================================================
+    // MÉTRICA MUSICAL (fonte única: Rust projeta do core)
+    //
+    // ppq e beats-per-bar espelham Transport; total-bars é
+    // calculado do projeto (fim do último clip + folga).
+    // Timeline, régua, tracks e LCD consomem daqui — sem
+    // hardcodes duplicados.
+    // =====================================================
+
+    in-out property <int> ppq:
+        960;
+
+    in-out property <int> beats-per-bar:
+        4;
+
+    in-out property <int> total-bars:
+        32;
+
+    in-out property <int> bpm:
+        120;
+
+    in-out property <bool> playing:
+        false;
+
+    in-out property <bool> loop-enabled: false;
+    in-out property <float> loop-start-beat: 0.0;
+    in-out property <float> loop-end-beat: 16.0;
+
+    in-out property <bool> metronome-enabled:
+        false;
+    in-out property <int> metronome-sound: 0;
+    in-out property <float> metronome-volume: 0.7;
+
+    in-out property <int> selected-track:
+        0;
+
+    in-out property <float> zoom-level:
+        1.0;
+
+    in-out property <float> zoom-y-level:
+        1.0;
+
+    in-out property <int> active-tool:
+        0;
+
+    // SNAP e FOLLOW PLAYHEAD (Toolbar ↔ Workspace ↔ janela).
+    // O Rust lê snap-enabled para aplicar/ignorar o grid.
+    in-out property <bool> snap-enabled:
+        true;
+
+    in-out property <bool> follow-playhead:
+        true;
+
+
+    // =====================================================
+    // PAINÉIS
+    // =====================================================
+
+    in-out property <bool> beat-open:
+        false;
+
+    // Beat sequencer playing state (separado do timeline playing).
+    // Controlado pelo beat popup via beat-play-state-changed.
+    in-out property <bool> beat-playing:
+        false;
+
+    // O atalho de play controla sempre o transporte global da timeline.
+    callback toggle-play-routed();
+
+    // Aba ativa do bottom panel (0 mixer, 1 sampler, ...), exposta
+    // ao Rust para abrir o sampler a partir de uma linha do beat.
+    in-out property <int> bottom-active-tab:
+        0;
+
+    // Bottom panel aberto (visible) — controlado pelo Rust junto
+    // com `bottom-active-tab` quando o sampler é aberto da linha.
+    in-out property <bool> bottom-panel-open:
+        false;
+
+    in-out property <bool> explorer-visible:
+        true;
+    in-out property <string> sampler-sample-name: "No Sample";
+    in-out property <bool> sampler-sample-loaded: false;
+    in-out property <string> sampler-sample-format: "";
+    in-out property <string> sampler-sample-duration: "";
+    in-out property <int> beat-selected-track: 0;
+
+
+    // Filesystem properties (forwarded to Explorer)
+    in-out property <string> explorer-current-path:
+        "";
+    in-out property <[string]> explorer-path-history:
+        [];
+    in-out property <int> explorer-history-index:
+        -1;
+    in-out property <[BrowserFileEntry]> explorer-entries:
+        [];
+    in-out property <bool> explorer-can-go-up:
+        false;
+    in-out property <string> explorer-search-text:
+        "";
+
+    // =====================================================
+    // DIMENSÕES
+    // =====================================================
+
+    in-out property <length> explorer-width:
+        300px;
+
+    in-out property <length> bottom-panel-height:
+        330px;
+
+    in-out property <[bool]> floated:
+        [false, false];
+
+    in-out property <length> left-panel-width:
+        230px;
+
+    in-out property <length> tracks-header-width:
+        200px;
+
+
+    // =====================================================
+    // DADOS
+    //
+    // Clips iniciais: no preview (sem Rust) a UI usa estes
+    // valores; no app compilado o backend sobrescreve via
+    // set_clips().
+    // =====================================================
+
+    // Medição real, um par de modelos compartilhado entre o mixer e
+    // o cabeçalho das faixas.
+    //
+    // `channel-meters` é achatado em 4 floats por canal
+    // ([L, R, pico L, pico R]) e `channel-clipped` em 2 bools
+    // ([clip L, clip R]). São estes mesmos modelos que o `MeterPump`
+    // escreve — foi a duplicação dos arrays por tela que permitia o
+    // medidor do mixer e o da timeline discordarem do mesmo áudio.
+    in-out property <[float]> channel-meters: [];
+    in-out property <[bool]> channel-clipped: [];
+
+    // Estado do mixer (projetado do core)
+    in-out property <[bool]> mixer-mutes:
+        [false, false, false, false, false];
+    in-out property <[bool]> mixer-soloes:
+        [false, false, false, false, false];
+    in-out property <[bool]> mixer-arms:
+        [false, false, false, false, false];
+    in-out property <[float]> mixer-volumes:
+        [0.8, 0.8, 0.8, 0.8, 0.8];
+    in-out property <[float]> mixer-pans:
+        [0.5, 0.5, 0.5, 0.5, 0.5];
+
+    // Inserts do mixer (projetado do core)
+    in-out property <[int]> mixer-insert-counts:
+        [0, 0, 0, 0, 0];
+    in-out property <[string]> mixer-insert-names:
+        [];
+    in-out property <[bool]> mixer-insert-enabled:
+        [];
+    in-out property <int> mixer-max-inserts:
+        8;
+
+    in-out property <int> mixer-selected-channel: 0;
+        
+    in-out property <int> selected-clip <=> workspace.selected-clip;
+    in-out property <length> timeline-scroll-x <=> workspace.timeline-scroll-x;
+    in-out property <length> timeline-scroll-y <=> workspace.timeline-scroll-y;
+    in property <length> timeline-view-width: workspace.timeline-view-width;
+
+    // Piano roll/timewarp abertos (P/T): timeline ocupa a largura total
+    // (track panel oculto) — espelhado pela engine a cada frame.
+    in-out property <bool> timeline-area-expanded <=> workspace.timeline-area-expanded;
+
+    // Métricas do motor de zoom/scroll (Rust): âncora do cursor + clamp.
+    in-out property <length> timeline-left-padding <=> workspace.timeline-left-padding;
+    in-out property <length> timeline-ruler-height <=> workspace.timeline-ruler-height;
+
+    // Escala REAL da cena wgpu (Rust escreve a cada frame). O Slint
+    // usava 40px/beat e 42px de linha fixos, que nunca foram os
+    // valores com que a engine desenhou — daí o preview e o drop
+    // discordarem. two-way para o Rust ser dono.
+    in-out property <length> timeline-px-per-beat <=> workspace.timeline-px-per-beat;
+    in-out property <length> timeline-row-height <=> workspace.timeline-row-height;
+    in property <length> timeline-max-scroll-x: workspace.timeline-max-scroll-x;
+    in property <length> timeline-max-scroll-y: workspace.timeline-max-scroll-y;
+
+    // Dimensões do canvas wgpu de fundo (resolução offscreen 1:1).
+    in property <length> timeline-canvas-content-width:
+        workspace.timeline-canvas-content-width;
+
+    in property <length> timeline-canvas-content-height:
+        workspace.timeline-canvas-content-height;
+
+    // Área REAL (lógico) do canvas da engine (buffer offscreen).
+    in property <length> timeline-canvas-area-width:
+        workspace.timeline-canvas-area-width;
+
+    in property <length> timeline-canvas-area-height:
+        workspace.timeline-canvas-area-height;
+
+    // Posição absoluta (px lógicos, dentro da janela) do retângulo onde o
+    // host compõe o frame wgpu da timeline (modo nativo/overlay).
+    in property <length> timeline-canvas-abs-x:
+        workspace.timeline-abs-x;
+
+    in property <length> timeline-canvas-abs-y:
+        workspace.timeline-abs-y;
+
+    in property <length> timeline-canvas-rect-width:
+        workspace.timeline-rect-width;
+
+    in property <length> timeline-canvas-rect-height:
+        workspace.timeline-rect-height;
+
+    // Modo nativo (AGENTS.md): timeline desenhada pelo wgpu na surface,
+    // UI do Slint composta por cima (timeline vira um "buraco").
+    in-out property <bool> native-overlay: false;
+
+    callback focus-selected-clip-requested(int, float, length, length, length);
+
+    // Scroll/zoom (roda/touchpad/mouse) → RUST (motor da interação).
+    callback scroll-input(float, float, bool, bool, bool, float, float);
+
+    // Canvas wgpu de fundo da timeline: publica a imagem rasterizada e
+    // pede re-render quando scroll/zoom/dimensões mudam.
+    in-out property <image> timeline-canvas-background: @image-url("");
+    callback timeline-canvas-render-requested();
+
+    // Eventos crus → engine wgpu headless do timeline-render (Fase 3).
+    callback engine-pointer-down(float, float, int, bool, bool, bool);
+    callback engine-pointer-move(float, float);
+    callback engine-pointer-up(float, float, int);
+    callback engine-scroll(float, float, bool, bool, bool);
+    callback engine-key-event(string, bool, bool, bool);
+    callback timeline-zoom-y-changed(float);
+
+    in-out property <[ClipData]> clips:
+        [
+            { id: 0, track-index: 0, name: "Drums A", beat: 0.0, len: 4.0, is-midi: true },
+            { id: 1, track-index: 1, name: "Bass A", beat: 0.0, len: 8.0, is-midi: true },
+            { id: 2, track-index: 2, name: "Vocal Verse", beat: 0.0, len: 4.0, is-midi: false }
+        ];
+
+    in-out property <[ClipData]> pool-clips: [];
+
+    in-out property <[string]> track-names:
+        [
+            "Drums",
+            "Bass",
+            "Vocal",
+            "Synth"
+        ];
+
+    // Índice de cor da paleta por track (0 = padrão por tipo).
+    in-out property <[int]> track-colors:
+        [
+            0,
+            0,
+            0,
+            0
+        ];
+
+
+    // =====================================================
+    // CALLBACKS
+    // =====================================================
+
+    callback play-state-changed(bool);
+
+    // Play/stop do BEAT SEQUENCER: roda o transporte em modo
+    // "só beat" (grid acende e o pattern soa; a timeline fica
+    // parada). O callback global acima é o transporte/timeline.
+    callback beat-play-state-changed(bool);
+
+    callback seek-to(float);
+
+    // BPM novo (inteiro). O backend atualiza o Transport e
+    // re-ancora o clock visual do playhead com a nova taxa.
+    callback set-bpm(float);
+    callback metronome-state-changed(bool);
+    callback metronome-sound-changed(int);
+    callback metronome-volume-changed(float);
+
+    callback window-close;
+
+    callback minimize;
+
+    callback window-drag-started();
+    callback window-drag-moved(length, length);
+    callback window-drag-finished();
+
+    callback add-track-requested(string);
+
+    callback clip-dropped(int, float, string, bool, string);
+
+    callback clip-slice-requested(int, float);
+
+    callback clip-glue-requested(int);
+
+    callback glue-clip-at(float, length, length, length) -> int;
+
+    callback clip-move-committed(int, int, float);
+    callback clip-resize-committed(int, int, float, float);
+    callback clip-delete-requested(int);
+
+    // Delete em massa (Delete/Backspace): apaga TODA a seleção —
+    // a seleção única (`selected-clip`) mais os clips marcados pela
+    // multi-seleção (marquee). Sem nada marcado, o handler no Rust
+    // simplesmente não faz nada.
+    callback multi-delete-requested();
+
+    // Clique na timeline → devolve o foco do teclado ao
+    // FocusScope global dos atalhos.
+    public function restore-keyboard-focus() {
+        undo-scope.focus();
+    }
+
+    callback clip-rename-requested(int, string);
+    callback clip-color-cycle-requested(int);
+    callback clip-copy-requested(int);
+    callback clip-paste-requested(float, int);
+    callback pencil-created(float, int, float);
+    callback clip-fade-committed(int, float, float);
+    callback clip-gain-committed(int, float);
+    callback marquee-select(float, float, int, int);
+    callback clip-duplicate-requested(int);
+
+    callback theme-selected(int);
+
+    // Alterna Musical/Linear do clip (timewarp estilo Cubase). Musical: o
+    // áudio acompanha o tempo do projeto (esticado, pitch preservado);
+    // Linear: tempo absoluto, com o span do clip decidindo quanto do
+    // arquivo é ouvido.
+    callback clip-time-mode-toggle-requested(int);
+
+    // Tema ativo: ponte Rust ↔ Theme (o Rust não gera acessor do
+    // global `Theme`; `changed` faz o set no global toda troca).
+    in-out property <int> theme-index: Theme.active;
+
+    changed theme-index => {
+        Theme.active = root.theme-index;
+    }
+
+    callback undo-requested;
+
+    callback redo-requested;
+
+    callback mixer-param-changed(int, string, float);
+
+    // Parâmetro de canal originado no CABEÇALHO da faixa (volume
+    // arrastado, M, S, record). O Rust trata pelo mesmo caminho do
+    // mixer, e é isso que impede os dois botões de discordarem.
+    callback track-param-changed(int, string, float);
+
+    // Clique na luz de clip de um canal.
+    callback channel-clip-cleared(int);
+
+    callback mixer-insert-added(int);
+    callback mixer-insert-removed(int, int);
+    callback mixer-insert-toggled(int, int);
+    callback mixer-copy-slots(int);
+    callback mixer-paste-slots(int);
+    callback mixer-undo-requested();
+    callback mixer-redo-requested();
+
+    callback explorer-path-changed(string);
+    callback explorer-directory-entered(string);
+
+    callback map-window-coords-to-timeline(length, length) -> TimelineCoords;
+    callback explorer-go-up();
+    callback explorer-history-go(int);
+    callback explorer-search-changed(string);
+
+    callback explorer-go-to-drives();
+
+    callback float-toggle(int);
+
+    callback tool-changed(int);
+    callback loop-state-changed(bool);
+    callback loop-range-changed(float, float);
+    callback timeline-bounds-changed(float, float, float, float);
+
+    callback track-recolor-requested(int, int);
+    callback sampler-load-requested(int);
+    callback sampler-sample-dropped(string, string);
+    callback debug-log(string);
+
+
+    // =====================================================
+    // DRAG & DROP (clip do ClipPool → timeline)
+    //
+    // O ghost acompanha a direção do arrasto com resposta imediata
+    // e relaxa suavemente quando o ponteiro para.
+    // =====================================================
+
+    in-out property <bool> drag-active:
+        false;
+
+    in-out property <bool> drag-inited:
+        false;
+
+    in-out property <string> drag-name:
+        "";
+
+    in-out property <string> drag-position:
+        "";
+
+    in-out property <string> drag-duration:
+        "";
+
+    in-out property <color> drag-color:
+        Theme.clip-midi;
+
+    in-out property <bool> drag-is-midi:
+        true;
+
+    // Path do arquivo de áudio arrastado (vazio quando a
+    // origem é um clip do ClipPool, que ainda não tem arquivo).
+    in-out property <string> drag-path:
+        "";
+
+    in-out property <length> drag-x:
+        0px;
+
+    in-out property <length> drag-y:
+        0px;
+
+    // Propriedades de drag computadas no Workspace e sincronizadas via binding
+    property <bool> drag-over-timeline: false;
+    property <bool> drag-over-sampler: false;
+    property <float> drag-snap-beat: 0.0;
+    property <int> drag-drop-track: 0;
+
+
+    // =====================================================
+    // DRAG COMPARTILHADO (ClipPool + Explorer → timeline / beat)
+    //
+    // Callbacks alimentados pelo ClipPool e pelo Explorer de
+    // áudio. Ghost, snap e drop preview são os mesmos
+    // para as duas origens.
+    //
+    // Assinatura: name, path, position, duration, color, is-midi
+    // =====================================================
+
+    callback drag-begin(string, string, string, string, color, bool);
+    callback drag-move(length, length);
+    callback drag-end();
+
+    // Drop de sample numa linha do beat sequencer
+    // (track da linha, nome do arquivo, path completo).
+    callback beat-sample-dropped(int, string, string);
+
+
+    drag-begin(
+        name,
+        path,
+        position,
+        duration,
+        color,
+        is-midi
+    ) => {
+
+        root.drag-name = name;
+        root.drag-path = path;
+        root.drag-position = position;
+        root.drag-duration = duration;
+        root.drag-color = color;
+        root.drag-is-midi = is-midi;
+        root.drag-active = true;
+        root.drag-inited = false;
+    }
+
+
+    drag-move(
+        x,
+        y
+    ) => {
+
+        // Coordenadas relativas à janela
+        // (via absolute-position).
+
+        root.drag-x = x;
+        root.drag-y = y;
+
+        root.drag-inited = true;
+
+
+        // =================================================
+        // PREVIEW DE DROP EM TEMPO REAL
+        //
+        // Calculado a CADA evento de mouse (antes: Timer de
+        // 16ms). As métricas vêm do global TimelineMetrics,
+        // publicado pelo RUST a cada frame com os valores que a
+        // engine wgpu usou para desenhar (px/beat, 64*zoom_y de
+        // linha, ruler_px, scroll, resolução do grid).
+        // =================================================
+
+        // Só a área de CONTEÚDO da timeline aceita o clip: abaixo
+        // da régua e dentro do retângulo do componente. Sem o
+        // limite inferior, soltar sobre o painel de baixo ou
+        // sobre a barra de status "incluía" o clip num lugar
+        // que o usuário não tinha apontado.
+        root.drag-over-timeline =
+            x >= TimelineMetrics.timeline-abs-x
+            && x <= TimelineMetrics.timeline-abs-x
+                + TimelineMetrics.width
+            && y >= TimelineMetrics.content-top-abs-y
+            && y <= TimelineMetrics.timeline-abs-y
+                + TimelineMetrics.rect-height;
+
+        root.drag-over-sampler =
+            SamplerMetrics.visible
+            && x / 1px >= SamplerMetrics.abs-x
+            && x / 1px <= SamplerMetrics.abs-x
+                + SamplerMetrics.width
+            && y / 1px >= SamplerMetrics.abs-y
+            && y / 1px <= SamplerMetrics.abs-y
+                + SamplerMetrics.height;
+
+        // Arredonda no MESMO grid da engine (`grid_beat_step`).
+        // Antes o Slint fixava 0.5 beat e a engine 1.0 no zoom
+        // padrão: o mesmo cursor produzia dois alvos diferentes e
+        // o clip entrava fora do bloco que o usuário via.
+        root.drag-snap-beat =
+            Math.max(
+                0.0,
+                root.snap-enabled
+                    ? Math.round(
+                        (
+                            (
+                                x
+                                - TimelineMetrics.timeline-abs-x
+                                + TimelineMetrics.scroll-x
+                            )
+                                / 1px
+                        )
+                            / (
+                                TimelineMetrics.px-per-beat / 1px
+                            )
+                            / TimelineMetrics.snap-beat-step
+                    )
+                        * TimelineMetrics.snap-beat-step
+                    : (
+                        (
+                            x
+                            - TimelineMetrics.timeline-abs-x
+                            + TimelineMetrics.scroll-x
+                        )
+                            / 1px
+                    )
+                        / (
+                            TimelineMetrics.px-per-beat / 1px
+                        )
+            );
+
+        root.drag-drop-track =
+            Math.max(
+                0,
+                Math.min(
+                    Math.floor(
+                        (
+                            (
+                                y
+                                - TimelineMetrics.content-top-abs-y
+                                + TimelineMetrics.scroll-y
+                            ) / 1px
+                        )
+                            / (
+                                TimelineMetrics.row-height / 1px
+                            )
+                    ),
+                    Math.max(
+                        0,
+                        TimelineMetrics.track-count - 1
+                    )
+                )
+            );
+    }
+
+
+    drag-end() => {
+
+        let dx = root.drag-x / 1px;
+        let dy = root.drag-y / 1px;
+        let smx = SamplerMetrics.abs-x;
+        let smy = SamplerMetrics.abs-y;
+        let smw = SamplerMetrics.width;
+        let smh = SamplerMetrics.height;
+        let bmy = BeatMetrics.rows-y;
+        let bmh = BeatMetrics.row-height;
+        let bmn = BeatMetrics.track-count;
+        root.debug-log(
+            "DRAG-END | beat-open={root.beat-open} hover-track={beat_popup.hover-track} over-sampler={root.drag-over-sampler} over-timeline={root.drag-over-timeline} active={root.drag-active} inited={root.drag-inited} pos=({dx},{dy}) SM.vis={SamplerMetrics.visible} SM=({smx},{smy},{smw},{smh}) BM.vis={BeatMetrics.visible} rows-y={bmy} row-h={bmh} n={bmn}"
+        );
+
+        if root.drag-active
+            && root.drag-inited {
+
+            // Prioridade: beat sequencer aberto com o cursor
+            // sobre uma linha do grid → define o sample da
+            // track (fluxo do channel rack do FL Studio).
+            if root.beat-open
+                && beat_popup.hover-track >= 0 {
+
+                root.beat-sample-dropped(
+                    beat_popup.hover-track,
+                    root.drag-name,
+                    root.drag-path
+                );
+
+            } else if root.drag-over-sampler
+                && root.drag-path != "" {
+
+                root.sampler-sample-dropped(
+                    root.drag-name,
+                    root.drag-path
+                );
+
+            } else if root.track-names.length > 0
+                && root.drag-over-timeline {
+
+                root.clip-dropped(
+                    root.drag-drop-track,
+                    root.drag-snap-beat,
+                    root.drag-name,
+                    root.drag-is-midi,
+                    root.drag-path
+                );
+            }
+        }
+
+        root.drag-active = false;
+        root.drag-inited = false;
+        root.drag-path = "";
+    }
+
+
+    // =====================================================
+    // LAYOUT PRINCIPAL
+    // =====================================================
+
+    undo-scope := FocusScope {
+
+        // ---------------------------------------------------------
+        // ATALHOS GLOBAIS DE TECLADO
+        //
+        // O foco deste FocusScope se perde quando o usuário clica em
+        // campos editáveis (busca do Explorer, rename de clip, etc.).
+        // Ele é recuperado em dois pontos:
+        //   1) clique na área da timeline (ver timeline.slint →
+        //      request-keyboard-focus);
+        //   2) quando a janela volta a ter foco do SO (Rust →
+        //      restore-keyboard-focus, ver os_drop.rs).
+        // Sem isso os atalhos abaixo morriam "silenciosamente".
+        // ---------------------------------------------------------
+        key-pressed(event) => {
+
+            if event.modifiers.control
+                && !event.modifiers.shift
+                && (event.text == "z" || event.text == "\u{1a}") {
+
+                root.undo-requested();
+                accept
+
+            } else if event.modifiers.control
+                && (event.text == "y"
+                    || event.text == "\u{19}"
+                    // Ctrl+Shift+Z: alguns backends entregam o texto
+                    // já em maiúscula por causa do Shift.
+                    || (event.modifiers.shift
+                        && (event.text == "Z" || event.text == "z"))) {
+
+                root.redo-requested();
+                accept
+
+            } else if event.modifiers.control
+                && !event.modifiers.shift
+                && (event.text == "c" || event.text == "C") {
+
+                // Ctrl+C = copia o clip selecionado para o clipboard
+                // interno (mesma rota do menu de contexto).
+                if root.selected-clip != -1 {
+                    root.clip-copy-requested(root.selected-clip);
+                    accept
+                } else {
+                    reject
+                }
+
+            } else if event.modifiers.control
+                && (event.text == "d" || event.text == "D") {
+
+                // Ctrl+D = duplicate do clip selecionado (mesma rota
+                // do menu de contexto).
+                if root.selected-clip != -1 {
+                    root.clip-duplicate-requested(root.selected-clip);
+                    accept
+                } else {
+                    reject
+                }
+
+            } else if event.modifiers.control
+                && !event.modifiers.shift
+                && (event.text == "m" || event.text == "M") {
+
+                // Ctrl+M = alterna Musical/Linear do clip selecionado
+                // (timewarp). Em Musical o áudio acompanha o tempo do
+                // projeto; em Linear ele volta ao tempo absoluto.
+                if root.selected-clip != -1 {
+                    root.clip-time-mode-toggle-requested(root.selected-clip);
+                    accept
+                } else {
+                    reject
+                }
+
+            } else if event.text == Key.Delete || event.text == Key.Backspace {
+
+                // Apaga a SELEÇÃO INTEIRA — seleção única (último
+                // clicado) mais os marcados pelo marquee. Antes a
+                // rota era bifurcada: com `selected-clip` presente
+                // apagava SÓ ele (a "origem" da instância) e os
+                // multi-selecionados do marquee eram ignorados. O
+                // handler do Rust (multi-delete-requested) funde os
+                // dois grupos e limpa a seleção.
+                root.multi-delete-requested();
+                accept
+
+            } else if event.text == " " {
+
+                root.toggle-play-routed();
+                accept
+
+            } else if event.text == "f" || event.text == "F" {
+                root.focus-selected-clip-requested(
+                    root.selected-clip,
+                    root.zoom-level,
+                    root.timeline-scroll-x,
+                    root.timeline-scroll-y,
+                    root.timeline-view-width
+                );
+                accept
+
+            } else {
+
+                reject;
+            }
+        }
+        workspace := Workspace {
+            full-screen <=> root.full-screen;
+            native-overlay <=> root.native-overlay;
+        
+            // Clique na timeline devolve o foco de teclado aos atalhos.
+            keyboard-focus-requested() => {
+                root.restore-keyboard-focus();
+            }
+        
+            // Scroll/zoom (roda/touchpad) → RUST (motor da interação).
+            scroll-input(dx, dy, ctrl, shift, alt, mx, my) => {
+                root.scroll-input(dx, dy, ctrl, shift, alt, mx, my);
+            }
+        
+            snap-enabled <=> root.snap-enabled;
+            follow-playhead <=> root.follow-playhead;
+            zoom-level <=> root.zoom-level;
+            zoom-y-level <=> root.zoom-y-level;
+            timeline-canvas-background <=> root.timeline-canvas-background;
+            timeline-canvas-render-requested() => {
+                root.timeline-canvas-render-requested();
+            }
+            // Eventos crus → engine wgpu headless (Rust em Fase 3).
+            engine-pointer-down(x, y, b, c, s, a) => { root.engine-pointer-down(x, y, b, c, s, a); }
+            engine-pointer-move(x, y) => { root.engine-pointer-move(x, y); }
+            engine-pointer-up(x, y, b) => { root.engine-pointer-up(x, y, b); }
+            engine-scroll(dx, dy, c, s, a) => { root.engine-scroll(dx, dy, c, s, a); }
+            engine-key-event(t, c, s, a) => { root.engine-key-event(t, c, s, a); }
+            timeline-zoom-y-changed(zy) => { root.timeline-zoom-y-changed(zy); }
+            loop-enabled <=> root.loop-enabled;
+            loop-start-beat <=> root.loop-start-beat;
+            loop-end-beat <=> root.loop-end-beat;
+            loop-state-changed(state) => { root.loop-state-changed(state); }
+            loop-range-changed(a, b) => { root.loop-range-changed(a, b); }
+            playing <=> root.playing;
+            metronome-enabled <=> root.metronome-enabled;
+            metronome-sound <=> root.metronome-sound;
+            metronome-volume <=> root.metronome-volume;
+            transport-position <=> root.transport-position;
+            transport-time-seconds <=> root.transport-time-seconds;
+            ppq <=> root.ppq;
+            beats-per-bar <=> root.beats-per-bar;
+            total-bars <=> root.total-bars;
+            bpm <=> root.bpm;
+            metronome-state-changed(enabled) => { root.metronome-state-changed(enabled); }
+            metronome-sound-changed(sound) => { root.metronome-sound-changed(sound); }
+            metronome-volume-changed(value) => { root.metronome-volume-changed(value); }
+            selected-track <=> root.selected-track;
+            active-tool <=> root.active-tool;
+            beat-open <=> root.beat-open;
+            explorer-visible <=> root.explorer-visible;
+            sampler-sample-name <=> root.sampler-sample-name;
+            sampler-sample-loaded <=> root.sampler-sample-loaded;
+            sampler-sample-format <=> root.sampler-sample-format;
+            sampler-sample-duration <=> root.sampler-sample-duration;
+            sampler-load-requested() => { root.sampler-load-requested(root.beat-selected-track); }
+            sampler-sample-dropped(name, path) => { root.sampler-sample-dropped(name, path); }
+            theme-selected(i) => { root.theme-selected(i); }
+            left-panel-width <=> root.left-panel-width;
+            tracks-header-width <=> root.tracks-header-width;
+            explorer-width <=> root.explorer-width;
+            bottom-panel-height <=> root.bottom-panel-height;
+            floated <=> root.floated;
+            selected-tab <=> root.bottom-active-tab;
+            bottom-panel-visible <=> root.bottom-panel-open;
+            track-names <=> root.track-names;
+            track-colors <=> root.track-colors;
+            clips <=> root.clips;
+            pool-clips <=> root.pool-clips;
+        
+            drag-active <=> root.drag-active;
+            drag-inited <=> root.drag-inited;
+            drag-over-timeline <=> root.drag-over-timeline;
+            drag-snap-beat <=> root.drag-snap-beat;
+            drag-drop-track <=> root.drag-drop-track;
+            drag-x <=> root.drag-x;
+            drag-y <=> root.drag-y;
+            drag-name <=> root.drag-name;
+            drag-position <=> root.drag-position;
+            drag-duration <=> root.drag-duration;
+            drag-color <=> root.drag-color;
+            drag-is-midi <=> root.drag-is-midi;
+            channel-meters <=> root.channel-meters;
+            channel-clipped <=> root.channel-clipped;
+            mixer-mutes <=> root.mixer-mutes;
+            mixer-soloes <=> root.mixer-soloes;
+            mixer-arms <=> root.mixer-arms;
+            mixer-volumes <=> root.mixer-volumes;
+            mixer-pans <=> root.mixer-pans;
+            mixer-insert-counts <=> root.mixer-insert-counts;
+            mixer-insert-names <=> root.mixer-insert-names;
+            mixer-insert-enabled <=> root.mixer-insert-enabled;
+            mixer-max-inserts <=> root.mixer-max-inserts;
+            mixer-selected-channel <=> root.mixer-selected-channel;
+            explorer-current-path <=> root.explorer-current-path;
+            explorer-path-history <=> root.explorer-path-history;
+            explorer-history-index <=> root.explorer-history-index;
+            explorer-entries <=> root.explorer-entries;
+            explorer-can-go-up <=> root.explorer-can-go-up;
+            explorer-search-text <=> root.explorer-search-text;
+        
+            close => { root.window-close(); }
+            minimize => { root.minimize(); }
+            window-drag-started() => { root.window-drag-started(); }
+            window-drag-moved(x, y) => { root.window-drag-moved(x, y); }
+            window-drag-finished() => { root.window-drag-finished(); }
+            play-state-changed(state) => { root.play-state-changed(state); }
+            seek-to(beat) => { root.seek-to(beat); }
+            set-bpm(bpm) => { root.set-bpm(bpm); }
+            add-track-requested(type) => { root.add-track-requested(type); }
+            clip-slice-requested(id, position) => { root.clip-slice-requested(id, position); }
+            clip-glue-requested(id) => { root.clip-glue-requested(id); }
+            glue-clip-at(row, x, sx, ppb) => { root.glue-clip-at(row, x, sx, ppb) }
+        clip-move-committed(id, track, beat) => { root.clip-move-committed(id, track, beat); }
+        clip-resize-committed(id, side, len, beat) => { root.clip-resize-committed(id, side, len, beat); }
+            clip-delete-requested(id) => { root.clip-delete-requested(id); }
+            clip-rename-requested(id, name) => { root.clip-rename-requested(id, name); }
+            clip-color-cycle-requested(id) => { root.clip-color-cycle-requested(id); }
+            clip-copy-requested(id) => { root.clip-copy-requested(id); }
+            clip-fade-committed(id, fi, fo) => { root.clip-fade-committed(id, fi, fo); }
+            clip-gain-committed(id, db) => { root.clip-gain-committed(id, db); }
+            clip-paste-requested(beat, track) => { root.clip-paste-requested(beat, track); }
+            pencil-created(beat, track, len) => { root.pencil-created(beat, track, len); }
+            marquee-select(b0, b1, t0, t1) => { root.marquee-select(b0, b1, t0, t1); }
+            mixer-param-changed(idx, param, val) => { root.mixer-param-changed(idx, param, val); }
+            track-param-changed(ch, param, val) => { root.track-param-changed(ch, param, val); }
+            channel-clip-cleared(ch) => { root.channel-clip-cleared(ch); }
+            mixer-insert-added(ch) => { root.mixer-insert-added(ch); }
+            mixer-insert-removed(ch, slot) => { root.mixer-insert-removed(ch, slot); }
+            mixer-insert-toggled(ch, slot) => { root.mixer-insert-toggled(ch, slot); }
+            mixer-copy-slots(ch) => { root.mixer-copy-slots(ch); }
+            mixer-paste-slots(ch) => { root.mixer-paste-slots(ch); }
+            mixer-undo-requested() => { root.mixer-undo-requested(); }
+            mixer-redo-requested() => { root.mixer-redo-requested(); }
+            explorer-path-changed(path) => { root.explorer-path-changed(path); }
+            explorer-directory-entered(path) => { root.explorer-directory-entered(path); }
+            explorer-go-up() => { root.explorer-go-up(); }
+            explorer-history-go(delta) => { root.explorer-history-go(delta); }
+            explorer-search-changed(term) => { root.explorer-search-changed(term); }
+            explorer-go-to-drives() => { root.explorer-go-to-drives(); }
+            float-toggle(tab) => { root.float-toggle(tab); }
+            tool-changed(tool) => { root.tool-changed(tool); }
+            track-recolor-requested(track, color) => { root.track-recolor-requested(track, color); }
+            timeline-bounds-changed(x, y, w, h) => { root.timeline-bounds-changed(x, y, w, h); }
+            drag-begin(name, path, position, duration, color, is-midi) => { root.drag-begin(name, path, position, duration, color, is-midi); }
+            drag-move(x, y) => { root.drag-move(x, y); }
+            drag-end() => { root.drag-end(); }
+        }
+    }
+
+    init => {
+        undo-scope.focus();
+    }
+
+    // =====================================================
+    // PLAY GLOBAL DA TIMELINE
+    // =====================================================
+    toggle-play-routed => {
+        root.playing = !root.playing;
+        root.play-state-changed(root.playing);
+    }
+
+    map-window-coords-to-timeline(wx, wy) => {
+        let rx = wx - workspace.timeline-abs-x + workspace.timeline-scroll-x;
+        // O início das tracks fica ABAIXO da régua: usar o topo
+        // do conteúdo (e não o topo do timeline), senão a linha
+        // calculada sai deslocada e o drop ignora o mouse.
+        let ry = wy - workspace.timeline-content-top-abs-y + workspace.timeline-scroll-y;
+        
+        let beat = rx / workspace.timeline-px-per-beat;
+        let track = Math.floor(ry / workspace.timeline-row-height);
+        
+        return {
+            track: Math.max(0, Math.min(root.track-names.length - 1, track)),
+            beat: Math.max(0.0, beat)
+        };
+    }
+
+
+    // =====================================================
+    // BEAT POPUP
+    //
+    // As propriedades de dados e os callbacks de persistência
+    // são ponteados ao global BeatState, consumido pelo Rust.
+    // =====================================================
+    beat_popup := BeatPopup {
+        selected-track <=> root.beat-selected-track;
+
+        open <=>
+            root.beat-open;
+
+        drag-active <=> root.drag-active;
+        drag-x <=> root.drag-x;
+        drag-y <=> root.drag-y;
+
+
+        // ----------------------------------------------------
+        // DADOS (core ↔ UI)
+        // ----------------------------------------------------
+
+        patterns <=> BeatState.patterns;
+
+        current-pattern <=> BeatState.current-pattern;
+
+        grid-resolution <=> BeatState.grid-resolution;
+
+        humanize <=> BeatState.humanize;
+
+        swing <=> BeatState.swing;
+
+        instrument-names <=> BeatState.instrument-names;
+
+        track-selected(index) => { BeatState.track-selected(index); }
+        sampler-open-requested(index) => { BeatState.sampler-open(index); }
+
+        track-sample-names <=> BeatState.track-sample-names;
+
+        track-active <=> BeatState.track-active;
+
+        track-solo <=> BeatState.track-solo;
+
+        track-pan <=> BeatState.track-pan;
+
+        track-volume <=> BeatState.track-volume;
+
+        track-mixer-channel <=> BeatState.track-mixer-channel;
+
+        // Playhead e play vêm do mesmo clock (o do áudio), senão a coluna
+        // acesa não corresponde ao som — mas o FLAG de play é o do
+        // SEQUENCIADOR (`beat-playing`), não o do transporte: tocar a
+        // timeline não pode acender o botão de play do beat nem manter
+        // o grid em modo "tocando". O Rust confirma os dois flags no
+        // start/stop (ver playback.rs).
+        playhead <=> BeatState.playhead;
+
+        playing <=> root.beat-playing;
+
+        play-state-changed(state) => {
+            root.beat-play-state-changed(state);
+        }
+
+        preview-track(track) => {
+            BeatState.preview-track(track);
+        }
+
+
+        // ----------------------------------------------------
+        // PERSISTÊNCIA
+        // ----------------------------------------------------
+
+        step-committed(index, value) => {
+            BeatState.step-committed(index, value);
+        }
+
+        grid-resolution-committed(value) => {
+            BeatState.grid-resolution-committed(value);
+        }
+
+        humanize-committed(value) => {
+            BeatState.humanize-committed(value);
+        }
+
+        swing-committed(value) => {
+            BeatState.swing-committed(value);
+        }
+
+        track-param-committed(track, param, value) => {
+            BeatState.track-param-committed(track, param, value);
+        }
+
+        pattern-changed(index) => {
+            BeatState.pattern-changed(index);
+        }
+
+        duplicate-beat => { BeatState.duplicate-beat(); }
+        copy-beat => { BeatState.copy-beat(); }
+        clear-beat => { BeatState.clear-beat(); }
+        delete-beat => { BeatState.delete-beat(); }
+
+        copy-track(track) => { BeatState.copy-track(track); }
+        duplicate-track(track) => { BeatState.duplicate-track(track); }
+        delete-track(track) => { BeatState.delete-track(track); }
+        clear-track(track) => { BeatState.clear-track(track); }
+
+        insert-pattern(track, interval) => {
+            BeatState.insert-pattern(track, interval);
+        }
+    }
+
+
+    // =====================================================
+    // MENU DE CONTEXTO DE CLIP (botão direito)
+    //
+    // Overlay global reutilizável (components/context_menu.slint).
+    // Estado (aberto/posição/id) vive no global ClipContextMenuState,
+    // escrito diretamente pelo TrackClip no clique direito.
+    // =====================================================
+
+    ContextMenu {
+
+        open <=> ClipContextMenuState.open;
+
+        menu-x: ClipContextMenuState.x;
+
+        menu-y: ClipContextMenuState.y;
+
+        items: [
+            { label: "Copy", action: "copy", separator: false, danger: false, disabled: false },
+            { label: "Duplicate", action: "duplicate", separator: false, danger: false, disabled: false },
+            { label: "Change Color", action: "color", separator: false, danger: false, disabled: false },
+            { label: "", action: "", separator: true, danger: false, disabled: false },
+            { label: "Delete", action: "delete", separator: false, danger: true, disabled: false },
+        ];
+
+        action-chosen(action) => {
+
+            let id = ClipContextMenuState.clip-id;
+
+            if action == "copy" {
+                root.clip-copy-requested(id);
+            }
+            else if action == "duplicate" {
+                root.clip-duplicate-requested(id);
+            }
+            else if action == "color" {
+                root.clip-color-cycle-requested(id);
+            }
+            else if action == "delete" {
+                root.clip-delete-requested(id);
+            }
+        }
+    }
+
+
+    // =====================================================
+    // TIMER DO BEAT METRICS
+    //
+    // Publica a geometria do BeatPopup para o global
+    // BeatMetrics, usado pelo handler de OS drop para saber
+    // se um sample solto do Explorer do SO caiu sobre uma
+    // linha do beat (e qual linha).
+    // =====================================================
+
+    beat_metrics_timer := Timer {
+
+        interval: 50ms;
+
+        // Só publica geometria enquanto o beat está aberto (única hora em que
+        // BeatMetrics.visible pode ficar true e o handler de OS drop consulta).
+        // Antes rodava sempre → repaint de fundo a cada 50ms mesmo ocioso.
+        running: root.beat-open;
+
+        triggered() => {
+
+            BeatMetrics.abs-x =
+                beat_popup.content-x / 1px;
+
+            BeatMetrics.abs-y =
+                beat_popup.content-y / 1px;
+
+            BeatMetrics.width =
+                beat_popup.content-w / 1px;
+
+            BeatMetrics.height =
+                beat_popup.content-h / 1px;
+
+            BeatMetrics.rows-y =
+                beat_popup.rows-top-y / 1px;
+
+            BeatMetrics.row-height =
+                beat_popup.row-height / 1px;
+
+            BeatMetrics.track-count =
+                beat_popup.instrument-names.length;
+
+            BeatMetrics.visible =
+                root.beat-open
+                && beat_popup.is-open;
+        }
+    }
+
+
+}

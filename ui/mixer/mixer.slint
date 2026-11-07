@@ -1,0 +1,183 @@
+import { Theme } from "../theme.slint";
+import { MixerHeader } from "mixer_header.slint";
+import { MixerChannel } from "mixer_channel.slint";
+import { ClipPalette } from "../clip_palette.slint";
+
+export component Mixer inherits Rectangle {
+    // Medição real por canal, achatada em 4 floats por canal:
+    // [L, R, pico L, pico R]. O Rust decide o comprimento, então
+    // começa vazio — um array com 5 zeros aqui mentiria sobre a
+    // quantidade de canais até o primeiro pump.
+    in-out property <[float]> meters: [];
+    min-height: 140px;
+    in-out property <[bool]> clipped: [];
+    in property <[string]> names: ["Drums", "Bass", "Vocal", "Synth", "Master"];
+    in property <[int]> track-colors: [];
+    in-out property <int> selected-channel: 0;
+
+    // Estado do mixer vindo do core (arrays indexados por canal)
+    in-out property <[bool]> mutes: [false, false, false, false, false];
+    in-out property <[bool]> soloes: [false, false, false, false, false];
+    in-out property <[bool]> arms: [false, false, false, false, false];
+    in-out property <[float]> volumes: [0.8, 0.8, 0.8, 0.8, 0.8];
+    in-out property <[float]> pans: [0.5, 0.5, 0.5, 0.5, 0.5];
+
+    // Inserts: contagem por canal + arrays achatados (canal * max-inserts + slot)
+    in-out property <[int]> insert-counts: [0, 0, 0, 0, 0];
+    in-out property <[string]> insert-names: [];
+    in-out property <[bool]> insert-enabled: [];
+    in-out property <int> max-inserts: 8;
+
+    in-out property <bool> floating: false;
+    callback float-toggle();
+    callback copy-inserts(int);
+    callback paste-inserts(int);
+    callback undo-requested();
+    callback redo-requested();
+    in property <bool> show-header: true;
+
+    // Leitura com guarda. O `MeterPump` publica o comprimento do
+    // modelo, mas a reordenação de canais (mover uma faixa) acontece
+    // antes do próximo tick: indexar direto nesse intervalo leria o
+    // canal vizinho em vez de falhar, e o medidor piscaria sozinho.
+    function meter-at(i: int, slot: int) -> float {
+        let idx = i * 4 + slot;
+        return idx >= 0 && idx < root.meters.length ? root.meters[idx] : 0.0;
+    }
+
+    function clip-at(i: int, side: int) -> bool {
+        let idx = i * 2 + side;
+        return idx >= 0 && idx < root.clipped.length ? root.clipped[idx] : false;
+    }
+
+    // Callbacks para o core
+    callback channel-param-changed(int, string, float);
+    callback channel-insert-added(int);
+    callback channel-insert-removed(int, int);
+    callback channel-insert-toggled(int, int);
+    callback channel-clip-cleared(int);
+
+    // Altura natural do conteúdo (usada pelo Rust para dimensionar a
+    // janela flutuante): cabeçalho + canal com fader default + inserts.
+    property <length> channel-fixed-height: 139px;
+    property <length> insert-slot-step: 22px;
+    property <length> content-natural-height:
+        root.channel-fixed-height
+        + 90px
+        + 18px
+        + root.max-inserts * root.insert-slot-step
+        + 18px;
+    in-out property <length> natural-height:
+        (root.show-header ? 30px : 0px) + root.content-natural-height;
+
+    background: transparent;
+    border-radius: 8px;
+
+    VerticalLayout {
+        spacing: 0;
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+
+        
+
+        if (root.show-header): MixerHeader {
+            floating <=> root.floating;
+            selected-channel: root.selected-channel;
+            float-toggle => { root.float-toggle(); }
+            copy-slots => { root.copy-inserts(root.selected-channel); }
+            paste-slots => { root.paste-inserts(root.selected-channel); }
+            undo => { root.undo-requested(); }
+            redo => { root.redo-requested(); }
+        }
+
+        HorizontalLayout {
+            width: 100%;
+            vertical-stretch: 1;
+            spacing: 0;
+            alignment: LayoutAlignment.stretch;
+            cross-axis-alignment: CrossAxisAlignment.stretch;
+
+            flickable := Flickable {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                content-width: max((root.mutes.length - 1) * 100px, self.width);
+                content-height: self.height;
+                interactive: true;
+
+                HorizontalLayout {
+                    height: 100%;
+                    spacing: 0;
+                    alignment: LayoutAlignment.stretch;
+                    cross-axis-alignment: CrossAxisAlignment.stretch;
+
+                    for m[i] in root.mutes: MixerChannel {
+                        visible: i < root.mutes.length - 1;
+                        height: 100%;
+                        name: root.names[i];
+                        channel-color: i < root.track-colors.length && root.track-colors[i] != 0
+                            ? ClipPalette.colors[Math.mod(root.track-colors[i], ClipPalette.colors.length)]
+                            : (i == 2 ? Theme.clip-audio : Theme.clip-midi);
+                        channel-index: i;
+                        selected: root.selected-channel == i;
+                        select-requested(channel) => { root.selected-channel = channel; }
+
+                        left-level: root.meter-at(i, 0);
+                        right-level: root.meter-at(i, 1);
+                        left-peak: root.meter-at(i, 2);
+                        right-peak: root.meter-at(i, 3);
+                        left-clipped: root.clip-at(i, 0);
+                        right-clipped: root.clip-at(i, 1);
+                        available-height: flickable.height;
+
+                        insert-count: root.insert-counts[i];
+                        insert-names: root.insert-names;
+                        insert-enabled: root.insert-enabled;
+
+                        muted: m;
+                        soloed: root.soloes[i];
+                        arm: root.arms[i];
+                        volume: root.volumes[i];
+                        pan: root.pans[i];
+
+                        param-changed(idx, param, val) => { root.channel-param-changed(idx, param, val); }
+                        insert-add() => { root.channel-insert-added(i); }
+                        insert-remove(slot) => { root.channel-insert-removed(i, slot); }
+                        insert-toggle(slot) => { root.channel-insert-toggled(i, slot); }
+                        clear-clip(idx) => { root.channel-clip-cleared(idx); }
+                    }
+                }
+            }
+
+            if root.mutes.length > 0 : MixerChannel {
+                width: 100px;
+                height: 100%;
+                name: root.names[root.mutes.length - 1];
+                channel-color: Theme.text-primary;
+                is-master: true;
+                channel-index: root.mutes.length - 1;
+                selected: root.selected-channel == root.mutes.length - 1;
+                select-requested(channel) => { root.selected-channel = channel; }
+                left-level: root.meter-at(root.mutes.length - 1, 0);
+                right-level: root.meter-at(root.mutes.length - 1, 1);
+                left-peak: root.meter-at(root.mutes.length - 1, 2);
+                right-peak: root.meter-at(root.mutes.length - 1, 3);
+                left-clipped: root.clip-at(root.mutes.length - 1, 0);
+                right-clipped: root.clip-at(root.mutes.length - 1, 1);
+                insert-count: root.insert-counts[root.mutes.length - 1];
+                insert-names: root.insert-names;
+                insert-enabled: root.insert-enabled;
+                muted: root.mutes[root.mutes.length - 1];
+                soloed: root.soloes[root.mutes.length - 1];
+                arm: root.arms[root.mutes.length - 1];
+                volume: root.volumes[root.mutes.length - 1];
+                pan: root.pans[root.mutes.length - 1];
+                param-changed(idx, param, val) => { root.channel-param-changed(idx, param, val); }
+                insert-add() => { root.channel-insert-added(root.mutes.length - 1); }
+                insert-remove(slot) => { root.channel-insert-removed(root.mutes.length - 1, slot); }
+                insert-toggle(slot) => { root.channel-insert-toggled(root.mutes.length - 1, slot); }
+                clear-clip(idx) => { root.channel-clip-cleared(idx); }
+            }
+        }
+    }
+
+}

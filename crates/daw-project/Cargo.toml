@@ -1,0 +1,6 @@
+[package]
+name = "daw-project"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

@@ -1,0 +1,569 @@
+import { BeatContent } from "beat_content.slint";
+import { Theme } from "../theme.slint";
+
+export component BeatPopup inherits Rectangle {
+
+    // ============================================================
+    // DADOS
+    // ============================================================
+
+    in-out property <[[bool]]> patterns: [[]];
+    in-out property <int> current-pattern: 0;
+    in-out property <int> playhead: -1;
+    in-out property <int> grid-resolution: 16;
+    in-out property <bool> playing: false;
+
+    in-out property <float> humanize: 0.0;
+    in-out property <float> swing: 0.0;
+
+    in-out property <string> beat-name:
+        "BEAT SEQUENCER";
+
+    in-out property <[int]> resolution-options:
+        [8, 16, 32, 64];
+
+    in-out property <[string]> instrument-names:
+        [
+            "Kick",
+            "Snare",
+            "Clap",
+            "Closed Hat",
+            "Open Hat",
+            "Tom",
+            "Cymbal",
+            "Perc"
+        ];
+
+    in-out property <[bool]> track-active:
+        [
+            true, true, true, true,
+            true, true, true, true
+        ];
+
+    in-out property <[bool]> track-solo:
+        [
+            false, false, false, false,
+            false, false, false, false
+        ];
+
+    in-out property <[float]> track-pan:
+        [
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0
+        ];
+
+    in-out property <[float]> track-volume:
+        [
+            1.0, 1.0, 1.0, 1.0,
+            1.0, 1.0, 1.0, 1.0
+        ];
+
+    in-out property <[int]> track-mixer-channel:
+        [0, 1, 2, 3, 4, 5, 6, 7];
+
+    in-out property <[string]> track-sample-names: [];
+
+    in-out property <int> selected-track: 0;
+
+
+    // ============================================================
+    // POPUP
+    // ============================================================
+
+    in-out property <length> popup-x: 24px;
+    in-out property <length> popup-y: 80px;
+
+    in-out property <bool> open: false;
+
+    out property <bool> is-open:
+        root.open;
+
+
+    // ============================================================
+    // GEOMETRIA DO POPUP
+    // ============================================================
+    //
+    // Geometria usada pelos hit-tests de drop e métricas do sequenciador.
+
+    out property <length> content-x:
+        beat_content.absolute-position.x;
+
+    out property <length> content-y:
+        beat_content.absolute-position.y;
+
+    out property <length> content-w:
+        beat_content.width;
+
+    out property <length> content-h:
+        beat_content.height;
+
+    // Y absoluto da primeira linha de tracks (após o header 33px).
+    out property <length> rows-top-y:
+        beat_content.absolute-position.y
+        + beat_content.content-top
+        + 33px;
+
+    out property <length> row-height:
+        beat_content.row-height;
+
+
+    // ============================================================
+    // DRAG DE SAMPLE
+    // ============================================================
+
+    in property <bool> drag-active: false;
+    in property <length> drag-x: 0px;
+    in property <length> drag-y: 0px;
+
+    out property <int> hover-track:
+        beat_content.drag-hover-track;
+
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
+
+    callback open-requested;
+    callback close-requested;
+
+    callback duplicate-beat;
+    callback copy-beat;
+    callback clear-beat;
+    callback delete-beat;
+
+    callback copy-track(int);
+    callback duplicate-track(int);
+    callback delete-track(int);
+    callback clear-track(int);
+
+    callback insert-pattern(int, int);
+    callback pattern-changed(int);
+
+    callback play-state-changed(bool);
+
+    callback preview-track(int);
+    callback track-selected(int);
+    callback sampler-open-requested(int);
+
+    callback step-committed(int, bool);
+    callback grid-resolution-committed(int);
+    callback humanize-committed(float);
+    callback swing-committed(float);
+
+    callback track-param-committed(
+        int,
+        string,
+        float
+    );
+
+
+    // ============================================================
+    // ABRIR
+    // ============================================================
+
+    open-requested => {
+        root.open = true;
+    }
+
+
+    // ============================================================
+    // POPUP PRINCIPAL
+    // ============================================================
+
+    background: transparent;
+
+    visible: root.open;
+
+    clip: false;
+
+
+    // ============================================================
+    // BACKDROP — fecha popup ao clicar fora do conteúdo
+    // ============================================================
+
+    backdrop := TouchArea {
+        x: 0px;
+        y: 0px;
+
+        width: parent.width;
+        height: parent.height;
+
+        enabled: root.open;
+
+        clicked => {
+            root.open = false;
+            root.close-requested();
+        }
+    }
+
+
+    // ============================================================
+    // CONTEÚDO
+    // ============================================================
+
+    content := Rectangle {
+
+        x: root.popup-x;
+        y: root.popup-y;
+
+        width: 800px;
+        height: 420px;
+
+        background: Theme.base;
+
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        z: 10;
+
+        // ========================================================
+        // BEAT CONTENT
+        // ========================================================
+
+        beat_content := BeatContent {
+
+            x: 0px;
+            y: 0px;
+
+            width: parent.width;
+            height: parent.height;
+
+
+            // ====================================================
+            // DADOS
+            // ====================================================
+
+            playhead <=> root.playhead;
+
+            grid-resolution
+                <=> root.grid-resolution;
+
+            playing
+                <=> root.playing;
+
+            humanize
+                <=> root.humanize;
+
+            swing
+                <=> root.swing;
+
+            beat-name
+                <=> root.beat-name;
+
+            resolution-options
+                <=> root.resolution-options;
+
+            instrument-names
+                <=> root.instrument-names;
+
+            track-active
+                <=> root.track-active;
+
+            track-solo
+                <=> root.track-solo;
+
+            track-pan
+                <=> root.track-pan;
+
+            track-volume
+                <=> root.track-volume;
+
+            track-mixer-channel
+                <=> root.track-mixer-channel;
+
+            track-sample-names
+                <=> root.track-sample-names;
+
+            selected-track
+                <=> root.selected-track;
+
+            current-pattern
+                <=> root.current-pattern;
+
+            patterns
+                <=> root.patterns;
+
+
+            // ====================================================
+            // DRAG DE SAMPLE
+            // ====================================================
+
+            drag-active:
+                root.drag-active;
+
+            drag-x:
+                root.drag-x;
+
+            drag-y:
+                root.drag-y;
+
+
+            // ====================================================
+            // CALLBACKS
+            // ====================================================
+
+            close-requested => {
+
+                root.open = false;
+
+                root.close-requested();
+            }
+
+
+            add-track-requested => {
+            }
+
+
+            grid-resolution-changed(value) => {
+
+                root.grid-resolution-committed(
+                    value
+                );
+            }
+
+
+            track-selected(index) => {
+
+                root.track-selected(
+                    index
+                );
+            }
+
+
+            track-preview-requested(index) => {
+
+                root.preview-track(
+                    index
+                );
+            }
+
+
+            sampler-open-requested(index) => {
+
+                root.sampler-open-requested(
+                    index
+                );
+            }
+
+
+            play-state-changed(value) => {
+
+                root.play-state-changed(
+                    value
+                );
+            }
+
+
+            track-param-changed(
+                track,
+                param,
+                value
+            ) => {
+
+                root.track-param-committed(
+                    track,
+                    param,
+                    value
+                );
+            }
+
+
+            humanize-committed(value) => {
+
+                root.humanize-committed(
+                    value
+                );
+            }
+
+
+            swing-committed(value) => {
+
+                root.swing-committed(
+                    value
+                );
+            }
+
+
+            step-toggled(
+                index,
+                value
+            ) => {
+
+                if root.patterns.length > 0
+                    && root.current-pattern
+                        < root.patterns.length {
+
+                    root.patterns[
+                        root.current-pattern
+                    ][index] = value;
+                }
+
+                root.step-committed(
+                    index,
+                    value
+                );
+            }
+
+
+            // ====================================================
+            // BEAT
+            // ====================================================
+
+            duplicate-beat => {
+
+                root.duplicate-beat();
+            }
+
+
+            copy-beat => {
+
+                root.copy-beat();
+            }
+
+
+            clear-beat => {
+
+                root.clear-beat();
+            }
+
+
+            delete-beat => {
+
+                root.delete-beat();
+            }
+
+
+            // ====================================================
+            // TRACKS
+            // ====================================================
+
+            copy-track(track) => {
+
+                root.copy-track(
+                    track
+                );
+            }
+
+
+            duplicate-track(track) => {
+
+                root.duplicate-track(
+                    track
+                );
+            }
+
+
+            delete-track(track) => {
+
+                root.delete-track(
+                    track
+                );
+            }
+
+
+            clear-track(track) => {
+
+                root.clear-track(
+                    track
+                );
+            }
+
+
+            // ====================================================
+            // PATTERNS
+            // ====================================================
+
+            insert-pattern(
+                track,
+                interval
+            ) => {
+
+                root.insert-pattern(
+                    track,
+                    interval
+                );
+            }
+
+
+            pattern-changed(index) => {
+
+                root.pattern-changed(
+                    index
+                );
+            }
+
+            drag-moved(dx, dy) => {
+                let max-x =
+                    max(0px, root.width - content.width);
+                let max-y =
+                    max(0px, root.height - content.height);
+                root.popup-x =
+                    max(0px, min(max-x, root.popup-x + dx));
+                root.popup-y =
+                    max(0px, min(max-y, root.popup-y + dy));
+            }
+        }
+
+        // Captures the title text and the blank area beside it, while
+        // leaving the header controls to receive their own pointer events.
+        header-drag-zone := TouchArea {
+            x: 12px;
+            y: 12px;
+            width: 200px;
+            height: 34px;
+            mouse-cursor: grab;
+
+            property <bool> dragging: false;
+            property <length> last-pointer-x: 0px;
+            property <length> last-pointer-y: 0px;
+
+            pointer-event(ev) => {
+                if ev.kind == PointerEventKind.down
+                    && ev.button == PointerEventButton.left {
+                    self.dragging = true;
+                    self.last-pointer-x =
+                        self.absolute-position.x + self.mouse-x;
+                    self.last-pointer-y =
+                        self.absolute-position.y + self.mouse-y;
+                } else if ev.kind == PointerEventKind.up {
+                    self.dragging = false;
+                }
+            }
+
+            moved => {
+                if self.dragging {
+                    let pointer-x =
+                        self.absolute-position.x + self.mouse-x;
+                    let pointer-y =
+                        self.absolute-position.y + self.mouse-y;
+                    let max-x =
+                        max(0px, root.width - content.width);
+                    let max-y =
+                        max(0px, root.height - content.height);
+
+                    root.popup-x = max(
+                        0px,
+                        min(
+                            max-x,
+                            root.popup-x
+                                + pointer-x
+                                - self.last-pointer-x
+                        )
+                    );
+                    root.popup-y = max(
+                        0px,
+                        min(
+                            max-y,
+                            root.popup-y
+                                + pointer-y
+                                - self.last-pointer-y
+                        )
+                    );
+                    self.last-pointer-x = pointer-x;
+                    self.last-pointer-y = pointer-y;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="160 150 220 220" width="512" height="512">
+  <defs>
+    <linearGradient id="playFrontOrange" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff883b" />
+      <stop offset="40%" stop-color="#F26A21" />
+      <stop offset="100%" stop-color="#d15a1c" />
+    </linearGradient>
+    <linearGradient id="playSideOrange" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a84413" />
+      <stop offset="100%" stop-color="#6e2c0c" />
+    </linearGradient>
+    <linearGradient id="gloss" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.0" />
+    </linearGradient>
+  </defs>
+  <g>
+    <!-- Extrusão 3D (Lado) -->
+    <path d="M 196,160 L 356,238 C 374,247 374,265 356,274 L 196,352 C 178,361 170,350 170,330 L 170,182 C 170,162 178,151 196,160 Z" 
+          fill="url(#playSideOrange)" 
+          transform="translate(0, 8)" />
+    <!-- Face Frontal -->
+    <path d="M 196,160 L 356,238 C 374,247 374,265 356,274 L 196,352 C 178,361 170,350 170,330 L 170,182 C 170,162 178,151 196,160 Z" 
+          fill="url(#playFrontOrange)" />
+    <!-- Brilho Glossy -->
+    <path d="M 196,160 L 356,238 C 364,242 368,249 369,256 C 310,230 240,210 170,225 L 170,182 C 170,162 178,151 196,160 Z" 
+          fill="url(#gloss)" />
+  </g>
+</svg>

@@ -1,0 +1,120 @@
+// ============================================================
+// TRANSPORT DO SAMPLER
+// ============================================================
+//
+// Antes: `Rectangle` + `TouchArea` cru em x fixo (4/66/128/190),
+// SEM nenhum estado de hover ou press — clicar não dava retorno
+// nenhum, e a fileira estourava largura quando o painel encolhia.
+//
+// Agora usa o `Button` do projeto
+// (ui/components/button.slint), que já resolve
+// hover/press/toggled/disabled e mantém o transport do sampler
+// parecido com o transport global. Os liga/desliga de texto usam
+// `SamplerToggle` porque o Button de 26px é alto demais para
+// empilhar em três fileiras nos 215px do bottom-panel.
+// ============================================================
+
+import { Theme } from "../theme.slint";
+import { Button } from "../components/button.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerToggle, SamplerSegments } from "sampler_widgets.slint";
+
+export component SamplerTransport inherits Rectangle {
+    in property <bool> playing: false;
+    in property <bool> loop-enabled: false;
+    in property <bool> reverse-enabled: false;
+    in property <bool> one-shot: true;
+    in property <bool> enabled: true;
+    in property <bool> compact: false;
+
+    callback play-clicked();
+    callback stop-clicked();
+    callback loop-toggled();
+    callback reverse-toggled();
+    callback one-shot-changed(bool);
+
+    private property <length> btn-h: root.compact ? 22px : 26px;
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: root.compact ? 3px : 5px;
+        alignment: start;
+
+        // --- fileira 1: play / stop ---
+        HorizontalLayout {
+            spacing: root.compact ? 3px : 4px;
+
+            Button {
+                height: root.btn-h;
+                icon: root.playing
+                    ? @image-url("../icons/pause.svg")
+                    : @image-url("../icons/play.svg");
+                icon-size: root.compact ? 13px : 15px;
+                icon-color: SamplerStyle.text-mid;
+                toggled: root.playing;
+                toggled-bg: SamplerStyle.sec-play;
+                toggled-fg: Theme.on-accent;
+                enabled: root.enabled;
+                horizontal-stretch: 2;
+                clicked => {
+                    root.play-clicked();
+                }
+            }
+
+            Button {
+                height: root.btn-h;
+                icon: @image-url("../icons/stop.svg");
+                icon-size: root.compact ? 13px : 15px;
+                icon-color: SamplerStyle.text-mid;
+                enabled: root.enabled;
+                horizontal-stretch: 1;
+                clicked => {
+                    root.stop-clicked();
+                }
+            }
+        }
+
+        // --- fileira 2: loop / reverse ---
+        HorizontalLayout {
+            spacing: root.compact ? 3px : 4px;
+
+            SamplerToggle {
+                text: "LOOP";
+                on: root.loop-enabled;
+                compact: root.compact;
+                enabled: root.enabled;
+                accent: SamplerStyle.sec-play;
+                clicked => {
+                    root.loop-toggled();
+                }
+            }
+
+            SamplerToggle {
+                text: "REV";
+                on: root.reverse-enabled;
+                compact: root.compact;
+                enabled: root.enabled;
+                accent: SamplerStyle.sec-play;
+                clicked => {
+                    root.reverse-toggled();
+                }
+            }
+        }
+
+        // --- fileira 3: modo de disparo ---
+        //
+        // Era um par de booleanos sem rótulo; como só um dos dois
+        // pode valer, segmented control diz isso sozinho.
+        SamplerSegments {
+            options: ["ONE-SHOT", "GATE"];
+            value: root.one-shot ? "ONE-SHOT" : "GATE";
+            compact: root.compact;
+            enabled: root.enabled;
+            accent: SamplerStyle.sec-play;
+            picked(v) => {
+                root.one-shot-changed(v == "ONE-SHOT");
+            }
+        }
+    }
+}

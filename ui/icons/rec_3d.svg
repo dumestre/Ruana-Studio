@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="150 150 212 212" width="512" height="512">
+  <defs>
+    <!-- Sombra projetada do elemento 3D -->
+    <filter id="recShadowOnly" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+
+    <!-- Gradientes para o efeito 3D vermelho (Baseado no primeiro exemplo) -->
+    
+    <!-- Face Frontal (Vermelho vibrante com leve reflexo) -->
+    <linearGradient id="recFrontRed" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff476f" />  <!-- Claro no topo -->
+      <stop offset="40%" stop-color="#ff1e4d" /> <!-- Vermelho principal -->
+      <stop offset="100%" stop-color="#d6002f" /><!-- Mais escuro embaixo -->
+    </linearGradient>
+
+    <!-- Lado/Extrusão 3D (Vermelho muito escuro para profundidade) -->
+    <linearGradient id="recSideRed" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a30022" />
+      <stop offset="100%" stop-color="#610012" />
+    </linearGradient>
+
+    <!-- Brilho superior para o efeito glossy -->
+    <linearGradient id="gloss" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Grupo do ícone com sombra -->
+  <g filter="url(#recShadowOnly)">
+    <!-- Extrusão lateral (o "corpo" 3D do círculo) -->
+    <circle cx="256" cy="266" r="96" fill="url(#recSideRed)" />
+
+    <!-- Face frontal do círculo REC -->
+    <circle cx="256" cy="256" r="96" fill="url(#recFrontRed)" />
+
+    <!-- Brilho superior para o efeito glossy -->
+    <path d="M 256,160 C 209.3,160 171.3,195.3 170,240 L 170,256 C 170,211.3 208,174 256,174 C 304,174 342,211.3 342,256 L 342,240 C 342,195.3 304.7,160 256,160 Z" 
+          fill="url(#gloss)" />
+  </g>
+</svg>

@@ -1,0 +1,113 @@
+import { Button } from "../components/button.slint";
+import { Theme } from "../theme.slint";
+
+export component BottomToolbar inherits Rectangle {
+    in-out property <int> selected-tab: -1;
+    in-out property <bool> panel-visible: false;
+
+    height: 26px;
+    in-out property <length> toolbar-height:
+        self.height;
+    background: transparent;
+
+
+
+    // Tab bar
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: LayoutAlignment.center;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        height: 100%;
+        padding: 5px;
+
+        // Tab: Sampler
+        Button {
+            text: "Sampler";
+            corner-radius: 2px;
+            height: 15px;
+            toggled: root.selected-tab == 1 && root.panel-visible;
+            toggled-bg: Theme.accent;
+            clicked => {
+                if root.selected-tab == 1 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 1;
+                    root.panel-visible = true;
+                }
+            }
+        }
+
+         // Tab: TimeWarp
+        Button {
+            text: "TimeWarp";
+            corner-radius: 2px;
+            height: 15px;
+            toggled: root.selected-tab == 4 && !root.panel-visible;
+            toggled-bg: Theme.accent;
+            clicked => {
+                if root.selected-tab == 4 && !root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 4;
+                    root.panel-visible = false;
+                }
+            }
+        }
+
+        // Tab: Piano Roll
+        Button {
+            text: "Piano Roll";
+            corner-radius: 2px;
+            height: 15px;
+            toggled: root.selected-tab == 2 && !root.panel-visible;
+            toggled-bg: Theme.accent;
+            clicked => {
+                if root.selected-tab == 2 && !root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 2;
+                    root.panel-visible = false;
+                }
+            }
+        }
+
+        // Tab: Mixer
+        Button {
+            text: "Mixer";
+            corner-radius: 2px;
+            height: 15px;
+            toggled: root.selected-tab == 0 && root.panel-visible;
+            toggled-bg: Theme.accent;
+            clicked => {
+                if root.selected-tab == 0 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 0;
+                    root.panel-visible = true;
+                }
+            }
+        }
+
+         // Tab: AI Assistant
+        Button {
+            text: "AI Assistant";
+            corner-radius: 2px;
+            height: 15px;
+            toggled: root.selected-tab == 3 && root.panel-visible;
+            toggled-bg: Theme.accent;
+            clicked => {
+                if root.selected-tab == 3 && root.panel-visible {
+                    root.panel-visible = false;
+                    root.selected-tab = -1;
+                } else {
+                    root.selected-tab = 3;
+                    root.panel-visible = true;
+                }
+            }
+        }
+    }
+}

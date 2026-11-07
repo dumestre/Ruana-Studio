@@ -1,0 +1,36 @@
+import { Theme } from "../theme.slint";
+import { StepCell } from "step_cell.slint";
+
+export component BeatStep inherits Rectangle {
+    in-out property <[bool]> steps: [];
+    in property <int> track-index: 0;
+    in property <int> playhead: -1;
+    in property <int> grid-resolution: 16;
+    in property <[int]> step-indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    in property <int> stride: 16;
+    in property <color> accent-color: Theme.accent;
+    in property <bool> track-active: true;
+
+    height: 30px;
+    background: transparent;
+
+    HorizontalLayout {
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        spacing: 2px;
+
+        for step in root.step-indexes: StepCell {
+            visible: step < root.grid-resolution;
+
+            active: root.steps[root.track-index * root.stride + step];
+            current: root.playhead == step;
+
+            beat-group-highlight:
+                Math.mod(Math.floor(step / 4), 2) == 1;
+
+            accent-color: root.accent-color;
+
+            opacity: root.track-active ? 1.0 : 0.35;
+        }
+    }
+}

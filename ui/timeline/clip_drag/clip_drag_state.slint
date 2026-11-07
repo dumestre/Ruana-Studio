@@ -1,0 +1,339 @@
+// ============================================================
+// CLIP DRAG STATE
+//
+// Estado global do arrasto de clips da timeline e métricas
+// da timeline para drags externos (pool/explorer/sampler).
+//
+// Filosofia anti-lag:
+//   DURANTE o gesto, NENHUMA chamada ao Rust e NENHUMA
+//   escrita no modelo de dados. Apenas floats mudam aqui e
+//   a posição é derivada por binding — atualiza a cada frame.
+//   O core só recebe UM commit no release (UP/drop).
+// ============================================================
+
+// ------------------------------------------------------------
+// Arrasto INTERNO de clips (ferramenta select).
+// ------------------------------------------------------------
+
+export global ClipDragState {
+
+    // Arrasto DE VERDADE em andamento?
+    //
+    // Só vira true depois do limiar de movimento (ver `moved`),
+    // nunca no DOWN — senão todo clique simples fazia o clip
+    // desaparecer e o overlay nascer no mesmo lugar por um
+    // frame, o que aparecia como piscada/tremor.
+    //
+    // Latch: quem liga é o handler de MOVE (uma escrita só) e
+    // nunca desliga no meio do gesto, mesmo que o cursor volte
+    // para dentro do limiar.
+    in-out property <bool> active: false;
+
+    // Clip sendo arrastado (-1 = nenhum).
+    in-out property <int> clip-id: -1;
+
+
+    // ========================================================
+    // SNAPSHOT DO CLIP (capturado no DOWN)
+    // ========================================================
+
+    in-out property <string> name: "";
+
+    in-out property <float> orig-beat: 0.0;
+
+    in-out property <int> orig-track: 0;
+
+    in-out property <float> len-beats: 4.0;
+
+    in-out property <int> color-index: 0;
+
+    in-out property <bool> is-midi: true;
+
+
+    // ========================================================
+    // MÉTRICAS CAPTURADAS NO DOWN
+    // ========================================================
+
+    in-out property <length> px-per-beat: 40px;
+
+    in-out property <length> row-height: 64px;
+
+    in-out property <int> track-count: 1;
+
+    in-out property <bool> snap-enabled: true;
+
+
+    // ========================================================
+    // MARQUEE (Ctrl+arrasto) — estado compartilhado
+    //
+    // O Ctrl+clique pode começar EM CIMA DE UM CLIP: nesse caso a
+    // TouchArea do clip captura o gesto e o zoom-pan-area da
+    // timeline nunca vê o DOWN. Guardando o estado aqui, o clip
+    // inicia o marquee no seu DOWN (com Ctrl) e o zoom-pan-area
+    // apenas CONTINUA o gesto nos move/up que chegam até ele.
+    // ========================================================
+
+    in-out property <bool> marquee-active: false;
+
+    in-out property <length> marquee-x0: 0px;
+
+    in-out property <length> marquee-y0: 0px;
+
+    in-out property <length> marquee-x1: 0px;
+
+    in-out property <length> marquee-y1: 0px;
+
+
+    // ========================================================
+    // CURSOR EM COORDENADAS DA JANELA
+    //
+    // start-* permanece fixo durante todo o gesto;
+    // cursor-* é atualizado a cada move (barato: 2 floats).
+    // ========================================================
+
+    in-out property <length> start-cursor-x: 0px;
+
+    in-out property <length> start-cursor-y: 0px;
+
+    in-out property <length> cursor-x: 0px;
+
+    in-out property <length> cursor-y: 0px;
+
+
+    // ========================================================
+    // DERIVADOS (recalculados por frame, puro Slint)
+    // ========================================================
+
+    // Deslocamento do cursor desde o DOWN.
+    out property <length> dx:
+        self.cursor-x
+        - self.start-cursor-x;
+
+    out property <length> dy:
+        self.cursor-y
+        - self.start-cursor-y;
+
+
+    // |dx| e |dy| — Slint não tem abs() para length.
+    out property <length> abs-dx:
+        self.dx < 0px
+            ? -self.dx
+            : self.dx;
+
+    out property <length> abs-dy:
+        self.dy < 0px
+            ? -self.dy
+            : self.dy;
+
+
+    // Passou do limiar? Cliques simples nunca viram arrasto
+    // (nem overlay, nem fantasma, nem commit).
+    out property <bool> moved:
+        self.abs-dx > 3px
+        || self.abs-dy > 3px;
+
+
+    // Beat bruto (sem snap).
+    //
+    // Baseado no DELTA do cursor: o ponto de pega dentro do
+    // clip é preservado, o clip não salta para o cursor.
+    out property <float> raw-beat:
+        self.orig-beat
+        + (self.dx / 1px)
+            / (self.px-per-beat / 1px);
+
+
+    // Beat ao vivo: snap de 1 beat quando ligado.
+    //
+    // O grid do core é inteiro em beats, então o passo do snap
+    // é 1 beat de propósito — é o que o projeto sabe persistir.
+    out property <float> live-beat:
+        Math.max(
+            0.0,
+            self.raw-beat
+        );
+
+
+    // Quantas linhas o cursor andou (snap de linha inteira,
+    // como em qualquer DAW).
+    out property <float> row-delta:
+        Math.round(
+            (self.dy / 1px)
+                / (self.row-height / 1px)
+        );
+
+    out property <int> live-track:
+        Math.max(
+            0,
+            Math.min(
+                self.track-count - 1,
+                self.orig-track
+                + self.row-delta
+            )
+        );
+
+
+    // ========================================================
+    // RESET
+    //
+    // Zera o delta junto: sem isso `moved` continuaria true com
+    // o cursor do gesto anterior e o próximo DOWN já nasceria
+    // "movido".
+    // ========================================================
+
+    public function reset() {
+        self.active = false;
+        self.clip-id = -1;
+        self.name = "";
+
+        self.cursor-x = self.start-cursor-x;
+        self.cursor-y = self.start-cursor-y;
+    }
+}
+
+
+// ------------------------------------------------------------
+// MÉTRICAS DA TIMELINE
+//
+// Publicadas pelo workspace (timer de bounds, 50ms) e
+// consumidas pelo handler drag-move em main.slint — substitui
+// o Timer DRAG de 16ms: o preview agora reage a cada evento
+// de mouse, não a cada tick.
+// ------------------------------------------------------------
+
+// DONO: o Rust (host.rs `tick`).
+//
+// Estas métricas descrevem a cena que o wgpu REALMENTE desenhou no
+// último frame (px/beat, altura da linha, altura da régua, scroll,
+// resolução do grid). O `drag-move` do main.slint converte cursor →
+// beat/linha com elas, e o ghost do ClipPool se posiciona com elas.
+//
+// Publicá-las por um Timer de 50ms fazia o preview e o ponto de
+// inserção divergirem: enquanto o Timer não rodava, o drop usava
+// 40px/beat e 42px de linha — números que NUNCA foram os da engine
+// (que desenha com `px_per_beat` vivo e 64*zoom_y de linha). Por
+// isso o `tick` publica aqui a cada frame, sem Timer no meio.
+export global TimelineMetrics {
+
+    in-out property <length> timeline-abs-x: 0px;
+
+    // Y absoluto do TOPO DA TIMELINE (incluindo a régua).
+    in-out property <length> timeline-abs-y: 0px;
+
+    // Y absoluto do início das tracks (abaixo da régua).
+    in-out property <length> content-top-abs-y: 0px;
+
+    in-out property <length> width: 0px;
+
+    // Altura do componente Timeline (régua + conteúdo). O drag só
+    // aceita o clip dentro de `timeline-abs-y + rect-height`; sem
+    // esse limite o "arrastar" aproveitava a área do painel de
+    // baixo e da barra de status, que não é timeline.
+    in-out property <length> rect-height: 0px;
+
+    // Altura da régua — quem converte coordenadas de janela →
+    // conteúdo a partir do topo DA TIMELINE precisa descontá-la.
+    in-out property <length> ruler-height: 0px;
+
+    in-out property <length> scroll-x: 0px;
+
+    in-out property <length> scroll-y: 0px;
+
+    in-out property <length> px-per-beat: 40px;
+
+    in-out property <length> row-height: 64px;
+
+    // Resolução do grid em BEATS (1.0 = 1 beat, 0.0625 = 1/16),
+    // espelhando `grid_beat_step` da engine. É o passo que o drop
+    // usa para arredondar o beat — sem ele, o Slint arredondava
+    // sempre em 0.5 beat e o preview (engine) em 1 beat: o mesmo
+    // cursor produzia dois alvos diferentes.
+    in-out property <float> snap-beat-step: 1.0;
+
+    in-out property <int> track-count: 0;
+
+    // Re-render da waveform na resolução exata de exibição.
+    // Global porque o handler vive no Rust (MainWindow) e o
+    // pedido nasce dentro de cada TrackClip.
+    //
+    // (id, largura total do corpo em px, janela visível x0/x1 em px,
+    // altura de exibição do corpo em px, ganho linear, fade-in px, fade-out px).
+    // A janela é o trecho do clip que está na viewport — no zoom
+    // fundo só ele é rasterizado (puro, leve, sem varrer o arquivo).
+    // Ganho/fade são baked no raster para o waveform mostrar a
+    // envoltória real (não só sombra).
+    callback waveform-resolution-requested(int, float, float, float, float, float, float, float);
+}
+
+
+// ------------------------------------------------------------
+// MÉTRICAS DO SAMPLER (área do bottom panel, tab == 1)
+//
+// Publicadas pelo workspace (timer de bounds, 50ms) e
+// consumidas pelo handler drag-move em main.slint para
+// detectar drop de áudio sobre o sampler.
+// ------------------------------------------------------------
+
+export global SamplerMetrics {
+
+    in-out property <float> abs-x: 0.0;
+
+    in-out property <float> abs-y: 0.0;
+
+    in-out property <float> width: 0.0;
+
+    in-out property <float> height: 0.0;
+
+    in-out property <bool> visible: false;
+}
+
+
+// ------------------------------------------------------------
+// MÉTRICAS DO BEAT POPUP (área do conteúdo do sequenciador)
+//
+// Publicadas pelo main (timer de bounds, 50ms) e consumidas
+// pelo handler de OS drop para detectar quando um sample
+// solto do Explorer do SO cai sobre uma linha do beat.
+// ------------------------------------------------------------
+
+export global BeatMetrics {
+
+    in-out property <float> abs-x: 0.0;
+
+    in-out property <float> abs-y: 0.0;
+
+    in-out property <float> width: 0.0;
+
+    in-out property <float> height: 0.0;
+
+    // Y absoluto da primeira linha (content-top + rows-top 33px).
+    in-out property <float> rows-y: 0.0;
+
+    in-out property <float> row-height: 30.0;
+
+    in-out property <int> track-count: 0;
+
+    in-out property <bool> visible: false;
+}
+
+
+// ------------------------------------------------------------
+// ESTADO DO SAMPLER (espelho entre a janela principal e a
+// janela flutuante)
+//
+// Espelhado do MainWindow pelo workspace (timer de bounds) e
+// consumido pela janela flutuante do sampler (outra Window,
+// sem acesso às propriedades do MainWindow).
+// ------------------------------------------------------------
+
+export global SamplerState {
+
+    in-out property <string> sample-name: "No Sample";
+
+    in-out property <bool> sample-loaded: false;
+
+    in-out property <string> sample-format: "";
+
+    in-out property <string> sample-duration: "";
+
+}

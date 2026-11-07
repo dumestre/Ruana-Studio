@@ -1,0 +1,178 @@
+import { Theme } from "../theme.slint";
+
+export component Preview inherits Rectangle {
+    in property <string> file-name: "No file selected";
+    in property <string> file-info: "Select an audio file to preview";
+    in property <string> duration: "00:00";
+    in property <bool> playing: false;
+    in property <float> progress: 0.0;
+
+    private property <bool> has-file: root.file-name != "No file selected";
+
+    callback play();
+    callback stop();
+
+    height: 92px;
+
+    background: Theme.base;
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 3px;
+
+    VerticalLayout {
+        padding: 7px;
+        spacing: 5px;
+
+        // Nome do arquivo
+        HorizontalLayout {
+            height: 18px;
+            spacing: 6px;
+            alignment: center;
+
+            Image {
+                source: @image-url("../icons/media.svg");
+
+                width: 15px;
+                height: 15px;
+
+                colorize: Theme.accent;
+            }
+
+            Text {
+                text: root.file-name;
+
+                color: Theme.text-primary;
+                font-size: 9px;
+
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.file-info;
+
+                color: Theme.text-dim;
+                font-size: 8px;
+
+                vertical-alignment: center;
+            }
+        }
+
+        // Waveform
+        Rectangle {
+            height: 30px;
+            background: Theme.surface;
+
+            border-radius: 2px;
+
+            opacity: root.has-file ? 1.0 : 0.4;
+
+            // Linha central
+            Rectangle {
+                y: parent.height / 2;
+                width: parent.width;
+                height: 1px;
+
+                background: Theme.border;
+            }
+
+            // Waveform estilizada
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 2px;
+                cross-axis-alignment: CrossAxisAlignment.center;
+
+                for level in [
+                    8, 15, 22, 12, 25, 18, 10, 20,
+                    27, 16, 23, 13, 26, 19, 11, 24,
+                    17, 28, 14, 22, 18, 9, 21, 26,
+                    15, 23, 12, 20, 16, 25, 10, 18
+                ] : Rectangle {
+                    width: 2px;
+                    height: level * 1px;
+
+                    background: Theme.text-dim;
+                    border-radius: 1px;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: transparent;
+                }
+            }
+
+            // Progresso
+            Rectangle {
+                x: 0;
+                y: 0;
+                width: parent.width * root.progress;
+                height: parent.height;
+
+                background: Theme.accent;
+                opacity: 0.12;
+            }
+
+            // Playhead
+            Rectangle {
+                x: parent.width * root.progress;
+                y: 0;
+                width: root.playing ? 2px : 1px;
+                height: parent.height;
+
+                background: Theme.accent;
+            }
+        }
+
+        // Controles
+        HorizontalLayout {
+            height: 22px;
+            spacing: 6px;
+            alignment: center;
+
+            Rectangle {
+                width: 24px;
+                height: 22px;
+
+                background: root.playing
+                    ? Theme.surface-high
+                    : transparent;
+
+                border-radius: 3px;
+
+                Image {
+                    source: @image-url("../icons/play.svg");
+                    colorize: root.has-file
+                        ? Theme.accent
+                        : Theme.text-dim;
+                    width: 16px;
+                    height: 16px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    enabled: root.has-file;
+                    clicked => {
+                        if root.playing {
+                            root.stop();
+                        } else {
+                            root.play();
+                        }
+                    }
+                }
+            }
+
+            Text {
+                text: root.duration;
+
+                color: Theme.text-dim;
+                font-size: 8px;
+
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+}

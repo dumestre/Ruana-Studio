@@ -1,0 +1,55 @@
+            }
+        });
+    }
+
+    // Estado da timeline engine (criada lazy no primeiro frame via rendering notifier)
+    let timeline_engine: Rc<RefCell<Option<TimelineApp>>> = Rc::new(RefCell::new(None));
+    let timeline_engine_clone = timeline_engine.clone();
+
+    // Configura rendering notifier para:
+    // 1. Capturar device/queue no primeiro frame (RenderingState::RenderingSetup)
+    // 2. Renderizar timeline no sub-rect a cada frame (RenderingState::Rendering)
+    {
+        let window = ui.window();
+        let project_tl = project.clone();
+        let transport_tl = transport.clone();
+        window.set_rendering_notifier(move |state, graphics_api| {
+            if let GraphicsAPI::WGPU29 { device, queue, .. } = graphics_api {
+                // Lazy init da timeline engine com device/queue compartilhados
+                let mut tl_engine = timeline_engine_clone.borrow_mut();
+                if tl_engine.is_none() {
+                    match TimelineApp::new_with_device_queue(
+                        device.clone(),
+                        queue.clone(),
+                        None, // sem janela própria
+                        (1, 1),
+                        Some(transport_tl.clone()),
+                    ) {
+                        Ok(engine) => {
+                            eprintln!("[timeline_unified] engine criada com device/queue compartilhados");
+                            *tl_engine = Some(engine);
+                        }
+                        Err(e) => {
+                            eprintln!("[timeline_unified] falha ao criar engine: {e}");
+                        }
+                    }
+                }
+
+                // Render da timeline no sub-rect durante o frame
+                if matches!(state, RenderingState::Rendering) {
+                    if let Some(engine) = tl_engine.as_mut() {
+                        // TODO: render_to_view com view da surface e rect da timeline
+                    }
+                }
+            }
+        }).ok();
+    }
+
+    // Estado autoritativo da DAW: vive no core, nunca na UI.
+    let project = Rc::new(RefCell::new(Project::startup()));
+    let transport = Arc::new(Mutex::new(Transport::default()));
+
+    // Motor de áudio: abre UMA vez e fica aberto pela vida do app.
+    //
+    // Antes o stream nascia no play e morria no stop. Isso custava
+    // ~100ms de handshake com o driver no início de cada play (o

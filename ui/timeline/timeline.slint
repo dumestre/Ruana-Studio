@@ -1,0 +1,231 @@
+import { Theme } from "../theme.slint";
+import { ClipData } from "clip_data.slint";
+
+// ============================================================
+// TIMELINE (ENGINE WGPU)
+//
+// A timeline real é renderizada pela engine wgpu (`timeline-render`)
+// num buffer offscreen exibido aqui como `Image` (`canvas`). Toda a
+// interação (pan, zoom, clips, ruler, marquee, resize, fade...) vive
+// na engine; este componente apenas:
+//
+//   1. preserva a INTERFACE (props + callbacks) que workspace.slint
+//      e o wiring Rust esperam (imutável);
+//   2. mostra o buffer rasterizado pela engine;
+//   3. encaminha eventos crus (mouse/wheel/teclado) para a engine
+//      através dos callbacks `engine-*` (consumidos no app em Fase 3).
+//
+// NENHUMA lógica de edição reside aqui.
+// ============================================================
+
+export component Timeline inherits Rectangle {
+
+    // ========================================================
+    // INTERFACE (imutável — consumida por workspace.slint/Rust)
+    // ========================================================
+
+    in-out property <length> scroll-x: 0px;
+    in-out property <length> scroll-y: 0px;
+    in-out property <length> timeline-left-padding: 0px;
+
+    in-out property <length> px-per-beat: 40px;
+    in-out property <length> row-height: 42px;
+    in-out property <length> ruler-height: 25px;
+    in-out property <length> max-scroll-x: 0px;
+    in-out property <length> max-scroll-y: 0px;
+
+    in-out property <image> canvas: @image-url("");
+    in-out property <length> canvas-content-width: 0px;
+    in-out property <length> canvas-content-height: 0px;
+
+    // ========================================================
+    // OVERLAY HOST (arquitetura do AGENTS.md)
+    //
+    // Quando true, a timeline do Slint vira um "buraco" transparente:
+    // o wgpu do host desenha o frame da timeline DIRETO na surface e o
+    // componente apenas captura input (o TouchArea continua ativo). O
+    // canvas-image fica vazio para não pintar por cima do frame do wgpu.
+    // ========================================================
+    in-out property <bool> overlay-hosted: false;
+
+    in-out property <int> selected-track: 0;
+
+    in property <float> current-time-seconds: 0;
+    in property <bool> playing: false;
+    in property <int> bpm: 120;
+    in property <int> beats-per-bar: 4;
+    in property <int> total-bars: 32;
+    in-out property <float> zoom: 1.0;
+    in-out property <float> zoom-y: 1.0;
+
+    in property <bool> loop-enabled: false;
+    in property <float> loop-start-beat: 0.0;
+    in property <float> loop-end-beat: 16.0;
+
+    in property <[string]> track-names: [];
+    in property <int> active-tool: 0;
+    in property <[ClipData]> clips: [];
+
+    in property <bool> drop-visible: false;
+    in property <bool> follow-playhead: true;
+    in property <length> drop-x: 0px;
+    in property <int> drop-track: 0;
+    in property <float> drop-len-beats: 4.0;
+
+    callback canvas-render-requested();
+    callback select-track(int);
+    callback seek-to(float);
+    callback marquee-select(float, float, int, int);
+    callback multi-delete-requested();
+    callback keyboard-focus-requested();
+    callback scroll-input(float, float, bool, bool, bool, float, float);
+    callback clip-selected(int);
+    callback clip-slice-requested(int, float);
+    callback clip-glue-requested(int);
+    callback glue-clip-at(float, length, length, length) -> int;
+    callback clip-move-committed(int, int, float);
+    callback clip-resize-committed(int, int, float, float);
+    callback clip-delete-requested(int);
+    callback clip-rename-requested(int, string);
+    callback clip-color-cycle-requested(int);
+    callback clip-copy-requested(int);
+    callback clip-fade-committed(int, float, float);
+    callback clip-gain-committed(int, float);
+    callback paste-requested(float, int);
+    callback pencil-created(float, int, float);
+
+    // ========================================================
+    // EVENTOS CRUS → ENGINE (timeline-render)
+    // ========================================================
+
+    // down/up recebem o botão codificado (0=left, 1=right, 2=middle).
+    callback engine-pointer-down(float, float, int, bool, bool, bool);
+    callback engine-pointer-move(float, float);
+    callback engine-pointer-up(float, float, int);
+    callback engine-scroll(float, float, bool, bool, bool);
+    callback engine-key-event(string, bool, bool, bool);
+
+    // Tamanho REAL da área ocupada pelo canvas (lógico, px) — usado pelo
+    // Rust para dimensionar o buffer offscreen da engine (× scale factor).
+    out property <length> canvas-area-width:
+        max(0px, self.width - self.timeline-left-padding);
+    out property <length> canvas-area-height:
+        max(0px, self.height - self.ruler-height);
+
+
+    // ========================================================
+    // APARÊNCIA
+    // ========================================================
+
+    background: root.overlay-hosted ? transparent : Theme.surface;
+
+    // ========================================================
+    // CANVAS WGPU — o buffer rasterizado pela engine (`timeline-render`)
+    // contém régua, grid, clips, playhead e loops num único frame.
+    // ========================================================
+
+    canvas-image := Image {
+        x: root.timeline-left-padding;
+        y: 0px;
+        width: max(0px, parent.width - root.timeline-left-padding);
+        height: max(0px, parent.height);
+        source: root.overlay-hosted ? @image-url("") : root.canvas;
+        image-fit: fill;
+    }
+
+    // ========================================================
+    // CAPTURA DE INPUT → ENGINE
+    // ========================================================
+
+    // FocusScope cria um escopo de foco para a TouchArea receber eventos
+    // de ponteiro imediatamente no primeiro clique.
+    engine-input := FocusScope {
+        x: root.timeline-left-padding;
+        y: 0px;
+        width: max(0px, parent.width - root.timeline-left-padding);
+        height: max(0px, parent.height);
+
+        TouchArea {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 100%;
+
+            // SEM mouse-cursor fixo — deixa o Rust (engine) controlar via
+            // slint::platform::set_cursor() / Window::set_cursor_icon()
+            // O crosshair fixo aqui impedia os cursores de ferramenta (hand, resize, etc.)
+
+            private property <length> observed-w: self.width;
+            private property <length> observed-h: self.height;
+            changed observed-w => {
+                root.canvas-render-requested();
+            }
+            changed observed-h => {
+                root.canvas-render-requested();
+            }
+
+            pointer-event(ev) => {
+                let btn = ev.button == PointerEventButton.left
+                    ? 0
+                    : ev.button == PointerEventButton.right
+                        ? 1
+                        : ev.button == PointerEventButton.middle
+                            ? 2
+                            : 3;
+                if ev.kind == PointerEventKind.down {
+                    root.engine-pointer-down(
+                        self.mouse-x / 1px,
+                        self.mouse-y / 1px,
+                        btn,
+                        ev.modifiers.control,
+                        ev.modifiers.shift,
+                        ev.modifiers.alt
+                    );
+                } else if ev.kind == PointerEventKind.move {
+                    root.engine-pointer-move(
+                        self.mouse-x / 1px,
+                        self.mouse-y / 1px
+                    );
+                } else if ev.kind == PointerEventKind.up {
+                    root.engine-pointer-up(
+                        self.mouse-x / 1px,
+                        self.mouse-y / 1px,
+                        btn
+                    );
+                }
+            }
+
+            scroll-event(ev) => {
+                root.engine-scroll(
+                    ev.delta-x / 1px,
+                    ev.delta-y / 1px,
+                    ev.modifiers.control,
+                    ev.modifiers.shift,
+                    ev.modifiers.alt
+                );
+                accept;
+            }
+        }
+    }
+
+    // ========================================================
+    // FOCO DE TECLADO → ENGINE (Fase 3+)
+    // ========================================================
+
+    engine-keys := FocusScope {
+        x: root.timeline-left-padding;
+        y: 0px;
+        width: max(0px, parent.width - root.timeline-left-padding);
+        height: max(0px, parent.height);
+
+        key-pressed(ke) => {
+            root.engine-key-event(
+                ke.text,
+                ke.modifiers.control,
+                ke.modifiers.shift,
+                ke.modifiers.alt
+            );
+            accept;
+        }
+    }
+}

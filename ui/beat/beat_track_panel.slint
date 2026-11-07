@@ -1,0 +1,140 @@
+import { Theme } from "../theme.slint";
+import { BeatTrack } from "beat_track.slint";
+import { BeatTrackHeader } from "beat_track_header.slint";
+
+export component BeatTrackPanel inherits Rectangle {
+
+    in-out property <[int]> instrument-indexes: [];
+    in-out property <[string]> instrument-names: [];
+
+    // Sample carregado em cada linha ("" = vazia).
+    in-out property <[string]> track-sample-names: [];
+
+    in-out property <[bool]> track-active: [];
+    in-out property <[bool]> track-solo: [];
+
+    in-out property <[float]> track-pan: [];
+    in-out property <[float]> track-volume: [];
+
+    in-out property <[int]> track-mixer-channel: [];
+    in-out property <[color]> track-colors: [];
+
+    in-out property <int> selected-track: 0;
+    in-out property <int> track-menu-open-index: -1;
+
+    // Linha alvo durante o drag de um sample
+    // (-1 = fora; a linha recebe a borda branca).
+    in property <int> drag-hover-track: -1;
+
+    callback track-selected(int);
+
+    // Pré-escuta do sample de uma linha.
+    callback track-preview-requested(int);
+
+    // Abre o sampler da linha (instrumento daquela track do beat).
+    callback sampler-open-requested(int);
+
+    // Persistência no core.
+    // param: "active" | "solo" | "pan" | "volume" | "channel"
+    callback track-param-changed(int, string, float);
+
+    background: Theme.surface;
+
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+
+    BeatTrackHeader {
+        x: 0px;
+        y: 0px;
+
+        width: parent.width;
+        height: 33px;
+    }
+
+
+    for inst in root.instrument-indexes: BeatTrack {
+
+        track-index: inst;
+
+        track-name:
+            root.instrument-names[inst];
+
+        sample-name:
+            inst < root.track-sample-names.length
+                ? root.track-sample-names[inst]
+                : "";
+
+        preview-requested => {
+            root.track-preview-requested(inst);
+        }
+
+        sampler-open-requested => {
+            root.sampler-open-requested(inst);
+        }
+
+        track-color:
+            root.track-colors[inst];
+
+        drag-target:
+            root.drag-hover-track == inst;
+
+        track-menu-open-index
+            <=> root.track-menu-open-index;
+
+        active:
+            root.track-active[inst];
+
+        active-changed(v) => {
+            root.track-active[inst] = v;
+            root.track-param-changed(inst, "active", v ? 1.0 : 0.0);
+        }
+
+        solo:
+            root.track-solo[inst];
+
+        solo-changed(v) => {
+            root.track-solo[inst] = v;
+            root.track-param-changed(inst, "solo", v ? 1.0 : 0.0);
+        }
+
+        pan:
+            root.track-pan[inst];
+
+        pan-changed(v) => {
+            root.track-pan[inst] = v;
+            root.track-param-changed(inst, "pan", v);
+        }
+
+        volume:
+            root.track-volume[inst];
+
+        volume-changed(v) => {
+            root.track-volume[inst] = v;
+            root.track-param-changed(inst, "volume", v);
+        }
+
+        mixer-channel:
+            root.track-mixer-channel[inst];
+
+        mixer-channel-changed(v) => {
+            root.track-mixer-channel[inst] = v;
+            root.track-param-changed(inst, "channel", v * 1.0);
+        }
+
+        x: 8px;
+        y: 33px + inst * 30px;
+
+        width: parent.width - 16px;
+        height: 30px;
+
+        selected:
+            root.selected-track == inst;
+
+        selected-changed => {
+            root.selected-track = inst;
+            root.track-selected(inst);
+        }
+    }
+}

@@ -1,0 +1,139 @@
+import { Theme } from "../theme.slint";
+import { SamplerStyle } from "sampler_style.slint";
+import { SamplerCard, SamplerKnob, SamplerToggle } from "sampler_widgets.slint";
+
+// ============================================================
+// PITCH
+// ============================================================
+//
+// A versão antiga posicionava 4 Knobs de 54px em x: 8/70/132/194
+// e o botão GLD em x: 256 — ou seja, exigia 304px de largura para
+// caber 4 knobs. Dentro do bottom panel isso não cabe em lugar
+// nenhum, e o desalinhamento vinha dos passos fixos de 62px, não do
+// dial.
+//
+// Agora a fileira estica: cada knob recebe o mesmo `horizontal-stretch`
+// e o `SamplerKnob` centraliza o corpo quadrado dentro da coluna
+// (sampler_widgets.slint:275), então a largura disponível é que
+// distribui. `compact` troca a métrica do dial (40px -> 30px) e
+// encolhe a fonte, permitindo a página inteira caber na altura do
+// painel.
+// ============================================================
+
+export component SamplerPitch inherits Rectangle {
+
+    in-out property <float> tune: 0.5;
+    in-out property <float> fine: 0.5;
+    in-out property <float> octave: 0.5;
+    in-out property <float> glide: 0.0;
+    in-out property <bool> glide-enabled: false;
+
+    in-out property <bool> compact: false;
+
+    callback tune-changed(float);
+    callback fine-changed(float);
+    callback octave-changed(float);
+    callback glide-changed(float);
+    callback glide-enabled-changed(bool);
+
+    SamplerCard {
+        title: "PITCH";
+        accent: SamplerStyle.sec-pitch;
+        compact: root.compact;
+
+        width: 100%;
+        height: 100%;
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            vertical-stretch: 1;
+
+            SamplerKnob {
+                label: "TUNE";
+                value: root.tune;
+                default-value: 0.5;
+                bipolar: true;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                value-text: SamplerStyle.fmt-semis(root.tune);
+
+                changed(value) => {
+                    root.tune = value;
+                    root.tune-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "FINE";
+                value: root.fine;
+                default-value: 0.5;
+                bipolar: true;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                value-text: SamplerStyle.fmt-cents(root.fine);
+
+                changed(value) => {
+                    root.fine = value;
+                    root.fine-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "OCTAVE";
+                value: root.octave;
+                default-value: 0.5;
+                bipolar: true;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                value-text: SamplerStyle.fmt-octaves(root.octave);
+
+                changed(value) => {
+                    root.octave = value;
+                    root.octave-changed(value);
+                }
+            }
+
+            SamplerKnob {
+                label: "GLIDE";
+                value: root.glide;
+                default-value: 0;
+                enabled: root.glide-enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                value-text: SamplerStyle.fmt-glide(root.glide);
+
+                changed(value) => {
+                    root.glide = value;
+                    root.glide-changed(value);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: SamplerStyle.gap(root.compact);
+            height: SamplerStyle.row-h(root.compact);
+
+            SamplerToggle {
+                text: "GLIDE";
+                on: root.glide-enabled;
+                compact: root.compact;
+                accent: SamplerStyle.sec-pitch;
+                horizontal-stretch: 0;
+
+                clicked => {
+                    root.glide-enabled = !root.glide-enabled;
+                    root.glide-enabled-changed(root.glide-enabled);
+                }
+            }
+
+            Text {
+                text: "±24 st  ·  ±200 ct  ·  ±4 oct";
+                font-size: SamplerStyle.label-size(root.compact);
+                color: SamplerStyle.text-faint;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+                overflow: elide;
+            }
+        }
+    }
+}

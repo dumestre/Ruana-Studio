@@ -1,0 +1,124 @@
+import { Theme } from "../theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component ProjectKey inherits Rectangle {
+    in-out property <string> key: "C";
+    callback key-changed(string);
+
+    in property <[string]> keys: [
+        "C", "Cm", "C#", "C#m", "D", "Dm", "D#", "D#m",
+        "E", "Em", "F", "Fm", "F#", "F#m", "G", "Gm",
+        "G#", "G#m", "A", "Am", "A#", "A#m", "B", "Bm"
+    ];
+
+    height: 18px;
+    width: 64px; 
+
+    // Usa surface-high no fundo, igual aos botões da toolbar
+    background: Theme.surface-high;
+    border-radius: 2px;
+
+    HorizontalLayout {
+        alignment: LayoutAlignment.stretch;
+        cross-axis-alignment: CrossAxisAlignment.center;
+        padding-left: 4px;
+        spacing: 4px;
+
+        Text {
+    text: "Key";
+
+    font-size:
+        11px;
+
+    color:
+        Theme.text-primary;
+
+    height:
+        parent.height;
+            horizontal-alignment: TextHorizontalAlignment.start;
+
+    vertical-alignment:
+        center;
+}
+
+
+Text {
+    text:
+        root.key;
+
+    font-size:
+        15px;
+
+        font-weight: 700;
+
+    color:
+        Theme.is-paper
+            ? Theme.text-primary
+            : Theme.accent;
+    font-family: "";
+
+    height:
+        parent.height;
+    horizontal-alignment: TextHorizontalAlignment.start;
+
+    vertical-alignment:
+        center;
+}
+    }
+
+    touch := TouchArea {
+        clicked => { popup.show(); }
+    }
+
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 2px;
+        width: 50px;
+        height: 150px;
+
+        Rectangle {
+            background: Theme.base; // Fundo base do menu flutuante (#1E1E1E)
+            border-color: Theme.border;
+            border-width: 1px;
+            border-radius: 3px;
+
+            ScrollView {
+                VerticalLayout {
+                    // Mudei o spacing para 0 para que o efeito zebra fique contínuo
+                    spacing: 0px;
+                    padding: 1px;
+
+                    // Adicionado o [index] para capturar a posição do item na lista
+                    for k[index] in root.keys : TouchArea {
+                        height: 20px;
+                        
+                        Rectangle {
+                            // Lógica do Efeito Zebra:
+                            // 1. Se tem hover, brilha (surface-high)
+                            // 2. Se for par (index % 2 == 0), fica transparente (mostra o Theme.base)
+                            // 3. Se for ímpar, usa uma cor levemente mais clara (Theme.surface)
+                            background: parent.has-hover ? Theme.surface-high 
+                                      : Math.mod(index, 2) == 0 ? transparent 
+                                      : Theme.surface;
+                                      
+                            border-radius: 2px;
+                            
+                            Text {
+                                text: k;
+                                font-size: 12px;
+                                color: Theme.is-paper ? Theme.text-primary : Theme.accent;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        clicked => {
+                            root.key = k;
+                            root.key-changed(k);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

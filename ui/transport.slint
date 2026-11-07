@@ -1,0 +1,550 @@
+﻿import { Button } from "components/button.slint";
+import { Theme } from "theme.slint";
+
+export component Transport inherits Rectangle {
+
+    // ============================================================
+    // ESTADO
+    // ============================================================
+
+    in-out property <bool> playing: false;
+    in-out property <bool> recording: false;
+    in-out property <bool> loop-enabled: false;
+    in-out property <bool> metronome-enabled: false;
+    in-out property <int> metronome-sound: 0;
+    in-out property <float> metronome-volume: 0.7;
+
+    in-out property <int> position: 0;
+
+    in property <int> bpm: 120;
+    in property <int> beats-per-bar: 4;
+    in property <int> ppq: 960;
+
+
+    // ============================================================
+    // CALLBACKS
+    // ============================================================
+
+    callback play-state-changed(bool);
+    callback record-state-changed(bool);
+    callback loop-state-changed(bool);
+    callback metronome-state-changed(bool);
+    callback metronome-sound-changed(int);
+    callback metronome-volume-changed(float);
+    callback set-bpm(float);
+
+
+    // ============================================================
+    // TRANSPORT POSITION
+    // ============================================================
+
+    property <int> ticks-per-bar:
+        self.ppq * self.beats-per-bar;
+
+    property <int> bars:
+        self.position / self.ticks-per-bar + 1;
+
+    property <int> beat:
+        Math.mod(
+            self.position,
+            self.ticks-per-bar
+        ) / self.ppq + 1;
+
+    property <int> ticks:
+        Math.mod(
+            self.position,
+            self.ppq
+        );
+
+
+    function pad2(v: int) -> string {
+        return v < 10
+            ? "0" + v
+            : "" + v;
+    }
+
+
+    // ============================================================
+    // DIMENSÕES
+    // ============================================================
+
+    height: 19px;
+
+    background: transparent;
+
+
+    // ============================================================
+    // TRANSPORT
+    // ============================================================
+
+    HorizontalLayout {
+
+        padding-left: 8px;
+        padding-right: 8px;
+        padding-top: 0px;
+        padding-bottom: 0px;
+
+        spacing: 20px;
+
+        alignment:
+            LayoutAlignment.center;
+
+        cross-axis-alignment:
+            CrossAxisAlignment.center;
+        height: 20px;
+
+         // ========================================================
+        // POSITION
+        // ========================================================
+
+        Rectangle {
+
+            height: 18px;
+            horizontal-stretch: 0;
+            width: 96px;
+
+            background:
+                Theme.surface-high;
+                drop-shadow-blur: 8px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 1px;
+                
+
+            border-radius:
+                2px;
+
+            pos-label := Text {
+
+                text:
+                    root.pad2(root.bars)
+                    + ":"
+                    + root.pad2(root.beat)
+                    + ":"
+                    + root.pad2(root.ticks);
+
+                width: 100%;
+                height: 100%;
+                
+
+                color:
+                    Theme.is-paper ? Theme.text-primary : Theme.accent;
+                    
+
+                font-size:
+                    12px;
+                font-weight: 700;
+
+        
+
+                horizontal-alignment:
+                    center;
+
+                vertical-alignment:
+                    center;
+            }
+        }
+
+
+        // ========================================================
+        // CONTROLES DE TRANSPORTE (em retângulo como as ferramentas)
+        // ========================================================
+
+        Rectangle {
+            HorizontalLayout {
+                spacing: 2px; // espaçamento igual em px
+                alignment: LayoutAlignment.center;
+                cross-axis-alignment: CrossAxisAlignment.center;
+                
+
+                Button {
+                    width: 18px;
+                    height: 18px;
+                    corner-radius: 2px;
+                    resting-bg: Theme.surface-high;
+                    drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+                    borderless: true;
+                    icon: root.playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
+                    icon-size: 16px;
+                    icon-color: root.playing ? Theme.accent : Theme.text-primary;
+                    clicked => {
+                        root.playing = !root.playing;
+                        root.play-state-changed(root.playing);
+                    }
+                }
+
+
+        // ========================================================
+        // STOP
+        // ========================================================
+
+        Button {
+
+            width: 18px;
+            height: 18px;
+
+            corner-radius:
+                2px;
+
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+            resting-bg:
+                Theme.surface-high;
+
+            borderless: true;
+
+            icon:
+                @image-url(
+                    "icons/stop.svg"
+                );
+
+            icon-size: 16px;
+
+            icon-color:
+                Theme.text-primary;
+
+            clicked => {
+
+                root.playing =
+                    false;
+
+                root.play-state-changed(
+                    false
+                );
+            }
+        }
+
+
+        // ========================================================
+        // RECORD
+        // ========================================================
+
+        Button {
+
+            width: 18px;
+            height: 18px;
+
+            drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+            corner-radius:
+                2px;
+
+            resting-bg:
+                Theme.surface-high;
+
+            borderless: true;
+
+            icon:
+                @image-url(
+                    "icons/rec.svg"
+                );
+
+            icon-size: 16px;
+
+            icon-color:
+                root.recording
+                ? Theme.danger
+                : Theme.text-primary;
+
+            clicked => {
+
+                root.recording =
+                    !root.recording;
+
+                root.record-state-changed(
+                    root.recording
+                );
+            }
+        }
+
+
+        // ========================================================
+        // LOOP
+        // ========================================================
+
+        Button {
+
+            width: 18px;
+            height: 18px;
+
+            drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+            corner-radius:
+                2px;
+
+            resting-bg:
+                Theme.surface-high;
+
+            borderless: true;
+
+            icon:
+                @image-url(
+                    "icons/loop.svg"
+                );
+
+            icon-size: 16px;
+
+            toggled:
+                root.loop-enabled;
+
+            subtle-toggled: !Theme.is-paper;
+
+            keep-icon-color: true;
+
+            icon-color:
+                Theme.text-primary;
+
+            toggled-icon-color:
+                Theme.accent;
+
+            toggled-bg:
+                Theme.is-paper ? Theme.accent : Theme.surface-high;
+
+            clicked => {
+
+                root.loop-enabled =
+                    !root.loop-enabled;
+
+                root.loop-state-changed(
+                    root.loop-enabled
+                );
+            }
+        }
+        }
+        }
+
+
+       
+
+
+        // ========================================================
+        // METRONOME + BPM
+        // ========================================================
+
+        HorizontalLayout {
+
+            spacing: 2px;
+
+            alignment:
+                LayoutAlignment.stretch;
+
+            cross-axis-alignment:
+                CrossAxisAlignment.center;
+
+
+            // ====================================================
+            // METRONOME
+            // ====================================================
+
+
+
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                background: (root.metronome-enabled && Theme.is-paper) ? Theme.accent : Theme.surface-high;
+                border-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                metro-icon := Image {
+                    source: root.metronome-enabled
+                        ? (Math.mod(Math.floor(root.position / root.ppq), 2) == 0
+                            ? @image-url("icons/metronome_l.svg")
+                            : @image-url("icons/metronome_r.svg"))
+                        : @image-url("icons/metronome_l.svg");
+                    width: 16px;
+                    height: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: root.metronome-enabled ? (Theme.is-paper ? Theme.text-primary : Theme.accent) : Theme.text-primary;
+                }
+
+                metro-area := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.metronome-enabled = !root.metronome-enabled;
+                        root.metronome-state-changed(root.metronome-enabled);
+                    }
+                    pointer-event(ev) => {
+                        if ev.kind == PointerEventKind.down
+                            && ev.button == PointerEventButton.right {
+                            metronome-popup.show();
+                        }
+                    }
+                }
+            }
+
+
+            
+
+
+            // ====================================================
+            // BPM VALUE
+            // ====================================================
+
+            Rectangle {
+                height: 18px;
+                background: Theme.surface-high;
+                border-radius: 2px;
+                drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+                bpm-area := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    mouse-cursor: MouseCursor.ns_resize;
+                    scroll-event(e) => {
+                        if e.delta-y > 0 {
+                            root.set-bpm(min(300, root.bpm + 1));
+                        } else {
+                            root.set-bpm(max(20, root.bpm - 1));
+                        }
+                        accept;
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-left: 4px;
+                    spacing: 4px;
+
+                    Text {
+                        text: "BPM";
+                        font-size: 11px;
+                        color: Theme.text-primary;
+                        height: parent.height;
+                        vertical-alignment: center;
+                    }
+
+                    TextInput {
+                        text: "" + root.bpm;
+                        font-size: 12px;
+                        font-weight: 700;
+                        width: 30px;
+                        color: Theme.is-paper ? Theme.text-primary : Theme.accent;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                        input-type: number;
+                        accepted => { root.set-bpm(self.text.to-float()); self.clear-focus(); }
+                    }
+                    
+                }
+            }
+             // ========================================================
+        // TIME SIGNATURE
+        // ========================================================
+
+        Rectangle {
+
+            width: 36px;
+            height: 18px;
+            
+            drop-shadow-blur: 3px;
+                drop-shadow-color: Theme.shadow;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-offset-x: 1.5px;
+
+            background:
+                Theme.surface-high;
+
+            border-radius:
+                2px;
+
+
+            Text {
+
+                text:
+                    root.beats-per-bar
+                    + "/4";
+
+                color:
+                    Theme.is-paper ? Theme.text-primary : Theme.accent;
+
+                font-size:
+                    12px;
+
+                width: 100%;
+                height: 100%;
+
+                horizontal-alignment:
+                    center;
+
+                vertical-alignment:
+                    center;
+            }
+        }
+        }
+
+
+       
+    }
+
+
+    metronome-popup := PopupWindow {
+        x: parent.width - 245px;
+        y: parent.height + 4px;
+        width: 220px;
+        height: 126px;
+        close-policy: close-on-click-outside;
+        Rectangle {
+            width: 100%; height: 100%;
+            background: Theme.surface-high;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: Theme.border;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+                Text { text: "METRONOME"; color: Theme.text-primary; font-size: 10px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 4px;
+                    for name[i] in ["CLICK", "WOOD", "BEEP", "SOFT", "HIGH"]: Rectangle {
+                        width: 36px; height: 24px;
+                        background: i == root.metronome-sound ? Theme.accent : Theme.surface;
+                        border-radius: 3px;
+                        Text { text: name; color: i == root.metronome-sound ? Theme.base : Theme.text-primary; font-size: 7px; horizontal-alignment: center; vertical-alignment: center; }
+                        TouchArea { mouse-cursor: pointer; clicked => { root.metronome-sound = i; root.metronome-sound-changed(i); } }
+                    }
+                }
+                HorizontalLayout {
+        spacing: 16px;
+                    Text { text: "VOLUME"; color: Theme.text-dim; font-size: 9px; vertical-alignment: center; }
+                    Rectangle {
+                        horizontal-stretch: 1; height: 5px; background: Theme.surface;
+                        Rectangle { width: parent.width * root.metronome-volume; height: 100%; background: Theme.accent; }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.metronome-volume = max(0.0, min(1.0, self.mouse-x / self.width));
+                                root.metronome-volume-changed(root.metronome-volume);
+                            }
+                            moved => {
+                                if self.pressed {
+                                    root.metronome-volume = max(0.0, min(1.0, self.mouse-x / self.width));
+                                    root.metronome-volume-changed(root.metronome-volume);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
