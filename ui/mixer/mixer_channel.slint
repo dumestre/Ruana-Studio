@@ -153,6 +153,7 @@ export component MixerChannel inherits Rectangle {
         padding: 5px;
         spacing: 4px;
         vertical-stretch: 1;
+        width: 100%;
 
         alignment: LayoutAlignment.stretch;
         cross-axis-alignment: CrossAxisAlignment.center;
@@ -163,6 +164,7 @@ export component MixerChannel inherits Rectangle {
 
         Rectangle {
             height: 22px;
+            width: 100%;
             background: transparent;
         }
 
@@ -174,6 +176,7 @@ export component MixerChannel inherits Rectangle {
             height: 18px;
 
             spacing: 2px;
+            width: 100%;
 
             alignment: LayoutAlignment.center;
             cross-axis-alignment: CrossAxisAlignment.center;
@@ -271,6 +274,7 @@ export component MixerChannel inherits Rectangle {
             // quando o painel está baixo — sem isso o Slint esmagava o
             // bottom fixo e o meter sumia.
             min-height: 0px;
+            preferred-width: 100%;
             spacing: 2px;
 
             alignment: LayoutAlignment.stretch;
@@ -278,6 +282,7 @@ export component MixerChannel inherits Rectangle {
             horizontal-stretch: 0;
 
             vertical-stretch: 1;
+            width: 100%;
 
             // Scrollable area for insert slots
             ScrollView {
