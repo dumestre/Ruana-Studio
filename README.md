@@ -3,6 +3,8 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Rust](https://img.shields.io/badge/Rust-2024-orange.svg)
 ![Slint](https://img.shields.io/badge/Slint-1.18-blue.svg)
+![Windows](https://img.shields.io/badge/Windows-blue.svg)
+![Linux](https://img.shields.io/badge/Linux-blue.svg)
 
 Digital Audio Workstation (DAW) desenvolvida em Rust com interface Slint.
 
@@ -28,23 +30,15 @@ Ruana Studio é uma estação de trabalho de áudio digital com timeline, mixer,
 - Renderização de timeline acelerada por GPU
 - Projeto salvo em formato próprio
 
-## Build
+## Release 0.5
+
+Binário de produção (target build):
 
 ```bash
 cargo build --release -p ruana-studio
 ```
 
-## Execução
-
-```bash
-cargo run -p ruana-studio
-```
-
-No Windows (binário já compilado):
-
-```powershell
-& 'target\debug\ruana-studio.exe' -p ruana-studio
-```
+O binário gerado está em `target/release/ruana-studio` (Linux) ou `target/release/ruana-studio.exe` (Windows).
 
 ## Estrutura
 
