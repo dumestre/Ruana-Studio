@@ -2,6 +2,9 @@
 
 Digital Audio Workstation (DAW) desenvolvida em Rust com interface Slint.
 
+[⬇️ Baixar executável (Windows)](https://github.com/dumestre/Ruana-Studio/releases/latest/download/ruana-studio.exe)
+
+
 ## Sobre
 
 Ruana Studio é uma estação de trabalho de áudio digital com timeline, mixer, plugins e suporte a MIDI/áudio. Construída para performance com renderização GPU e engine de áudio em Rust.
