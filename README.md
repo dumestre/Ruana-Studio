@@ -2,7 +2,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Rust](https://img.shields.io/badge/Rust-2024-orange.svg)
-![Platform](https://img.shields.io/badge/Platform-Windows-blue.svg)
+![Slint](https://img.shields.io/badge/Slint-1.18-blue.svg)
 
 Digital Audio Workstation (DAW) desenvolvida em Rust com interface Slint.
 
