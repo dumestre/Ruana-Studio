@@ -60,4 +60,5 @@ No Windows (binário já compilado):
 
 ## Licença
 
-A definir.
+MIT. Veja o arquivo [LICENSE](LICENSE).
+
