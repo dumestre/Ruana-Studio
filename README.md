@@ -35,6 +35,12 @@ cargo build --release -p ruana-studio
 cargo run -p ruana-studio
 ```
 
+No Windows (binário já compilado):
+
+```powershell
+& 'target\debug\ruana-studio.exe' -p ruana-studio
+```
+
 ## Estrutura
 
 - `app/` — aplicação principal (UI Slint)

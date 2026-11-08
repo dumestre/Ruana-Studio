@@ -1259,7 +1259,8 @@ impl App {
                     &self.queue,
                     "overlay-uniforms",
                     bytemuck::cast_slice(&overlay_ubo),
-                    wgpu::BufferUsages::UNIFORM,
+            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+
                 );
                 let overlay_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("overlay-bg"),
@@ -1369,7 +1370,7 @@ impl App {
                 queue,
                 "composite-uniforms",
                 bytemuck::cast_slice(&ubo),
-                wgpu::BufferUsages::UNIFORM,
+                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             );
             let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("composite-bg"),
