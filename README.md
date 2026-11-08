@@ -6,8 +6,6 @@
 
 Digital Audio Workstation (DAW) desenvolvida em Rust com interface Slint.
 
-[⬇️ Baixar executável (Windows)](https://github.com/dumestre/Ruana-Studio/releases/latest/download/ruana-studio.exe)
-
 
 ## Sobre
 
